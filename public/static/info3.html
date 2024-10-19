@@ -1,0 +1,45 @@
+<div id="container">
+  <div id="text">Manage task status.</div>
+  <div id="imagecontainer">
+    <img src="./image3.png"/>
+  </div>
+</div>
+
+<style>
+  #container {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    margin: 0;
+    background-color: transparent;
+  }
+  #text {
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+    width: 100%;
+    height: 3rem;
+    padding: 0 1rem;
+    font-size: 1.2rem;
+    font-weight: bold;
+    background-color: rgb(200, 208, 233);
+  }
+  #imagecontainer {
+    width: 100%;
+    padding: 1rem;
+    box-sizing: border-box;
+    height: calc(100% - 3rem);
+    overflow: auto;
+  }
+  img {
+    padding: 0;
+    margin: 0;
+    width: 100%;
+    object-fit: scale-down;
+    flex: 1;
+  }
+</style>
