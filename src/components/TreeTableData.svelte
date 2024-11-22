@@ -164,7 +164,7 @@
 </button>
 {#if Expanded}
 	{#each children as child}
-		<div transition:slide={{duration: 350}} style="display: flex; flex-direction: column">
+		<div style="display: flex; flex-direction: column">
 			<svelte:self depth={depth + 1} node={child} />
 		</div>
 	{/each}
