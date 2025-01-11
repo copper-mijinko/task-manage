@@ -7,12 +7,10 @@
   let search_key = "name";
   let search_box; //bind
   const search = () => {
-    console.log(search_key, search_text);
     $filter = {
       ...$filter,
-      name: search_text != "" ? [search_text] : undefined,
+      name: search_text != "" ? [search_text] : null,
     };
-    console.log($filter);
   };
   const params = {
     color: "var(--theme-color-Main-main)",
@@ -28,7 +26,9 @@
     bind:this={search_box}
     bind:value={search_text}
     draggable="false"
-    on:blur
+    on:blur={(e) => {
+      search();
+    }}
     on:input
     on:click={(e) => {
       e.stopPropagation();

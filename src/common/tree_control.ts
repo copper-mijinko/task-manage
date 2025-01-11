@@ -19,16 +19,24 @@ interface ProjectData {
   "data": TreeData
 }
 
-export function filterTree(tree, key, keywords): TreeData {
-  if (!tree || !key|| !keywords) return tree;
+export function filterTree(tree, filter): TreeData {
+  if (!tree || !filter) return tree;
   let matchedChildren = [];
   for (let child of (tree.children || [])) {
-    const filteredChild = filterTree(child, key, keywords);
+    const filteredChild = filterTree(child, filter);
     if (filteredChild) {
       matchedChildren.push(filteredChild);
     }
   }
-  const isMatch = keywords.some(keyword => tree.data[key] && JSON.stringify(tree.data[key]).includes(keyword));
+  let isMatch = true;
+  for (let key in filter) {
+    const keywords = filter[key];
+    if (! keywords) continue;
+    isMatch = keywords.some(keyword => tree.data[key] && JSON.stringify(tree.data[key]).toLowerCase().includes(keyword.toLowerCase()));
+    if (! isMatch) {
+      break;
+    }
+  }
   if (matchedChildren.length > 0 || isMatch) {
     const cloned = { ...tree, children: matchedChildren };
     return cloned;

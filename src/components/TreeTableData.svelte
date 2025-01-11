@@ -4,7 +4,6 @@
 
 <script>
   import { onMount } from "svelte";
-  import { slide } from "svelte/transition";
   import { tree_data, table_selected_id, not_expanded_ids } from "../stores.js";
   import { isChild, reorderTree, setNode } from "../common/tree_control.ts";
   import { ripple } from "../common/common.js";

@@ -142,10 +142,8 @@ function createFilter(filter) {
 				if (!current) return;
 				const current_tree_data = get(tree_data);
 				if (!current_tree_data) return;
-				let filtered = current_tree_data.data;
-				for (let key of Object.keys(current)) {
-					filtered = filterTree(filtered, key, current[key])
-				}
+				let filtered = JSON.parse(JSON.stringify(current_tree_data.data));
+				filtered = filterTree(filtered, current)
 				if (get(table_selected_id) && filtered && getNode(get(table_selected_id), filtered)) {
 					;
 				}else{
