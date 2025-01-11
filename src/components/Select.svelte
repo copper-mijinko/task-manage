@@ -4,13 +4,29 @@
   export let value;
   export let style = "";
   export let backgroundColor = "var(--theme-color-Main-light)";
-  export let color = "var(--theme-color-Sub-main)"
+  export let color = "var(--theme-color-Sub-main)";
 </script>
-<div class="select" style="--backgroundColor: {backgroundColor}; --color: {color}; {style}">
-  <select id={id} value={value} disabled={disabled} on:change on:click={(e) => {e.stopPropagation();}}>
+
+<div
+  class="select"
+  style="--backgroundColor: {backgroundColor}; --color: {color}; {style}"
+>
+  <select
+    {id}
+    {value}
+    {disabled}
+    on:change
+    on:click={(e) => {
+      e.stopPropagation();
+    }}
+  >
     <slot />
   </select>
-  <svg viewBox="-12 0 32 32" version="1.1" xmlns="http://www.w3.org/2000/svg"><path d="M0.88 23.28c-0.2 0-0.44-0.080-0.6-0.24-0.32-0.32-0.32-0.84 0-1.2l5.76-5.84-5.8-5.84c-0.32-0.32-0.32-0.84 0-1.2 0.32-0.32 0.84-0.32 1.2 0l6.44 6.44c0.16 0.16 0.24 0.36 0.24 0.6s-0.080 0.44-0.24 0.6l-6.4 6.44c-0.2 0.16-0.4 0.24-0.6 0.24z"></path></svg>
+  <svg viewBox="-12 0 32 32" version="1.1" xmlns="http://www.w3.org/2000/svg"
+    ><path
+      d="M0.88 23.28c-0.2 0-0.44-0.080-0.6-0.24-0.32-0.32-0.32-0.84 0-1.2l5.76-5.84-5.8-5.84c-0.32-0.32-0.32-0.84 0-1.2 0.32-0.32 0.84-0.32 1.2 0l6.44 6.44c0.16 0.16 0.24 0.36 0.24 0.6s-0.080 0.44-0.24 0.6l-6.4 6.44c-0.2 0.16-0.4 0.24-0.6 0.24z"
+    ></path></svg
+  >
 </div>
 
 <style>
@@ -44,7 +60,7 @@
   .select {
     display: flex;
     position: relative;
-    border-radius: .25em;
+    border-radius: 0.25em;
     height: 100%;
     width: 100%;
     flex: 1;
@@ -57,7 +73,7 @@
     height: 100%;
     top: 0;
     right: 0;
-    transition: .25s fill ease;
+    transition: 0.25s fill ease;
     pointer-events: none;
     transform: rotate(90deg);
     background-color: transparent;

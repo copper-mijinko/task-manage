@@ -1,48 +1,47 @@
 <script>
   import { onMount } from "svelte";
-	import Quill from "quill";
+  import Quill from "quill";
   import "../..//node_modules/quill/dist/quill.snow.css";
-  import { isEqual } from 'lodash';
+  import { isEqual } from "lodash";
 
   export let saveMemo;
   export let content = "";
 
   let editor;
   let toolbarOptions = [
-    [{ 'font': [] }],
-    [{ 'header': [1, 2, false] }],
-    [{ 'color': [] }, { 'background': [] }],          // dropdown with defaults from theme
-    ['bold', 'italic', 'underline', 'strike'],        // toggled buttons
-    ['blockquote', 'code-block', { 'list': 'ordered'}, { 'list': 'bullet' }],
-    [{ 'script': 'sub'}, { 'script': 'super' }],      // superscript/subscript
-    [{ 'indent': '-1'}, { 'indent': '+1' }],          // outdent/indent
-    [{ 'align': [] }],
-    ['link', 'image'],
-    ['clean']                                         // remove formatting button
+    [{ font: [] }],
+    [{ header: [1, 2, false] }],
+    [{ color: [] }, { background: [] }], // dropdown with defaults from theme
+    ["bold", "italic", "underline", "strike"], // toggled buttons
+    ["blockquote", "code-block", { list: "ordered" }, { list: "bullet" }],
+    [{ script: "sub" }, { script: "super" }], // superscript/subscript
+    [{ indent: "-1" }, { indent: "+1" }], // outdent/indent
+    [{ align: [] }],
+    ["link", "image"],
+    ["clean"], // remove formatting button
   ];
-	let quill = null;
+  let quill = null;
 
-  onMount( () => { 
-		quill = new Quill(editor, {
+  onMount(() => {
+    quill = new Quill(editor, {
       theme: "snow",
       modules: {
-        toolbar: toolbarOptions
+        toolbar: toolbarOptions,
       },
     });
     if (content) {
       quill.setContents(content);
     }
-    quill.on('editor-change', function(eventName, args) {
+    quill.on("editor-change", function (eventName, args) {
       if (content != quill.getContents()) {
         saveMemo(quill.getContents());
       }
     });
-	});
+  });
 
-  $: if (quill && ! isEqual(quill.getContents(), content)) {
+  $: if (quill && !isEqual(quill.getContents(), content)) {
     quill.setContents(content);
   }
-
 </script>
 
 <div class="wrapper">
@@ -67,16 +66,16 @@
     height: 100%;
     background-color: var(--theme-color-Main-light);
   }
-  :global(.ql-picker :not(.ql-active,:hover)) {
+  :global(.ql-picker :not(.ql-active, :hover)) {
     color: var(--theme-color-Sub-light) !important;
   }
   :global(.ql-picker-options) {
     background-color: var(--theme-color-Main-light) !important;
   }
-  :global(*:not(.ql-active,:hover)>svg>.ql-stroke) {
+  :global(*:not(.ql-active, :hover) > svg > .ql-stroke) {
     stroke: var(--theme-color-Sub-light) !important;
   }
-  :global(*:not(.ql-active,:hover)>svg>.ql-fill) {
+  :global(*:not(.ql-active, :hover) > svg > .ql-fill) {
     fill: var(--theme-color-Sub-light) !important;
   }
 </style>

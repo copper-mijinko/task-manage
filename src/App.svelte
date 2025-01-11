@@ -1,10 +1,17 @@
 <script>
-	import { tree_data, project_ids, selected_type, selected_id, theme, filter } from './stores.js';
-  import ProjectPage from './components/ProjectPage.svelte';
-  import Header from './components/Header.svelte';
-  import InfoPage from './components/InfoPage.svelte';
-  import Modal from './components/Modal.svelte';
-  import Button from './components/Button.svelte';
+  import {
+    tree_data,
+    project_ids,
+    selected_type,
+    selected_id,
+    theme,
+    filter,
+  } from "./stores.js";
+  import ProjectPage from "./components/ProjectPage.svelte";
+  import Header from "./components/Header.svelte";
+  import InfoPage from "./components/InfoPage.svelte";
+  import Modal from "./components/Modal.svelte";
+  import Button from "./components/Button.svelte";
 
   let show = Array(4).fill(false);
 
@@ -27,7 +34,6 @@
   });
   // Set theme
   theme.setTheme();
-
 </script>
 
 <div class:Container={true}>
@@ -35,20 +41,36 @@
     <Header />
   </div>
   <div class="Main">
-    {#if ! ($selected_type && $selected_id)}
-      <h1 style="color:var(--theme-color-Sub-main); display:flex; justify-content:center">No data.</h1>
+    {#if !($selected_type && $selected_id)}
+      <h1
+        style="color:var(--theme-color-Sub-main); display:flex; justify-content:center"
+      >
+        No data.
+      </h1>
     {/if}
-    {#if $selected_type=="Projects" }
+    {#if $selected_type == "Projects"}
       <ProjectPage />
     {/if}
-    {#if $selected_type=="Info" }
-      <div style="height:100%; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-        {#each [1,2,3,4] as i}
-          <Button content="Setp{i}" on:click={() => {show[i-1] = !show[i-1]}} />
-          <Modal show={show[i-1]} toggle={() => {show[i-1] = !show[i-1]}}>
-            <InfoPage index={i}/>
+    {#if $selected_type == "Info"}
+      <div
+        style="height:100%; display: flex; flex-direction: column; justify-content: center; align-items: center;"
+      >
+        {#each [1, 2, 3, 4] as i}
+          <Button
+            content="Setp{i}"
+            on:click={() => {
+              show[i - 1] = !show[i - 1];
+            }}
+          />
+          <Modal
+            show={show[i - 1]}
+            toggle={() => {
+              show[i - 1] = !show[i - 1];
+            }}
+          >
+            <InfoPage index={i} />
           </Modal>
-      {/each}
+        {/each}
       </div>
     {/if}
   </div>
@@ -58,14 +80,14 @@
   :global(html) {
     font-size: 75%;
   }
-	:global(body) {
-		font-family: "Roboto", "Helvetica", "Arial", sans-serif;
+  :global(body) {
+    font-family: "Roboto", "Helvetica", "Arial", sans-serif;
     padding: 0;
     margin: 0;
-	}
+  }
   div.Container {
-		display: flex;
-		flex-direction: column;
+    display: flex;
+    flex-direction: column;
     box-sizing: border-box;
     height: 100%;
     width: 100%;

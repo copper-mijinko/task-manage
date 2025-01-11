@@ -7,10 +7,12 @@
   export let rightColorBack = "#ff8d8d33";
 </script>
 
-<div style="--leftColor:{leftColor}; --leftColorBack:{leftColorBack}; --rightColor:{rightColor}; --rightColorBack:{rightColorBack};">
+<div
+  style="--leftColor:{leftColor}; --leftColorBack:{leftColorBack}; --rightColor:{rightColor}; --rightColorBack:{rightColorBack};"
+>
   <span class="Left">{left}</span>
   <label class="ToggleButton">
-    <input type="checkbox" on:click/>
+    <input type="checkbox" on:click />
   </label>
   <span class="Right">{right}</span>
 </div>
@@ -21,7 +23,7 @@
     flex-direction: row;
     justify-content: center;
     align-items: center;
-    margin: .5rem
+    margin: 0.5rem;
   }
   .ToggleButton {
     display: flex;
@@ -33,7 +35,7 @@
     box-sizing: content-box;
     background-color: var(--leftColorBack);
     cursor: pointer;
-    transition: background-color .4s;
+    transition: background-color 0.4s;
   }
 
   .ToggleButton:has(:checked) {
@@ -46,9 +48,9 @@
     height: 2rem;
     border-radius: 50%;
     background-color: var(--leftColor);
-    content: '';
+    content: "";
     left: 0;
-    transition: left .2s;
+    transition: left 0.2s;
   }
 
   .ToggleButton:has(:checked)::before {
@@ -57,9 +59,9 @@
   }
 
   span {
-    margin: .5rem;
+    margin: 0.5rem;
     font-weight: 600;
-    font-size: .8rem;
+    font-size: 0.8rem;
   }
 
   .Left {

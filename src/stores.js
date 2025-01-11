@@ -80,8 +80,8 @@ function createTreeData(tree_data) {
 		update,
 		init: () => {
 			subscribe(current => {
-        setTreeData(current);
-      });
+				setTreeData(current);
+		});
 		}
 	}
 }

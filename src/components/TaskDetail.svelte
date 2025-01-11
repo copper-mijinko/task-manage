@@ -1,29 +1,32 @@
-
 <script>
-  import { getNode, setNode } from '../common/tree_control.ts';
-  import { tree_data, table_selected_id } from '../stores.js';
-  import { throttle } from 'lodash';
-  import MemoTab from './MemoTab.svelte';
+  import { getNode, setNode } from "../common/tree_control.ts";
+  import { tree_data, table_selected_id } from "../stores.js";
+  import { throttle } from "lodash";
+  import MemoTab from "./MemoTab.svelte";
 
-  $: is_selected = $table_selected_id? true : false;
+  $: is_selected = $table_selected_id ? true : false;
   $: node = getNode($table_selected_id, $tree_data.data);
-  $: name = node? node.data["name"]: "Select Task";
-  $: memo = node? node.data["memo"]: [];
+  $: name = node ? node.data["name"] : "Select Task";
+  $: memo = node ? node.data["memo"] : [];
   const changeData = (node, key, value) => {
-    node = {...node, "data": {...node.data, [key]: value}};
+    node = { ...node, data: { ...node.data, [key]: value } };
     let data = setNode(node, $tree_data.data);
-    $tree_data = {...$tree_data, "data": data}
-  }
+    $tree_data = { ...$tree_data, data: data };
+  };
   const changeDataThrottle = throttle(changeData, 1000);
   const addMemo = (newMemoTitle) => {
     if (newMemoTitle) {
-      let newMemo = {title: newMemoTitle, content: ""};
+      let newMemo = { title: newMemoTitle, content: "" };
       changeData(node, "memo", [...node.data.memo, newMemo]);
       return true;
     }
   };
   const deleteMemo = (index) => {
-    changeData(node, "memo", node.data.memo.filter((_, i) => i !== index));
+    changeData(
+      node,
+      "memo",
+      node.data.memo.filter((_, i) => i !== index)
+    );
     return true;
   };
   const saveMemo = (editedContent, selectedMemoIndex) => {
@@ -45,15 +48,13 @@
 <div class="container">
   <div class="memotab-container">
     {#if is_selected}
-      <MemoTab
-        {memo} 
-        {saveMemo}
-        {addMemo}
-        {deleteMemo}
-        {renameMemo}
-        />
+      <MemoTab {memo} {saveMemo} {addMemo} {deleteMemo} {renameMemo} />
     {:else}
-      <h1 style="color:var(--theme-color-Sub-main); display:flex; justify-content:center">No data.</h1>
+      <h1
+        style="color:var(--theme-color-Sub-main); display:flex; justify-content:center"
+      >
+        No data.
+      </h1>
     {/if}
   </div>
 </div>

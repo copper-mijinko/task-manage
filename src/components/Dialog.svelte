@@ -1,6 +1,6 @@
 <script>
-  import Modal from './Modal.svelte';
-  import Button from './Button.svelte';
+  import Modal from "./Modal.svelte";
+  import Button from "./Button.svelte";
   export let show = false;
   export let toggle;
   export let header;
@@ -10,17 +10,30 @@
   export let cancel = "cancel";
 </script>
 
-<Modal show={show} toggle={toggle} width="30rem" height="15rem">
+<Modal {show} {toggle} width="30rem" height="15rem">
   <div class="container">
     <div class="header">{header}</div>
     <div class="content">{content}</div>
-    {#if (ok || cancel)}
+    {#if ok || cancel}
       <div class="control">
-        {#if (cancel)}
-          <Button use_ripple={false} variant="text" content={cancel} on:click={toggle}/>
+        {#if cancel}
+          <Button
+            use_ripple={false}
+            variant="text"
+            content={cancel}
+            on:click={toggle}
+          />
         {/if}
-        {#if (ok)}
-          <Button use_ripple={false} variant="filled" content={ok} on:click={() => {callback(); toggle();}}/>
+        {#if ok}
+          <Button
+            use_ripple={false}
+            variant="filled"
+            content={ok}
+            on:click={() => {
+              callback();
+              toggle();
+            }}
+          />
         {/if}
       </div>
     {/if}
@@ -69,8 +82,8 @@
     align-items: center;
     justify-content: flex-end;
     width: 100%;
-    padding-bottom: .5rem;
-    padding-top: .5rem;
+    padding-bottom: 0.5rem;
+    padding-top: 0.5rem;
     margin: 0;
     box-sizing: border-box;
   }
