@@ -5,7 +5,7 @@ interface TreeData {
   "data": {
     "name": string,
     "status": "Open" | "Pending" | "In Progress" | "Completed" | "Canceled",
-    "due date": `${string}-${string}-${string}`,
+    "due date": `${string}-${string}-${string}` | undefined,
     "memo": []
   },
   "children": TreeData[]
@@ -44,7 +44,7 @@ export function getDefaultNode():TreeData {
     "data": {
       "name": "new_task",
       "status": "Open",
-      "due date": `${date.getFullYear().toString()}-${(date.getMonth()+1).toString().padStart(2,"0")}-${date.getDate().toString().padStart(2,"0")}`,
+      "due date": undefined,
       "memo": [],
     },
     "children": []
@@ -77,7 +77,7 @@ export function getDefaultProject():ProjectData {
       "data": {
         "name": "new_project",
         "status": "Open",
-        "due date": `${date.getFullYear().toString()}-${(date.getMonth()+1).toString().padStart(2,"0")}-${date.getDate().toString().padStart(2,"0")}`,
+        "due date": undefined,
         "memo": [],
       },
       "children": []
