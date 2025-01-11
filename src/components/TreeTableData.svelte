@@ -177,15 +177,27 @@
             style="flex-shrink: 0"
             on:click={toggle}
           >
-            <svg
-              viewBox="-12 0 32 32"
-              version="1.1"
-              xmlns="http://www.w3.org/2000/svg"
+            <svg viewBox="-12 0 32 32" xmlns="http://www.w3.org/2000/svg"
               ><path
                 d="M0.88 23.28c-0.2 0-0.44-0.080-0.6-0.24-0.32-0.32-0.32-0.84 0-1.2l5.76-5.84-5.8-5.84c-0.32-0.32-0.32-0.84 0-1.2 0.32-0.32 0.84-0.32 1.2 0l6.44 6.44c0.16 0.16 0.24 0.36 0.24 0.6s-0.080 0.44-0.24 0.6l-6.4 6.44c-0.2 0.16-0.4 0.24-0.6 0.24z"
-              ></path></svg
-            >
+              ></path>
+            </svg>
           </button>
+        {:else}
+          <div class:Space={true}>
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M9 8H15M9 12H15M9 16H12M8.2 21H15.8C16.9201 21 17.4802 21 17.908 20.782C18.2843 20.5903 18.5903 20.2843 18.782 19.908C19 19.4802 19 18.9201 19 17.8V6.2C19 5.0799 19 4.51984 18.782 4.09202C18.5903 3.71569 18.2843 3.40973 17.908 3.21799C17.4802 3 16.9201 3 15.8 3H8.2C7.0799 3 6.51984 3 6.09202 3.21799C5.71569 3.40973 5.40973 3.71569 5.21799 4.09202C5 4.51984 5 5.07989 5 6.2V17.8C5 18.9201 5 19.4802 5.21799 19.908C5.40973 20.2843 5.71569 20.5903 6.09202 20.782C6.51984 21 7.07989 21 8.2 21Z"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              ></path>
+            </svg>
+          </div>
         {/if}
         <TextInput
           text={data[header.name]}
@@ -330,34 +342,37 @@
     position: relative;
     display: inline-block;
     height: 100%;
-    width: 1rem;
-    margin-left: 1rem;
+    width: 0.6rem;
+    margin-left: 0.3rem;
     border-left: 1px solid gray;
   }
   .ExpandButton:focus-visible {
     outline: auto;
     z-index: 999;
   }
-  .HasChildren:first-child .ExpandButton {
+  .ExpandButton {
     cursor: pointer;
-    width: 1.5rem;
-    height: 1.5rem;
-    margin: 0.25rem;
+    width: 1rem;
+    height: 1rem;
     border-radius: 50%;
     transform: rotate(0deg);
     transition: all 0.05s ease;
   }
-  .HasChildren:first-child .ExpandButton svg {
+  .ExpandButton svg {
     width: 100%;
     height: 100%;
     fill: var(--theme-color-Sub-light);
   }
-  .HasChildren:first-child .ExpandButton.Expanded {
+  .ExpandButton.Expanded {
     transform: rotate(90deg);
   }
-  :not(.HasChildren) .ExpandButton {
+  .Space {
     width: 1rem;
     height: 1rem;
+    flex-shrink: 0;
+  }
+  .Space svg {
+    stroke: var(--theme-color-Sub-light);
   }
   .TextOverFlow {
     text-overflow: ellipsis;
