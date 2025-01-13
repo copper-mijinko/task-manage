@@ -5,7 +5,12 @@
 <script>
   import { onMount } from "svelte";
   import { tree_data, table_selected_id, not_expanded_ids } from "../stores.js";
-  import { isChild, reorderTree, setNode } from "../common/tree_control.ts";
+  import {
+    isChild,
+    reorderTree,
+    setNode,
+    getNode,
+  } from "../common/tree_control.ts";
   import { ripple } from "../common/common.js";
   import { THEME_DARK } from "../common/theme.js";
   import { theme } from "../stores.js";
@@ -45,6 +50,8 @@
   }
 
   const changeData = (node, key, value) => {
+    const id = node.id;
+    node = getNode(id, $tree_data.data);
     node = { ...node, data: { ...node.data, [key]: value } };
     let data = setNode(node, $tree_data.data);
     $tree_data = { ...$tree_data, data: data };

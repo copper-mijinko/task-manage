@@ -9,6 +9,8 @@
   $: name = node ? node.data["name"] : "Select Task";
   $: memo = node ? node.data["memo"] : [];
   const changeData = (node, key, value) => {
+    const id = node.id;
+    node = getNode(id, $tree_data.data);
     node = { ...node, data: { ...node.data, [key]: value } };
     let data = setNode(node, $tree_data.data);
     $tree_data = { ...$tree_data, data: data };

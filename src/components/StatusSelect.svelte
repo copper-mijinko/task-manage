@@ -1,7 +1,7 @@
 <script>
   import Select from "./Select.svelte";
   import { tree_data } from "../stores.js";
-  import { setNode } from "../common/tree_control.ts";
+  import { setNode, getNode } from "../common/tree_control.ts";
 
   export let node;
   export let status = "Open";
@@ -15,6 +15,8 @@
   };
 
   const changeData = (node, key, value) => {
+    const id = node.id;
+    node = getNode(id, $tree_data.data);
     node = { ...node, data: { ...node.data, [key]: value } };
     let data = setNode(node, $tree_data.data);
     $tree_data = { ...$tree_data, data: data };
