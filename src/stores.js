@@ -81,7 +81,6 @@ function createTreeData(tree_data) {
 		init: () => {
 			subscribe(current => {
 				setTreeData(current);
-				console.log(current)
 		});
 		}
 	}

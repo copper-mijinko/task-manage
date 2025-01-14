@@ -16,7 +16,7 @@ interface ProjectData {
     "name": string,
     "default_ratio": number
   }[],
-  "data": TreeData
+  "data": TreeData,
 }
 
 export function filterTree(tree, filter): TreeData {
@@ -65,11 +65,11 @@ export function getDefaultProject():ProjectData {
     "headers": [
       {
         "name": "name",
-        "default_ratio": 8
+        "default_ratio": 10
       },
       {
         "name": "status",
-        "default_ratio": 5
+        "default_ratio": 4
       },
       {
         "name": "due date",
@@ -77,7 +77,7 @@ export function getDefaultProject():ProjectData {
       },
       {
         "name": "memo",
-        "default_ratio": 1
+        "default_ratio": 2
       }
     ],
     "data": {
@@ -89,7 +89,7 @@ export function getDefaultProject():ProjectData {
         "memo": [],
       },
       "children": []
-    }
+    },
   }
 }
 
