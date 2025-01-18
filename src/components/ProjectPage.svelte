@@ -73,13 +73,16 @@
                 on:click={(e) => handleAdd(e, "insert_after")}
               >
                 <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
                   xmlns="http://www.w3.org/2000/svg"
-                  fill="var(--theme-color-Main-main)"
-                  viewBox="0 0 48 48"
                   ><path
+                    d="M12 5V19M5 12H19"
                     stroke="var(--theme-color-Main-main)"
-                    d="m24 40-2.1-2.15L34.25 25.5H8v-3h26.25L21.9 10.15 24 8l16 16Z"
-                  /></svg
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  ></path></svg
                 >
               </IconButton>
               <IconButton
@@ -90,13 +93,16 @@
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 52 52"
                   fill="var(--theme-color-Main-main)"
-                  viewBox="0 0 48 48"
-                  ><path
-                    stroke="var(--theme-color-Main-main)"
-                    d="m28.3 42-2.15-2.15 8.1-8.1H10V8h3v20.75h21.3l-8.1-8.1 2.15-2.15L40 30.15Z"
-                  /></svg
                 >
+                  <g transform="translate(-1159 -1592)">
+                    <path
+                      stroke="var(--theme-color-Main-main)"
+                      d="M1168 1604.54 1171.06 1604.54 1171.06 1626.52 1186.59 1626.52 1181.61 1621.39 1183.77 1619.17 1192.41 1628.05 1192.38 1628.09 1192.41 1628.12 1183.77 1637 1181.61 1634.78 1186.59 1629.66 1171.06 1629.66 1168 1629.66ZM1192.41 1599C1193.26 1599 1193.95 1599.71 1193.95 1600.59L1193.95 1608.3 1201.46 1608.3C1202.31 1608.3 1203 1609.01 1203 1609.88L1203 1609.88C1203 1610.76 1202.31 1611.47 1201.46 1611.47L1193.95 1611.47 1193.95 1619.18C1193.95 1620.06 1193.26 1620.77 1192.41 1620.77L1192.41 1620.77C1191.56 1620.77 1190.87 1620.06 1190.87 1619.18L1190.87 1611.47 1183.36 1611.47C1182.51 1611.47 1181.82 1610.76 1181.82 1609.88 1181.82 1609.01 1182.51 1608.3 1183.36 1608.3L1190.87 1608.3 1190.87 1600.59C1190.87 1599.71 1191.56 1599 1192.41 1599Z"
+                    />
+                  </g>
+                </svg>
               </IconButton>
               <IconButton
                 tooltipContent="Delete the selected task."
