@@ -21,33 +21,83 @@ interface ProjectData {
 
 export function filterTree(tree, filter): TreeData {
   if (!tree || !filter) return tree;
-  let matchedChildren = [];
-  for (let child of (tree.children || [])) {
-    const filteredChild = filterTree(child, filter);
-    if (filteredChild) {
-      matchedChildren.push(filteredChild);
-    }
-  }
-  let isMatch = true;
+
+  // Check match against all filters
+  let allFiltersMatch = true;
+  let nameFilterMatch = false;
+
+  // Check if filter is empty
+  const hasFilters = Object.keys(filter).some(key => filter[key] && filter[key].length > 0);
+  if (!hasFilters) return tree; // Return tree as is if no filters
+
+  // Evaluate each filter
   for (let key in filter) {
     const keywords = filter[key];
-    if (! keywords) continue;
-    isMatch = keywords.some(keyword => tree.data[key] && JSON.stringify(tree.data[key]).toLowerCase().includes(keyword.toLowerCase()));
-    if (! isMatch) {
-      break;
+    if (!keywords || keywords.length === 0) continue;
+
+    let keyMatch = false;
+    if (key === 'name') {
+      // In case of name filter
+      keyMatch = keywords.some(keyword =>
+        tree.data.name &&
+        tree.data.name.toLowerCase().includes(keyword.toLowerCase())
+      );
+      nameFilterMatch = keyMatch; // Record if name filter matched
+    } else {
+      // For other filters
+      keyMatch = keywords.some(keyword =>
+        tree.data[key] &&
+        JSON.stringify(tree.data[key]).toLowerCase().includes(keyword.toLowerCase())
+      );
+    }
+
+    if (!keyMatch) {
+      allFiltersMatch = false;
+      // Early exit only for non-name filters
+      if (key !== 'name') break;
     }
   }
-  if (matchedChildren.length > 0 || isMatch) {
+
+  // Process child nodes
+  let matchedChildren = [];
+  for (let child of (tree.children || [])) {
+    if (nameFilterMatch && allFiltersMatch) {
+      // If name filter matches and all filters match,
+      // include all child nodes (no filtering)
+      matchedChildren.push(cloneTreeWithAllChildren(child));
+    } else {
+      // Otherwise filter recursively
+      const filteredChild = filterTree(child, filter);
+      if (filteredChild) {
+        matchedChildren.push(filteredChild);
+      }
+    }
+  }
+
+  // Determine the result
+  if (allFiltersMatch || matchedChildren.length > 0) {
     const cloned = { ...tree, children: matchedChildren };
     return cloned;
   }
+
   return null;
 }
 
-export function getDefaultNode():TreeData {
+// Helper function to clone the given tree node and all its children
+function cloneTreeWithAllChildren(tree): TreeData {
+  if (!tree) return null;
+
+  const children = (tree.children || []).map(child =>
+    cloneTreeWithAllChildren(child)
+  );
+
+  return { ...tree, children };
+}
+
+export function getDefaultNode(): TreeData {
   let date = new Date();
   date.setDate(date.getDate() + 7);
-  return  {
+  return {
     "id": `${uuidV4()}`,
     "data": {
       "name": "new_task",
@@ -59,7 +109,7 @@ export function getDefaultNode():TreeData {
   }
 }
 
-export function getDefaultProject():ProjectData {
+export function getDefaultProject(): ProjectData {
   let date = new Date();
   return {
     "headers": [
@@ -112,7 +162,7 @@ export function getNode(base: string, tree_data: TreeData): TreeData {
   return base_tree;
 }
 
-export function setNode(target: TreeData, tree_data: TreeData):TreeData {
+export function setNode(target: TreeData, tree_data: TreeData): TreeData {
   // Depth First Search
   if (tree_data.id == target.id) {
     return target
@@ -128,7 +178,7 @@ export function setNode(target: TreeData, tree_data: TreeData):TreeData {
   return tree_data;
 }
 
-function getParent(base: string, tree_data: TreeData):TreeData {
+function getParent(base: string, tree_data: TreeData): TreeData {
   // Depth First Search
   let parent_tree;
   if (tree_data.id == base) {
@@ -147,7 +197,7 @@ function getParent(base: string, tree_data: TreeData):TreeData {
   return parent_tree;
 }
 
-export function isChild(target: string, base: string, tree_data: TreeData):boolean {
+export function isChild(target: string, base: string, tree_data: TreeData): boolean {
   if (target == base) {
     return false;
   }
@@ -161,17 +211,17 @@ export function isChild(target: string, base: string, tree_data: TreeData):boole
 }
 
 export function addNode(
-    node: TreeData, 
-    base: string, 
-    tree_data: TreeData, 
-    action: "insert" | "insert_after" | "append"
-  ):TreeData {
+  node: TreeData,
+  base: string,
+  tree_data: TreeData,
+  action: "insert" | "insert_after" | "append"
+): TreeData {
   // insert or append
   switch (action) {
     case "insert":
     case "insert_after":
       const base_parent_tree = getParent(base, tree_data);
-      if (! base_parent_tree) {
+      if (!base_parent_tree) {
         return tree_data;
       }
       let index = undefined;
@@ -193,7 +243,7 @@ export function addNode(
   return tree_data
 }
 
-export function rmNode(target: string, tree_data: TreeData):TreeData {
+export function rmNode(target: string, tree_data: TreeData): TreeData {
   const target_parent_tree = getParent(target, tree_data);
   let index = undefined;
   let i = 0;
@@ -208,7 +258,7 @@ export function rmNode(target: string, tree_data: TreeData):TreeData {
   return tree_data
 }
 
-export function reorderTree(target: string, base: string, tree_data: TreeData, action: "insert" | "append"):TreeData {
+export function reorderTree(target: string, base: string, tree_data: TreeData, action: "insert" | "append"): TreeData {
   const target_tree = getNode(target, tree_data);
   tree_data = rmNode(target, tree_data);
   tree_data = addNode(target_tree, base, tree_data, action);
