@@ -37,7 +37,7 @@
     position: sticky;
     top: 0;
     display: flex;
-    flex-grow: 1;
+    flex-shrink: 0;
     box-sizing: border-box;
     height: 4rem;
     padding: 0;
