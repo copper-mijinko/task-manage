@@ -1,4 +1,9 @@
+<script context="module">
+  let dragged_id; // Project ID being dragged
+</script>
+
 <script>
+  import { onMount, afterUpdate } from "svelte";
   import { slide } from "svelte/transition";
   import IconButton from "./IconButton.svelte";
   import Dialog from "./Dialog.svelte";
@@ -47,10 +52,160 @@
     e.stopPropagation();
     project_id_confirm = project_id;
     project_name_confirm = $project_ids.filter(
-      (node, i) => node.id == project_id
+      (node, i) => node.id == project_id,
     )[0].name;
     show_confirm = true;
   };
+
+  // Drag and drop
+  let dragOverTarget;
+  let dragOverType;
+
+  // Function to get the list of projects
+  function getProjectElements() {
+    return document.querySelectorAll('.MenuRow[data-section="Projects"]');
+  }
+
+  // Drag start
+  function dragStart(e) {
+    if (e.currentTarget.dataset.section !== "Projects") return;
+
+    this.classList.add("Dragging");
+
+    const name_text = this.querySelector("span").innerText;
+    const name_tag = document.createElement("div");
+    name_tag.classList.add("NameTag");
+    name_tag.innerText = name_text;
+    document.body.appendChild(name_tag);
+
+    const rem = parseFloat(
+      window.getComputedStyle(document.documentElement).fontSize,
+    );
+    e.dataTransfer.setDragImage(name_tag, -rem, -rem);
+
+    dragged_id = e.currentTarget.dataset.id;
+  }
+
+  // Drag end
+  function dragEnd() {
+    dragOverType = undefined;
+    dragOverTarget = undefined;
+    this.classList.remove("Dragging");
+    const nameTag = document.querySelector(".NameTag");
+    if (nameTag) nameTag.remove();
+  }
+
+  // Drag over
+  function dragOver(e) {
+    e.preventDefault();
+
+    // Only the project section can be reordered
+    if (this.dataset.section !== "Projects") return;
+
+    // If not the dragging item itself or the currently dragged item
+    if (
+      !this.classList.contains("Dragging") &&
+      this.dataset.id !== dragged_id
+    ) {
+      dragOverTarget = this;
+      const rect = this.getBoundingClientRect();
+      const y = e.clientY;
+
+      if (y <= rect.top + rect.height / 2) {
+        if (dragOverType !== "DragOverTop") {
+          dragOverType = "DragOverTop";
+          this.classList.remove("DragOverBottom");
+          this.classList.add("DragOverTop");
+        }
+      } else if (dragOverType !== "DragOverBottom") {
+        dragOverType = "DragOverBottom";
+        this.classList.remove("DragOverTop");
+        this.classList.add("DragOverBottom");
+      }
+    }
+  }
+
+  // Drag leave
+  function dragLeave() {
+    dragOverType = undefined;
+    this.classList.remove("DragOverTop");
+    this.classList.remove("DragOverBottom");
+  }
+
+  // Drop
+  function dragDrop() {
+    if (this.dataset.section !== "Projects" || !dragOverType) return;
+
+    const draggedIndex = $project_ids.findIndex((p) => p.id === dragged_id);
+    const targetIndex = $project_ids.findIndex((p) => p.id === this.dataset.id);
+
+    if (draggedIndex !== -1 && targetIndex !== -1) {
+      // Clone the project array
+      const newProjects = [...$project_ids];
+
+      // Remove the dragged item
+      const [draggedProject] = newProjects.splice(draggedIndex, 1);
+
+      // Calculate insertion position (before if DragOverTop, after if DragOverBottom)
+      let insertAt = targetIndex;
+      if (dragOverType === "DragOverBottom") {
+        insertAt = targetIndex + (draggedIndex < targetIndex ? 0 : 1);
+      } else {
+        insertAt = targetIndex + (draggedIndex < targetIndex ? -1 : 0);
+      }
+
+      // Reinsert into the array
+      newProjects.splice(Math.max(0, insertAt), 0, draggedProject);
+
+      // Update the store
+      project_ids.update(() => newProjects);
+    }
+
+    // Reset
+    this.classList.remove("DragOverTop");
+    this.classList.remove("DragOverBottom");
+    dragOverType = undefined;
+    dragged_id = undefined;
+  }
+
+  // Add cleanup function to prevent duplicate event listeners
+  function cleanupDND(element) {
+    element.removeEventListener("dragstart", dragStart);
+    element.removeEventListener("dragend", dragEnd);
+    element.removeEventListener("dragover", dragOver);
+    element.removeEventListener("dragleave", dragLeave);
+    element.removeEventListener("drop", dragDrop);
+  }
+
+  // Setup drag & drop events
+  function setDND() {
+    const projectItems = getProjectElements();
+
+    projectItems.forEach((item) => {
+      // First remove existing event listeners
+      cleanupDND(item);
+
+      // For the dragging side
+      item.setAttribute("draggable", "true");
+      item.addEventListener("dragstart", dragStart);
+      item.addEventListener("dragend", dragEnd);
+
+      // For the drop target side
+      item.addEventListener("dragover", dragOver);
+      item.addEventListener("dragleave", dragLeave);
+      item.addEventListener("drop", dragDrop);
+    });
+  }
+
+  onMount(() => {
+    // Initial drag & drop setup
+    setDND();
+  });
+
+  afterUpdate(() => {
+    // Update drag & drop settings when project list changes
+    setDND();
+  });
 </script>
 
 <div class="Container">
@@ -90,7 +245,9 @@
               ></path></svg
             >
           {/if}
-          <span class:TextOverFlow={true}>{menu.name}</span>
+          <span class:TextOverFlow={true}>
+            {menu.name}
+          </span>
           {#if menu.name == "Projects"}
             <div class="AddButtonContainer">
               <IconButton
@@ -124,6 +281,8 @@
               class:MenuRow={true}
               class:Selected={child.id == $selected_id}
               use:ripple
+              data-id={child.id}
+              data-section={menu.name}
               on:click={(e) => select(e, child.id, menu.name)}
             >
               <div class:TreeLine={true} style="flex-shrink: 0" />
@@ -268,11 +427,58 @@
     overflow: hidden;
     white-space: nowrap;
   }
+
+  .SortHelper {
+    font-size: 0.75rem;
+    opacity: 0.7;
+    font-weight: normal;
+    margin-left: 0.5rem;
+  }
   .TreeLine {
     display: block;
     height: 100%;
     width: 1rem;
     border-left: 1px solid white;
     left: -1rem;
+  }
+
+  /* Drag and drop styles */
+  :global(.NameTag) {
+    position: absolute;
+    top: -1000rem;
+    display: inline;
+    background-color: var(--theme-color-Accent-dark);
+    border: 1px solid var(--theme-color-Accent-dark);
+    color: var(--theme-color-Sub-main);
+    padding: 0 0.5rem;
+    z-index: 10000;
+  }
+
+  .MenuRow:global(.Dragging) {
+    opacity: 0.6;
+  }
+
+  .MenuRow:global(.DragOverTop):before {
+    border-top: 0.2rem solid var(--theme-color-Accent-dark);
+    position: absolute;
+    content: "";
+    height: 2rem;
+    padding: 0;
+    width: 100%;
+    box-sizing: border-box;
+    z-index: 999999;
+    pointer-events: none;
+  }
+
+  .MenuRow:global(.DragOverBottom):before {
+    border-bottom: 0.2rem solid var(--theme-color-Accent-dark);
+    position: absolute;
+    content: "";
+    height: 2rem;
+    padding: 0;
+    width: 100%;
+    box-sizing: border-box;
+    z-index: 999999;
+    pointer-events: none;
   }
 </style>
