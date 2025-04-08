@@ -14,7 +14,7 @@ app.on("ready", () => {
     minWidth: 700,
     minHeight: 700,
   });
-  
+
   ////////////// Low //////////////
   // Extend Low class with a new `chain` field
   class LowSyncWithLodash extends LowSync {
@@ -37,7 +37,7 @@ app.on("ready", () => {
   // on get-tree-data.
   // return data to renderer.
   ipcMain.handle('get-tree-data', async (event, arg) => {
-    return db.chain.find({data: {id: arg}}).value();
+    return db.chain.find({ data: { id: arg } }).value();
   });
   // on set-tree-data.
   // return data to renderer.
@@ -50,26 +50,41 @@ app.on("ready", () => {
           return o;
         }
       }).value();
-      db.write();
+      try {
+        db.write();
+      } catch (err) {
+        // Log the error but continue silently
+        log.error('Failed to write data (set-tree-data):', err.message);
+      }
     }
   });
   // on get-project-ids.
   // return data to renderer.
   ipcMain.handle('get-project-ids', async (event, arg) => {
-    return db.chain.map((o) => {return {name: o.data.data.name, id: o.data.id}}).value();
+    return db.chain.map((o) => { return { name: o.data.data.name, id: o.data.id } }).value();
   });
   // on add-project.
   ipcMain.on('add-project', (event, arg) => {
     if (arg) {
       db.data.push(arg);
-      db.write();
+      try {
+        db.write();
+      } catch (err) {
+        // Log the error but continue silently
+        log.error('Failed to write data (add-project):', err.message);
+      }
     }
   });
   // on delete-project.
   ipcMain.on('delete-project', (event, arg) => {
     if (arg) {
       db.data = db.data.filter((node, i) => node.data.id !== arg);
-      db.write();
+      try {
+        db.write();
+      } catch (err) {
+        // Log the error but continue silently
+        log.error('Failed to write data (delete-project):', err.message);
+      }
     }
   });
   // on message.
