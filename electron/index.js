@@ -87,6 +87,43 @@ app.on("ready", () => {
       }
     }
   });
+
+  // on set-project-order.
+  ipcMain.on('set-project-order', (event, projects) => {
+    if (projects && Array.isArray(projects) && projects.length > 0) {
+      // 既存のプロジェクトデータをIDでインデックス化
+      const projectMap = {};
+      db.data.forEach(item => {
+        projectMap[item.data.id] = item;
+      });
+
+      // 新しい順序でプロジェクトを並べ替え
+      const newOrder = [];
+      let hasChanges = false;
+
+      projects.forEach(project => {
+        if (projectMap[project.id]) {
+          newOrder.push(projectMap[project.id]);
+          delete projectMap[project.id]; // 処理済みのプロジェクトを削除
+          hasChanges = true;
+        }
+      });
+
+      // 残りのプロジェクト（配列に含まれていなかったプロジェクト）があれば追加
+      Object.values(projectMap).forEach(project => {
+        newOrder.push(project);
+      });
+
+      if (hasChanges) {
+        db.data = newOrder;
+        try {
+          db.write();
+        } catch (err) {
+          log.error('Failed to write data (set-project-order):', err.message);
+        }
+      }
+    }
+  });
   // on message.
   ipcMain.on('message', (event, arg) => {
     console.log(arg);

@@ -159,6 +159,9 @@
 
       // Update the store
       project_ids.update(() => newProjects);
+
+      // Save the new order to backend
+      project_ids.setProjectOrder(newProjects);
     }
 
     // Reset

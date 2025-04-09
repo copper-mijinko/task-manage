@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getTreeData: (project_name) => ipcRenderer.invoke('get-tree-data', project_name),
   getInitialTreeData: () => ipcRenderer.invoke('get-initial-tree-data'),
   getProjectIDs: () => ipcRenderer.invoke('get-project-ids'),
+  setProjectOrder: (projects) => ipcRenderer.send('set-project-order', projects),
   addProject: (project) => ipcRenderer.send('add-project', project),
   deleteProject: (project_id) => ipcRenderer.send('delete-project', project_id),
   message: (message) => {

@@ -5,7 +5,7 @@ import _ from 'lodash';
 import { getDefaultProject, getNode, filterTree } from './common/tree_control.ts';
 
 // info
-export const info_ids = writable([{id: "9ba28822-6240-4280-9da3-63ac6b8356a6", name: "Usage"}]);
+export const info_ids = writable([{ id: "9ba28822-6240-4280-9da3-63ac6b8356a6", name: "Usage" }]);
 
 // Control projects.
 //  project_ids       : To add or delete project. 
@@ -37,7 +37,7 @@ function createProjectIds(project_ids) {
 		update,
 		init: () => {
 			subscribe(current => {
-				if (!current || current.length==0) {
+				if (!current || current.length == 0) {
 					selected_type.set(undefined);
 					table_selected_id.set(undefined);
 					not_expanded_ids.set(new Set());
@@ -55,11 +55,16 @@ function createProjectIds(project_ids) {
 		},
 		deleteProject: (project_id) => {
 			window.electronAPI.deleteProject(project_id);
-			window.electronAPI.getProjectIDs().then((result) => {set(result);});
+			window.electronAPI.getProjectIDs().then((result) => { set(result); });
 			if (project_id == get(selected_id)) {
 				selected_type.set(undefined);
 				selected_id.set(undefined);
 			}
+		},
+		setProjectOrder: (projects) => {
+			// プロジェクトの順序を保存
+			window.electronAPI.setProjectOrder(projects);
+			// UIを更新（すでにupdateで更新されているため、ここでは何もしない）
 		}
 	}
 }
@@ -72,7 +77,7 @@ function createTreeData(tree_data) {
 		// update tree data db.
 		window.electronAPI.setTreeData(current);
 		// when project_name updated.
-		window.electronAPI.getProjectIDs().then((result) => {project_ids.set(result);})
+		window.electronAPI.getProjectIDs().then((result) => { project_ids.set(result); })
 	}, 1000);
 	return {
 		subscribe,
@@ -81,7 +86,7 @@ function createTreeData(tree_data) {
 		init: () => {
 			subscribe(current => {
 				setTreeData(current);
-		});
+			});
 		}
 	}
 }
@@ -109,16 +114,16 @@ function createSelectedID(id) {
 function createTheme(theme) {
 	const { subscribe, set, update } = writable(theme);
 	const traverse = (theme, varString) => {
-    const keys = Object.keys(theme);
-    Object.keys(theme).forEach((key) => {
-      let varString2 = `${varString}-${key}`;
-      if (theme[key].constructor === Object && !theme[key].length) {
-        traverse(theme[key], varString2);
-      } else {
-        document.documentElement.style.setProperty(varString2, theme[key]);
-      }
-    })
-  }
+		const keys = Object.keys(theme);
+		Object.keys(theme).forEach((key) => {
+			let varString2 = `${varString}-${key}`;
+			if (theme[key].constructor === Object && !theme[key].length) {
+				traverse(theme[key], varString2);
+			} else {
+				document.documentElement.style.setProperty(varString2, theme[key]);
+			}
+		})
+	}
 	return {
 		subscribe,
 		set,
@@ -146,7 +151,7 @@ function createFilter(filter) {
 				filtered = filterTree(filtered, current)
 				if (get(table_selected_id) && filtered && getNode(get(table_selected_id), filtered)) {
 					;
-				}else{
+				} else {
 					table_selected_id.set(undefined);
 				}
 				filtered_data.set(filtered);
