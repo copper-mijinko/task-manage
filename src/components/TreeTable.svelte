@@ -29,7 +29,7 @@
       [resizers, headers, data_rows] = createResizers(
         resizers,
         false,
-        resize_observer
+        resize_observer,
       );
       // Event listners
       unsetResizerEvents(resizers, handlers);
@@ -41,7 +41,7 @@
   const createResizers = (
     resizers = [],
     is_default = true,
-    resize_observer = null
+    resize_observer = null,
   ) => {
     // Get elms
     let rows = table_root.querySelectorAll(".TableRow");
@@ -55,12 +55,12 @@
     // Set width
     const default_ratio_sum = $tree_data.headers.reduce(
       (partialSum, header) => partialSum + header.default_ratio,
-      0
+      0,
     );
     const default_root_width = rows[0].getBoundingClientRect().width;
     const default_data_widths = $tree_data.headers.map(
       (header) =>
-        (default_root_width * header.default_ratio) / default_ratio_sum
+        (default_root_width * header.default_ratio) / default_ratio_sum,
     );
     headers.forEach((header, index) => {
       if (is_default) {
@@ -109,7 +109,8 @@
       });
       let new_table_width = entries[0].contentRect.width;
       const new_header_widths = headers.map(
-        (h) => (h.getBoundingClientRect().width * new_table_width) / table_width
+        (h) =>
+          (h.getBoundingClientRect().width * new_table_width) / table_width,
       );
       headers.forEach((header, index) => {
         header.style.width = `${new_header_widths[index]}px`;
@@ -249,6 +250,8 @@
     width: 100%;
     height: 100%;
     min-width: var(--minWidth);
+    overflow-y: auto;
+    position: relative;
   }
   .TableRoot :global(.Resizer) {
     position: absolute;
