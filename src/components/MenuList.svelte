@@ -430,13 +430,6 @@
     overflow: hidden;
     white-space: nowrap;
   }
-
-  .SortHelper {
-    font-size: 0.75rem;
-    opacity: 0.7;
-    font-weight: normal;
-    margin-left: 0.5rem;
-  }
   .TreeLine {
     display: block;
     height: 100%;
@@ -444,7 +437,6 @@
     border-left: 1px solid white;
     left: -1rem;
   }
-
   /* Drag and drop styles */
   :global(.NameTag) {
     position: absolute;

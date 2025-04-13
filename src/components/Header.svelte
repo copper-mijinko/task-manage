@@ -3,7 +3,6 @@
   import Drawer from "./Drawer.svelte";
   import ToggleSwitch from "./ToggleSwitch.svelte";
   import { theme } from "../stores";
-  import { THEME_DARK, THEME_LIGHT } from "../common/theme";
   import MenuList from "./MenuList.svelte";
   export let title = "Task Manage";
   let show_drawer = false;
@@ -46,8 +45,9 @@
       rightColor="white"
       leftColorBack="rgba(0,0,0,0.5)"
       rightColorBack="rgba(255,255,255,0.5)"
+      checked={$theme == "light"}
       on:click={() => {
-        $theme = $theme == THEME_DARK ? THEME_LIGHT : THEME_DARK;
+        $theme = $theme == "dark" ? "light" : "dark";
       }}
     />
   </div>

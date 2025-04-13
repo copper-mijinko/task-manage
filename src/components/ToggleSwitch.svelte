@@ -5,6 +5,7 @@
   export let leftColorBack = "#75bbff33";
   export let rightColor = "#ff8d8d";
   export let rightColorBack = "#ff8d8d33";
+  export let checked = true;
 </script>
 
 <div
@@ -12,7 +13,7 @@
 >
   <span class="Left">{left}</span>
   <label class="ToggleButton">
-    <input type="checkbox" on:click />
+    <input type="checkbox" {checked} on:click />
   </label>
   <span class="Right">{right}</span>
 </div>

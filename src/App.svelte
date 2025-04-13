@@ -1,12 +1,5 @@
 <script>
-  import {
-    tree_data,
-    project_ids,
-    selected_type,
-    selected_id,
-    theme,
-    filter,
-  } from "./stores.js";
+  import { selected_type, selected_id, init_store } from "./stores.js";
   import ProjectPage from "./components/ProjectPage.svelte";
   import Header from "./components/Header.svelte";
   import InfoPage from "./components/InfoPage.svelte";
@@ -16,24 +9,7 @@
   let show = Array(4).fill(false);
 
   ////////////// Initial Settings //////////////
-  // Get initial data of a project from db.
-  window.electronAPI.getInitialTreeData().then((result) => {
-    tree_data.init();
-    project_ids.init();
-    selected_id.init();
-    filter.init();
-    if (result) {
-      tree_data.set(result);
-      selected_type.set("Projects");
-      selected_id.set(result.data.id);
-    }
-  });
-  // Get all project IDs from db.
-  window.electronAPI.getProjectIDs().then((result) => {
-    project_ids.set(result);
-  });
-  // Set theme
-  theme.setTheme();
+  init_store();
 </script>
 
 <div class:Container={true}>

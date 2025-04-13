@@ -21,23 +21,52 @@ app.on("ready", () => {
     chain = _.chain(this).get('data')
   }
   // init low db. read after.
+  // data
   const file = path.join(__dirname, 'db.json');
   log.info(file);
-  const adapter = new JSONFileSync(file);
   const defaultData = {}
-  const db = new LowSyncWithLodash(adapter, defaultData);
+  const adapter = new JSONFileSync(file);
+  const db = new LowSyncWithLodash(adapter);
+  db.read();
+  db.data ||= defaultData; // initialize
+  db.write();
+  // meta
+  const file_meta = path.join(__dirname, 'meta.json');
+  log.info(file_meta);
+  const defaultDataMeta = {
+    "theme": "dark"
+  }
+  const adapter_meta = new JSONFileSync(file_meta);
+  const db_meta = new LowSyncWithLodash(adapter_meta);
+  db_meta.read()
+  db_meta.data ||= defaultDataMeta; // initialize
+  db_meta.write();
 
   ////////////// IPC //////////////
   // on get-initial-tree-data.
   // return data to renderer.
   ipcMain.handle('get-initial-tree-data', async (event, arg) => {
-    await db.read();
     return db.data[0];
   });
   // on get-tree-data.
   // return data to renderer.
   ipcMain.handle('get-tree-data', async (event, arg) => {
     return db.chain.find({ data: { id: arg } }).value();
+  });
+  // on get-meta-data.
+  // return data to renderer.
+  ipcMain.handle('get-meta-data', async (event, key) => {
+    return db_meta.data[key];
+  });
+  // on set-meta-data.
+  // return data to renderer.
+  ipcMain.on('set-meta-data', (event, key, value) => {
+    db_meta.data[key] = value;
+    try {
+      db_meta.write();
+    } catch (err) {
+      log.error('Failed to write meta_data (set-meta-data):', err.message);
+    }
   });
   // on set-tree-data.
   // return data to renderer.

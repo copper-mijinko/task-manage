@@ -12,7 +12,6 @@
     getNode,
   } from "../common/tree_control.ts";
   import { ripple } from "../common/common.js";
-  import { THEME_DARK } from "../common/theme.js";
   import { theme } from "../stores.js";
   import TextInput from "./TextInput.svelte";
   import StatusSelect from "./StatusSelect.svelte";
@@ -32,7 +31,7 @@
   $: Expanded = !$not_expanded_ids.has(id);
   $: Selected = $table_selected_id == id;
 
-  $: is_dark = $theme == THEME_DARK;
+  $: is_dark = $theme == "dark";
 
   function select(e) {
     e.stopPropagation();
@@ -74,7 +73,7 @@
     this.classList.add("Dragging");
 
     const name_text = this.querySelector(
-      "div:first-child div:last-child input"
+      "div:first-child div:last-child input",
     ).value;
     const name_tag = document.createElement("div");
     name_tag.classList.add("NameTag");
@@ -82,7 +81,7 @@
     document.body.appendChild(name_tag);
 
     const rem = parseFloat(
-      window.getComputedStyle(document.documentElement).fontSize
+      window.getComputedStyle(document.documentElement).fontSize,
     );
     e.dataTransfer.setDragImage(name_tag, -rem, -rem);
 
@@ -131,7 +130,7 @@
           dragged_id,
           this.id,
           $tree_data.data,
-          "insert"
+          "insert",
         );
         this.classList.remove("DragOverTop");
         break;
@@ -140,7 +139,7 @@
           dragged_id,
           this.id,
           $tree_data.data,
-          "append"
+          "append",
         );
         this.classList.remove("DragOverBottom");
         break;

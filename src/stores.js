@@ -10,12 +10,13 @@ export const info_ids = writable([{ id: "9ba28822-6240-4280-9da3-63ac6b8356a6", 
 // Control projects.
 //  project_ids       : To add or delete project. 
 //  tree_data         : To control data of the selected project.
+// Meta data.
+//  theme             : ("dark"|"light")
 // Only for ui.
 //  selected_type     : (undefined|"Projects"|"Info") to show main page.
 //  table_selected_id : Selected id of the table row.
 //  not_expanded_ids  : Ids of not expanded rows.
 //  selected_id       : The project_id or info_id.
-//  theme             : (THEME_DARK|THEME_LIGHT)
 //  filter            : Key value(list) data for filtering. ex) {"status": ["Open", "In Progress"]}
 //  filtered_data     : Filtered tree_data.data.
 
@@ -37,6 +38,13 @@ function createProjectIds(project_ids) {
 		update,
 		init: () => {
 			subscribe(current => {
+				if (current === undefined) {
+					window.electronAPI.getProjectIDs().then(
+						(result) => {
+							current = result;
+						}
+					)
+				}
 				if (!current || current.length == 0) {
 					selected_type.set(undefined);
 					table_selected_id.set(undefined);
@@ -85,6 +93,15 @@ function createTreeData(tree_data) {
 		update,
 		init: () => {
 			subscribe(current => {
+				if (current === undefined) {
+					window.electronAPI.getInitialTreeData().then(
+						(result) => {
+							setTreeData(current);
+							selected_type.set("Projects");
+							selected_id.set(result.data.id);
+						}
+					)
+				} else { }
 				setTreeData(current);
 			});
 		}
@@ -99,6 +116,7 @@ function createSelectedID(id) {
 		update,
 		init: () => {
 			subscribe(current => {
+				// on selected_id changed, load project
 				let current_selected_type = get(selected_type);
 				if (current_selected_type == "Projects") {
 					window.electronAPI.getTreeData(current).then((result) => {
@@ -128,11 +146,24 @@ function createTheme(theme) {
 		subscribe,
 		set,
 		update,
-		setTheme: () => {
+		init: () => {
 			subscribe(current => {
-				traverse(current, "--theme");
+				if (current === undefined) {
+					window.electronAPI.getMetaData("theme").then(
+						(result) => {
+							set(result);
+						}
+					);
+				}
+				if (current == "dark") {
+					traverse(THEME_DARK, "--theme");
+					window.electronAPI.setMetaData("theme", current);
+				} else if (current == "light") {
+					traverse(THEME_LIGHT, "--theme");
+					window.electronAPI.setMetaData("theme", current);
+				}
 			})
-		}
+		},
 	}
 };
 
@@ -166,6 +197,16 @@ selected_type = writable(undefined);
 table_selected_id = writable(undefined);
 not_expanded_ids = writable(new Set()); // for default expanded.
 selected_id = createSelectedID(undefined);
-theme = createTheme(THEME_DARK);
+theme = createTheme(undefined);
 filter = createFilter({})
 filtered_data = writable(tree_data.data)
+
+export function init_store() {
+	// Get initial data of a project from db.
+	tree_data.init();
+	project_ids.init();
+	selected_id.init();
+	filter.init();
+	// Set theme
+	theme.init();
+}
