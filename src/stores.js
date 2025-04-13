@@ -98,7 +98,11 @@ function createTreeData(tree_data) {
 						(result) => {
 							setTreeData(current);
 							selected_type.set("Projects");
-							selected_id.set(result.data.id);
+							if (result === undefined) {
+								;
+							} else {
+								selected_id.set(result.data.id);
+							}
 						}
 					)
 				} else { }

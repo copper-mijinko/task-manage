@@ -24,7 +24,7 @@ app.on("ready", () => {
   // data
   const file = path.join(__dirname, 'db.json');
   log.info(file);
-  const defaultData = {}
+  const defaultData = []
   const adapter = new JSONFileSync(file);
   const db = new LowSyncWithLodash(adapter);
   db.read();

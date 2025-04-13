@@ -5,7 +5,7 @@
   export let toggle;
   export let header;
   export let content;
-  export let callback;
+  export let callback = undefined;
   export let ok = "ok";
   export let cancel = "cancel";
 </script>
