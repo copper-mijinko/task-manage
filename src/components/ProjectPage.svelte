@@ -7,8 +7,13 @@
   import Card from "./Card.svelte";
   import Dialog from "./Dialog.svelte";
   import SearchBox from "./SearchBox.svelte";
-  import { table_selected_id, tree_data } from "../stores.js";
-  import { getNode, addNode, rmNode } from "../common/tree_control.ts";
+  import { table_selected_id, tree_data, not_expanded_ids } from "../stores.js";
+  import {
+    getNode,
+    addNode,
+    rmNode,
+    getParent,
+  } from "../common/tree_control.ts";
   import { getDefaultNode } from "../common/tree_control.ts";
 
   // Dialog
@@ -33,12 +38,45 @@
 
     const new_node = getDefaultNode();
     if ($table_selected_id) {
+      // 親ノードのIDを特定
+      let parentId;
+      if (action === "append") {
+        // appendの場合は選択されているノードが親
+        parentId = $table_selected_id;
+      } else {
+        // insert_afterの場合は選択されているノードの親
+        const parentNode = getParent($table_selected_id, $tree_data.data);
+        if (parentNode) {
+          parentId = parentNode.id;
+        }
+      }
+
+      // ノードを追加
       $tree_data.data = addNode(
         new_node,
         $table_selected_id,
         $tree_data.data,
-        action
+        action,
       );
+
+      // 親ノードが折りたたまれている場合は展開する
+      if (parentId && $not_expanded_ids.has(parentId)) {
+        $not_expanded_ids.delete(parentId);
+        $not_expanded_ids = $not_expanded_ids; // Svelteのリアクティビティのためのトリガー
+      }
+
+      // 新しいノードを選択状態にする
+      setTimeout(() => {
+        $table_selected_id = new_node.id;
+
+        // DOMの更新を待ってからスクロール処理を行う
+        setTimeout(() => {
+          const newRow = document.getElementById(new_node.id);
+          if (newRow) {
+            newRow.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          }
+        }, 50); // 少し長めのタイムアウトで確実にDOMが更新されるのを待つ
+      }, 0);
     }
   }
 

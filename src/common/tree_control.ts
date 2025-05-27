@@ -178,7 +178,7 @@ export function setNode(target: TreeData, tree_data: TreeData): TreeData {
   return tree_data;
 }
 
-function getParent(base: string, tree_data: TreeData): TreeData {
+export function getParent(base: string, tree_data: TreeData): TreeData {
   // Depth First Search
   let parent_tree;
   if (tree_data.id == base) {
