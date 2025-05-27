@@ -13,6 +13,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
       - run: npm install
+      - run: |
+          sudo dpkg --add-architecture i386
+          sudo mkdir -pm755 /etc/apt/keyrings
+          sudo wget -O /etc/apt/keyrings/winehq-archive.key https://dl.winehq.org/wine-builds/winehq.key
+          sudo apt-key add /etc/apt/keyrings/winehq-archive.key
+          sudo add-apt-repository 'deb https://dl.winehq.org/wine-builds/ubuntu/ focal main'
+          sudo apt update
+          sudo apt install --install-recommends winehq-stable
       - id: extract_tag
         run: |
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
