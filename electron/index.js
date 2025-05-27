@@ -1,5 +1,5 @@
 const _ = require("lodash")
-const { app, BrowserWindow, ipcMain } = require("electron");
+const { app, BrowserWindow, ipcMain, shell } = require("electron");
 const path = require("path");
 const { LowSync, JSONFileSync } = require('@commonify/lowdb');
 const log = require("electron-log");
@@ -156,6 +156,15 @@ app.on("ready", () => {
   // on message.
   ipcMain.on('message', (event, arg) => {
     console.log(arg);
+  });
+
+  // 外部リンクを開くためのハンドラ
+  ipcMain.on('open-external-link', (event, url) => {
+    if (url && typeof url === 'string') {
+      shell.openExternal(url).catch(err => {
+        log.error('外部リンクを開く際にエラーが発生しました:', err);
+      });
+    }
   });
 
   mainWindow.loadFile(path.join(__dirname, "../public/index.html"));

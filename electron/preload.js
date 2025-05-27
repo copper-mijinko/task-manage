@@ -12,5 +12,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deleteProject: (project_id) => ipcRenderer.send('delete-project', project_id),
   message: (message) => {
     ipcRenderer.send('message', message);
+  },
+  openExternalLink: (url) => {
+    ipcRenderer.send('open-external-link', url);
   }
 })

@@ -22,6 +22,46 @@
   ];
   let quill = null;
 
+  // ql-previewクリックをハンドルする関数
+  function setupLinkHandlers() {
+    setTimeout(() => {
+      const tooltipPreviews = document.querySelectorAll(
+        ".ql-tooltip.ql-editing a.ql-action",
+      );
+      if (tooltipPreviews.length) {
+        // リンク保存ボタンがクリックされた後にプレビューハンドラを設定する
+        tooltipPreviews.forEach((preview) => {
+          preview.addEventListener("click", () => {
+            setTimeout(() => setupPreviewHandlers(), 100);
+          });
+        });
+      }
+
+      // 既存のプレビューリンクにもハンドラを設定
+      setupPreviewHandlers();
+    }, 100);
+  }
+
+  // プレビューリンクのハンドラを設定
+  function setupPreviewHandlers() {
+    const previewLinks = document.querySelectorAll(
+      ".ql-tooltip:not(.ql-editing) .ql-preview",
+    );
+    previewLinks.forEach((link) => {
+      if (!link.dataset.handlerAttached) {
+        link.dataset.handlerAttached = "true";
+        link.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const href = link.getAttribute("href");
+          if (href) {
+            window.electronAPI.openExternalLink(href);
+          }
+        });
+      }
+    });
+  }
+
   onMount(() => {
     quill = new Quill(editor, {
       theme: "snow",
@@ -35,6 +75,25 @@
     quill.on("editor-change", function (eventName, args) {
       if (content != quill.getContents()) {
         saveMemo(quill.getContents());
+      }
+
+      // エディタの変更時にリンクハンドラをセットアップ
+      setupLinkHandlers();
+    });
+
+    // 初期セットアップ
+    setupLinkHandlers();
+
+    // ドキュメント全体のクリックイベントでもチェック
+    document.addEventListener("click", (e) => {
+      // リンク挿入時または編集時にプレビューハンドラをセットアップ
+      if (
+        e.target &&
+        (e.target.classList.contains("ql-link") ||
+          (e.target.parentElement &&
+            e.target.parentElement.classList.contains("ql-link")))
+      ) {
+        setupLinkHandlers();
       }
     });
   });
