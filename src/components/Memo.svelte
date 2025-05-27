@@ -56,6 +56,17 @@
           const href = link.getAttribute("href");
           if (href) {
             window.electronAPI.openExternalLink(href);
+
+            // tooltipを閉じる
+            const tooltip = link.closest(".ql-tooltip");
+            if (tooltip) {
+              tooltip.style.display = "none";
+
+              // エディタにフォーカスを戻す
+              if (quill) {
+                quill.focus();
+              }
+            }
           }
         });
       }
