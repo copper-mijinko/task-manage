@@ -14,10 +14,9 @@ jobs:
       - uses: actions/setup-node@v4
       - run: npm install
       - run: |
-          sudo su -
-          apt update
-          apt install wine64
-          dpkg --add-architecture i386 && apt-get update && apt-get install wine32:i386
+          sudo apt update
+          sudo apt install wine64
+          sudo dpkg --add-architecture i386 && sudo apt-get update && sudo apt-get install wine32:i386
       - id: extract_tag
         run: |
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
