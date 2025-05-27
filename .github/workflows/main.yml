@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+      - run: npm ci
+      - id: extract_tag
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      - run: |
+          VERSION=${{ steps.extract_tag.outputs.version }}
+          jq --arg v "$VERSION" '.version = $v' package.json > tmp.json && mv tmp.json package.json
+      - run: npm run dist
+      - run: |
+          VERSION=${{ steps.extract_tag.outputs.version }}
+          ls dist
+          mv dist/win-unpacked dist/task-manage-$VERSION
+          cd dist && tar -cvzf task-manage-$VERSION.tar.gz task-manage-$VERSION
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: Release v${{ steps.extract_tag.outputs.version }}
+          files: |
+            dist/*.tar.gz
+            dist/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
