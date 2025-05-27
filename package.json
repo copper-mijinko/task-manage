@@ -20,7 +20,8 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
-    }
+    },
+    "publish": null
   },
   "scripts": {
     "build": "rollup -c",
