@@ -27,7 +27,7 @@ jobs:
       - run: |
           VERSION=${{ steps.extract_tag.outputs.version }}
           jq --arg v "$VERSION" '.version = $v' package.json > tmp.json && mv tmp.json package.json
-      - run: npm run dist
+      - run: npm run dist --publish never
       - run: |
           VERSION=${{ steps.extract_tag.outputs.version }}
           ls dist
