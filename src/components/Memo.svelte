@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from "svelte";
+  import { onMount, createEventDispatcher } from "svelte";
   import Quill from "quill";
   import "../..//node_modules/quill/dist/quill.snow.css";
   import { isEqual } from "lodash";
@@ -22,55 +22,44 @@
   ];
   let quill = null;
 
-  // ql-previewクリックをハンドルする関数
-  function setupLinkHandlers() {
-    setTimeout(() => {
-      const tooltipPreviews = document.querySelectorAll(
-        ".ql-tooltip.ql-editing a.ql-action",
-      );
-      if (tooltipPreviews.length) {
-        // リンク保存ボタンがクリックされた後にプレビューハンドラを設定する
-        tooltipPreviews.forEach((preview) => {
-          preview.addEventListener("click", () => {
-            setTimeout(() => setupPreviewHandlers(), 100);
-          });
-        });
-      }
+  // リンク処理のための変数
+  let isHandlingLink = false;
 
-      // 既存のプレビューリンクにもハンドラを設定
-      setupPreviewHandlers();
-    }, 100);
-  }
+  // Quillのリンクツールチップを処理するための関数
+  function handleLinkTooltips() {
+    // ドキュメント全体のクリックイベントリスナーを一度だけ設定
+    document.addEventListener(
+      "click",
+      (e) => {
+        // Visit (ql-preview) ボタンがクリックされた場合
+        if (e.target && e.target.classList.contains("ql-preview")) {
+          const href = e.target.getAttribute("href");
+          if (href && href.trim() !== "") {
+            // 既に処理中なら何もしない（二重実行防止）
+            if (isHandlingLink) return;
+            isHandlingLink = true;
 
-  // プレビューリンクのハンドラを設定
-  function setupPreviewHandlers() {
-    const previewLinks = document.querySelectorAll(
-      ".ql-tooltip:not(.ql-editing) .ql-preview",
-    );
-    previewLinks.forEach((link) => {
-      if (!link.dataset.handlerAttached) {
-        link.dataset.handlerAttached = "true";
-        link.addEventListener("click", (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          const href = link.getAttribute("href");
-          if (href) {
+            // クリックイベントのデフォルト動作を停止（内部ブラウザでの開封を防止）
+            e.preventDefault();
+            e.stopPropagation();
+
+            // 外部ブラウザでリンクを開く
             window.electronAPI.openExternalLink(href);
 
-            // tooltipを閉じる
-            const tooltip = link.closest(".ql-tooltip");
-            if (tooltip) {
-              tooltip.style.display = "none";
-
-              // エディタにフォーカスを戻す
-              if (quill) {
-                quill.focus();
-              }
+            // Quillの標準ツールチップを適切に閉じる
+            if (quill && quill.theme && quill.theme.tooltip) {
+              quill.theme.tooltip.hide();
             }
+
+            // フラグをリセット（次のリンククリックのため）
+            setTimeout(() => {
+              isHandlingLink = false;
+            }, 100);
           }
-        });
-      }
-    });
+        }
+      },
+      false,
+    );
   }
 
   onMount(() => {
@@ -80,33 +69,25 @@
         toolbar: toolbarOptions,
       },
     });
+
     if (content) {
       quill.setContents(content);
     }
+
     quill.on("editor-change", function (eventName, args) {
       if (content != quill.getContents()) {
         saveMemo(quill.getContents());
       }
-
-      // エディタの変更時にリンクハンドラをセットアップ
-      setupLinkHandlers();
     });
 
-    // 初期セットアップ
-    setupLinkHandlers();
+    // リンクツールチップの処理をセットアップ
+    handleLinkTooltips();
 
-    // ドキュメント全体のクリックイベントでもチェック
-    document.addEventListener("click", (e) => {
-      // リンク挿入時または編集時にプレビューハンドラをセットアップ
-      if (
-        e.target &&
-        (e.target.classList.contains("ql-link") ||
-          (e.target.parentElement &&
-            e.target.parentElement.classList.contains("ql-link")))
-      ) {
-        setupLinkHandlers();
-      }
-    });
+    // クリーンアップ関数を返す
+    return () => {
+      // コンポーネントがアンマウントされる時に必要なクリーンアップを行う
+      quill = null;
+    };
   });
 
   $: if (quill && !isEqual(quill.getContents(), content)) {
