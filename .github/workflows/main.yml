@@ -27,18 +27,28 @@ jobs:
       - run: |
           VERSION=${{ steps.extract_tag.outputs.version }}
           jq --arg v "$VERSION" '.version = $v' package.json > tmp.json && mv tmp.json package.json
-      - run: npm run dist
+      - run: |
+          npm run dist
+          sleep 2  # EXE生成後のI/O待ち
       - run: |
           VERSION=${{ steps.extract_tag.outputs.version }}
           ls dist
           mv dist/win-unpacked dist/task-manage-$VERSION
           cd dist && tar -cvzf task-manage-$VERSION.tar.gz task-manage-$VERSION
-      - uses: softprops/action-gh-release@v2
+          sleep 2  # tar.gz生成後のI/O待ち
+
+      # .tar.gzのみアップロード
+      - uses: softprops/action-gh-release@v2.0.4
         with:
           name: Release v${{ steps.extract_tag.outputs.version }}
-          files: |
-            dist/*.tar.gz
-            dist/*.exe
+          files: dist/*.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      
+
+      # .exeのみアップロード
+      - uses: softprops/action-gh-release@v2.0.4
+        with:
+          name: Release v${{ steps.extract_tag.outputs.version }}
+          files: dist/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
