@@ -53,7 +53,7 @@
     "@commonify/lowdb": "^3.0.0",
     "electron-log": "^4.4.8",
     "lodash": "^4.17.21",
-    "quill": "^2.0.0-dev.4",
+    "quill": "^2.0.3",
     "sirv-cli": "^2.0.0"
   }
 }
