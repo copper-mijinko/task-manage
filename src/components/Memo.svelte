@@ -43,18 +43,19 @@
             e.preventDefault();
             e.stopPropagation();
 
-            // 外部ブラウザでリンクを開く
-            window.electronAPI.openExternalLink(href);
-
             // Quillの標準ツールチップを適切に閉じる
             if (quill && quill.theme && quill.theme.tooltip) {
               quill.theme.tooltip.hide();
             }
 
+            // 外部ブラウザでリンクを開く
+            window.electronAPI.openExternalLink(href);
+
             // フラグをリセット（次のリンククリックのため）
+            // 適切な時間でリセットし、短時間での複数回クリックを防止
             setTimeout(() => {
               isHandlingLink = false;
-            }, 100);
+            }, 300);
           }
         }
       },
