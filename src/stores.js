@@ -12,10 +12,10 @@ export const info_ids = writable([{ id: "9ba28822-6240-4280-9da3-63ac6b8356a6", 
 //  tree_data         : To control data of the selected project.
 // Meta data.
 //  theme             : ("dark"|"light")
+//  closed_node_ids   : Set of ids of closed nodes.
 // Only for ui.
 //  selected_type     : (undefined|"Projects"|"Info") to show main page.
 //  table_selected_id : Selected id of the table row.
-//  not_expanded_ids  : Ids of not expanded rows.
 //  selected_id       : The project_id or info_id.
 //  filter            : Key value(list) data for filtering. ex) {"status": ["Open", "In Progress"]}
 //  filtered_data     : Filtered tree_data.data.
@@ -24,7 +24,7 @@ export let project_ids;
 export let tree_data;
 export let selected_type;
 export let table_selected_id;
-export let not_expanded_ids;
+export let closed_node_ids;
 export let selected_id;
 export let theme;
 export let filter;
@@ -48,7 +48,8 @@ function createProjectIds(project_ids) {
 				if (!current || current.length == 0) {
 					selected_type.set(undefined);
 					table_selected_id.set(undefined);
-					not_expanded_ids.set(new Set());
+					// プロジェクトがない場合は空のセットにリセット
+					closed_node_ids.update(() => new Set());
 				}
 			})
 		},
@@ -64,6 +65,12 @@ function createProjectIds(project_ids) {
 		deleteProject: (project_id) => {
 			window.electronAPI.deleteProject(project_id);
 			window.electronAPI.getProjectIDs().then((result) => { set(result); });
+
+			// プロジェクト削除時に関連するメタデータも削除
+			const metaKey = `closed_nodes_${project_id}`;
+			window.electronAPI.deleteMetaData(metaKey);
+			console.log(`プロジェクト削除によりメタデータを完全に削除: ${metaKey}`);
+
 			if (project_id == get(selected_id)) {
 				selected_type.set(undefined);
 				selected_id.set(undefined);
@@ -79,7 +86,61 @@ function createProjectIds(project_ids) {
 
 function createTreeData(tree_data) {
 	const { subscribe, set, update } = writable(tree_data);
+	let previousData = null;
+
+	// ツリーデータから削除されたノードのIDを検出
+	const findRemovedNodeIds = (oldData, newData) => {
+		if (!oldData || !newData) return [];
+
+		// 削除されたノードを検出する関数
+		const collectNodeIds = (node) => {
+			if (!node) return [];
+			const ids = [node.id];
+			if (node.children && node.children.length > 0) {
+				for (const child of node.children) {
+					ids.push(...collectNodeIds(child));
+				}
+			}
+			return ids;
+		};
+
+		// 古いデータと新しいデータからすべてのノードIDを収集
+		const oldIds = oldData.data ? collectNodeIds(oldData.data) : [];
+		const newIds = newData.data ? collectNodeIds(newData.data) : [];
+
+		// 古いデータにあって新しいデータにないIDを見つける
+		return oldIds.filter(id => !newIds.includes(id));
+	};
+
 	let setTreeData = throttle((current) => {
+		// 削除されたノードのメタデータをクリーンアップ
+		if (previousData) {
+			const removedIds = findRemovedNodeIds(previousData, current);
+			if (removedIds.length > 0) {
+				const projectId = get(selected_id);
+				if (projectId) {
+					// 削除されたノードのIDをclosed_node_idsから削除
+					closed_node_ids.update(currentState => {
+						const newState = new Set(currentState);
+						removedIds.forEach(id => {
+							newState.delete(id);
+						});
+
+						// メタデータに保存
+						const metaKey = `closed_nodes_${projectId}`;
+						const idsArray = Array.from(newState);
+						console.log(`ノード削除による状態更新: ${metaKey}`, idsArray);
+						window.electronAPI.setMetaData(metaKey, idsArray);
+
+						return newState;
+					});
+				}
+			}
+		}
+
+		// 現在のデータを保存
+		previousData = _.cloneDeep(current);
+
 		// update filtered in ui.
 		filter.set(get(filter));
 		// update tree data db.
@@ -196,14 +257,169 @@ function createFilter(filter) {
 }
 
 tree_data = createTreeData(undefined);
+// ノードの閉じている状態を管理するストア（閉じているノードのIDのセット）
+// 指定されたノードとその子孫ノードのIDをすべて収集する関数
+function collectNodeAndDescendantIds(node) {
+	if (!node) return [];
+
+	const ids = [node.id];
+	if (node.children && node.children.length > 0) {
+		for (const child of node.children) {
+			ids.push(...collectNodeAndDescendantIds(child));
+		}
+	}
+	return ids;
+}
+
+function createClosedNodeIds(ids) {
+	// 各プロジェクトのノード開閉状態を保持
+	// プロジェクトID -> Set(閉じているノードID) のマップ
+	const projectExpandedStates = new Map();
+
+	// 現在のプロジェクトの閉じているノードIDのセット
+	const { subscribe, set, update } = writable(ids || new Set());
+
+	// メタデータから状態を読み込む
+	const loadState = async (projectId) => {
+		if (!projectId) return;
+
+		try {
+			const metaKey = `closed_nodes_${projectId}`;
+			const result = await window.electronAPI.getMetaData(metaKey);
+			console.log(`読み込み: ${metaKey}`, result);
+
+			let newState;
+			if (result && Array.isArray(result)) {
+				newState = new Set(result);
+				projectExpandedStates.set(projectId, newState);
+			} else {
+				newState = new Set();
+				projectExpandedStates.set(projectId, newState);
+			}
+
+			set(newState);
+			return newState;
+		} catch (error) {
+			console.error("状態読み込みエラー:", error);
+			return new Set();
+		}
+	};
+
+	// メタデータに状態を保存
+	const saveState = (projectId, state) => {
+		if (!projectId) return;
+
+		try {
+			const metaKey = `closed_nodes_${projectId}`;
+			const idsArray = Array.from(state);
+			console.log(`保存: ${metaKey}`, idsArray);
+			window.electronAPI.setMetaData(metaKey, idsArray);
+		} catch (error) {
+			console.error("状態保存エラー:", error);
+		}
+	};
+
+	return {
+		subscribe,
+		set,
+		update,
+
+		add: (nodeId) => {
+			const projectId = get(selected_id);
+			if (!projectId) return;
+
+			update(currentState => {
+				const newState = new Set(currentState);
+				newState.add(nodeId);
+
+				// 状態をマップに保存
+				projectExpandedStates.set(projectId, newState);
+
+				// メタデータに保存
+				saveState(projectId, newState);
+
+				return newState;
+			});
+		},
+
+		delete: (nodeId) => {
+			const projectId = get(selected_id);
+			if (!projectId) return;
+
+			update(currentState => {
+				const newState = new Set(currentState);
+				newState.delete(nodeId);
+
+				// 状態をマップに保存
+				projectExpandedStates.set(projectId, newState);
+
+				// メタデータに保存
+				saveState(projectId, newState);
+
+				return newState;
+			});
+		},
+
+		// 初期化
+		init: () => {
+			// プロジェクト変更時に対応する状態をロード
+			selected_id.subscribe(async (projectId) => {
+				if (projectId) {
+					// すでに読み込み済みの状態があればそれを使用
+					if (projectExpandedStates.has(projectId)) {
+						set(projectExpandedStates.get(projectId));
+					} else {
+						// なければ読み込み
+						await loadState(projectId);
+					}
+				}
+			});
+		},
+
+		// 指定されたノードとその子孫のメタデータを削除
+		cleanupNodeMetadata: (nodeId) => {
+			const projectId = get(selected_id);
+			if (!projectId) return;
+
+			const node = getNode(nodeId, get(tree_data).data);
+			if (!node) return;
+
+			// ノードとその子孫のIDをすべて収集
+			const nodeIds = collectNodeAndDescendantIds(node);
+
+			update(currentState => {
+				const newState = new Set(currentState);
+
+				// 収集したIDをすべて削除
+				nodeIds.forEach(id => {
+					newState.delete(id);
+				});
+
+				// 状態をマップに保存
+				projectExpandedStates.set(projectId, newState);
+
+				// メタデータに保存
+				const metaKey = `closed_nodes_${projectId}`;
+				const idsArray = Array.from(newState);
+				console.log(`ノード削除による状態更新: ${metaKey}`, idsArray);
+				window.electronAPI.setMetaData(metaKey, idsArray);
+
+				return newState;
+			});
+		}
+	};
+}
+
 project_ids = createProjectIds(undefined);
 selected_type = writable(undefined);
 table_selected_id = writable(undefined);
-not_expanded_ids = writable(new Set()); // for default expanded.
+closed_node_ids = createClosedNodeIds(new Set()); // 閉じているノードのIDのセット
 selected_id = createSelectedID(undefined);
 theme = createTheme(undefined);
 filter = createFilter({})
 filtered_data = writable(tree_data.data)
+
+// 古い変数名は使用しない
 
 export function init_store() {
 	// Get initial data of a project from db.
@@ -211,6 +427,7 @@ export function init_store() {
 	project_ids.init();
 	selected_id.init();
 	filter.init();
-	// Set theme
+	// Set theme and other UI states
 	theme.init();
+	closed_node_ids.init();
 }
