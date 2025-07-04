@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import TreeTableHeader from "./TreeTableHeader.svelte";
   import TreeTableData from "./TreeTableData.svelte";
-  import { tree_data, filter, filtered_data } from "../stores";
+  import { tree_data, filter, filtered_data, closed_node_ids } from "../stores";
 
   let table_root; // Bind
 

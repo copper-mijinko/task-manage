@@ -7,7 +7,7 @@
   import Card from "./Card.svelte";
   import Dialog from "./Dialog.svelte";
   import SearchBox from "./SearchBox.svelte";
-  import { table_selected_id, tree_data, not_expanded_ids } from "../stores.js";
+  import { table_selected_id, tree_data, closed_node_ids } from "../stores.js";
   import {
     getNode,
     addNode,
@@ -60,9 +60,8 @@
       );
 
       // 親ノードが折りたたまれている場合は展開する
-      if (parentId && $not_expanded_ids.has(parentId)) {
-        $not_expanded_ids.delete(parentId);
-        $not_expanded_ids = $not_expanded_ids; // Svelteのリアクティビティのためのトリガー
+      if (parentId && $closed_node_ids.has(parentId)) {
+        closed_node_ids.delete(parentId);
       }
 
       // 新しいノードを選択状態にする

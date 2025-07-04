@@ -68,6 +68,19 @@ app.on("ready", () => {
       log.error('Failed to write meta_data (set-meta-data):', err.message);
     }
   });
+  // on delete-meta-data.
+  // completely remove a key from meta data.
+  ipcMain.on('delete-meta-data', (event, key) => {
+    if (key && db_meta.data.hasOwnProperty(key)) {
+      delete db_meta.data[key];
+      try {
+        db_meta.write();
+        log.info(`Metadata key deleted: ${key}`);
+      } catch (err) {
+        log.error('Failed to write meta_data (delete-meta-data):', err.message);
+      }
+    }
+  });
   // on set-tree-data.
   // return data to renderer.
   ipcMain.on('set-tree-data', (event, arg) => {

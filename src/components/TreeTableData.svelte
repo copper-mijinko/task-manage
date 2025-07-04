@@ -4,7 +4,7 @@
 
 <script>
   import { onMount } from "svelte";
-  import { tree_data, table_selected_id, not_expanded_ids } from "../stores.js";
+  import { tree_data, table_selected_id, closed_node_ids } from "../stores.js";
   import {
     isChild,
     reorderTree,
@@ -28,7 +28,7 @@
   let table_row; //Bind
 
   $: HasChildren = children.length > 0;
-  $: Expanded = !$not_expanded_ids.has(id);
+  $: Expanded = !$closed_node_ids.has(id);
   $: Selected = $table_selected_id == id;
 
   $: is_dark = $theme == "dark";
@@ -40,12 +40,22 @@
 
   function toggle(e) {
     e.stopPropagation();
-    if ($not_expanded_ids.has(id)) {
-      $not_expanded_ids.delete(id);
-    } else {
-      $not_expanded_ids.add(id);
+    console.log("ノード開閉操作:", id, $closed_node_ids.has(id));
+    try {
+      if ($closed_node_ids.has(id)) {
+        console.log("閉じたノードを開く:", id);
+        closed_node_ids.delete(id);
+      } else {
+        console.log("開いたノードを閉じる:", id);
+        closed_node_ids.add(id);
+      }
+      // 状態更新の確認
+      setTimeout(() => {
+        console.log("操作後の状態:", id, $closed_node_ids.has(id));
+      }, 10);
+    } catch (error) {
+      console.error("ノード開閉処理エラー:", error);
     }
-    Expanded = !$not_expanded_ids.has(id); // for reactive doesn't work.
   }
 
   const changeData = (node, key, value) => {
