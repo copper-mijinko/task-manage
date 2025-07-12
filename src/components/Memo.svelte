@@ -25,42 +25,47 @@
   // リンク処理のための変数
   let isHandlingLink = false;
 
+  // イベントリスナーの参照を保持する変数
+  let linkClickListener;
+
   // Quillのリンクツールチップを処理するための関数
   function handleLinkTooltips() {
-    // ドキュメント全体のクリックイベントリスナーを一度だけ設定
-    document.addEventListener(
-      "click",
-      (e) => {
-        // Visit (ql-preview) ボタンがクリックされた場合
-        if (e.target && e.target.classList.contains("ql-preview")) {
-          const href = e.target.getAttribute("href");
-          if (href && href.trim() !== "") {
-            // 既に処理中なら何もしない（二重実行防止）
-            if (isHandlingLink) return;
-            isHandlingLink = true;
+    // イベントハンドラー関数を定義
+    const handleLinkClick = (e) => {
+      // Visit (ql-preview) ボタンがクリックされた場合
+      if (e.target && e.target.classList.contains("ql-preview")) {
+        const href = e.target.getAttribute("href");
+        if (href && href.trim() !== "") {
+          // 既に処理中なら何もしない（二重実行防止）
+          if (isHandlingLink) return;
+          isHandlingLink = true;
 
-            // クリックイベントのデフォルト動作を停止（内部ブラウザでの開封を防止）
-            e.preventDefault();
-            e.stopPropagation();
+          // クリックイベントのデフォルト動作を停止（内部ブラウザでの開封を防止）
+          e.preventDefault();
+          e.stopPropagation();
 
-            // Quillの標準ツールチップを適切に閉じる
-            if (quill && quill.theme && quill.theme.tooltip) {
-              quill.theme.tooltip.hide();
-            }
-
-            // 外部ブラウザでリンクを開く
-            window.electronAPI.openExternalLink(href);
-
-            // フラグをリセット（次のリンククリックのため）
-            // 適切な時間でリセットし、短時間での複数回クリックを防止
-            setTimeout(() => {
-              isHandlingLink = false;
-            }, 300);
+          // Quillの標準ツールチップを適切に閉じる
+          if (quill && quill.theme && quill.theme.tooltip) {
+            quill.theme.tooltip.hide();
           }
+
+          // 外部ブラウザでリンクを開く
+          window.electronAPI.openExternalLink(href);
+
+          // フラグをリセット（次のリンククリックのため）
+          // 適切な時間でリセットし、短時間での複数回クリックを防止
+          setTimeout(() => {
+            isHandlingLink = false;
+          }, 300);
         }
-      },
-      false,
-    );
+      }
+    };
+
+    // 参照を保存してクリーンアップで使用できるようにする
+    linkClickListener = handleLinkClick;
+
+    // ドキュメント全体のクリックイベントリスナーを設定
+    document.addEventListener("click", linkClickListener, false);
   }
 
   onMount(() => {
@@ -87,6 +92,13 @@
     // クリーンアップ関数を返す
     return () => {
       // コンポーネントがアンマウントされる時に必要なクリーンアップを行う
+
+      // イベントリスナーを削除
+      if (linkClickListener) {
+        document.removeEventListener("click", linkClickListener, false);
+        linkClickListener = null;
+      }
+
       quill = null;
     };
   });
