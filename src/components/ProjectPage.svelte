@@ -7,7 +7,13 @@
   import Card from "./Card.svelte";
   import Dialog from "./Dialog.svelte";
   import SearchBox from "./SearchBox.svelte";
-  import { table_selected_id, tree_data, closed_node_ids } from "../stores.js";
+  import PageSearchBox from "./PageSearchBox.svelte";
+  import {
+    table_selected_id,
+    tree_data,
+    closed_node_ids,
+    showPageSearch,
+  } from "../stores.js";
   import {
     getNode,
     addNode,
@@ -15,6 +21,8 @@
     getParent,
   } from "../common/tree_control.ts";
   import { getDefaultNode } from "../common/tree_control.ts";
+
+  // ページ内検索はstoresから共有
 
   // Dialog
   let show_confirm = false;
@@ -200,6 +208,12 @@
     Loading...
   </h1>
 {/if}
+
+<!-- ページ内検索ボックス -->
+<PageSearchBox
+  bind:show={$showPageSearch}
+  on:close={() => ($showPageSearch = false)}
+/>
 
 <style>
   div.Content {

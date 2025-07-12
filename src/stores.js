@@ -419,6 +419,9 @@ theme = createTheme(undefined);
 filter = createFilter({})
 filtered_data = writable(tree_data.data)
 
+// 画面内検索ボックスの表示状態
+export const showPageSearch = writable(false);
+
 // 古い変数名は使用しない
 
 export function init_store() {

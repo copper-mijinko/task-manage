@@ -1,15 +1,38 @@
 <script>
-  import { selected_type, selected_id, init_store } from "./stores.js";
+  import {
+    selected_type,
+    selected_id,
+    init_store,
+    showPageSearch,
+  } from "./stores.js";
+  import { onMount, onDestroy } from "svelte";
   import ProjectPage from "./components/ProjectPage.svelte";
   import Header from "./components/Header.svelte";
   import InfoPage from "./components/InfoPage.svelte";
   import Modal from "./components/Modal.svelte";
   import Button from "./components/Button.svelte";
-
+  import PageSearchBox from "./components/PageSearchBox.svelte";
   let show = Array(4).fill(false);
 
   ////////////// Initial Settings //////////////
   init_store();
+
+  // ページ内検索ショートカットキー設定
+  function handleKeyDown(event) {
+    // Ctrl+FまたはCmd+F (Macの場合)
+    if ((event.ctrlKey || event.metaKey) && event.key === "f") {
+      event.preventDefault();
+      $showPageSearch = true;
+    }
+  }
+
+  onMount(() => {
+    window.addEventListener("keydown", handleKeyDown);
+  });
+
+  onDestroy(() => {
+    window.removeEventListener("keydown", handleKeyDown);
+  });
 </script>
 
 <div class:Container={true}>
@@ -52,6 +75,12 @@
   </div>
 </div>
 
+<!-- 検索ボックスを直接body直下に配置（他の要素と独立して） -->
+<PageSearchBox
+  show={$showPageSearch}
+  on:close={() => ($showPageSearch = false)}
+/>
+
 <style>
   :global(html) {
     font-size: 75%;
@@ -71,6 +100,7 @@
     margin: 0;
     padding: 0;
     overflow: auto;
+    position: relative; /* 子要素のためのコンテキスト設定 */
   }
   div.Header {
     height: 3.5rem;
