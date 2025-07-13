@@ -19,29 +19,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   // 画面内検索機能 - シンプル実装
   findInPage: (text, options) => {
-    console.log('検索実行:', text);
+    console.log('Execute find-in-page:', text);
     return ipcRenderer.invoke('find-in-page', text, options);
   },
   findInPageNext: (text) => {
-    console.log('次を検索で使用するテキスト:', text);
+    console.log('Execute find-in-page-next:', text);
     return ipcRenderer.invoke('find-in-page-next', text);
   },
   findInPagePrevious: (text) => {
-    console.log('前を検索で使用するテキスト:', text);
+    console.log('Execute find-in-page-previous:', text);
     return ipcRenderer.invoke('find-in-page-previous', text);
   },
-  stopFindInPage: (action) => {
-    console.log('stopFindInPage呼び出し:', action);
-    ipcRenderer.send('stop-find-in-page', action);
-  },
-  // ハイライトクリア用のイベントリスナー登録関数
-  onClearHighlights: (callback) => {
-    ipcRenderer.on('clear-highlights', (event, data) => callback(data));
+  stopFindInPage: () => {
+    console.log('Execute stop-find-in-page:');
+    ipcRenderer.send('stop-find-in-page');
   },
   // 検索結果更新イベント
   onSearchResultUpdated: (callback) => {
     ipcRenderer.on('search-result-updated', (event, result) => {
-      console.log('検索結果更新イベント受信:', result);
+      console.log('Receive search-result-updated:', result);
       callback(result);
     });
   }

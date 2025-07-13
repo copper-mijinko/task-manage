@@ -1,110 +1,85 @@
 <script>
-    import { onMount, onDestroy, createEventDispatcher } from "svelte";
+    import { onMount, onDestroy, createEventDispatcher, tick } from "svelte";
     import IconButton from "./IconButton.svelte";
 
     export let show = false;
 
-    let searchText = "";
+    let searchInputElement; // bind element
+    let searchText = ""; //bind value
     let matchCount = 0;
     let activeMatchOrdinal = 0;
-    let caseSensitive = false;
-    let searchInputElement;
-    let hasSearchedOnce = false;
-    let lastRequestId = 0;
+    let lastSearchText = "";
 
     const dispatch = createEventDispatcher();
 
-    // 検索ボックスが表示されたらフォーカスするだけ（検索は実行しない）
+    // focus when the search box is shown.
     $: if (show) {
-        console.log("検索ボックス表示:", show);
+        tick();
         if (searchInputElement) {
             setTimeout(() => {
+                console.log("focus");
                 searchInputElement.focus();
-            }, 100);
+            }, 1000);
         }
     }
 
-    // showがfalseになったときにハイライトを確実に消去
+    // clear in closing the search box.
     $: if (show === false) {
-        console.log("検索ボックス非表示によるハイライトクリア");
-        window.electronAPI.stopFindInPage("clearSelection");
+        console.log("Clear in closing search box");
+        searchText = ""; // search box内をクリア
+        lastSearchText = ""; // ステータスをクリア
+        window.electronAPI.stopFindInPage(); // matchCount, activeMatchOrdinalはMainから0が通知される
     }
 
-    // 大文字小文字設定変更時のみ検索を実行（検索ボタン押下済みの場合のみ）
-    let previousCaseSensitive = caseSensitive;
-    $: if (show && hasSearchedOnce && caseSensitive !== previousCaseSensitive) {
-        console.log("大文字小文字設定変更:", caseSensitive);
-        previousCaseSensitive = caseSensitive;
-        if (searchText && searchText.trim()) {
-            executeSearch();
-        }
-    }
-
-    // 検索処理を実行する関数 - シンプル実装
+    // search
     async function executeSearch() {
-        console.log("検索処理開始:", searchText);
+        console.log("Execute Search:", searchText);
 
-        // 検索文字列が空の場合はクリア
+        // empty, clear
         if (!searchText || !searchText.trim()) {
-            console.log("検索テキストが空のためクリア");
-            window.electronAPI.stopFindInPage("clearSelection");
-            matchCount = 0;
-            activeMatchOrdinal = 0;
+            console.log("Clear when empty search box");
+            lastSearchText = ""; // ステータスをクリア
+            window.electronAPI.stopFindInPage(); // matchCount, activeMatchOrdinalはMainから0が通知される
             return;
         }
 
         try {
-            // 検索実行 - 結果はイベントで取得
-            const result = await window.electronAPI.findInPage(searchText, {
-                forward: true,
-                findNext: false,
-                matchCase: caseSensitive,
-            });
-
-            console.log("検索リクエスト完了:", result);
-
-            // リクエストIDを保存（古い結果を無視するため）
-            if (result && result.requestId) {
-                lastRequestId = result.requestId;
-            }
+            // 検索キック
+            await window.electronAPI.findInPage(searchText.trim(), {});
+            console.log("Finished findInPage");
+            // 検索文字列を保存（検索文字列変更を判定するため）
+            lastSearchText = searchText;
         } catch (error) {
-            console.error("検索エラー:", error);
+            console.error("Search Error:", error);
         }
     }
 
-    // 検索ボタンクリック時のハンドラ - 改良版
+    // on click search
     function handleSearchButtonClick() {
-        console.log("検索ボタンがクリックされました");
-
-        // 検索ボタンクリック時に即座に検索結果を更新（UX向上）
-        if (searchText && searchText.trim()) {
-            // 検索実行前に仮の検索結果を表示
-            matchCount = 1;
-            activeMatchOrdinal = 1;
-        }
-
+        console.log("Clicked Search Button");
         executeSearch();
-        hasSearchedOnce = true;
     }
 
-    // 大文字小文字設定変更ハンドラ
-    function toggleCaseSensitive() {
-        console.log("大文字小文字設定変更:", !caseSensitive);
-        caseSensitive = !caseSensitive;
-        // リアクティブな検出で自動的に実行される
-    }
-
-    // 次を検索 - シンプル版
+    // on click next
     function findNext() {
+        // if empty, return
         if (!searchText.trim()) return;
-        console.log("次を検索実行");
+        // if searchText is changed, kick new search.
+        if (searchText != lastSearchText) {
+            executeSearch();
+        }
+        console.log("Execute findInPageNext");
         window.electronAPI.findInPageNext(searchText.trim());
     }
 
-    // 前を検索 - シンプル版
+    // on click prev
     function findPrevious() {
         if (!searchText.trim()) return;
-        console.log("前を検索実行");
+        // if searchText is changed, kick new search.
+        if (searchText != lastSearchText) {
+            executeSearch();
+        }
+        console.log("Execute findInPagePrevious");
         window.electronAPI.findInPagePrevious(searchText.trim());
     }
 
@@ -145,8 +120,8 @@
 
     // 検索ボックスを閉じる
     function closeSearch() {
-        console.log("検索ボックスを閉じる");
-        window.electronAPI.stopFindInPage("clearSelection");
+        console.log("Close SearchBox");
+        window.electronAPI.stopFindInPage();
         removeAllTooltips();
         show = false;
         dispatch("close");
@@ -154,8 +129,8 @@
 
     // 検索結果をクリア - シンプル版
     function clearSearch() {
-        console.log("検索結果をクリア");
-        window.electronAPI.stopFindInPage("clearSelection");
+        console.log("Clear search result");
+        window.electronAPI.stopFindInPage();
         searchText = "";
         matchCount = 0;
         activeMatchOrdinal = 0;
@@ -166,42 +141,18 @@
 
     // コンポーネントが表示された時
     onMount(() => {
-        // メインプロセスからのハイライトクリアメッセージを受け取るリスナーを設定
-        window.electronAPI.onClearHighlights((data) => {
-            console.log("ハイライトクリアイベント受信:", data);
-        });
-
         // メインプロセスからの検索結果更新メッセージを受け取るリスナーを設定
         window.electronAPI.onSearchResultUpdated((result) => {
-            console.log("検索結果更新イベント受信:", result);
-
-            // 古い検索結果は無視（検索IDによる判定）
-            if (result.requestId && result.requestId < lastRequestId) {
-                console.log("古い検索結果を無視します");
-                return;
-            }
-
-            // 検索がクリアされた場合
-            if (result.cleared) {
-                matchCount = 0;
-                activeMatchOrdinal = 0;
-                console.log("検索結果クリア");
-                return;
-            }
+            console.log("Receive onSearchResultUpdated:", result);
 
             // 検索結果の件数と現在位置を設定
             matchCount = result.matches || 0;
             activeMatchOrdinal = result.activeMatchOrdinal || 0;
 
             if (matchCount === 0) {
-                console.log("検索結果なし");
+                console.log("No result");
             } else {
-                console.log(`検索結果: ${activeMatchOrdinal}/${matchCount}`);
-            }
-
-            // 検索が成功したらフラグを立てる
-            if (matchCount > 0) {
-                hasSearchedOnce = true;
+                console.log(`Result: ${activeMatchOrdinal}/${matchCount}`);
             }
         });
 
@@ -211,7 +162,6 @@
                 removeAllTooltips();
             }
         };
-
         // イベントハンドラの登録
         window.addEventListener("keydown", handleGlobalEscape);
 
@@ -222,7 +172,7 @@
 
     // コンポーネントが破棄される時
     onDestroy(() => {
-        window.electronAPI.stopFindInPage("clearSelection");
+        window.electronAPI.stopFindInPage();
         removeAllTooltips();
     });
 </script>
@@ -236,25 +186,23 @@
                     bind:this={searchInputElement}
                     bind:value={searchText}
                     on:keydown={handleKeydown}
-                    placeholder="検索..."
+                    placeholder="search..."
                     autocomplete="off"
                     spellcheck="false"
-                    autofocus
                 />
                 <button
                     class="search-button"
                     on:click={handleSearchButtonClick}
                 >
-                    検索
+                    Search
                 </button>
             </div>
 
             <div class="count-display">
                 {#if searchText}
-                    <!-- 検索結果表示の強調（改良版） -->
                     <span class="result-count">
-                        {matchCount > 0 ? activeMatchOrdinal || 1 : 0} / {matchCount ||
-                            1}
+                        {matchCount > 0 ? activeMatchOrdinal || 0 : 0} / {matchCount ||
+                            0}
                     </span>
                 {:else}
                     <span class="result-count">0 / 0</span>
@@ -264,7 +212,7 @@
             <div class="controls">
                 <IconButton
                     on:click={findPrevious}
-                    tooltipContent="前を検索 (Shift+Enter)"
+                    tooltipContent="Prev"
                     style="width: 24px; height: 24px; padding: 0;"
                     normalColor="var(--theme-color-Primary-main)"
                     activeColor="var(--theme-color-Primary-dark)"
@@ -286,7 +234,7 @@
 
                 <IconButton
                     on:click={findNext}
-                    tooltipContent="次を検索 (Enter)"
+                    tooltipContent="Next"
                     style="width: 24px; height: 24px; padding: 0;"
                     normalColor="var(--theme-color-Primary-main)"
                     activeColor="var(--theme-color-Primary-dark)"
@@ -308,7 +256,7 @@
 
                 <IconButton
                     on:click={clearSearch}
-                    tooltipContent="検索をクリア"
+                    tooltipContent="Clear"
                     style="width: 24px; height: 24px; padding: 0;"
                     normalColor="var(--theme-color-Success-main)"
                     activeColor="var(--theme-color-Success-dark)"
@@ -337,7 +285,7 @@
 
                 <IconButton
                     on:click={closeSearch}
-                    tooltipContent="閉じる (Esc)"
+                    tooltipContent="Close(Esc)"
                     style="width: 24px; height: 24px; padding: 0;"
                     normalColor="var(--theme-color-Error-main)"
                     activeColor="var(--theme-color-Error-dark)"

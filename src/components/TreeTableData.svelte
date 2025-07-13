@@ -40,21 +40,21 @@
 
   function toggle(e) {
     e.stopPropagation();
-    console.log("ノード開閉操作:", id, $closed_node_ids.has(id));
+    console.log("Node open/close:", id, $closed_node_ids.has(id));
     try {
       if ($closed_node_ids.has(id)) {
-        console.log("閉じたノードを開く:", id);
+        console.log("Open closed node:", id);
         closed_node_ids.delete(id);
       } else {
-        console.log("開いたノードを閉じる:", id);
+        console.log("Close opened node:", id);
         closed_node_ids.add(id);
       }
       // 状態更新の確認
       setTimeout(() => {
-        console.log("操作後の状態:", id, $closed_node_ids.has(id));
+        console.log("Status updated:", id, $closed_node_ids.has(id));
       }, 10);
     } catch (error) {
-      console.error("ノード開閉処理エラー:", error);
+      console.error("Node close/open error:", error);
     }
   }
 

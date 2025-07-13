@@ -129,7 +129,6 @@ app.on("ready", () => {
       }
     }
   });
-
   // on set-project-order.
   ipcMain.on('set-project-order', (event, projects) => {
     if (projects && Array.isArray(projects) && projects.length > 0) {
@@ -170,7 +169,6 @@ app.on("ready", () => {
   ipcMain.on('message', (event, arg) => {
     console.log(arg);
   });
-
   // 外部リンクを開くためのハンドラ
   ipcMain.on('open-external-link', (event, url) => {
     if (url && typeof url === 'string') {
@@ -180,285 +178,114 @@ app.on("ready", () => {
     }
   });
 
-  // ====================================================
-  // 画面内検索機能 - シンプルに再実装
-  // ====================================================
+  // 画面内検索
   const webContents = mainWindow.webContents;
-
-  // 最小限の検索状態
-  let searchState = {
-    text: '',
-    matches: 0,
-    activeMatchOrdinal: 0,
-    requestId: 0
-  };
-
-  // 基本的なイベントリスナー - 改良版
+  // found-in-page event. this called in 1. first one found, 2. last one found(finalUpdate).
   webContents.on('found-in-page', (event, result) => {
-    console.log('検索結果:', result);
-
-    // 結果を保存（0の場合は1に強制）
-    searchState.matches = result.matches || 0;
-    searchState.activeMatchOrdinal = result.activeMatchOrdinal || 0;
-
-    // 検索結果が0または未定義の場合は1を設定（表示用）
-    const displayMatches = Math.max(searchState.matches, 1);
-    const displayOrdinal = Math.max(searchState.activeMatchOrdinal || 0, 1);
-
-    // 結果をレンダラーに通知（自動検索を防ぐため、最小限の情報を送信）
-    webContents.send('search-result-updated', {
-      matches: displayMatches,  // 少なくとも1件表示
-      activeMatchOrdinal: displayOrdinal,  // 少なくとも1件表示
-      requestId: searchState.requestId,
-      finalUpdate: result.finalUpdate,
-      // テキストは送信しない（自動検索を防ぐため）
-      noAutoSearch: true
-    });
+    console.log('Search Result:', result);
+    // see https://www.electronjs.org/docs/latest/api/web-contents/#contentsfindinpagetext-options
+    // send to renderer of search-result-updated.
+    webContents.send('search-result-updated', result);
   });
-
-  // 検索ハイライトをリセット - 強化版
+  // 検索ハイライトをリセット
   async function resetHighlights() {
-    console.log('ハイライトをリセット');
-
-    // 1. 標準APIでハイライトを消去（2回実行）
+    console.log('Reset HighLights');
+    // 標準APIでハイライトを消去
     webContents.stopFindInPage('clearSelection');
-
-    // 2. 強力なCSSリセットを適用
-    const resetCSS = await webContents.insertCSS(`
-      /* すべての検索ハイライト関連要素をリセット */
-      .electron-find-result,
-      [class*="find"],
-      [class*="search"],
-      [class*="highlight"] {
-        background-color: transparent !important;
-        background: none !important;
-        color: inherit !important;
-        text-decoration: none !important;
-        border: none !important;
-        box-shadow: none !important;
-      }
-    `);
-
-    // 3. JavaScriptでDOMをクリーンアップ
-    await webContents.executeJavaScript(`
-      try {
-        // 選択をクリア
-        if (window.getSelection) {
-          window.getSelection().removeAllRanges();
-        }
-        
-        // ハイライト関連要素をクリーンアップ
-        document.querySelectorAll('.electron-find-result, [class*="find"], [class*="search"], [class*="highlight"]').forEach(el => {
-          if (el.style) {
-            el.style.backgroundColor = '';
-            el.style.color = '';
-            el.style.textDecoration = '';
-          }
-        });
-      } catch(e) {
-        console.error("DOM cleanup error:", e);
-      }
-      true;
-    `);
-
-    // 4. 少し待ってからCSSを削除
-    await new Promise(resolve => setTimeout(resolve, 200));
-
-    try {
-      await webContents.removeInsertedCSS(resetCSS);
-    } catch (e) {
-      console.log('CSS削除エラー（無視）');
-    }
-
-    // 5. 再度標準APIでクリア
-    webContents.stopFindInPage('clearSelection');
-
-    // 6. レンダラーに通知
-    webContents.send('clear-highlights', {
-      timestamp: Date.now(),
-      complete: true
-    });
-
     return true;
   }
-
-  // 基本検索 - シンプル実装 (改良版)
+  // find-in-page
   ipcMain.handle('find-in-page', async (event, text, options = {}) => {
-    console.log('検索実行:', text);
-
-    // リクエストIDをインクリメント
-    searchState.requestId++;
-    const currentRequestId = searchState.requestId;
+    console.log('Execute Search:', text);
 
     // 空の検索テキストの場合は検索をクリア
     if (!text || !text.trim()) {
       await resetHighlights();
-      return { matches: 0, activeMatchOrdinal: 0, requestId: currentRequestId };
-    }
-
-    try {
-      // 1. 前回の検索をクリア
-      await resetHighlights();
-
-      // 2. 検索テキストを保存
-      searchState.text = text;
-
-      // 3. ハイライト用のCSSスタイルを適用
-      const highlightCSS = await webContents.insertCSS(`
-        .electron-find-result {
-          background-color: rgba(255, 255, 0, 0.3) !important;
-          color: black !important;
-          text-decoration: underline !important;
-          border-radius: 2px;
-          box-shadow: 0 0 2px rgba(0, 0, 0, 0.2) !important;
-        }
-      `);
-
-      // 4. 少し待機してから検索実行
-      await new Promise(resolve => setTimeout(resolve, 200));
-
-      // 5. 検索実行の前に仮の検索結果を通知（初期表示用）
-      webContents.send('search-result-updated', {
-        matches: 1, // 仮に1件あると表示
-        activeMatchOrdinal: 1,
-        requestId: currentRequestId,
-        initialUpdate: true
-      });
-
-      // 6. 検索実行（必ず新規検索として実行）
-      console.log('findInPage実行:', text, options);
-      webContents.findInPage(text, {
-        ...options,
-        findNext: false
-      });
-
-      // 7. 検索結果が確定するまでタイマーを設定
-      // 最初のタイマー - 早めの更新
-      setTimeout(() => {
-        // 確実に値が表示されるように強制
-        if (searchState.matches === 0) {
-          searchState.matches = 1;
-          searchState.activeMatchOrdinal = 1;
-        }
-
-        webContents.send('search-result-updated', {
-          matches: Math.max(searchState.matches, 1), // 少なくとも1件
-          activeMatchOrdinal: Math.max(searchState.activeMatchOrdinal || 0, 1),
-          requestId: currentRequestId,
-          midUpdate: true
-        });
-      }, 100);
-
-      // 2番目のタイマー - 最終的な更新
-      setTimeout(() => {
-        // 確実に値が表示されるように再度強制
-        if (searchState.matches === 0) {
-          searchState.matches = 1;
-          searchState.activeMatchOrdinal = 1;
-        }
-
-        webContents.send('search-result-updated', {
-          matches: Math.max(searchState.matches, 1), // 少なくとも1件
-          activeMatchOrdinal: Math.max(searchState.activeMatchOrdinal || 0, 1),
-          requestId: currentRequestId,
-          finalUpdate: true
-        });
-      }, 300);
-
-      // 7. 結果を返却（実際の結果はイベントで通知される）
-      return {
-        requestId: currentRequestId,
-        pending: true
-      };
-    } catch (error) {
-      console.error('検索エラー:', error);
-      return { matches: 0, activeMatchOrdinal: 0, requestId: currentRequestId };
-    }
-  });
-
-  // 次の検索 - シンプル実装
-  ipcMain.handle('find-in-page-next', async (event, text = '') => {
-    console.log('次の検索');
-
-    // 検索テキストを決定
-    const searchText = text || searchState.text;
-    if (!searchText || !searchText.trim()) {
       return { matches: 0, activeMatchOrdinal: 0 };
     }
 
     try {
-      // 検索テキストが変わった場合は新規検索
-      if (text && text !== searchState.text) {
-        return await ipcMain.handle('find-in-page', event, text, {
-          findNext: true,
-          forward: true
-        });
-      }
+      // 前回の検索をクリア
+      await resetHighlights();
 
-      // 次の検索を実行
-      webContents.findInPage(searchText, {
+      // 少し待機
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // 検索実行
+      console.log('Execute findInPage():', text, options);
+      webContents.findInPage(text.trim(), {
+        ...options,
+        findNext: false // 新規検索
+      });
+      // 検索実行（次へ）　※ 新規検索時は一度次へを実行しないと更新されない
+      webContents.findInPage(text.trim(), {
         findNext: true,
         forward: true
       });
 
-      return { pending: true };
+      return;
     } catch (error) {
-      console.error('次の検索エラー:', error);
-      return { matches: 0, activeMatchOrdinal: 0 };
+      console.error('検索エラー:', error);
+      return;
     }
   });
 
-  // 前の検索 - シンプル実装
-  ipcMain.handle('find-in-page-previous', async (event, text = '') => {
-    console.log('前の検索');
+  // 次の検索
+  ipcMain.handle('find-in-page-next', async (event, text = '') => {
+    console.log('Search next');
 
     // 検索テキストを決定
-    const searchText = text || searchState.text;
-    if (!searchText || !searchText.trim()) {
+    if (!text || !text.trim()) {
+      return;
+    }
+
+    try {
+      // 次の検索を実行
+      webContents.findInPage(text.trim(), {
+        findNext: true,
+        forward: true
+      });
+
+      return;
+    } catch (error) {
+      console.error('次の検索エラー:', error);
+      return;
+    }
+  });
+
+  // 前の検索
+  ipcMain.handle('find-in-page-previous', async (event, text = '') => {
+    console.log('Search Previous');
+
+    // 検索テキストを決定
+    if (!text || !text.trim()) {
       return { matches: 0, activeMatchOrdinal: 0 };
     }
 
     try {
-      // 検索テキストが変わった場合は新規検索
-      if (text && text !== searchState.text) {
-        return await ipcMain.handle('find-in-page', event, text, {
-          findNext: true,
-          forward: false
-        });
-      }
-
       // 前の検索を実行
-      webContents.findInPage(searchText, {
+      webContents.findInPage(text.trim(), {
         findNext: true,
         forward: false
       });
 
-      return { pending: true };
+      return;
     } catch (error) {
       console.error('前の検索エラー:', error);
-      return { matches: 0, activeMatchOrdinal: 0 };
+      return;
     }
   });
 
-  // 検索のクリア - シンプル実装
-  ipcMain.on('stop-find-in-page', async (event, action = 'clearSelection') => {
-    console.log('検索クリア実行');
+  // 検索のクリア
+  ipcMain.on('stop-find-in-page', async (event) => {
+    console.log('Execute stopFindInPage()');
 
     try {
-      // ハイライトをリセット
-      await resetHighlights();
-
-      // 状態をリセット
-      searchState.text = '';
-      searchState.matches = 0;
-      searchState.activeMatchOrdinal = 0;
-
-      // 結果を通知
+      webContents.stopFindInPage('clearSelection');
+      // 強制的に上書き
       webContents.send('search-result-updated', {
         matches: 0,
-        activeMatchOrdinal: 0,
-        requestId: searchState.requestId,
-        cleared: true
+        activeMatchOrdinal: 0
       });
     } catch (error) {
       console.error('検索クリアエラー:', error);

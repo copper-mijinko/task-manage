@@ -69,7 +69,7 @@ function createProjectIds(project_ids) {
 			// プロジェクト削除時に関連するメタデータも削除
 			const metaKey = `closed_nodes_${project_id}`;
 			window.electronAPI.deleteMetaData(metaKey);
-			console.log(`プロジェクト削除によりメタデータを完全に削除: ${metaKey}`);
+			console.log(`Delete meta-data in removing a project: ${metaKey}`);
 
 			if (project_id == get(selected_id)) {
 				selected_type.set(undefined);
@@ -129,7 +129,7 @@ function createTreeData(tree_data) {
 						// メタデータに保存
 						const metaKey = `closed_nodes_${projectId}`;
 						const idsArray = Array.from(newState);
-						console.log(`ノード削除による状態更新: ${metaKey}`, idsArray);
+						console.log(`Update meta in removing a node: ${metaKey}`, idsArray);
 						window.electronAPI.setMetaData(metaKey, idsArray);
 
 						return newState;
@@ -286,7 +286,7 @@ function createClosedNodeIds(ids) {
 		try {
 			const metaKey = `closed_nodes_${projectId}`;
 			const result = await window.electronAPI.getMetaData(metaKey);
-			console.log(`読み込み: ${metaKey}`, result);
+			console.log(`Read: ${metaKey}`, result);
 
 			let newState;
 			if (result && Array.isArray(result)) {
@@ -312,7 +312,7 @@ function createClosedNodeIds(ids) {
 		try {
 			const metaKey = `closed_nodes_${projectId}`;
 			const idsArray = Array.from(state);
-			console.log(`保存: ${metaKey}`, idsArray);
+			console.log(`Save: ${metaKey}`, idsArray);
 			window.electronAPI.setMetaData(metaKey, idsArray);
 		} catch (error) {
 			console.error("状態保存エラー:", error);
@@ -401,7 +401,7 @@ function createClosedNodeIds(ids) {
 				// メタデータに保存
 				const metaKey = `closed_nodes_${projectId}`;
 				const idsArray = Array.from(newState);
-				console.log(`ノード削除による状態更新: ${metaKey}`, idsArray);
+				console.log(`Update in removing a node: ${metaKey}`, idsArray);
 				window.electronAPI.setMetaData(metaKey, idsArray);
 
 				return newState;
