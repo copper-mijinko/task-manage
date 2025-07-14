@@ -44,5 +44,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
       console.log('Receive search-result-updated:', result);
       callback(result);
     });
+  },
+  // テーマ変更の通知を受け取る
+  onThemeChanged: (callback) => {
+    ipcRenderer.on('theme-changed', (event, theme) => {
+      console.log('Theme changed:', theme);
+      callback(theme);
+    });
+  },
+  // 現在のテーマを取得する
+  getCurrentTheme: () => {
+    return ipcRenderer.invoke('get-current-theme');
   }
 })

@@ -4,6 +4,7 @@
     selected_id,
     init_store,
     showPageSearch,
+    theme,
   } from "./stores.js";
   import { onMount, onDestroy, tick } from "svelte";
   import ProjectPage from "./components/ProjectPage.svelte";
@@ -20,6 +21,22 @@
   // ページ内検索ショートカットキー設定
   let searchBox;
   let isSearchWindow = false;
+
+  // 検索ウィンドウでのテーマ初期化処理
+  async function initSearchWindowTheme() {
+    try {
+      if (window.electronAPI && window.electronAPI.getCurrentTheme) {
+        // メインウィンドウから現在のテーマを取得
+        const currentTheme = await window.electronAPI.getCurrentTheme();
+        if (currentTheme) {
+          // テーマを設定
+          theme.set(currentTheme);
+        }
+      }
+    } catch (error) {
+      console.error("テーマ初期化エラー:", error);
+    }
+  }
 
   function handleKeyDown(event) {
     // Ctrl+FまたはCmd+F (Macの場合)
@@ -51,6 +68,17 @@
       document.querySelector(".Container").style.height = "auto";
       document.querySelector(".Main").style.display = "none";
       document.querySelector(".Header").style.display = "none";
+
+      // 検索ウィンドウ用のテーマ初期化
+      await initSearchWindowTheme();
+
+      // テーマ変更通知のリスナー登録
+      if (window.electronAPI && window.electronAPI.onThemeChanged) {
+        window.electronAPI.onThemeChanged((newTheme) => {
+          console.log("Received theme change:", newTheme);
+          theme.set(newTheme);
+        });
+      }
     }
 
     window.addEventListener("keydown", handleKeyDown);

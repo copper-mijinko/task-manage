@@ -65,6 +65,11 @@ app.on("ready", () => {
     db_meta.data[key] = value;
     try {
       db_meta.write();
+
+      // テーマが変更された場合、検索ウィンドウにも通知
+      if (key === 'theme' && searchWindow && !searchWindow.isDestroyed()) {
+        searchWindow.webContents.send('theme-changed', value);
+      }
     } catch (err) {
       log.error('Failed to write meta_data (set-meta-data):', err.message);
     }
@@ -314,7 +319,7 @@ app.on("ready", () => {
     // 検索ウィンドウを作成
     searchWindow = new BrowserWindow({
       width: 500,
-      height: 68,
+      height: 90,
       parent: mainWindow,
       modal: false,
       frame: true,
@@ -356,5 +361,10 @@ app.on("ready", () => {
     if (searchWindow && !searchWindow.isDestroyed()) {
       searchWindow.close();
     }
-  })
+  });
+
+  // 検索ウィンドウからテーマ情報を要求された場合
+  ipcMain.handle('get-current-theme', async (event) => {
+    return db_meta.data.theme || 'dark';
+  });
 });
