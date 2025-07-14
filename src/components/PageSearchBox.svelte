@@ -3,6 +3,7 @@
     import IconButton from "./IconButton.svelte";
 
     export let show = false;
+    export let isSearchWindow = false;
 
     let searchInputElement; // bind element
     let searchText = ""; //bind value
@@ -12,15 +13,15 @@
 
     const dispatch = createEventDispatcher();
 
+    export async function focusInput() {
+        await tick();
+        searchInputElement?.focus();
+        console.log("called focustInput");
+    }
+
     // focus when the search box is shown.
     $: if (show) {
-        tick();
-        if (searchInputElement) {
-            setTimeout(() => {
-                console.log("focus");
-                searchInputElement.focus();
-            }, 1000);
-        }
+        focusInput();
     }
 
     // clear in closing the search box.
@@ -134,9 +135,7 @@
         searchText = "";
         matchCount = 0;
         activeMatchOrdinal = 0;
-        if (searchInputElement) {
-            searchInputElement.focus();
-        }
+        focusInput();
     }
 
     // コンポーネントが表示された時
@@ -178,132 +177,134 @@
 </script>
 
 {#if show}
-    <div class="search-box-container">
-        <div class="search-box">
-            <div class="search-input-container">
-                <input
-                    type="text"
-                    bind:this={searchInputElement}
-                    bind:value={searchText}
-                    on:keydown={handleKeydown}
-                    placeholder="search..."
-                    autocomplete="off"
-                    spellcheck="false"
-                />
-                <button
-                    class="search-button"
-                    on:click={handleSearchButtonClick}
-                >
-                    Search
-                </button>
-            </div>
-
-            <div class="count-display">
-                {#if searchText}
-                    <span class="result-count">
-                        {matchCount > 0 ? activeMatchOrdinal || 0 : 0} / {matchCount ||
-                            0}
-                    </span>
-                {:else}
-                    <span class="result-count">0 / 0</span>
-                {/if}
-            </div>
-
-            <div class="controls">
-                <IconButton
-                    on:click={findPrevious}
-                    tooltipContent="Prev"
-                    style="width: 24px; height: 24px; padding: 0;"
-                    normalColor="var(--theme-color-Primary-main)"
-                    activeColor="var(--theme-color-Primary-dark)"
-                >
-                    <svg
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        xmlns="http://www.w3.org/2000/svg"
+    <div class:search-window-mode={isSearchWindow}>
+        <div class="search-box-container">
+            <div class="search-box">
+                <div class="search-input-container">
+                    <input
+                        type="text"
+                        bind:this={searchInputElement}
+                        bind:value={searchText}
+                        on:keydown={handleKeydown}
+                        placeholder="search..."
+                        autocomplete="off"
+                        spellcheck="false"
+                    />
+                    <button
+                        class="search-button"
+                        on:click={handleSearchButtonClick}
                     >
-                        <path
-                            d="M15 18L9 12L15 6"
-                            stroke="currentColor"
-                            stroke-width="2"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                        />
-                    </svg>
-                </IconButton>
+                        Search
+                    </button>
+                </div>
 
-                <IconButton
-                    on:click={findNext}
-                    tooltipContent="Next"
-                    style="width: 24px; height: 24px; padding: 0;"
-                    normalColor="var(--theme-color-Primary-main)"
-                    activeColor="var(--theme-color-Primary-dark)"
-                >
-                    <svg
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        xmlns="http://www.w3.org/2000/svg"
-                    >
-                        <path
-                            d="M9 6L15 12L9 18"
-                            stroke="currentColor"
-                            stroke-width="2"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                        />
-                    </svg>
-                </IconButton>
+                <div class="count-display">
+                    {#if searchText}
+                        <span class="result-count">
+                            {matchCount > 0 ? activeMatchOrdinal || 0 : 0} / {matchCount ||
+                                0}
+                        </span>
+                    {:else}
+                        <span class="result-count">0 / 0</span>
+                    {/if}
+                </div>
 
-                <IconButton
-                    on:click={clearSearch}
-                    tooltipContent="Clear"
-                    style="width: 24px; height: 24px; padding: 0;"
-                    normalColor="var(--theme-color-Success-main)"
-                    activeColor="var(--theme-color-Success-dark)"
-                >
-                    <svg
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        xmlns="http://www.w3.org/2000/svg"
+                <div class="controls">
+                    <IconButton
+                        on:click={findPrevious}
+                        tooltipContent="Prev"
+                        style="width: 24px; height: 24px; padding: 0;"
+                        normalColor="var(--theme-color-Primary-main)"
+                        activeColor="var(--theme-color-Primary-dark)"
                     >
-                        <path
-                            d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z"
-                            stroke="currentColor"
-                            stroke-width="2"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                        />
-                        <path
-                            d="M15 9L9 15M9 9L15 15"
-                            stroke="currentColor"
-                            stroke-width="2"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                        />
-                    </svg>
-                </IconButton>
+                        <svg
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            xmlns="http://www.w3.org/2000/svg"
+                        >
+                            <path
+                                d="M15 18L9 12L15 6"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            />
+                        </svg>
+                    </IconButton>
 
-                <IconButton
-                    on:click={closeSearch}
-                    tooltipContent="Close(Esc)"
-                    style="width: 24px; height: 24px; padding: 0;"
-                    normalColor="var(--theme-color-Error-main)"
-                    activeColor="var(--theme-color-Error-dark)"
-                >
-                    <svg
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        xmlns="http://www.w3.org/2000/svg"
+                    <IconButton
+                        on:click={findNext}
+                        tooltipContent="Next"
+                        style="width: 24px; height: 24px; padding: 0;"
+                        normalColor="var(--theme-color-Primary-main)"
+                        activeColor="var(--theme-color-Primary-dark)"
                     >
-                        <path
-                            d="M18 6L6 18M6 6L18 18"
-                            stroke="currentColor"
-                            stroke-width="2"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                        />
-                    </svg>
-                </IconButton>
+                        <svg
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            xmlns="http://www.w3.org/2000/svg"
+                        >
+                            <path
+                                d="M9 6L15 12L9 18"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            />
+                        </svg>
+                    </IconButton>
+
+                    <IconButton
+                        on:click={clearSearch}
+                        tooltipContent="Clear"
+                        style="width: 24px; height: 24px; padding: 0;"
+                        normalColor="var(--theme-color-Success-main)"
+                        activeColor="var(--theme-color-Success-dark)"
+                    >
+                        <svg
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            xmlns="http://www.w3.org/2000/svg"
+                        >
+                            <path
+                                d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            />
+                            <path
+                                d="M15 9L9 15M9 9L15 15"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            />
+                        </svg>
+                    </IconButton>
+
+                    <IconButton
+                        on:click={closeSearch}
+                        tooltipContent="Close(Esc)"
+                        style="width: 24px; height: 24px; padding: 0;"
+                        normalColor="var(--theme-color-Error-main)"
+                        activeColor="var(--theme-color-Error-dark)"
+                    >
+                        <svg
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            xmlns="http://www.w3.org/2000/svg"
+                        >
+                            <path
+                                d="M18 6L6 18M6 6L18 18"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            />
+                        </svg>
+                    </IconButton>
+                </div>
             </div>
         </div>
     </div>
@@ -319,6 +320,20 @@
         border-radius: 4px;
         background-color: var(--theme-color-Main-main);
         border: 1px solid var(--theme-color-Shadow-main);
+    }
+
+    /* 検索ウィンドウモードのスタイル */
+    :global(.search-window-mode) .search-box-container {
+        position: relative;
+        top: 0;
+        left: 0;
+        right: 0;
+        width: 100%;
+        border-radius: 0;
+        border: none;
+        box-shadow: none;
+        padding: 10px;
+        box-sizing: border-box;
     }
 
     .search-box {

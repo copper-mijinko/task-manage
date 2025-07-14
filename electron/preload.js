@@ -17,6 +17,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openExternalLink: (url) => {
     ipcRenderer.send('open-external-link', url);
   },
+  // 別ウィンドウで検索ボックスを開く
+  openSearchWindow: () => {
+    ipcRenderer.send('open-search-window');
+  },
   // 画面内検索機能 - シンプル実装
   findInPage: (text, options) => {
     console.log('Execute find-in-page:', text);

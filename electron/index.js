@@ -1,5 +1,6 @@
 const _ = require("lodash")
 const { app, BrowserWindow, ipcMain, shell, WebContents } = require("electron");
+const { screen } = require("electron");
 const path = require("path");
 const { LowSync, JSONFileSync } = require('@commonify/lowdb');
 const log = require("electron-log");
@@ -178,6 +179,9 @@ app.on("ready", () => {
     }
   });
 
+  // 検索ウィンドウの変数
+  let searchWindow = null;
+
   // 画面内検索
   const webContents = mainWindow.webContents;
   // found-in-page event. this called in 1. first one found, 2. last one found(finalUpdate).
@@ -186,6 +190,10 @@ app.on("ready", () => {
     // see https://www.electronjs.org/docs/latest/api/web-contents/#contentsfindinpagetext-options
     // send to renderer of search-result-updated.
     webContents.send('search-result-updated', result);
+    // 検索ウィンドウが存在する場合、そちらにも結果を送信
+    if (searchWindow && !searchWindow.isDestroyed()) {
+      searchWindow.webContents.send('search-result-updated', result);
+    }
   });
   // 検索ハイライトをリセット
   async function resetHighlights() {
@@ -292,11 +300,61 @@ app.on("ready", () => {
     }
   });
 
+  // 別ウィンドウでの検索ボックスを開く
+  ipcMain.on('open-search-window', (event) => {
+    if (searchWindow && !searchWindow.isDestroyed()) {
+      searchWindow.focus();
+      return;
+    }
+
+    // メインウィンドウの位置を取得
+    const mainWindowPosition = mainWindow.getBounds();
+    const displaySize = screen.getPrimaryDisplay().workAreaSize;
+
+    // 検索ウィンドウを作成
+    searchWindow = new BrowserWindow({
+      width: 500,
+      height: 68,
+      parent: mainWindow,
+      modal: false,
+      frame: true,
+      resizable: false,
+      minimizable: false,
+      maximizable: false,
+      alwaysOnTop: true,
+      autoHideMenuBar: true,
+      webPreferences: {
+        preload: path.join(__dirname, 'preload.js'),
+        nodeIntegration: false,
+        contextIsolation: true
+      }
+    });
+
+    // メインウィンドウの上に配置
+    searchWindow.setPosition(
+      mainWindowPosition.x + (mainWindowPosition.width - 500) / 2,
+      mainWindowPosition.y + 50
+    );
+
+    // 検索用のHTMLを読み込む
+    searchWindow.loadFile(path.join(__dirname, "../public/index.html"), {
+      hash: 'search-window'
+    });
+
+    // 閉じた時のイベント処理
+    searchWindow.on('closed', () => {
+      searchWindow = null;
+    });
+  });
+
   mainWindow.loadFile(path.join(__dirname, "../public/index.html"));
   if (!app.isPackaged) {
     webContents.openDevTools();
   }
   mainWindow.on("closed", () => {
     mainWindow = null;
+    if (searchWindow && !searchWindow.isDestroyed()) {
+      searchWindow.close();
+    }
   })
 });

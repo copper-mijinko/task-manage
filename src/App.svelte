@@ -5,7 +5,7 @@
     init_store,
     showPageSearch,
   } from "./stores.js";
-  import { onMount, onDestroy } from "svelte";
+  import { onMount, onDestroy, tick } from "svelte";
   import ProjectPage from "./components/ProjectPage.svelte";
   import Header from "./components/Header.svelte";
   import InfoPage from "./components/InfoPage.svelte";
@@ -18,15 +18,41 @@
   init_store();
 
   // ページ内検索ショートカットキー設定
+  let searchBox;
+  let isSearchWindow = false;
+
   function handleKeyDown(event) {
     // Ctrl+FまたはCmd+F (Macの場合)
     if ((event.ctrlKey || event.metaKey) && event.key === "f") {
       event.preventDefault();
-      $showPageSearch = true;
+      if (window.electronAPI && !isSearchWindow) {
+        // 別ウィンドウで検索ボックスを開く
+        window.electronAPI.openSearchWindow();
+      } else {
+        // 通常の検索ボックスを表示（検索ウィンドウの場合やAPIがない場合）
+        $showPageSearch = true;
+        searchBox?.focusInput();
+      }
     }
   }
 
-  onMount(() => {
+  onMount(async () => {
+    // URLハッシュを確認して検索ウィンドウかどうかを判断
+    if (window.location.hash === "#search-window") {
+      isSearchWindow = true;
+
+      // 検索ウィンドウでは自動的に検索ボックスを表示
+      $showPageSearch = true;
+      await tick();
+      searchBox?.focusInput();
+
+      // ウィンドウサイズを検索ボックスに合わせる
+      document.body.style.overflow = "hidden";
+      document.querySelector(".Container").style.height = "auto";
+      document.querySelector(".Main").style.display = "none";
+      document.querySelector(".Header").style.display = "none";
+    }
+
     window.addEventListener("keydown", handleKeyDown);
   });
 
@@ -77,8 +103,16 @@
 
 <!-- 検索ボックスを直接body直下に配置（他の要素と独立して） -->
 <PageSearchBox
+  bind:this={searchBox}
   show={$showPageSearch}
-  on:close={() => ($showPageSearch = false)}
+  on:close={() => {
+    $showPageSearch = false;
+    if (isSearchWindow && window.electronAPI) {
+      // 検索ウィンドウの場合、閉じるボタンでウィンドウを閉じる
+      window.close();
+    }
+  }}
+  {isSearchWindow}
 />
 
 <style>
