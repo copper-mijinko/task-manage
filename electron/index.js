@@ -187,24 +187,93 @@ app.on("ready", () => {
   // 検索ウィンドウの変数
   let searchWindow = null;
 
+  // 検索ウィンドウを作成する関数
+  function createSearchWindow() {
+    // すでに作成済みで有効な場合は何もしない
+    if (searchWindow && !searchWindow.isDestroyed()) {
+      return;
+    }
+
+    // メインウィンドウの位置を取得
+    const mainWindowPosition = mainWindow.getBounds();
+    const displaySize = screen.getPrimaryDisplay().workAreaSize;
+
+    // 検索ウィンドウを作成
+    searchWindow = new BrowserWindow({
+      width: 500,
+      height: 90,
+      parent: mainWindow,
+      modal: false,
+      frame: true,
+      resizable: false,
+      minimizable: false,
+      maximizable: false,
+      alwaysOnTop: true,
+      autoHideMenuBar: true,
+      show: false, // 初期状態では非表示
+      webPreferences: {
+        preload: path.join(__dirname, 'preload.js'),
+        nodeIntegration: false,
+        contextIsolation: true
+      }
+    });
+
+    // メインウィンドウの上に配置
+    searchWindow.setPosition(
+      mainWindowPosition.x + (mainWindowPosition.width - 500) / 2,
+      mainWindowPosition.y + 50
+    );
+
+    // 検索用のHTMLを読み込む
+    searchWindow.loadFile(path.join(__dirname, "../public/index.html"), {
+      hash: 'search-window'
+    });
+
+    // 閉じた時のイベント処理
+    searchWindow.on('closed', () => {
+      searchWindow = null;
+      // 再度作成しておく
+      setTimeout(() => createSearchWindow(), 500);
+    });
+
+    log.info('Search window created and hidden');
+  }
+
+  // アプリケーション起動時に検索ウィンドウを作成
+  setTimeout(() => createSearchWindow(), 1000);
+
   // 画面内検索
   const webContents = mainWindow.webContents;
   // found-in-page event. this called in 1. first one found, 2. last one found(finalUpdate).
   webContents.on('found-in-page', (event, result) => {
     console.log('Search Result:', result);
     // see https://www.electronjs.org/docs/latest/api/web-contents/#contentsfindinpagetext-options
-    // send to renderer of search-result-updated.
-    webContents.send('search-result-updated', result);
-    // 検索ウィンドウが存在する場合、そちらにも結果を送信
+
+    // 検索ウィンドウが開いている場合は検索ウィンドウにのみ結果を送信
+    // 開いていない場合はメインウィンドウに送信
     if (searchWindow && !searchWindow.isDestroyed()) {
       searchWindow.webContents.send('search-result-updated', result);
+    } else {
+      webContents.send('search-result-updated', result);
     }
   });
   // 検索ハイライトをリセット
-  async function resetHighlights() {
+  async function resetHighlights(notifyResult = false) {
     console.log('Reset HighLights');
     // 標準APIでハイライトを消去
     webContents.stopFindInPage('clearSelection');
+
+    // 結果通知フラグがtrueの場合のみ通知する
+    if (notifyResult) {
+      const result = { matches: 0, activeMatchOrdinal: 0 };
+      // 検索ウィンドウが開いている場合は検索ウィンドウにのみ結果を送信
+      if (searchWindow && !searchWindow.isDestroyed()) {
+        searchWindow.webContents.send('search-result-updated', result);
+      } else {
+        webContents.send('search-result-updated', result);
+      }
+    }
+
     return true;
   }
   // find-in-page
@@ -213,13 +282,13 @@ app.on("ready", () => {
 
     // 空の検索テキストの場合は検索をクリア
     if (!text || !text.trim()) {
-      await resetHighlights();
+      await resetHighlights(true);
       return { matches: 0, activeMatchOrdinal: 0 };
     }
 
     try {
-      // 前回の検索をクリア
-      await resetHighlights();
+      // 前回の検索をクリア (通知なし)
+      await resetHighlights(false);
 
       // 少し待機
       await new Promise(resolve => setTimeout(resolve, 200));
@@ -294,62 +363,39 @@ app.on("ready", () => {
     console.log('Execute stopFindInPage()');
 
     try {
-      webContents.stopFindInPage('clearSelection');
-      // 強制的に上書き
-      webContents.send('search-result-updated', {
-        matches: 0,
-        activeMatchOrdinal: 0
-      });
+      await resetHighlights(true);
     } catch (error) {
       console.error('検索クリアエラー:', error);
     }
   });
 
   // 別ウィンドウでの検索ボックスを開く
-  ipcMain.on('open-search-window', (event) => {
-    if (searchWindow && !searchWindow.isDestroyed()) {
-      searchWindow.focus();
-      return;
+  ipcMain.on('open-search-window', async (event) => {
+    // 現在の検索をクリア（重複検索を防ぐため）- 通知なし
+    try {
+      await resetHighlights(false);
+    } catch (error) {
+      console.error('検索クリアエラー:', error);
     }
 
-    // メインウィンドウの位置を取得
+    // 検索ウィンドウが存在しない場合は作成
+    if (!searchWindow || searchWindow.isDestroyed()) {
+      createSearchWindow();
+      // ウィンドウの読み込みを待つ
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+
+    // ウィンドウの位置を更新（メインウィンドウが移動している可能性があるため）
     const mainWindowPosition = mainWindow.getBounds();
-    const displaySize = screen.getPrimaryDisplay().workAreaSize;
-
-    // 検索ウィンドウを作成
-    searchWindow = new BrowserWindow({
-      width: 500,
-      height: 90,
-      parent: mainWindow,
-      modal: false,
-      frame: true,
-      resizable: false,
-      minimizable: false,
-      maximizable: false,
-      alwaysOnTop: true,
-      autoHideMenuBar: true,
-      webPreferences: {
-        preload: path.join(__dirname, 'preload.js'),
-        nodeIntegration: false,
-        contextIsolation: true
-      }
-    });
-
-    // メインウィンドウの上に配置
     searchWindow.setPosition(
       mainWindowPosition.x + (mainWindowPosition.width - 500) / 2,
       mainWindowPosition.y + 50
     );
 
-    // 検索用のHTMLを読み込む
-    searchWindow.loadFile(path.join(__dirname, "../public/index.html"), {
-      hash: 'search-window'
-    });
-
-    // 閉じた時のイベント処理
-    searchWindow.on('closed', () => {
-      searchWindow = null;
-    });
+    // 検索ウィンドウを表示してフォーカス
+    searchWindow.show();
+    searchWindow.focus();
+    log.info('Search window shown');
   });
 
   mainWindow.loadFile(path.join(__dirname, "../public/index.html"));
@@ -359,7 +405,7 @@ app.on("ready", () => {
   mainWindow.on("closed", () => {
     mainWindow = null;
     if (searchWindow && !searchWindow.isDestroyed()) {
-      searchWindow.close();
+      searchWindow.destroy(); // closeではなくdestroyを使用
     }
   });
 

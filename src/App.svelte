@@ -63,6 +63,9 @@
       await tick();
       searchBox?.focusInput();
 
+      // メインウィンドウの検索状態をクリアする処理は
+      // electron側で一元管理されるようになったため削除
+
       // ウィンドウサイズを検索ボックスに合わせる
       document.body.style.overflow = "hidden";
       document.querySelector(".Container").style.height = "auto";

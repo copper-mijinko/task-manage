@@ -24,6 +24,15 @@
         focusInput();
     }
 
+    // 検索実行前に実際に検索テキストがあるか確認
+    function checkAndExecuteSearch() {
+        // 検索テキストが空の場合は検索を実行しない
+        if (!searchText || !searchText.trim()) {
+            return;
+        }
+        executeSearch();
+    }
+
     // clear in closing the search box.
     $: if (show === false) {
         console.log("Clear in closing search box");
@@ -58,7 +67,7 @@
     // on click search
     function handleSearchButtonClick() {
         console.log("Clicked Search Button");
-        executeSearch();
+        checkAndExecuteSearch();
     }
 
     // on click next
@@ -67,7 +76,7 @@
         if (!searchText.trim()) return;
         // if searchText is changed, kick new search.
         if (searchText != lastSearchText) {
-            executeSearch();
+            checkAndExecuteSearch();
         }
         console.log("Execute findInPageNext");
         window.electronAPI.findInPageNext(searchText.trim());
@@ -78,7 +87,7 @@
         if (!searchText.trim()) return;
         // if searchText is changed, kick new search.
         if (searchText != lastSearchText) {
-            executeSearch();
+            checkAndExecuteSearch();
         }
         console.log("Execute findInPagePrevious");
         window.electronAPI.findInPagePrevious(searchText.trim());
@@ -176,9 +185,8 @@
     });
 </script>
 
-{#if show}
-    <div class:search-window-mode={isSearchWindow}>
-        <div class="search-box-container">
+<div class:search-window-mode={isSearchWindow} class:hidden={!show}>
+    <div class="search-box-container">
             <div class="search-box">
                 <div class="search-input-container">
                     <input
@@ -306,11 +314,16 @@
                     </IconButton>
                 </div>
             </div>
-        </div>
     </div>
-{/if}
+</div>
 
 <style>
+    .hidden {
+        visibility: hidden;
+        opacity: 0;
+        pointer-events: none;
+    }
+    
     .search-box-container {
         position: fixed;
         top: 4rem;
