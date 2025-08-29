@@ -2,12 +2,17 @@
   import { onMount, createEventDispatcher } from "svelte";
   import Quill from "quill";
   import "../..//node_modules/quill/dist/quill.snow.css";
-  import { isEqual } from "lodash";
+  import { isEqual, debounce } from "lodash";
 
   export let saveMemo;
   export let content = "";
+  export let memoIndex = 0; // メモのインデックスを受け取る
 
   let editor;
+  // 編集中のフラグとカーソル位置を保存する変数
+  let isEditing = false;
+  let savedSelection = null;
+  let lastSavedContent = null;
   let toolbarOptions = [
     [{ font: [] }],
     [{ header: [1, 2, false] }],
@@ -80,9 +85,41 @@
       quill.setContents(content);
     }
 
-    quill.on("editor-change", function (eventName, args) {
-      if (content != quill.getContents()) {
-        saveMemo(quill.getContents());
+    // テキスト変更のみを検知して保存処理を行う
+    quill.on("text-change", function (delta, oldDelta, source) {
+      if (source === "user") {
+        // 編集中フラグを設定
+        isEditing = true;
+
+        // 現在のカーソル位置を取得
+        const currentSelection = quill.hasFocus() ? quill.getSelection() : null;
+
+        // 内容を保存（カーソル位置も一緒に送信）
+        const contents = quill.getContents();
+        lastSavedContent = contents;
+
+        // カーソル位置情報も一緒に送信
+        if (currentSelection) {
+          saveMemo(contents, memoIndex, currentSelection);
+        } else {
+          saveMemo(contents, memoIndex);
+        }
+
+        // 編集フラグをリセット
+        setTimeout(() => {
+          isEditing = false;
+        }, 100);
+      }
+    });
+
+    // カーソル位置の変更のみを検出（保存は行わない）
+    quill.on("selection-change", function (range, oldRange, source) {
+      if (range && source === "user") {
+        // カーソル位置を保存（ローカルのみ）
+        savedSelection = {
+          index: range.index,
+          length: range.length,
+        };
       }
     });
 
@@ -99,12 +136,33 @@
         linkClickListener = null;
       }
 
+      // すべてのリソース解放
+      isEditing = false;
+      savedSelection = null;
+      lastSavedContent = null;
       quill = null;
     };
   });
 
-  $: if (quill && !isEqual(quill.getContents(), content)) {
+  // 外部から更新されたコンテンツとの同期（編集中は同期しない）
+  $: if (
+    quill &&
+    content &&
+    !isEditing &&
+    !isEqual(content, lastSavedContent)
+  ) {
+    // 一時的に編集中フラグを立てる（再描画防止）
+    isEditing = true;
+
+    // コンテンツを更新
     quill.setContents(content);
+    lastSavedContent = content;
+
+    // 外部更新後はカーソル位置を保存せずにシンプルに編集フラグのみリセット
+    setTimeout(() => {
+      // 編集フラグをリセット
+      isEditing = false;
+    }, 50);
   }
 </script>
 

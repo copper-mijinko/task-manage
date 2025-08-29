@@ -34,14 +34,18 @@
     memo.length > selectedMemoIndex ? memo[selectedMemoIndex].content : "";
   let newMemoTitle = "memo";
 
-  let inputs = [];
+  // 安全にアクセスできるように配列を初期化
+  let inputs = Array(100).fill(null);
   let edit = false;
   const toggle = async () => {
     if (memo.length > 0) {
       edit = !edit;
       if (edit) {
         await tick();
-        inputs[selectedMemoIndex].focus();
+        // 要素が存在することを確認してからfocusを呼び出す
+        if (inputs[selectedMemoIndex]) {
+          inputs[selectedMemoIndex].focus();
+        }
       }
     }
   };
@@ -147,8 +151,10 @@
   <div class="memotab-content">
     {#if memo[selectedMemoIndex]}
       <Memo
-        saveMemo={(editedContent) => saveMemo(editedContent, selectedMemoIndex)}
+        saveMemo={(editedContent, cursorPosition) =>
+          saveMemo(editedContent, selectedMemoIndex, cursorPosition)}
         content={editedContent}
+        memoIndex={selectedMemoIndex}
       />
     {:else}
       <textarea placeholder="No page" disabled></textarea>

@@ -1,7 +1,7 @@
 <script>
   import { getNode, setNode } from "../common/tree_control.ts";
   import { tree_data, table_selected_id } from "../stores.js";
-  import { throttle } from "lodash";
+  import { debounce } from "lodash";
   import MemoTab from "./MemoTab.svelte";
 
   $: is_selected = $table_selected_id ? true : false;
@@ -15,7 +15,8 @@
     let data = setNode(node, $tree_data.data);
     $tree_data = { ...$tree_data, data: data };
   };
-  const changeDataThrottle = throttle(changeData, 1000);
+  // データストア更新処理のdebounce - 全てのUI更新を統合的に処理
+  const changeDataDebounce = debounce(changeData, 500);
   const addMemo = (newMemoTitle) => {
     if (newMemoTitle) {
       let newMemo = { title: newMemoTitle, content: "" };
@@ -27,21 +28,43 @@
     changeData(
       node,
       "memo",
-      node.data.memo.filter((_, i) => i !== index)
+      node.data.memo.filter((_, i) => i !== index),
     );
     return true;
   };
-  const saveMemo = (editedContent, selectedMemoIndex) => {
-    memo = [...node.data["memo"]];
-    memo[selectedMemoIndex].content = editedContent;
-    changeDataThrottle(node, "memo", memo);
+  const saveMemo = (
+    editedContent,
+    selectedMemoIndex,
+    cursorPosition = null,
+  ) => {
+    // 保存処理を行うが、再描画をトリガーしないようにする
+    const updatedMemo = [...node.data["memo"]];
+
+    // カーソル位置情報も含めて保存
+    if (cursorPosition) {
+      // コンテンツとカーソル位置の両方を更新
+      updatedMemo[selectedMemoIndex] = {
+        ...updatedMemo[selectedMemoIndex],
+        content: editedContent,
+        cursorPosition: cursorPosition,
+      };
+    } else {
+      // 後方互換性のためコンテンツのみ更新
+      updatedMemo[selectedMemoIndex].content = editedContent;
+    }
+
+    // 直接ノードのデータを更新（リアクティブな更新をトリガーしない方法）
+    node.data["memo"] = updatedMemo;
+
+    // データストアの更新（debounceされる）
+    changeDataDebounce(node, "memo", updatedMemo);
     return true;
   };
   const renameMemo = (newMemoTitle, selectedMemoIndex) => {
     if (newMemoTitle) {
       memo = [...node.data["memo"]];
       memo[selectedMemoIndex].title = newMemoTitle;
-      changeDataThrottle(node, "memo", memo);
+      changeDataDebounce(node, "memo", memo);
       return true;
     }
   };
