@@ -208,7 +208,7 @@ app.on("ready", () => {
       resizable: false,
       minimizable: false,
       maximizable: false,
-      alwaysOnTop: true,
+      alwaysOnTop: false,
       autoHideMenuBar: true,
       show: false, // 初期状態では非表示
       webPreferences: {
