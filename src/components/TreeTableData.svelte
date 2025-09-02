@@ -13,7 +13,7 @@
   } from "../common/tree_control.ts";
   import { ripple } from "../common/common.js";
   import { theme } from "../stores.js";
-  import TextInput from "./TextInput.svelte";
+  import TaskName from "./TaskName.svelte";
   import StatusSelect from "./StatusSelect.svelte";
   import DateInput from "./DateInput.svelte";
 
@@ -64,6 +64,13 @@
     node = { ...node, data: { ...node.data, [key]: value } };
     let data = setNode(node, $tree_data.data);
     $tree_data = { ...$tree_data, data: data };
+  };
+
+  // 別ウィンドウでタスクを開く
+  const openTaskInWindow = (taskText) => {
+    // ここでElectronを使って新しいウィンドウを開く処理を実装
+    // window.electronAPI.openTaskWindow(id, taskText)などの形で実装する
+    console.log("別ウィンドウで開く:", id, taskText);
   };
 
   onMount(() => {
@@ -214,11 +221,12 @@
             </svg>
           </div>
         {/if}
-        <TextInput
+        <TaskName
           text={data[header.name]}
           on:input={(e) => {
             changeData(node, "name", e.target.value);
           }}
+          on:openWindow={({ detail }) => openTaskInWindow(detail.text)}
         />
       {:else if header.name == "status"}
         <StatusSelect {node} status={data[header.name]} />

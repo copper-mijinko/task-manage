@@ -1,0 +1,294 @@
+<script>
+    import { tick, createEventDispatcher } from "svelte";
+    import { ripple, tooltip } from "../common/common.js";
+    import TaskMenu from "./TaskMenu.svelte";
+
+    export let text;
+    export let color = "var(--theme-color-Sub-main)";
+    export let backgroundColor = "transparent";
+    let input;
+    let wrapper;
+    let disabled = true;
+    let showMenu = false;
+    let menuPosition = { x: 0, y: 0 };
+
+    // メニュー項目の定義
+    const menuItems = [
+        {
+            title: "rename",
+            action: "rename",
+            icon: {
+                viewBox: "-4 -4 32 32",
+                path: "M18.111,2.293,9.384,11.021a.977.977,0,0,0-.241.39L8.052,14.684A1,1,0,0,0,9,16a.987.987,0,0,0,.316-.052l3.273-1.091a.977.977,0,0,0,.39-.241l8.728-8.727a1,1,0,0,0,0-1.414L19.525,2.293A1,1,0,0,0,18.111,2.293Z",
+            },
+        },
+        {
+            title: "open another window",
+            action: "openWindow",
+            icon: {
+                viewBox: "0 0 24 24",
+                path: "M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z",
+            },
+        },
+    ];
+
+    const dispatch = createEventDispatcher();
+
+    const params = {
+        color: "var(--theme-color-Main-main)",
+        backgroundColor: "var(--theme-color-Sub-main)",
+        wrapped: true,
+    };
+
+    const toggle = async () => {
+        disabled = !disabled;
+        if (!disabled) {
+            await tick();
+            input.focus();
+        }
+    };
+
+    const openMenu = (e) => {
+        e.stopPropagation();
+
+        // メニューの位置を計算
+        const rect = e.currentTarget.getBoundingClientRect();
+        const viewportWidth = window.innerWidth;
+
+        // メニューの幅（CSSのmin-widthと同じ値）
+        const menuWidth = 180;
+
+        // 右端に近い場合は左側に表示、それ以外は右下に表示
+        if (rect.right + menuWidth > viewportWidth) {
+            menuPosition = {
+                x: rect.left,
+                y: rect.bottom,
+                position: "left",
+            };
+        } else {
+            menuPosition = {
+                x: rect.right,
+                y: rect.bottom,
+                position: "right",
+            };
+        }
+
+        showMenu = true;
+    };
+
+    // メニューイベントハンドラ
+    function handleMenuAction(event) {
+        const action = event.detail;
+        if (action === "rename") {
+            toggle();
+        } else if (action === "openWindow") {
+            dispatch("openWindow", { text });
+        }
+    }
+</script>
+
+<div
+    style="--color:{color}; --backgroundColor:{backgroundColor};"
+    bind:this={wrapper}
+>
+    <input
+        type="text"
+        bind:this={input}
+        value={text}
+        {disabled}
+        draggable="true"
+        on:blur={() => {
+            disabled = true;
+        }}
+        on:input
+        on:click={(e) => {
+            e.stopPropagation();
+        }}
+        on:keydown={(e) => {
+            if (["Enter", "Escape"].includes(e.key)) {
+                disabled = true;
+            }
+        }}
+        on:dragstart={(e) => {
+            if (!disabled) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        }}
+        on:drag={(e) => {
+            if (!disabled) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        }}
+        on:dragend={(e) => {
+            if (!disabled) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        }}
+        use:tooltip={params}
+    />
+
+    <button
+        class="edit-button"
+        use:ripple={{ duration: 350, color: color }}
+        on:click={(e) => {
+            e.stopPropagation();
+            toggle();
+        }}
+    >
+        <svg
+            height="100%"
+            viewBox="-4 -4 32 32"
+            xmlns="http://www.w3.org/2000/svg"
+        >
+            <path
+                d="M18.111,2.293,9.384,11.021a.977.977,0,0,0-.241.39L8.052,14.684A1,1,0,0,0,9,16a.987.987,0,0,0,.316-.052l3.273-1.091a.977.977,0,0,0,.39-.241l8.728-8.727a1,1,0,0,0,0-1.414L19.525,2.293A1,1,0,0,0,18.111,2.293ZM11.732,13.035l-1.151.384.384-1.151L16.637,6.6l.767.767Zm7.854-7.853-.768.767-.767-.767.767-.768ZM3,5h8a1,1,0,0,1,0,2H4V20H17V13a1,1,0,0,1,2,0v8a1,1,0,0,1-1,1H3a1,1,0,0,1-1-1V6A1,1,0,0,1,3,5Z"
+            ></path>
+        </svg>
+    </button>
+
+    <button
+        class="menu-button"
+        use:ripple={{ duration: 350, color: color }}
+        on:click={openMenu}
+    >
+        <svg
+            height="100%"
+            viewBox="0 0 24 24"
+            xmlns="http://www.w3.org/2000/svg"
+        >
+            <circle cx="5" cy="12" r="2" />
+            <circle cx="12" cy="12" r="2" />
+            <circle cx="19" cy="12" r="2" />
+        </svg>
+    </button>
+
+    <TaskMenu
+        {menuItems}
+        position={menuPosition}
+        show={showMenu}
+        on:rename={handleMenuAction}
+        on:openWindow={handleMenuAction}
+        on:close={() => (showMenu = false)}
+    />
+</div>
+
+<style>
+    div {
+        width: 100%;
+        height: 100%;
+        padding: 0 0.5rem;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        flex: 1;
+        position: relative;
+    }
+    input {
+        border: none;
+        padding: 0;
+        margin: 0;
+        width: 100%;
+        position: relative;
+    }
+    input:focus {
+        outline: auto;
+    }
+    input:disabled {
+        background-color: var(--backgroundColor);
+        color: var(--color);
+    }
+    button {
+        height: calc(100% - 0.5rem);
+        aspect-ratio: 1;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        border-radius: 50%;
+        border: none;
+        cursor: pointer;
+        background-color: transparent !important;
+        margin: 0.25rem;
+        padding: 0;
+    }
+    button:focus-visible {
+        outline: auto;
+    }
+    button svg {
+        fill: var(--color);
+    }
+
+    .menu-button svg {
+        width: 20px;
+        height: 20px;
+    }
+
+    :global(#task-menu) {
+        position: fixed;
+        z-index: 999999999999;
+    }
+
+    :global(.task-menu) {
+        background: var(--theme-color-Main-dark);
+        border: 1px solid var(--theme-color-Sub-dark);
+        border-radius: 4px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        white-space: nowrap;
+        margin: 0;
+        padding: 4px 0;
+        list-style: none;
+        min-width: fit-content;
+        display: flex;
+        flex-direction: column;
+    }
+
+    :global(.menu-right) {
+        left: var(--menu-pos-x);
+    }
+
+    :global(.menu-left) {
+        right: calc(100% - var(--menu-pos-x));
+    }
+
+    :global(.task-menu li) {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        display: block;
+    }
+
+    :global(.task-menu-item) {
+        width: 100%;
+        text-align: left;
+        padding: 4px 6px;
+        display: flex;
+        align-items: center;
+        border-radius: 0;
+        color: var(--theme-color-Sub-main);
+        font-size: 0.8rem;
+        height: auto;
+        aspect-ratio: auto;
+        margin: 0;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+    }
+
+    :global(.task-menu-item:hover) {
+        background-color: var(--theme-color-Theme-dark);
+    }
+
+    :global(.task-menu-item svg) {
+        margin-right: 4px;
+        width: 12px;
+        height: 12px;
+        flex-shrink: 0;
+        fill: var(--theme-color-Sub-main);
+    }
+
+    :global(.task-menu-item span) {
+        flex: 0 1 auto;
+    }
+</style>
