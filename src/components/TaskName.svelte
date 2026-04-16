@@ -5,16 +5,19 @@
     import TaskMenu from "./TaskMenu.svelte";
 
     export let text;
-    let draftText = text ?? "";
     export let color = "var(--theme-color-Sub-main)";
     export let backgroundColor = "transparent";
+    export let hasChildren = false;
+    export let expanded = false;
+    export let isRoot = false;
+    let draftText = text ?? "";
     let input;
     let disabled = true;
     let showMenu = false;
     let menuPosition = { x: 0, y: 0 };
 
     // メニュー項目の定義
-    const menuItems = [
+    $: menuItems = [
         {
             title: "rename",
             action: "rename",
@@ -23,6 +26,40 @@
                 path: "M18.111,2.293,9.384,11.021a.977.977,0,0,0-.241.39L8.052,14.684A1,1,0,0,0,9,16a.987.987,0,0,0,.316-.052l3.273-1.091a.977.977,0,0,0,.39-.241l8.728-8.727a1,1,0,0,0,0-1.414L19.525,2.293A1,1,0,0,0,18.111,2.293Z",
             },
         },
+        ...(!isRoot
+            ? [
+                  {
+                      title: "add task below",
+                      action: "addBelow",
+                      icon: {
+                          viewBox: "0 0 24 24",
+                          path: "M12 5V19M5 12H19",
+                      },
+                  },
+              ]
+            : []),
+        {
+            title: "add child task",
+            action: "addChild",
+            icon: {
+                viewBox: "0 0 24 24",
+                path: "M5 5V14H15M11 10L15 14L11 18M19 5V9M17 7H21",
+            },
+        },
+        ...(hasChildren
+            ? [
+                  {
+                      title: expanded ? "collapse" : "expand",
+                      action: "toggleExpand",
+                      icon: {
+                          viewBox: "0 0 24 24",
+                          path: expanded
+                              ? "M6 9L12 15L18 9"
+                              : "M9 6L15 12L9 18",
+                      },
+                  },
+              ]
+            : []),
         {
             title: "open another window",
             action: "openWindow",
@@ -31,6 +68,18 @@
                 path: "M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z",
             },
         },
+        ...(!isRoot
+            ? [
+                  {
+                      title: "delete task",
+                      action: "deleteTask",
+                      icon: {
+                          viewBox: "0 0 48 48",
+                          path: "M13.05 42q-1.25 0-2.125-.875T10.05 39V10.5H8v-3h9.4V6h13.2v1.5H40v3h-2.05V39q0 1.2-.9 2.1-.9.9-2.1.9Zm21.9-31.5h-21.9V39h21.9Zm-16.6 24.2h3V14.75h-3Zm8.3 0h3V14.75h-3Zm-13.6-24.2V39Z",
+                      },
+                  },
+              ]
+            : []),
     ];
 
     const dispatch = createEventDispatcher();
@@ -120,14 +169,12 @@
     // メニューイベントハンドラ
     function handleMenuAction(event) {
         const data = event.detail;
-        console.log("イベント詳細:", data);
-
         if (data && data.action === "rename") {
-            console.log("called in TaskName - rename");
             toggle();
         } else if (data && data.action === "openWindow") {
-            console.log("called in TaskName - openWindow");
             dispatch("openWindow", { text: draftText });
+        } else if (data?.action) {
+            dispatch(data.action, data);
         }
     }
 </script>
@@ -223,7 +270,11 @@
         show={showMenu}
         taskText={draftText}
         on:rename={handleMenuAction}
+        on:addBelow={handleMenuAction}
+        on:addChild={handleMenuAction}
+        on:toggleExpand={handleMenuAction}
         on:openWindow={handleMenuAction}
+        on:deleteTask={handleMenuAction}
         on:close={() => (showMenu = false)}
     />
 </div>

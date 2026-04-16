@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import TreeTableHeader from "./TreeTableHeader.svelte";
   import TreeTableRow from "./TreeTableRow.svelte";
+  import Dialog from "./Dialog.svelte";
   import {
     tree_data,
     filtered_data,
@@ -14,6 +15,11 @@
     updateNodeDataById,
     isChild,
     reorderTree,
+    addNode,
+    rmNode,
+    getNode,
+    getParent,
+    getDefaultNode,
   } from "../common/tree_control.ts";
 
   let table_root; // Bind
@@ -25,6 +31,10 @@
   let minWidth;
   $: rows = $filtered_data ? flattenVisibleTree($filtered_data, $closed_node_ids) : [];
   $: isDark = $theme == "dark";
+
+  let showDeleteConfirm = false;
+  let deleteTargetId;
+  let deleteTargetName = "";
 
   onMount(() => {
     let headers, data_rows;
@@ -288,6 +298,84 @@
     const data = reorderTree(draggedId, targetId, $tree_data.data, mode);
     $tree_data = { ...$tree_data, data };
   }
+
+  function focusNewNode(newNodeId) {
+    setTimeout(() => {
+      $table_selected_id = newNodeId;
+
+      setTimeout(() => {
+        const newRow = document.getElementById(newNodeId);
+        if (newRow) {
+          newRow.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
+      }, 50);
+    }, 0);
+  }
+
+  function handleAddRelative(targetId, action) {
+    if (!targetId || !$tree_data?.data) {
+      return;
+    }
+
+    const newNode = getDefaultNode();
+    let parentId;
+
+    if (action === "append") {
+      parentId = targetId;
+    } else {
+      const parentNode = getParent(targetId, $tree_data.data);
+      if (parentNode) {
+        parentId = parentNode.id;
+      }
+    }
+
+    const data = addNode(newNode, targetId, $tree_data.data, action);
+    $tree_data = { ...$tree_data, data };
+
+    if (parentId && $closed_node_ids.has(parentId)) {
+      closed_node_ids.delete(parentId);
+    }
+
+    focusNewNode(newNode.id);
+  }
+
+  function handleAddBelow(event) {
+    handleAddRelative(event.detail.id, "insert_after");
+  }
+
+  function handleAddChild(event) {
+    handleAddRelative(event.detail.id, "append");
+  }
+
+  function requestDelete(event) {
+    const { id } = event.detail;
+    const node = getNode(id, $tree_data.data);
+    if (!node || node.id === $tree_data.data.id) {
+      return;
+    }
+
+    deleteTargetId = id;
+    deleteTargetName = node.data.name;
+    showDeleteConfirm = true;
+  }
+
+  function toggleDeleteConfirm() {
+    showDeleteConfirm = !showDeleteConfirm;
+  }
+
+  function confirmDelete() {
+    if (!deleteTargetId) {
+      return;
+    }
+
+    const data = rmNode(deleteTargetId, $tree_data.data);
+    $tree_data = { ...$tree_data, data };
+    if ($table_selected_id === deleteTargetId) {
+      $table_selected_id = undefined;
+    }
+    deleteTargetId = undefined;
+    deleteTargetName = "";
+  }
 </script>
 
 <div
@@ -308,10 +396,21 @@
         on:toggle={handleToggleRow}
         on:commit={handleCommit}
         on:reorder={handleReorder}
+        on:addBelow={handleAddBelow}
+        on:addChild={handleAddChild}
+        on:deleteTask={requestDelete}
       />
     {/each}
   {/if}
 </div>
+
+<Dialog
+  show={showDeleteConfirm}
+  toggle={toggleDeleteConfirm}
+  header="Confirm."
+  content={`Do you really delete "${deleteTargetName}"?\nThis may delete child nodes.`}
+  callback={confirmDelete}
+/>
 
 <style>
   .TableRoot {

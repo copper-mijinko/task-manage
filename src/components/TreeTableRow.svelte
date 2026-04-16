@@ -188,8 +188,23 @@
         <TaskName
           bind:this={taskName}
           text={data[header.name]}
+          {hasChildren}
+          {expanded}
+          isRoot={depth === 0}
           on:commit={(e) => {
             commitData("name", e.detail.value);
+          }}
+          on:addBelow={() => {
+            dispatch("addBelow", { id });
+          }}
+          on:addChild={() => {
+            dispatch("addChild", { id });
+          }}
+          on:toggleExpand={() => {
+            dispatch("toggle", { id });
+          }}
+          on:deleteTask={() => {
+            dispatch("deleteTask", { id });
           }}
           on:openWindow={({ detail }) => {
             openTaskInWindow(detail.text);

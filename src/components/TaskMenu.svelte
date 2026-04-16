@@ -1,5 +1,5 @@
 <script>
-    import { createEventDispatcher, onMount, onDestroy } from "svelte";
+    import { createEventDispatcher, onDestroy } from "svelte";
 
     // メニュー項目の型定義
     export let menuItems = [];
@@ -135,27 +135,10 @@
                     e.stopPropagation();
 
                     try {
-                        // アクションに基づいてイベントを発火（直接的に処理）
-                        if (item.action === "rename") {
-                            // イベントを発火
-                            const renameEvent = new CustomEvent("rename");
-                            document.dispatchEvent(renameEvent);
-                            // Svelteイベントの発火 - detailにactionとその他データを含むオブジェクトを設定
-                            dispatch(item.action, {
-                                action: item.action,
-                            });
-                        } else if (item.action === "openWindow") {
-                            console.log("called openWindow");
-                            const openWindowEvent = new CustomEvent(
-                                "openWindow",
-                            );
-                            document.dispatchEvent(openWindowEvent);
-                            // openWindowの場合は、actionとtextを含むオブジェクトを送信
-                            dispatch(item.action, {
-                                action: item.action,
-                                text: taskText,
-                            });
-                        }
+                        dispatch(item.action, {
+                            action: item.action,
+                            text: taskText,
+                        });
                         dispatch("close");
 
                         // メニューを閉じる
