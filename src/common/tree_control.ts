@@ -330,3 +330,109 @@ export function reorderTree(target: string, base: string, tree_data: TreeData, a
   tree_data = addNode(target_tree, base, tree_data, action);
   return tree_data
 }
+
+function getSiblingContext(target: string, tree_data: TreeData) {
+  const parent = getParent(target, tree_data);
+  if (!parent) {
+    return undefined;
+  }
+
+  const index = parent.children.findIndex((child) => child.id === target);
+  if (index < 0) {
+    return undefined;
+  }
+
+  return { parent, index };
+}
+
+export function canMoveNodeUp(target: string, tree_data: TreeData): boolean {
+  const context = getSiblingContext(target, tree_data);
+  return !!context && context.index > 0;
+}
+
+export function canMoveNodeDown(target: string, tree_data: TreeData): boolean {
+  const context = getSiblingContext(target, tree_data);
+  return !!context && context.index < context.parent.children.length - 1;
+}
+
+export function canIndentNode(target: string, tree_data: TreeData): boolean {
+  const context = getSiblingContext(target, tree_data);
+  return !!context && context.index > 0;
+}
+
+export function canOutdentNode(target: string, tree_data: TreeData): boolean {
+  const parent = getParent(target, tree_data);
+  if (!parent) {
+    return false;
+  }
+
+  return !!getParent(parent.id, tree_data);
+}
+
+export function moveNodeUp(target: string, tree_data: TreeData): TreeData {
+  const context = getSiblingContext(target, tree_data);
+  if (!context || context.index === 0) {
+    return tree_data;
+  }
+
+  const { parent, index } = context;
+  [parent.children[index - 1], parent.children[index]] = [
+    parent.children[index],
+    parent.children[index - 1],
+  ];
+
+  return tree_data;
+}
+
+export function moveNodeDown(target: string, tree_data: TreeData): TreeData {
+  const context = getSiblingContext(target, tree_data);
+  if (!context || context.index >= context.parent.children.length - 1) {
+    return tree_data;
+  }
+
+  const { parent, index } = context;
+  [parent.children[index], parent.children[index + 1]] = [
+    parent.children[index + 1],
+    parent.children[index],
+  ];
+
+  return tree_data;
+}
+
+export function indentNode(target: string, tree_data: TreeData): TreeData {
+  const context = getSiblingContext(target, tree_data);
+  if (!context || context.index === 0) {
+    return tree_data;
+  }
+
+  const { parent, index } = context;
+  const [node] = parent.children.splice(index, 1);
+  const newParent = parent.children[index - 1];
+  newParent.children.push(node);
+
+  return tree_data;
+}
+
+export function outdentNode(target: string, tree_data: TreeData): TreeData {
+  const parent = getParent(target, tree_data);
+  if (!parent) {
+    return tree_data;
+  }
+
+  const grandParent = getParent(parent.id, tree_data);
+  if (!grandParent) {
+    return tree_data;
+  }
+
+  const targetIndex = parent.children.findIndex((child) => child.id === target);
+  const parentIndex = grandParent.children.findIndex((child) => child.id === parent.id);
+
+  if (targetIndex < 0 || parentIndex < 0) {
+    return tree_data;
+  }
+
+  const [node] = parent.children.splice(targetIndex, 1);
+  grandParent.children.splice(parentIndex + 1, 0, node);
+
+  return tree_data;
+}

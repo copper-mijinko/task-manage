@@ -10,6 +10,10 @@
     export let hasChildren = false;
     export let expanded = false;
     export let isRoot = false;
+    export let canMoveUp = false;
+    export let canMoveDown = false;
+    export let canIndent = false;
+    export let canOutdent = false;
     let draftText = text ?? "";
     let input;
     let disabled = true;
@@ -61,6 +65,42 @@
                   },
               ]
             : []),
+        {
+            title: "move up",
+            action: "moveUp",
+            disabled: !canMoveUp,
+            icon: {
+                viewBox: "0 0 24 24",
+                path: "M12 5L6 11H10V19H14V11H18L12 5Z",
+            },
+        },
+        {
+            title: "move down",
+            action: "moveDown",
+            disabled: !canMoveDown,
+            icon: {
+                viewBox: "0 0 24 24",
+                path: "M12 19L18 13H14V5H10V13H6L12 19Z",
+            },
+        },
+        {
+            title: "move right",
+            action: "indentTask",
+            disabled: !canIndent,
+            icon: {
+                viewBox: "0 0 24 24",
+                path: "M4 6H14V8H4V6ZM4 11H14V13H4V11ZM4 16H14V18H4V16ZM12 9L17 14L12 19V16H8V12H12V9Z",
+            },
+        },
+        {
+            title: "move left",
+            action: "outdentTask",
+            disabled: !canOutdent,
+            icon: {
+                viewBox: "0 0 24 24",
+                path: "M10 9L5 14L10 19V16H16V12H10V9ZM10 6H20V8H10V6ZM10 16H20V18H10V16Z",
+            },
+        },
         {
             title: "show details",
             action: "openTaskDetailWindow",
@@ -306,6 +346,10 @@
         on:addBelow={handleMenuAction}
         on:addChild={handleMenuAction}
         on:toggleExpand={handleMenuAction}
+        on:moveUp={handleMenuAction}
+        on:moveDown={handleMenuAction}
+        on:indentTask={handleMenuAction}
+        on:outdentTask={handleMenuAction}
         on:openTaskDetailWindow={handleMenuAction}
         on:deleteTask={handleMenuAction}
         on:close={closeMenu}

@@ -15,6 +15,10 @@
   export let selected = false;
   export let isDark = false;
   export let canDrop = () => false;
+  export let canMoveUp = false;
+  export let canMoveDown = false;
+  export let canIndent = false;
+  export let canOutdent = false;
 
   const dispatch = createEventDispatcher();
   let taskName;
@@ -198,6 +202,10 @@
           {hasChildren}
           {expanded}
           isRoot={depth === 0}
+          {canMoveUp}
+          {canMoveDown}
+          {canIndent}
+          {canOutdent}
           on:commit={(e) => {
             commitData("name", e.detail.value);
           }}
@@ -209,6 +217,18 @@
           }}
           on:toggleExpand={() => {
             dispatch("toggle", { id });
+          }}
+          on:moveUp={() => {
+            dispatch("moveUp", { id });
+          }}
+          on:moveDown={() => {
+            dispatch("moveDown", { id });
+          }}
+          on:indentTask={() => {
+            dispatch("indentTask", { id });
+          }}
+          on:outdentTask={() => {
+            dispatch("outdentTask", { id });
           }}
           on:deleteTask={() => {
             dispatch("deleteTask", { id });
