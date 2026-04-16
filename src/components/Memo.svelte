@@ -7,6 +7,7 @@
   export let saveMemo;
   export let content = "";
   export let memoIndex = 0; // メモのインデックスを受け取る
+  export let readOnly = false;
 
   let editor;
   // 編集中のフラグとカーソル位置を保存する変数
@@ -32,6 +33,24 @@
 
   // イベントリスナーの参照を保持する変数
   let linkClickListener;
+
+  function applyContent(nextContent) {
+    if (!quill) {
+      return;
+    }
+
+    if (!nextContent) {
+      quill.setText("");
+      return;
+    }
+
+    if (typeof nextContent === "string") {
+      quill.setText(nextContent);
+      return;
+    }
+
+    quill.setContents(nextContent);
+  }
 
   // Quillのリンクツールチップを処理するための関数
   function handleLinkTooltips() {
@@ -77,51 +96,52 @@
     quill = new Quill(editor, {
       theme: "snow",
       modules: {
-        toolbar: toolbarOptions,
+        toolbar: readOnly ? false : toolbarOptions,
       },
     });
 
-    if (content) {
-      quill.setContents(content);
-    }
+    applyContent(content);
+    quill.enable(!readOnly);
 
-    // テキスト変更のみを検知して保存処理を行う
-    quill.on("text-change", function (delta, oldDelta, source) {
-      if (source === "user") {
-        // 編集中フラグを設定
-        isEditing = true;
+    if (!readOnly) {
+      // テキスト変更のみを検知して保存処理を行う
+      quill.on("text-change", function (delta, oldDelta, source) {
+        if (source === "user") {
+          // 編集中フラグを設定
+          isEditing = true;
 
-        // 現在のカーソル位置を取得
-        const currentSelection = quill.hasFocus() ? quill.getSelection() : null;
+          // 現在のカーソル位置を取得
+          const currentSelection = quill.hasFocus() ? quill.getSelection() : null;
 
-        // 内容を保存（カーソル位置も一緒に送信）
-        const contents = quill.getContents();
-        lastSavedContent = contents;
+          // 内容を保存（カーソル位置も一緒に送信）
+          const contents = quill.getContents();
+          lastSavedContent = contents;
 
-        // カーソル位置情報も一緒に送信
-        if (currentSelection) {
-          saveMemo(contents, memoIndex, currentSelection);
-        } else {
-          saveMemo(contents, memoIndex);
+          // カーソル位置情報も一緒に送信
+          if (currentSelection) {
+            saveMemo(contents, memoIndex, currentSelection);
+          } else {
+            saveMemo(contents, memoIndex);
+          }
+
+          // 編集フラグをリセット
+          setTimeout(() => {
+            isEditing = false;
+          }, 100);
         }
+      });
 
-        // 編集フラグをリセット
-        setTimeout(() => {
-          isEditing = false;
-        }, 100);
-      }
-    });
-
-    // カーソル位置の変更のみを検出（保存は行わない）
-    quill.on("selection-change", function (range, oldRange, source) {
-      if (range && source === "user") {
-        // カーソル位置を保存（ローカルのみ）
-        savedSelection = {
-          index: range.index,
-          length: range.length,
-        };
-      }
-    });
+      // カーソル位置の変更のみを検出（保存は行わない）
+      quill.on("selection-change", function (range, oldRange, source) {
+        if (range && source === "user") {
+          // カーソル位置を保存（ローカルのみ）
+          savedSelection = {
+            index: range.index,
+            length: range.length,
+          };
+        }
+      });
+    }
 
     // リンクツールチップの処理をセットアップ
     handleLinkTooltips();
@@ -147,7 +167,6 @@
   // 外部から更新されたコンテンツとの同期（編集中は同期しない）
   $: if (
     quill &&
-    content &&
     !isEditing &&
     !isEqual(content, lastSavedContent)
   ) {
@@ -155,7 +174,7 @@
     isEditing = true;
 
     // コンテンツを更新
-    quill.setContents(content);
+    applyContent(content);
     lastSavedContent = content;
 
     // 外部更新後はカーソル位置を保存せずにシンプルに編集フラグのみリセット

@@ -4,6 +4,22 @@ import { THEME_DARK, THEME_LIGHT } from './common/theme'
 import _ from 'lodash';
 import { getDefaultProject, getNode, filterTree } from './common/tree_control.ts';
 
+const currentHash =
+	typeof window !== "undefined" ? window.location.hash : "";
+const currentSearch =
+	typeof window !== "undefined" ? new URLSearchParams(window.location.search) : new URLSearchParams();
+const isTaskDetailWindow = currentHash === "#task-detail-window";
+const detailProjectId = currentSearch.get("projectId") || undefined;
+const detailTaskId = currentSearch.get("taskId") || undefined;
+let pendingTaskDetailSelection =
+	isTaskDetailWindow && detailProjectId && detailTaskId
+		? { projectId: detailProjectId, taskId: detailTaskId }
+		: undefined;
+
+function clearPendingTaskDetailSelection() {
+	pendingTaskDetailSelection = undefined;
+}
+
 // info
 export const info_ids = writable([{ id: "9ba28822-6240-4280-9da3-63ac6b8356a6", name: "Usage" }]);
 
@@ -30,13 +46,46 @@ export let theme;
 export let filter;
 export let filtered_data;
 
+export function setTaskDetailWindowTarget(projectId, taskId) {
+	if (!projectId || !taskId) {
+		pendingTaskDetailSelection = undefined;
+		return;
+	}
+
+	pendingTaskDetailSelection = { projectId, taskId };
+	selected_type.set("Projects");
+	selected_id.set(projectId);
+}
+
 function createProjectIds(project_ids) {
 	const { subscribe, set, update } = writable(project_ids);
+	let projectDeleteListenerRegistered = false;
 	return {
 		subscribe,
 		set,
 		update,
 		init: () => {
+			if (!projectDeleteListenerRegistered && window.electronAPI?.onProjectDeleted) {
+				projectDeleteListenerRegistered = true;
+				window.electronAPI.onProjectDeleted((deletedProjectId) => {
+					window.electronAPI.getProjectIDs().then((result) => {
+						set(result);
+					});
+
+					if (pendingTaskDetailSelection?.projectId === deletedProjectId) {
+						clearPendingTaskDetailSelection();
+					}
+
+					if (deletedProjectId === get(selected_id)) {
+						selected_type.set(undefined);
+						selected_id.set(undefined);
+						table_selected_id.set(undefined);
+						filtered_data.set(undefined);
+						closed_node_ids.set(new Set());
+					}
+				});
+			}
+
 			subscribe(current => {
 				if (current === undefined) {
 					window.electronAPI.getProjectIDs().then(
@@ -87,6 +136,8 @@ function createProjectIds(project_ids) {
 function createTreeData(tree_data) {
 	const { subscribe, set, update } = writable(tree_data);
 	let previousData = null;
+	let skipPersistOnce = false;
+	let syncListenerRegistered = false;
 
 	// ツリーデータから削除されたノードのIDを検出
 	const findRemovedNodeIds = (oldData, newData) => {
@@ -113,6 +164,14 @@ function createTreeData(tree_data) {
 	};
 
 	let setTreeData = throttle((current) => {
+		if (skipPersistOnce) {
+			skipPersistOnce = false;
+			previousData = _.cloneDeep(current);
+			filter.set(get(filter));
+			window.electronAPI.getProjectIDs().then((result) => { project_ids.set(result); });
+			return;
+		}
+
 		// 削除されたノードのメタデータをクリーンアップ
 		if (previousData) {
 			const removedIds = findRemovedNodeIds(previousData, current);
@@ -153,19 +212,60 @@ function createTreeData(tree_data) {
 		set,
 		update,
 		init: () => {
+			if (!syncListenerRegistered && window.electronAPI?.onTreeDataUpdated) {
+				syncListenerRegistered = true;
+				window.electronAPI.onTreeDataUpdated((nextTreeData) => {
+					if (!nextTreeData) {
+						return;
+					}
+
+					const currentSelectedType = get(selected_type);
+					const currentSelectedId = get(selected_id);
+					const shouldSyncCurrentProject =
+						currentSelectedType === "Projects" &&
+						currentSelectedId === nextTreeData.data?.id;
+					const shouldSyncTaskDetailWindow =
+						pendingTaskDetailSelection?.projectId === nextTreeData.data?.id;
+
+					if (!shouldSyncCurrentProject && !shouldSyncTaskDetailWindow) {
+						return;
+					}
+
+					skipPersistOnce = true;
+					set(nextTreeData);
+
+					if (shouldSyncTaskDetailWindow && pendingTaskDetailSelection?.taskId) {
+						if (getNode(pendingTaskDetailSelection.taskId, nextTreeData.data)) {
+							table_selected_id.set(pendingTaskDetailSelection.taskId);
+						} else {
+							clearPendingTaskDetailSelection();
+							table_selected_id.set(undefined);
+						}
+					}
+				});
+			}
+
 			subscribe(current => {
 				if (current === undefined) {
-					window.electronAPI.getInitialTreeData().then(
-						(result) => {
-							setTreeData(current);
-							selected_type.set("Projects");
-							if (result === undefined) {
-								;
-							} else {
-								selected_id.set(result.data.id);
-							}
+					if (pendingTaskDetailSelection?.projectId) {
+						selected_type.set("Projects");
+						selected_id.set(pendingTaskDetailSelection.projectId);
+						if (pendingTaskDetailSelection.taskId) {
+							table_selected_id.set(pendingTaskDetailSelection.taskId);
 						}
-					)
+					} else {
+						window.electronAPI.getInitialTreeData().then(
+							(result) => {
+								setTreeData(current);
+								selected_type.set("Projects");
+								if (result === undefined) {
+									;
+								} else {
+									selected_id.set(result.data.id);
+								}
+							}
+						)
+					}
 				} else { }
 				setTreeData(current);
 			});
@@ -186,8 +286,17 @@ function createSelectedID(id) {
 				if (current_selected_type == "Projects") {
 					window.electronAPI.getTreeData(current).then((result) => {
 						tree_data.set(result);
+						if (pendingTaskDetailSelection?.projectId === current && pendingTaskDetailSelection.taskId) {
+							if (result?.data && getNode(pendingTaskDetailSelection.taskId, result.data)) {
+								table_selected_id.set(pendingTaskDetailSelection.taskId);
+							} else {
+								clearPendingTaskDetailSelection();
+								table_selected_id.set(undefined);
+							}
+						} else {
+							table_selected_id.set(undefined);
+						}
 					});
-					table_selected_id.set(undefined);
 				}
 			})
 		}

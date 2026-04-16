@@ -1,177 +1,225 @@
 <script>
-    import { createEventDispatcher, onDestroy } from "svelte";
+    import { createEventDispatcher } from "svelte";
 
-    // メニュー項目の型定義
     export let menuItems = [];
-
-    // 位置情報
     export let position = { x: 0, y: 0, position: "right" };
     export let show = false;
-    // タスク名
     export let taskText = "";
 
     const dispatch = createEventDispatcher();
-
-    // メニュー要素の参照
     let menuElement;
 
-    // メニューの作成・削除
-    $: if (show) {
-        createMenu();
-    } else {
-        removeMenu();
-    }
+    $: menuSideClass =
+        position.position === "left" ? "menu-position-left" : "menu-position-right";
+    $: submenuSideClass =
+        position.position === "left" ? "submenu-position-left" : "submenu-position-right";
 
-    // コンポーネント破棄時の処理
-    onDestroy(() => {
-        removeMenu();
-    });
-
-    // 画面外クリックでメニューを閉じる
     function handleClickOutside(event) {
         if (show && menuElement && !menuElement.contains(event.target)) {
             dispatch("close");
         }
     }
 
-    // メニュー作成
-    function createMenu() {
-        removeMenu(); // 既存のメニューを削除
+    function triggerAction(item, event) {
+        event.preventDefault();
+        event.stopPropagation();
 
-        // メニュー要素の作成
-        menuElement = document.createElement("div");
-        menuElement.id = "task-menu";
-        menuElement.style.position = "fixed";
-        menuElement.style.zIndex = "999999999999";
-        menuElement.style.top = `${position.y}px`;
-
-        if (position.position === "left") {
-            menuElement.style.right = `calc(100% - ${position.x}px)`;
-        } else {
-            menuElement.style.left = `${position.x}px`;
+        if (item.disabled || item.children?.length) {
+            return;
         }
 
-        // メニュー内容のHTMLを構築
-        const menuHTML = `
-            <ul class="task-menu" style="
-                background: var(--theme-color-Main-main);
-                border-radius: 0.5rem;
-                box-shadow: 0 0.2rem 0.5rem rgba(0, 0, 0, 0.25), 0 0.1em 0.25rem rgba(0, 0, 0, 0);
-                white-space: nowrap;
-                margin: 0;
-                padding: 4px 0;
-                list-style: none;
-                min-width: fit-content;
-                display: flex;
-                flex-direction: column;
-                overflow: hidden;
-            ">
-                ${menuItems
-                    .map(
-                        (item, index) => `
-                    <li style="
-                        margin: 0;
-                        padding: 0;
-                        width: 100%;
-                        display: block;
-                    ">
-                        <button id="task-menu-item-${index}" style="
-                            width: 100%;
-                            text-align: left;
-                            padding: 6px 10px;
-                            display: flex;
-                            align-items: center;
-                            border-radius: 0;
-                            color: var(--theme-color-Sub-light);
-                            font-size: 0.85rem;
-                            height: auto;
-                            aspect-ratio: auto;
-                            margin: 0;
-                            background: transparent;
-                            border: none;
-                            cursor: pointer;
-                        ">
-                            ${
-                                item.icon
-                                    ? `
-                                <svg
-                                    viewBox="${item.icon.viewBox}"
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    style="
-                                        margin-right: 6px;
-                                        width: 14px;
-                                        height: 14px;
-                                        flex-shrink: 0;
-                                        fill: var(--theme-color-Sub-light);
-                                    "
-                                >
-                                    <path d="${item.icon.path}"></path>
-                                </svg>
-                            `
-                                    : ""
-                            }
-                            <span style="flex: 0 1 auto;">${item.title}</span>
-                        </button>
-                    </li>
-                `,
-                    )
-                    .join("")}
-            </ul>
-        `;
-
-        menuElement.innerHTML = menuHTML;
-
-        // body直下に追加
-        document.body.appendChild(menuElement);
-
-        // イベントリスナーを追加
-        menuItems.forEach((item, index) => {
-            const button = document.getElementById(`task-menu-item-${index}`);
-            if (button) {
-                // クリックイベントリスナー（バブリングを防止）
-                button.addEventListener("click", function (e) {
-                    // イベントのデフォルト動作とバブリングを防止
-                    e.preventDefault();
-                    e.stopPropagation();
-
-                    try {
-                        dispatch(item.action, {
-                            action: item.action,
-                            text: taskText,
-                        });
-                        dispatch("close");
-
-                        // メニューを閉じる
-                        removeMenu();
-                    } catch (error) {
-                        console.error("Error in menu click handler:", error);
-                    }
-                });
-
-                // ホバー効果
-                button.addEventListener("mouseover", () => {
-                    button.style.backgroundColor =
-                        "var(--theme-color-Accent-dark)";
-                });
-                button.addEventListener("mouseout", () => {
-                    button.style.backgroundColor = "transparent";
-                });
-            }
+        dispatch(item.action, {
+            ...item,
+            text: taskText,
         });
+        dispatch("close");
     }
 
-    // メニュー削除
-    function removeMenu() {
-        if (menuElement) {
-            menuElement.remove();
-            menuElement = null;
-        }
+    function portal(node) {
+        document.body.appendChild(node);
 
-        const existingMenu = document.getElementById("task-menu");
-        if (existingMenu) {
-            existingMenu.remove();
-        }
+        return {
+            destroy() {
+                if (node.parentNode) {
+                    node.parentNode.removeChild(node);
+                }
+            },
+        };
     }
 </script>
 
 <svelte:window on:click={handleClickOutside} />
+
+{#if show}
+    <div
+        bind:this={menuElement}
+        id="task-menu"
+        class={menuSideClass}
+        use:portal
+        style:top={`${position.y}px`}
+        style:left={position.position === "right" ? `${position.x}px` : undefined}
+        style:right={position.position === "left"
+            ? `calc(100vw - ${position.x}px)`
+            : undefined}
+    >
+        <ul class="task-menu">
+            {#each menuItems as item}
+                <li class="menu-item-shell">
+                    <button
+                        class="task-menu-item"
+                        class:disabled={item.disabled}
+                        class:has-children={item.children?.length > 0}
+                        disabled={item.disabled}
+                        on:click={(event) => triggerAction(item, event)}
+                    >
+                        <span class="menu-item-content">
+                            {#if item.icon}
+                                <svg
+                                    viewBox={item.icon.viewBox}
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    class="menu-icon"
+                                >
+                                    <path d={item.icon.path}></path>
+                                </svg>
+                            {/if}
+                            <span class="menu-label">{item.title}</span>
+                        </span>
+                        {#if item.children?.length}
+                            <span class="submenu-arrow">›</span>
+                        {/if}
+                    </button>
+
+                    {#if item.children?.length}
+                        <div class={`submenu ${submenuSideClass}`}>
+                            <ul class="task-menu">
+                                {#each item.children as child}
+                                    <li class="menu-item-shell">
+                                        <button
+                                            class="task-menu-item"
+                                            on:click={(event) => triggerAction(child, event)}
+                                        >
+                                            <span class="menu-item-content">
+                                                {#if child.icon}
+                                                    <svg
+                                                        viewBox={child.icon.viewBox}
+                                                        xmlns="http://www.w3.org/2000/svg"
+                                                        class="menu-icon"
+                                                    >
+                                                        <path d={child.icon.path}></path>
+                                                    </svg>
+                                                {/if}
+                                                <span class="menu-label">{child.title}</span>
+                                            </span>
+                                        </button>
+                                    </li>
+                                {/each}
+                            </ul>
+                        </div>
+                    {/if}
+                </li>
+            {/each}
+        </ul>
+    </div>
+{/if}
+
+<style>
+    #task-menu {
+        position: fixed;
+        z-index: 999999999999;
+    }
+
+    .task-menu {
+        background: var(--theme-color-Main-main);
+        border-radius: 0.5rem;
+        box-shadow: 0 0.2rem 0.5rem rgba(0, 0, 0, 0.25);
+        white-space: nowrap;
+        margin: 0;
+        padding: 4px 0;
+        list-style: none;
+        min-width: 14rem;
+        display: flex;
+        flex-direction: column;
+        overflow: visible;
+    }
+
+    .menu-item-shell {
+        position: relative;
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        display: block;
+    }
+
+    .task-menu-item {
+        width: 100%;
+        text-align: left;
+        padding: 0.45rem 0.75rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-radius: 0;
+        color: var(--theme-color-Sub-light);
+        font-size: 0.85rem;
+        margin: 0;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        gap: 0.75rem;
+    }
+
+    .task-menu-item:hover:not(.disabled),
+    .menu-item-shell:hover > .task-menu-item:not(.disabled) {
+        background-color: var(--theme-color-Accent-dark);
+    }
+
+    .task-menu-item.disabled {
+        opacity: 0.45;
+        cursor: default;
+    }
+
+    .menu-item-content {
+        display: flex;
+        align-items: center;
+        min-width: 0;
+        gap: 0.5rem;
+    }
+
+    .menu-label {
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .menu-icon {
+        width: 0.95rem;
+        height: 0.95rem;
+        flex-shrink: 0;
+        fill: var(--theme-color-Sub-light);
+        stroke: var(--theme-color-Sub-light);
+        stroke-width: 1.5;
+    }
+
+    .submenu-arrow {
+        font-size: 1rem;
+        line-height: 1;
+        flex-shrink: 0;
+    }
+
+    .submenu {
+        position: absolute;
+        top: 0;
+        display: none;
+        padding-inline: 0.35rem;
+    }
+
+    .submenu-position-right {
+        left: 100%;
+    }
+
+    .submenu-position-left {
+        right: 100%;
+    }
+
+    .menu-item-shell:hover > .submenu {
+        display: block;
+    }
+</style>

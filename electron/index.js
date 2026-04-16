@@ -67,8 +67,13 @@ app.on("ready", () => {
       db_meta.write();
 
       // テーマが変更された場合、検索ウィンドウにも通知
-      if (key === 'theme' && searchWindow && !searchWindow.isDestroyed()) {
-        searchWindow.webContents.send('theme-changed', value);
+      if (key === 'theme') {
+        if (searchWindow && !searchWindow.isDestroyed()) {
+          searchWindow.webContents.send('theme-changed', value);
+        }
+        if (taskDetailWindow && !taskDetailWindow.isDestroyed()) {
+          taskDetailWindow.webContents.send('theme-changed', value);
+        }
       }
     } catch (err) {
       log.error('Failed to write meta_data (set-meta-data):', err.message);
@@ -104,6 +109,12 @@ app.on("ready", () => {
         // Log the error but continue silently
         log.error('Failed to write data (set-tree-data):', err.message);
       }
+
+      BrowserWindow.getAllWindows().forEach((window) => {
+        if (!window.isDestroyed() && window.webContents !== event.sender) {
+          window.webContents.send('tree-data-updated', arg);
+        }
+      });
     }
   });
   // on get-project-ids.
@@ -133,6 +144,12 @@ app.on("ready", () => {
         // Log the error but continue silently
         log.error('Failed to write data (delete-project):', err.message);
       }
+
+      BrowserWindow.getAllWindows().forEach((window) => {
+        if (!window.isDestroyed() && window.webContents !== event.sender) {
+          window.webContents.send('project-deleted', arg);
+        }
+      });
     }
   });
   // on set-project-order.
@@ -187,8 +204,8 @@ app.on("ready", () => {
   // 検索ウィンドウの変数
   let searchWindow = null;
 
-  // タスクウィンドウの変数
-  let taskWindow = null;
+  // タスク詳細ウィンドウの変数
+  let taskDetailWindow = null;
 
   // 検索ウィンドウを作成する関数
   function createSearchWindow() {
@@ -401,28 +418,22 @@ app.on("ready", () => {
     log.info('Search window shown');
   });
 
-  // タスク用のウィンドウを作成する関数
-  function createTaskWindow(taskId, taskText) {
+  // タスク詳細用のウィンドウを作成する関数
+  function createTaskDetailWindow(detailData) {
     try {
-      // エラー処理：引数のチェック
-      const safeTaskId = taskId ? String(taskId) : '';
-      const safeTaskText = taskText ? String(taskText) : '';
+      const safeDetailData = {
+        projectId: detailData?.projectId ? String(detailData.projectId) : '',
+        taskId: detailData?.taskId ? String(detailData.taskId) : '',
+        taskName: detailData?.taskName ? String(detailData.taskName) : 'Task Detail',
+      };
 
-      console.log('タスクウィンドウを作成します:', safeTaskId, safeTaskText);
-
-      // すでに作成済みで有効な場合は閉じる（常に新しいウィンドウを作成）
-      if (taskWindow && !taskWindow.isDestroyed()) {
-        taskWindow.close();
+      if (taskDetailWindow && !taskDetailWindow.isDestroyed()) {
+        taskDetailWindow.close();
       }
 
-      // メインウィンドウの位置を取得
-      const mainWindowPosition = mainWindow.getBounds();
-
-      // タスクウィンドウを作成
-      taskWindow = new BrowserWindow({
-        width: 600,
-        height: 400,
-        parent: mainWindow,
+      taskDetailWindow = new BrowserWindow({
+        width: 960,
+        height: 720,
         modal: false,
         frame: true,
         resizable: true,
@@ -437,73 +448,55 @@ app.on("ready", () => {
         }
       });
 
-      // メインウィンドウの中央に配置
-      /*taskWindow.setPosition(
-        mainWindowPosition.x + (mainWindowPosition.width - 600) / 2,
-        mainWindowPosition.y + (mainWindowPosition.height - 400) / 2
-      );*/
-
-      // URLハッシュを構築（search-windowと同様のアプローチ）
-      // ハッシュには#を含めて指定する必要がある
-      taskWindow.loadFile(path.join(__dirname, "../public/index.html"), {
-        hash: '#task-window'
+      taskDetailWindow.loadFile(path.join(__dirname, "../public/index.html"), {
+        hash: '#task-detail-window',
+        query: {
+          projectId: safeDetailData.projectId,
+          taskId: safeDetailData.taskId,
+          taskName: safeDetailData.taskName,
+        }
       });
 
-      // グローバルなタスクデータを設定
-      global.currentTaskData = {
-        id: safeTaskId,
-        text: safeTaskText
-      };
+      global.currentTaskDetailWindowData = safeDetailData;
 
-      // 閉じた時のイベント処理
-      taskWindow.on('closed', () => {
-        taskWindow = null;
-        // グローバルデータをクリア
-        global.currentTaskData = null;
+      taskDetailWindow.on('closed', () => {
+        taskDetailWindow = null;
+        global.currentTaskDetailWindowData = null;
       });
 
-      log.info(`Task window created for task: ${safeTaskId}`);
-      return taskWindow;
+      log.info(`Task detail window created for task: ${safeDetailData.taskId}`);
+      return taskDetailWindow;
     } catch (error) {
-      console.error('タスクウィンドウの作成に失敗しました:', error);
+      console.error('タスク詳細ウィンドウの作成に失敗しました:', error);
       return null;
     }
   }
 
-  // タスクデータを取得するハンドラ
-  ipcMain.handle('get-task-data', async (event) => {
-    return global.currentTaskData || { id: '', text: '' };
+  ipcMain.handle('get-task-detail-window-data', async () => {
+    return (
+      global.currentTaskDetailWindowData || {
+        projectId: '',
+        taskId: '',
+        taskName: 'Task Detail',
+      }
+    );
   });
 
-  // 別ウィンドウでタスクを開く
-  ipcMain.on('open-task-window', async (event, taskId, taskText) => {
+  // 別ウィンドウでタスク詳細を開く
+  ipcMain.on('open-task-detail-window', async (event, detailData) => {
     try {
-      console.log('open-task-window イベント受信:', taskId, taskText);
+      global.currentTaskDetailWindowData = detailData;
+      const window = createTaskDetailWindow(detailData);
 
-      // 値の型をチェックして正しく変換
-      const safeTaskId = taskId ? String(taskId) : '';
-      const safeTaskText = taskText ? String(taskText) : '';
-
-      // グローバルデータを先に設定
-      global.currentTaskData = {
-        id: safeTaskId,
-        text: safeTaskText
-      };
-
-      // タスクウィンドウを作成
-      const window = createTaskWindow(safeTaskId, safeTaskText);
-
-      // ウィンドウの読み込みを待つ
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      // タスクウィンドウをフォーカス
       if (window && !window.isDestroyed()) {
         window.show();
         window.focus();
-        log.info(`Task window shown for task: ${safeTaskText}`);
+        log.info(`Task detail window shown for task: ${detailData?.taskId || ''}`);
       }
     } catch (error) {
-      console.error('タスクウィンドウを開く際にエラーが発生しました:', error);
+      console.error('タスク詳細ウィンドウを開く際にエラーが発生しました:', error);
     }
   });
 
@@ -516,8 +509,8 @@ app.on("ready", () => {
     if (searchWindow && !searchWindow.isDestroyed()) {
       searchWindow.destroy(); // closeではなくdestroyを使用
     }
-    if (taskWindow && !taskWindow.isDestroyed()) {
-      taskWindow.destroy(); // タスクウィンドウも閉じる
+    if (taskDetailWindow && !taskDetailWindow.isDestroyed()) {
+      taskDetailWindow.destroy();
     }
   });
 

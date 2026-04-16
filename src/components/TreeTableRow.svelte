@@ -4,6 +4,7 @@
 
 <script>
   import { createEventDispatcher } from "svelte";
+  import { selected_id } from "../stores.js";
   import { ripple } from "../common/common.js";
   import TaskName from "./TaskName.svelte";
   import StatusSelect from "./StatusSelect.svelte";
@@ -27,6 +28,7 @@
 
   let dragOverType;
   let isDragging = false;
+  let isMenuOpen = false;
 
   function select(e) {
     e.stopPropagation();
@@ -47,15 +49,19 @@
     });
   }
 
-  function openTaskInWindow(taskText) {
+  function openTaskDetailInWindow(taskText) {
     try {
-      if (window.electronAPI && window.electronAPI.openTaskWindow) {
-        window.electronAPI.openTaskWindow(id, taskText);
+      if (window.electronAPI && window.electronAPI.openTaskDetailWindow) {
+        window.electronAPI.openTaskDetailWindow({
+          projectId: $selected_id,
+          taskId: id,
+          taskName: taskText,
+        });
       } else {
-        console.error("electronAPI.openTaskWindowが見つかりません");
+        console.error("electronAPI.openTaskDetailWindowが見つかりません");
       }
     } catch (error) {
-      console.error("タスクウィンドウを開く際にエラーが発生しました:", error);
+      console.error("タスク詳細ウィンドウを開く際にエラーが発生しました:", error);
     }
   }
 
@@ -131,6 +137,7 @@
   class:TableRow={true}
   class:Selected={selected}
   class:Dragging={isDragging}
+  class:MenuOpen={isMenuOpen}
   class:DragOverTop={dragOverType === "DragOverTop"}
   class:DragOverBottom={dragOverType === "DragOverBottom"}
   use:ripple
@@ -206,8 +213,11 @@
           on:deleteTask={() => {
             dispatch("deleteTask", { id });
           }}
-          on:openWindow={({ detail }) => {
-            openTaskInWindow(detail.text);
+          on:menuVisibilityChange={({ detail }) => {
+            isMenuOpen = detail.open;
+          }}
+          on:openTaskDetailWindow={({ detail }) => {
+            openTaskDetailInWindow(detail.text);
           }}
         />
       {:else if header.name == "status"}
@@ -288,6 +298,9 @@
     height: 2rem;
     padding: 0;
     width: 100%;
+  }
+  .TableRow.MenuOpen {
+    z-index: 9999;
   }
   .TableRow :global(*) {
     --backgroundColor: var(--theme-color-Main-light);

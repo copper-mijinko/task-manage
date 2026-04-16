@@ -1,5 +1,5 @@
 <script>
-    import { tick, createEventDispatcher, onDestroy } from "svelte";
+    import { tick, createEventDispatcher, onDestroy, onMount } from "svelte";
     import { debounce } from "lodash";
     import { ripple, tooltip } from "../common/common.js";
     import TaskMenu from "./TaskMenu.svelte";
@@ -15,6 +15,7 @@
     let disabled = true;
     let showMenu = false;
     let menuPosition = { x: 0, y: 0 };
+    const menuOwnerId = Math.random().toString(36).slice(2);
 
     // メニュー項目の定義
     $: menuItems = [
@@ -61,11 +62,11 @@
               ]
             : []),
         {
-            title: "open another window",
-            action: "openWindow",
+            title: "show details",
+            action: "openTaskDetailWindow",
             icon: {
                 viewBox: "0 0 24 24",
-                path: "M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z",
+                path: "M12 4C7 4 2.73 7.11 1 12c1.73 4.89 6 8 11 8s9.27-3.11 11-8c-1.73-4.89-6-8-11-8Zm0 13a5 5 0 1 1 0-10 5 5 0 0 1 0 10Zm0-8.2A3.2 3.2 0 1 0 12 15.2 3.2 3.2 0 0 0 12 8.8Z",
             },
         },
         ...(!isRoot
@@ -151,10 +152,42 @@
         };
     };
 
+    const setMenuVisibility = (open) => {
+        if (showMenu === open) {
+            return;
+        }
+
+        showMenu = open;
+        dispatch("menuVisibilityChange", { open });
+    };
+
+    const closeMenu = () => {
+        setMenuVisibility(false);
+    };
+
+    const handleTaskMenuOpened = (event) => {
+        if (event.detail?.ownerId !== menuOwnerId) {
+            closeMenu();
+        }
+    };
+
+    onMount(() => {
+        window.addEventListener("task-menu-opened", handleTaskMenuOpened);
+    });
+
     export function openMenuAt(position) {
+        window.dispatchEvent(
+            new CustomEvent("task-menu-opened", {
+                detail: { ownerId: menuOwnerId },
+            }),
+        );
         menuPosition = getMenuPosition(position.x, position.y);
-        showMenu = true;
+        setMenuVisibility(true);
     }
+
+    onDestroy(() => {
+        window.removeEventListener("task-menu-opened", handleTaskMenuOpened);
+    });
 
     const openMenu = (e) => {
         e.stopPropagation();
@@ -171,8 +204,8 @@
         const data = event.detail;
         if (data && data.action === "rename") {
             toggle();
-        } else if (data && data.action === "openWindow") {
-            dispatch("openWindow", { text: draftText });
+        } else if (data && data.action === "openTaskDetailWindow") {
+            dispatch("openTaskDetailWindow", { text: text ?? draftText });
         } else if (data?.action) {
             dispatch(data.action, data);
         }
@@ -273,9 +306,9 @@
         on:addBelow={handleMenuAction}
         on:addChild={handleMenuAction}
         on:toggleExpand={handleMenuAction}
-        on:openWindow={handleMenuAction}
+        on:openTaskDetailWindow={handleMenuAction}
         on:deleteTask={handleMenuAction}
-        on:close={() => (showMenu = false)}
+        on:close={closeMenu}
     />
 </div>
 

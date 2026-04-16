@@ -2,6 +2,9 @@
   import {
     selected_type,
     selected_id,
+    table_selected_id,
+    tree_data,
+    setTaskDetailWindowTarget,
     init_store,
     showPageSearch,
     theme,
@@ -13,28 +16,51 @@
   import Modal from "./components/Modal.svelte";
   import Button from "./components/Button.svelte";
   import PageSearchBox from "./components/PageSearchBox.svelte";
+  import TaskDetailWindow from "./components/TaskDetailWindow.svelte";
   let show = Array(4).fill(false);
+
+  const currentHash =
+    typeof window !== "undefined" ? window.location.hash : "";
+  const currentSearch =
+    typeof window !== "undefined" ? new URLSearchParams(window.location.search) : new URLSearchParams();
 
   ////////////// Initial Settings //////////////
   init_store();
 
   // ページ内検索ショートカットキー設定
   let searchBox;
-  let isSearchWindow = false;
-  let isTaskWindow = false;
-  let taskWindowData = { id: null, text: "" };
+  let isSearchWindow = currentHash === "#search-window";
+  let isTaskDetailWindow = currentHash === "#task-detail-window";
+  let detailWindowReady = false;
+  let detailWindowProjectId = currentSearch.get("projectId") || "";
+  let detailWindowTaskId = currentSearch.get("taskId") || "";
+  let detailWindowTaskName = currentSearch.get("taskName") || "Task Detail";
 
-  async function loadTaskData() {
+  async function initTaskDetailWindow() {
     try {
-      if (window.electronAPI && window.electronAPI.getTaskData) {
-        const data = await window.electronAPI.getTaskData();
-        if (data) {
-          taskWindowData = data;
-          document.title = `タスク: ${data.text || "詳細"}`;
-        }
+      const detailData = await window.electronAPI?.getTaskDetailWindowData?.();
+      if (!detailData?.projectId || !detailData?.taskId) {
+        return;
+      }
+
+      detailWindowProjectId = detailData.projectId;
+      detailWindowTaskId = detailData.taskId;
+      detailWindowTaskName = detailData.taskName || detailWindowTaskName;
+      document.title = `${detailWindowTaskName} | Task Detail`;
+
+      setTaskDetailWindowTarget(detailData.projectId, detailData.taskId);
+
+      const result = await window.electronAPI.getTreeData(detailData.projectId);
+      if (result) {
+        tree_data.set(result);
+        selected_type.set("Projects");
+        selected_id.set(detailData.projectId);
+        table_selected_id.set(detailData.taskId);
       }
     } catch (error) {
-      console.error("タスクデータ取得エラー:", error);
+      console.error("タスク詳細ウィンドウ初期化エラー:", error);
+    } finally {
+      detailWindowReady = true;
     }
   }
 
@@ -70,10 +96,7 @@
   }
 
   onMount(async () => {
-    // URLハッシュを確認してウィンドウタイプを判断
-    const hash = window.location.hash;
-
-    if (hash === "#search-window") {
+    if (isSearchWindow) {
       isSearchWindow = true;
 
       // 検索ウィンドウでは自動的に検索ボックスを表示
@@ -86,11 +109,10 @@
       document.querySelector(".Container").style.height = "auto";
       document.querySelector(".Main").style.display = "none";
       document.querySelector(".Header").style.display = "none";
-    } else if (hash === "#task-window") {
-      isTaskWindow = true;
-
-      // タスクデータを取得
-      await loadTaskData();
+    } else if (isTaskDetailWindow) {
+      await initTaskDetailWindow();
+    } else {
+      detailWindowReady = true;
     }
 
     // テーマ初期化
@@ -113,30 +135,19 @@
 </script>
 
 <div class:Container={true}>
-  <div class="Header">
-    <Header />
-  </div>
-  <div class="Main">
-    {#if isTaskWindow}
-      <div class="TaskWindow">
-        <h2 style="color:var(--theme-color-Sub-main); text-align:center;">
-          {taskWindowData.text || "タスク詳細"}
-        </h2>
-        <div class="TaskContent">
-          <p style="color:var(--theme-color-Sub-main); text-align:center;">
-            タスクID: {taskWindowData.id || "不明"}
-          </p>
-          <!-- ここにタスクの詳細コンテンツを表示 -->
-          <div class="TaskActions">
-            <Button
-              content="閉じる"
-              on:click={() => {
-                window.close();
-              }}
-            />
-          </div>
-        </div>
-      </div>
+  {#if !isTaskDetailWindow}
+    <div class="Header">
+      <Header />
+    </div>
+  {/if}
+  <div class="Main" class:DetailWindowMain={isTaskDetailWindow}>
+    {#if isTaskDetailWindow}
+      <TaskDetailWindow
+        initialTaskName={detailWindowTaskName}
+        initialTaskId={detailWindowTaskId}
+        initialProjectId={detailWindowProjectId}
+        ready={detailWindowReady}
+      />
     {:else}
       {#if !($selected_type && $selected_id)}
         <h1
@@ -220,32 +231,7 @@
     width: 100%;
     flex: 1;
   }
-
-  /* タスクウィンドウのスタイル */
-  .TaskWindow {
-    width: 100%;
+  div.Main.DetailWindowMain {
     height: 100%;
-    display: flex;
-    flex-direction: column;
-    padding: 1rem;
-    box-sizing: border-box;
-    color: var(--theme-color-Sub-main);
-  }
-
-  .TaskContent {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    padding: 1rem;
-    background-color: var(--theme-color-Main-main);
-    border-radius: 0.5rem;
-    margin-top: 1rem;
-  }
-
-  .TaskActions {
-    display: flex;
-    justify-content: center;
-    margin-top: 2rem;
   }
 </style>

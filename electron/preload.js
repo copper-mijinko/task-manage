@@ -21,13 +21,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openSearchWindow: () => {
     ipcRenderer.send('open-search-window');
   },
-  // タスク用の別ウィンドウを開く
-  openTaskWindow: (taskId, taskText) => {
-    ipcRenderer.send('open-task-window', taskId, taskText);
+  // タスク詳細ウィンドウを開く
+  openTaskDetailWindow: (detailData) => {
+    ipcRenderer.send('open-task-detail-window', detailData);
   },
-  // タスクデータを取得する
-  getTaskData: () => {
-    return ipcRenderer.invoke('get-task-data');
+  getTaskDetailWindowData: () => {
+    return ipcRenderer.invoke('get-task-detail-window-data');
   },
   // 画面内検索機能 - シンプル実装
   findInPage: (text, options) => {
@@ -58,6 +57,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('theme-changed', (event, theme) => {
       console.log('Theme changed:', theme);
       callback(theme);
+    });
+  },
+  onTreeDataUpdated: (callback) => {
+    ipcRenderer.on('tree-data-updated', (event, treeData) => {
+      callback(treeData);
+    });
+  },
+  onProjectDeleted: (callback) => {
+    ipcRenderer.on('project-deleted', (event, projectId) => {
+      callback(projectId);
     });
   },
   // 現在のテーマを取得する
