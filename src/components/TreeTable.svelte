@@ -1,8 +1,20 @@
 <script>
   import { onMount } from "svelte";
   import TreeTableHeader from "./TreeTableHeader.svelte";
-  import TreeTableData from "./TreeTableData.svelte";
-  import { tree_data, filter, filtered_data, closed_node_ids } from "../stores";
+  import TreeTableRow from "./TreeTableRow.svelte";
+  import {
+    tree_data,
+    filtered_data,
+    closed_node_ids,
+    table_selected_id,
+    theme,
+  } from "../stores";
+  import {
+    flattenVisibleTree,
+    updateNodeDataById,
+    isChild,
+    reorderTree,
+  } from "../common/tree_control.ts";
 
   let table_root; // Bind
 
@@ -11,6 +23,8 @@
 
   // Min width
   let minWidth;
+  $: rows = $filtered_data ? flattenVisibleTree($filtered_data, $closed_node_ids) : [];
+  $: isDark = $theme == "dark";
 
   onMount(() => {
     let headers, data_rows;
@@ -230,6 +244,50 @@
       resizer.removeEventListener("mousedown", handlers[index]);
     });
   };
+
+  function handleSelectRow(event) {
+    $table_selected_id = event.detail.id;
+  }
+
+  function handleToggleRow(event) {
+    const { id } = event.detail;
+    if ($closed_node_ids.has(id)) {
+      closed_node_ids.delete(id);
+    } else {
+      closed_node_ids.add(id);
+    }
+  }
+
+  function handleCommit(event) {
+    const { id, patch } = event.detail;
+    const data = updateNodeDataById($tree_data.data, id, patch);
+    if (data !== $tree_data.data) {
+      $tree_data = { ...$tree_data, data };
+    }
+  }
+
+  function canDropTarget(draggedId, targetId) {
+    if (!draggedId || !targetId || !$tree_data?.data) {
+      return false;
+    }
+    if (draggedId === targetId) {
+      return false;
+    }
+    if (targetId === $tree_data.data.id) {
+      return false;
+    }
+    return !isChild(targetId, draggedId, $tree_data.data);
+  }
+
+  function handleReorder(event) {
+    const { draggedId, targetId, mode } = event.detail;
+    if (!canDropTarget(draggedId, targetId)) {
+      return;
+    }
+
+    const data = reorderTree(draggedId, targetId, $tree_data.data, mode);
+    $tree_data = { ...$tree_data, data };
+  }
 </script>
 
 <div
@@ -238,8 +296,20 @@
   style="--minWidth: {minWidth}"
 >
   <TreeTableHeader headers={$tree_data.headers} />
-  {#if $filtered_data}
-    <TreeTableData node={$filtered_data} />
+  {#if rows.length > 0}
+    {#each rows as row (row.id)}
+      <TreeTableRow
+        {row}
+        headers={$tree_data.headers}
+        selected={$table_selected_id === row.id}
+        {isDark}
+        canDrop={canDropTarget}
+        on:select={handleSelectRow}
+        on:toggle={handleToggleRow}
+        on:commit={handleCommit}
+        on:reorder={handleReorder}
+      />
+    {/each}
   {/if}
 </div>
 

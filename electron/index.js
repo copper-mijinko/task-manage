@@ -187,6 +187,9 @@ app.on("ready", () => {
   // 検索ウィンドウの変数
   let searchWindow = null;
 
+  // タスクウィンドウの変数
+  let taskWindow = null;
+
   // 検索ウィンドウを作成する関数
   function createSearchWindow() {
     // すでに作成済みで有効な場合は何もしない
@@ -398,6 +401,112 @@ app.on("ready", () => {
     log.info('Search window shown');
   });
 
+  // タスク用のウィンドウを作成する関数
+  function createTaskWindow(taskId, taskText) {
+    try {
+      // エラー処理：引数のチェック
+      const safeTaskId = taskId ? String(taskId) : '';
+      const safeTaskText = taskText ? String(taskText) : '';
+
+      console.log('タスクウィンドウを作成します:', safeTaskId, safeTaskText);
+
+      // すでに作成済みで有効な場合は閉じる（常に新しいウィンドウを作成）
+      if (taskWindow && !taskWindow.isDestroyed()) {
+        taskWindow.close();
+      }
+
+      // メインウィンドウの位置を取得
+      const mainWindowPosition = mainWindow.getBounds();
+
+      // タスクウィンドウを作成
+      taskWindow = new BrowserWindow({
+        width: 600,
+        height: 400,
+        parent: mainWindow,
+        modal: false,
+        frame: true,
+        resizable: true,
+        minimizable: true,
+        maximizable: true,
+        alwaysOnTop: false,
+        autoHideMenuBar: true,
+        webPreferences: {
+          preload: path.join(__dirname, 'preload.js'),
+          nodeIntegration: false,
+          contextIsolation: true
+        }
+      });
+
+      // メインウィンドウの中央に配置
+      /*taskWindow.setPosition(
+        mainWindowPosition.x + (mainWindowPosition.width - 600) / 2,
+        mainWindowPosition.y + (mainWindowPosition.height - 400) / 2
+      );*/
+
+      // URLハッシュを構築（search-windowと同様のアプローチ）
+      // ハッシュには#を含めて指定する必要がある
+      taskWindow.loadFile(path.join(__dirname, "../public/index.html"), {
+        hash: '#task-window'
+      });
+
+      // グローバルなタスクデータを設定
+      global.currentTaskData = {
+        id: safeTaskId,
+        text: safeTaskText
+      };
+
+      // 閉じた時のイベント処理
+      taskWindow.on('closed', () => {
+        taskWindow = null;
+        // グローバルデータをクリア
+        global.currentTaskData = null;
+      });
+
+      log.info(`Task window created for task: ${safeTaskId}`);
+      return taskWindow;
+    } catch (error) {
+      console.error('タスクウィンドウの作成に失敗しました:', error);
+      return null;
+    }
+  }
+
+  // タスクデータを取得するハンドラ
+  ipcMain.handle('get-task-data', async (event) => {
+    return global.currentTaskData || { id: '', text: '' };
+  });
+
+  // 別ウィンドウでタスクを開く
+  ipcMain.on('open-task-window', async (event, taskId, taskText) => {
+    try {
+      console.log('open-task-window イベント受信:', taskId, taskText);
+
+      // 値の型をチェックして正しく変換
+      const safeTaskId = taskId ? String(taskId) : '';
+      const safeTaskText = taskText ? String(taskText) : '';
+
+      // グローバルデータを先に設定
+      global.currentTaskData = {
+        id: safeTaskId,
+        text: safeTaskText
+      };
+
+      // タスクウィンドウを作成
+      const window = createTaskWindow(safeTaskId, safeTaskText);
+
+      // ウィンドウの読み込みを待つ
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // タスクウィンドウをフォーカス
+      if (window && !window.isDestroyed()) {
+        window.show();
+        window.focus();
+        log.info(`Task window shown for task: ${safeTaskText}`);
+      }
+    } catch (error) {
+      console.error('タスクウィンドウを開く際にエラーが発生しました:', error);
+    }
+  });
+
   mainWindow.loadFile(path.join(__dirname, "../public/index.html"));
   if (!app.isPackaged) {
     webContents.openDevTools();
@@ -406,6 +515,9 @@ app.on("ready", () => {
     mainWindow = null;
     if (searchWindow && !searchWindow.isDestroyed()) {
       searchWindow.destroy(); // closeではなくdestroyを使用
+    }
+    if (taskWindow && !taskWindow.isDestroyed()) {
+      taskWindow.destroy(); // タスクウィンドウも閉じる
     }
   });
 

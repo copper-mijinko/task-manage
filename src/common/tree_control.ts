@@ -19,6 +19,14 @@ interface ProjectData {
   "data": TreeData,
 }
 
+export interface VisibleTreeRow {
+  id: string,
+  depth: number,
+  node: TreeData,
+  hasChildren: boolean,
+  expanded: boolean,
+}
+
 export function filterTree(tree, filter): TreeData {
   if (!tree || !filter) return tree;
 
@@ -162,20 +170,78 @@ export function getNode(base: string, tree_data: TreeData): TreeData {
   return base_tree;
 }
 
-export function setNode(target: TreeData, tree_data: TreeData): TreeData {
-  // Depth First Search
-  if (tree_data.id == target.id) {
-    return target
+export function updateNodeDataById(
+  tree_data: TreeData,
+  targetId: string,
+  patch: Partial<TreeData["data"]>,
+): TreeData {
+  if (!tree_data) {
+    return tree_data;
   }
-  for (let child of tree_data.children) {
-    if (child.id == target.id) {
-      tree_data.children[tree_data.children.indexOf(child)] = target;
-      break;
-    } else {
-      child = setNode(target, child);
+
+  if (tree_data.id === targetId) {
+    return {
+      ...tree_data,
+      data: {
+        ...tree_data.data,
+        ...patch,
+      },
+    };
+  }
+
+  if (!tree_data.children || tree_data.children.length === 0) {
+    return tree_data;
+  }
+
+  let hasChanged = false;
+  const updatedChildren = tree_data.children.map((child) => {
+    const nextChild = updateNodeDataById(child, targetId, patch);
+    if (nextChild !== child) {
+      hasChanged = true;
     }
+    return nextChild;
+  });
+
+  if (!hasChanged) {
+    return tree_data;
   }
-  return tree_data;
+
+  return {
+    ...tree_data,
+    children: updatedChildren,
+  };
+}
+
+export function flattenVisibleTree(
+  tree_data: TreeData,
+  closedIds: Set<string> = new Set(),
+  depth = 0,
+): VisibleTreeRow[] {
+  if (!tree_data) {
+    return [];
+  }
+
+  const hasChildren = !!(tree_data.children && tree_data.children.length > 0);
+  const expanded = !closedIds.has(tree_data.id);
+  const rows: VisibleTreeRow[] = [
+    {
+      id: tree_data.id,
+      depth,
+      node: tree_data,
+      hasChildren,
+      expanded,
+    },
+  ];
+
+  if (!hasChildren || !expanded) {
+    return rows;
+  }
+
+  for (const child of tree_data.children) {
+    rows.push(...flattenVisibleTree(child, closedIds, depth + 1));
+  }
+
+  return rows;
 }
 
 export function getParent(base: string, tree_data: TreeData): TreeData {

@@ -21,6 +21,22 @@
   // ページ内検索ショートカットキー設定
   let searchBox;
   let isSearchWindow = false;
+  let isTaskWindow = false;
+  let taskWindowData = { id: null, text: "" };
+
+  async function loadTaskData() {
+    try {
+      if (window.electronAPI && window.electronAPI.getTaskData) {
+        const data = await window.electronAPI.getTaskData();
+        if (data) {
+          taskWindowData = data;
+          document.title = `タスク: ${data.text || "詳細"}`;
+        }
+      }
+    } catch (error) {
+      console.error("タスクデータ取得エラー:", error);
+    }
+  }
 
   // 検索ウィンドウでのテーマ初期化処理
   async function initSearchWindowTheme() {
@@ -54,8 +70,10 @@
   }
 
   onMount(async () => {
-    // URLハッシュを確認して検索ウィンドウかどうかを判断
-    if (window.location.hash === "#search-window") {
+    // URLハッシュを確認してウィンドウタイプを判断
+    const hash = window.location.hash;
+
+    if (hash === "#search-window") {
       isSearchWindow = true;
 
       // 検索ウィンドウでは自動的に検索ボックスを表示
@@ -63,25 +81,27 @@
       await tick();
       searchBox?.focusInput();
 
-      // メインウィンドウの検索状態をクリアする処理は
-      // electron側で一元管理されるようになったため削除
-
       // ウィンドウサイズを検索ボックスに合わせる
       document.body.style.overflow = "hidden";
       document.querySelector(".Container").style.height = "auto";
       document.querySelector(".Main").style.display = "none";
       document.querySelector(".Header").style.display = "none";
+    } else if (hash === "#task-window") {
+      isTaskWindow = true;
 
-      // 検索ウィンドウ用のテーマ初期化
-      await initSearchWindowTheme();
+      // タスクデータを取得
+      await loadTaskData();
+    }
 
-      // テーマ変更通知のリスナー登録
-      if (window.electronAPI && window.electronAPI.onThemeChanged) {
-        window.electronAPI.onThemeChanged((newTheme) => {
-          console.log("Received theme change:", newTheme);
-          theme.set(newTheme);
-        });
-      }
+    // テーマ初期化
+    await initSearchWindowTheme();
+
+    // テーマ変更通知のリスナー登録
+    if (window.electronAPI && window.electronAPI.onThemeChanged) {
+      window.electronAPI.onThemeChanged((newTheme) => {
+        console.log("Received theme change:", newTheme);
+        theme.set(newTheme);
+      });
     }
 
     window.addEventListener("keydown", handleKeyDown);
@@ -97,37 +117,59 @@
     <Header />
   </div>
   <div class="Main">
-    {#if !($selected_type && $selected_id)}
-      <h1
-        style="color:var(--theme-color-Sub-main); display:flex; justify-content:center"
-      >
-        No data.
-      </h1>
-    {/if}
-    {#if $selected_type == "Projects"}
-      <ProjectPage />
-    {/if}
-    {#if $selected_type == "Info"}
-      <div
-        style="height:100%; display: flex; flex-direction: column; justify-content: center; align-items: center;"
-      >
-        {#each [1, 2, 3, 4] as i}
-          <Button
-            content="Setp{i}"
-            on:click={() => {
-              show[i - 1] = !show[i - 1];
-            }}
-          />
-          <Modal
-            show={show[i - 1]}
-            toggle={() => {
-              show[i - 1] = !show[i - 1];
-            }}
-          >
-            <InfoPage index={i} />
-          </Modal>
-        {/each}
+    {#if isTaskWindow}
+      <div class="TaskWindow">
+        <h2 style="color:var(--theme-color-Sub-main); text-align:center;">
+          {taskWindowData.text || "タスク詳細"}
+        </h2>
+        <div class="TaskContent">
+          <p style="color:var(--theme-color-Sub-main); text-align:center;">
+            タスクID: {taskWindowData.id || "不明"}
+          </p>
+          <!-- ここにタスクの詳細コンテンツを表示 -->
+          <div class="TaskActions">
+            <Button
+              content="閉じる"
+              on:click={() => {
+                window.close();
+              }}
+            />
+          </div>
+        </div>
       </div>
+    {:else}
+      {#if !($selected_type && $selected_id)}
+        <h1
+          style="color:var(--theme-color-Sub-main); display:flex; justify-content:center"
+        >
+          No data.
+        </h1>
+      {/if}
+      {#if $selected_type == "Projects"}
+        <ProjectPage />
+      {/if}
+      {#if $selected_type == "Info"}
+        <div
+          style="height:100%; display: flex; flex-direction: column; justify-content: center; align-items: center;"
+        >
+          {#each [1, 2, 3, 4] as i}
+            <Button
+              content="Setp{i}"
+              on:click={() => {
+                show[i - 1] = !show[i - 1];
+              }}
+            />
+            <Modal
+              show={show[i - 1]}
+              toggle={() => {
+                show[i - 1] = !show[i - 1];
+              }}
+            >
+              <InfoPage index={i} />
+            </Modal>
+          {/each}
+        </div>
+      {/if}
     {/if}
   </div>
 </div>
@@ -177,5 +219,33 @@
     height: calc(100% - 3.5rem);
     width: 100%;
     flex: 1;
+  }
+
+  /* タスクウィンドウのスタイル */
+  .TaskWindow {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 1rem;
+    box-sizing: border-box;
+    color: var(--theme-color-Sub-main);
+  }
+
+  .TaskContent {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 1rem;
+    background-color: var(--theme-color-Main-main);
+    border-radius: 0.5rem;
+    margin-top: 1rem;
+  }
+
+  .TaskActions {
+    display: flex;
+    justify-content: center;
+    margin-top: 2rem;
   }
 </style>

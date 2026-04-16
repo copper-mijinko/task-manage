@@ -21,6 +21,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openSearchWindow: () => {
     ipcRenderer.send('open-search-window');
   },
+  // タスク用の別ウィンドウを開く
+  openTaskWindow: (taskId, taskText) => {
+    ipcRenderer.send('open-task-window', taskId, taskText);
+  },
+  // タスクデータを取得する
+  getTaskData: () => {
+    return ipcRenderer.invoke('get-task-data');
+  },
   // 画面内検索機能 - シンプル実装
   findInPage: (text, options) => {
     console.log('Execute find-in-page:', text);

@@ -1,5 +1,5 @@
 import { writable, get } from 'svelte/store';
-import { throttle } from 'lodash';
+import { throttle, debounce } from 'lodash';
 import { THEME_DARK, THEME_LIGHT } from './common/theme'
 import _ from 'lodash';
 import { getDefaultProject, getNode, filterTree } from './common/tree_control.ts';
@@ -234,6 +234,19 @@ function createTheme(theme) {
 
 function createFilter(filter) {
 	const { subscribe, set, update } = writable(filter);
+	const applyFilteredData = debounce((current, current_tree_data) => {
+		const filtered = filterTree(current_tree_data.data, current);
+		if (get(table_selected_id) && filtered && getNode(get(table_selected_id), filtered)) {
+			;
+		} else {
+			table_selected_id.set(undefined);
+		}
+		filtered_data.set(filtered);
+	}, 300);
+
+	const hasActiveFilters = (current) =>
+		Object.keys(current || {}).some((key) => current[key] && current[key].length > 0);
+
 	return {
 		subscribe,
 		set,
@@ -243,14 +256,20 @@ function createFilter(filter) {
 				if (!current) return;
 				const current_tree_data = get(tree_data);
 				if (!current_tree_data) return;
-				let filtered = JSON.parse(JSON.stringify(current_tree_data.data));
-				filtered = filterTree(filtered, current)
-				if (get(table_selected_id) && filtered && getNode(get(table_selected_id), filtered)) {
-					;
-				} else {
-					table_selected_id.set(undefined);
+
+				if (!hasActiveFilters(current)) {
+					applyFilteredData.cancel();
+					const nextTree = current_tree_data.data;
+					if (get(table_selected_id) && nextTree && getNode(get(table_selected_id), nextTree)) {
+						;
+					} else {
+						table_selected_id.set(undefined);
+					}
+					filtered_data.set(nextTree);
+					return;
 				}
-				filtered_data.set(filtered);
+
+				applyFilteredData(current, current_tree_data);
 			})
 		}
 	}
@@ -417,7 +436,7 @@ closed_node_ids = createClosedNodeIds(new Set()); // 閉じているノードの
 selected_id = createSelectedID(undefined);
 theme = createTheme(undefined);
 filter = createFilter({})
-filtered_data = writable(tree_data.data)
+filtered_data = writable(undefined)
 
 // 画面内検索ボックスの表示状態
 export const showPageSearch = writable(false);

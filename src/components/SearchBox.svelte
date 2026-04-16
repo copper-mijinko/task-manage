@@ -4,7 +4,6 @@
   import { filter } from "../stores.js";
 
   let search_text = "";
-  let search_key = "name";
   let search_box; //bind
   const search = () => {
     $filter = {

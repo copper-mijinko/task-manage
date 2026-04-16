@@ -7,6 +7,8 @@
     // 位置情報
     export let position = { x: 0, y: 0, position: "right" };
     export let show = false;
+    // タスク名
+    export let taskText = "";
 
     const dispatch = createEventDispatcher();
 
@@ -138,15 +140,22 @@
                             // イベントを発火
                             const renameEvent = new CustomEvent("rename");
                             document.dispatchEvent(renameEvent);
+                            // Svelteイベントの発火 - detailにactionとその他データを含むオブジェクトを設定
+                            dispatch(item.action, {
+                                action: item.action,
+                            });
                         } else if (item.action === "openWindow") {
+                            console.log("called openWindow");
                             const openWindowEvent = new CustomEvent(
                                 "openWindow",
                             );
                             document.dispatchEvent(openWindowEvent);
+                            // openWindowの場合は、actionとtextを含むオブジェクトを送信
+                            dispatch(item.action, {
+                                action: item.action,
+                                text: taskText,
+                            });
                         }
-
-                        // Svelteイベントの発火 - detailにactionを明示的に設定
-                        dispatch(item.action, item.action);
                         dispatch("close");
 
                         // メニューを閉じる

@@ -1,100 +1,69 @@
 <script context="module">
-  let dragged_id; // Share this in TreeTableData components.
+  let dragged_id;
 </script>
 
 <script>
-  import { onMount } from "svelte";
-  import { tree_data, table_selected_id, closed_node_ids } from "../stores.js";
-  import {
-    isChild,
-    reorderTree,
-    setNode,
-    getNode,
-  } from "../common/tree_control.ts";
+  import { createEventDispatcher } from "svelte";
   import { ripple } from "../common/common.js";
-  import { theme } from "../stores.js";
   import TaskName from "./TaskName.svelte";
   import StatusSelect from "./StatusSelect.svelte";
   import DateInput from "./DateInput.svelte";
 
-  // node;
-  export let node;
-  $: id = node.id;
+  export let row;
+  export let headers = [];
+  export let selected = false;
+  export let isDark = false;
+  export let canDrop = () => false;
+
+  const dispatch = createEventDispatcher();
+
+  $: id = row.id;
+  $: node = row.node;
+  $: depth = row.depth;
   $: data = node.data;
-  $: children = node.children;
+  $: hasChildren = row.hasChildren;
+  $: expanded = row.expanded;
 
-  export let depth = 0;
-
-  let table_row; //Bind
-
-  $: HasChildren = children.length > 0;
-  $: Expanded = !$closed_node_ids.has(id);
-  $: Selected = $table_selected_id == id;
-
-  $: is_dark = $theme == "dark";
+  let dragOverType;
+  let isDragging = false;
 
   function select(e) {
     e.stopPropagation();
-    $table_selected_id = id;
+    dispatch("select", { id });
   }
 
   function toggle(e) {
     e.stopPropagation();
-    console.log("Node open/close:", id, $closed_node_ids.has(id));
+    dispatch("toggle", { id });
+  }
+
+  function commitData(key, value) {
+    dispatch("commit", {
+      id,
+      patch: {
+        [key]: value,
+      },
+    });
+  }
+
+  function openTaskInWindow(taskText) {
     try {
-      if ($closed_node_ids.has(id)) {
-        console.log("Open closed node:", id);
-        closed_node_ids.delete(id);
+      if (window.electronAPI && window.electronAPI.openTaskWindow) {
+        window.electronAPI.openTaskWindow(id, taskText);
       } else {
-        console.log("Close opened node:", id);
-        closed_node_ids.add(id);
+        console.error("electronAPI.openTaskWindowが見つかりません");
       }
-      // 状態更新の確認
-      setTimeout(() => {
-        console.log("Status updated:", id, $closed_node_ids.has(id));
-      }, 10);
     } catch (error) {
-      console.error("Node close/open error:", error);
+      console.error("タスクウィンドウを開く際にエラーが発生しました:", error);
     }
   }
 
-  const changeData = (node, key, value) => {
-    const id = node.id;
-    node = getNode(id, $tree_data.data);
-    node = { ...node, data: { ...node.data, [key]: value } };
-    let data = setNode(node, $tree_data.data);
-    $tree_data = { ...$tree_data, data: data };
-  };
-
-  // 別ウィンドウでタスクを開く
-  const openTaskInWindow = (taskText) => {
-    // ここでElectronを使って新しいウィンドウを開く処理を実装
-    // window.electronAPI.openTaskWindow(id, taskText)などの形で実装する
-    console.log("別ウィンドウで開く:", id, taskText);
-  };
-
-  onMount(() => {
-    // set z-index
-    let datas = table_row.querySelectorAll(".TableData");
-    datas.forEach((data, index) => {
-      data.style.zIndex = index + 100;
-    });
-
-    // set drag'n drop
-    setDND();
-  });
-
-  // drag'n drop
-  let dragOverType;
   function dragStart(e) {
-    this.classList.add("Dragging");
+    isDragging = true;
 
-    const name_text = this.querySelector(
-      "div:first-child div:last-child input",
-    ).value;
     const name_tag = document.createElement("div");
     name_tag.classList.add("NameTag");
-    name_tag.innerText = name_text;
+    name_tag.innerText = data.name;
     document.body.appendChild(name_tag);
 
     const rem = parseFloat(
@@ -102,99 +71,82 @@
     );
     e.dataTransfer.setDragImage(name_tag, -rem, -rem);
 
-    dragged_id = e.currentTarget.id;
+    dragged_id = id;
   }
 
   function dragEnd() {
     dragOverType = undefined;
-    this.classList.remove("Dragging");
-    document.querySelector(".NameTag").remove();
+    isDragging = false;
+    document.querySelector(".NameTag")?.remove();
   }
 
   function dragOver(e) {
     e.preventDefault();
-    if (
-      !this.classList.contains("Dragging") &&
-      !isChild(this.id, dragged_id, $tree_data.data) &&
-      this.id != $tree_data.data.id
-    ) {
-      const rect = this.getBoundingClientRect();
-      const y = e.clientY;
-      if (y <= rect.top + rect.height / 2) {
-        if (dragOverType != "DragOverTop") {
-          dragOverType = "DragOverTop";
-          this.classList.remove("DragOverBottom");
-          this.classList.add("DragOverTop");
-        }
-      } else if (dragOverType != "DragOverBottom") {
-        dragOverType = "DragOverBottom";
-        this.classList.remove("DragOverTop");
-        this.classList.add("DragOverBottom");
-      }
+
+    if (!canDrop(dragged_id, id)) {
+      dragOverType = undefined;
+      return;
     }
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const y = e.clientY;
+    dragOverType =
+      y <= rect.top + rect.height / 2 ? "DragOverTop" : "DragOverBottom";
   }
 
   function dragLeave() {
     dragOverType = undefined;
-    this.classList.remove("DragOverTop");
-    this.classList.remove("DragOverBottom");
   }
 
   function dragDrop() {
-    switch (dragOverType) {
-      case "DragOverTop":
-        $tree_data.data = reorderTree(
-          dragged_id,
-          this.id,
-          $tree_data.data,
-          "insert",
-        );
-        this.classList.remove("DragOverTop");
-        break;
-      case "DragOverBottom":
-        $tree_data.data = reorderTree(
-          dragged_id,
-          this.id,
-          $tree_data.data,
-          "append",
-        );
-        this.classList.remove("DragOverBottom");
-        break;
+    if (!dragged_id || !dragOverType) {
+      return;
     }
+
+    dispatch("reorder", {
+      draggedId: dragged_id,
+      targetId: id,
+      mode: dragOverType === "DragOverTop" ? "insert" : "append",
+    });
+
     dragOverType = undefined;
     dragged_id = undefined;
   }
-
-  function setDND() {
-    // drag item
-    table_row.addEventListener("dragstart", dragStart);
-    table_row.addEventListener("dragend", dragEnd);
-
-    // drop area
-    table_row.addEventListener("dragover", dragOver);
-    table_row.addEventListener("dragleave", dragLeave);
-    table_row.addEventListener("drop", dragDrop);
-  }
 </script>
 
-<button
-  bind:this={table_row}
+<div
   {id}
+  role="button"
   class:TableRow={true}
-  class:Selected
+  class:Selected={selected}
+  class:Dragging={isDragging}
+  class:DragOverTop={dragOverType === "DragOverTop"}
+  class:DragOverBottom={dragOverType === "DragOverBottom"}
   use:ripple
-  on:click={select}
+  tabindex="0"
   draggable="true"
+  on:click={select}
+  on:keydown={(e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      select(e);
+    }
+  }}
+  on:dragstart={dragStart}
+  on:dragend={dragEnd}
+  on:dragover={dragOver}
+  on:dragleave={dragLeave}
+  on:drop={dragDrop}
 >
-  {#each $tree_data.headers as header, i}
-    <div class:TableData={true} class:HasChildren>
+  {#each headers as header, i}
+    <div class:TableData={true} style:z-index={i + 100}>
       {#if header.name == "name"}
-        {#each [...Array(depth)].map((_, i) => i) as i}
+        {#each Array(depth) as _}
           <div class:TreeLine={true} style="flex-shrink: 0" />
         {/each}
-        {#if HasChildren}
+        {#if hasChildren}
           <button
-            class:Expanded
+            class:Expanded={expanded}
             class:ExpandButton={true}
             style="flex-shrink: 0"
             on:click={toggle}
@@ -223,21 +175,28 @@
         {/if}
         <TaskName
           text={data[header.name]}
-          on:input={(e) => {
-            changeData(node, "name", e.target.value);
+          on:commit={(e) => {
+            commitData("name", e.detail.value);
           }}
-          on:openWindow={({ detail }) => openTaskInWindow(detail.text)}
+          on:openWindow={({ detail }) => {
+            openTaskInWindow(detail.text);
+          }}
         />
       {:else if header.name == "status"}
-        <StatusSelect {node} status={data[header.name]} />
+        <StatusSelect
+          status={data[header.name]}
+          on:change={(e) => {
+            commitData("status", e.target.value);
+          }}
+        />
       {:else if header.name == "due date"}
         <DateInput
-          {is_dark}
+          is_dark={isDark}
           id="due-date"
           backgroundColor={"var(--backgroundColor)"}
           value={data[header.name]}
           on:change={(e) => {
-            changeData(node, "due date", e.target.value);
+            commitData("due date", e.target.value);
           }}
         />
       {:else}
@@ -249,14 +208,7 @@
       {/if}
     </div>
   {/each}
-</button>
-{#if Expanded}
-  {#each children as child}
-    <div style="display: flex; flex-direction: column">
-      <svelte:self depth={depth + 1} node={child} />
-    </div>
-  {/each}
-{/if}
+</div>
 
 <style>
   button {
@@ -275,10 +227,10 @@
     color: var(--theme-color-Sub-main);
     padding: 0 0.5rem;
   }
-  .TableRow:global(.Dragging) {
+  .TableRow.Dragging {
     opacity: 0.6;
   }
-  .TableRow:global(.DragOverTop):before {
+  .TableRow.DragOverTop:before {
     border-top: 0.2rem solid var(--theme-color-Accent-dark);
     position: absolute;
     content: "";
@@ -289,7 +241,7 @@
     z-index: 999999999999;
     pointer-events: none;
   }
-  .TableRow:global(.DragOverBottom):before {
+  .TableRow.DragOverBottom:before {
     border: 0.2rem solid var(--theme-color-Accent-dark);
     position: absolute;
     content: "";

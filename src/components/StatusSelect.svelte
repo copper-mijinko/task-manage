@@ -1,9 +1,6 @@
 <script>
   import Select from "./Select.svelte";
-  import { tree_data } from "../stores.js";
-  import { setNode, getNode } from "../common/tree_control.ts";
 
-  export let node;
   export let status = "Open";
 
   const color_map = {
@@ -12,14 +9,6 @@
     Pending: "var(--theme-color-Warning-main)",
     Completed: "var(--theme-color-Success-main)",
     Canceled: "var(--theme-color-Error-main)",
-  };
-
-  const changeData = (node, key, value) => {
-    const id = node.id;
-    node = getNode(id, $tree_data.data);
-    node = { ...node, data: { ...node.data, [key]: value } };
-    let data = setNode(node, $tree_data.data);
-    $tree_data = { ...$tree_data, data: data };
   };
 </script>
 
@@ -101,9 +90,7 @@
     color={color_map[status]}
     id="status"
     value={status}
-    on:change={(e) => {
-      changeData(node, "status", e.target.value);
-    }}
+    on:change
   >
     <option value="Open">Open</option>
     <option value="Pending">Pending</option>

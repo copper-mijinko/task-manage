@@ -1,13 +1,14 @@
 <script>
-    import { tick, createEventDispatcher } from "svelte";
+    import { tick, createEventDispatcher, onDestroy } from "svelte";
+    import { debounce } from "lodash";
     import { ripple, tooltip } from "../common/common.js";
     import TaskMenu from "./TaskMenu.svelte";
 
     export let text;
+    let draftText = text ?? "";
     export let color = "var(--theme-color-Sub-main)";
     export let backgroundColor = "transparent";
     let input;
-    let wrapper;
     let disabled = true;
     let showMenu = false;
     let menuPosition = { x: 0, y: 0 };
@@ -34,11 +35,35 @@
 
     const dispatch = createEventDispatcher();
 
+    let lastSubmittedText = null;
+    $: if (disabled) {
+        draftText = text ?? "";
+    }
+    $: if ((text ?? "") === lastSubmittedText) {
+        lastSubmittedText = null;
+    }
+
     const params = {
         color: "var(--theme-color-Main-main)",
         backgroundColor: "var(--theme-color-Sub-main)",
         wrapped: true,
     };
+
+    const dispatchCommitIfChanged = () => {
+        const currentText = text ?? "";
+        if (draftText === currentText || draftText === lastSubmittedText) {
+            return;
+        }
+
+        lastSubmittedText = draftText;
+        dispatch("commit", { value: draftText });
+    };
+
+    const debouncedCommit = debounce(dispatchCommitIfChanged, 300);
+
+    onDestroy(() => {
+        debouncedCommit.cancel();
+    });
 
     const toggle = async () => {
         disabled = !disabled;
@@ -46,6 +71,16 @@
             await tick();
             input.focus();
         }
+    };
+
+    const flushCommit = () => {
+        debouncedCommit.cancel();
+        dispatchCommitIfChanged();
+    };
+
+    const resetDraft = () => {
+        debouncedCommit.cancel();
+        draftText = text ?? "";
     };
 
     const openMenu = (e) => {
@@ -78,34 +113,45 @@
 
     // メニューイベントハンドラ
     function handleMenuAction(event) {
-        const action = event.detail;
-        if (action === "rename") {
+        const data = event.detail;
+        console.log("イベント詳細:", data);
+
+        if (data && data.action === "rename") {
+            console.log("called in TaskName - rename");
             toggle();
-        } else if (action === "openWindow") {
-            dispatch("openWindow", { text });
+        } else if (data && data.action === "openWindow") {
+            console.log("called in TaskName - openWindow");
+            dispatch("openWindow", { text: draftText });
         }
     }
 </script>
 
 <div
     style="--color:{color}; --backgroundColor:{backgroundColor};"
-    bind:this={wrapper}
 >
     <input
         type="text"
         bind:this={input}
-        value={text}
+        value={draftText}
         {disabled}
         draggable="true"
         on:blur={() => {
+            flushCommit();
             disabled = true;
         }}
-        on:input
+        on:input={(e) => {
+            draftText = e.currentTarget.value;
+            debouncedCommit();
+        }}
         on:click={(e) => {
             e.stopPropagation();
         }}
         on:keydown={(e) => {
-            if (["Enter", "Escape"].includes(e.key)) {
+            if (e.key === "Enter") {
+                flushCommit();
+                disabled = true;
+            } else if (e.key === "Escape") {
+                resetDraft();
                 disabled = true;
             }
         }}
@@ -169,6 +215,7 @@
         {menuItems}
         position={menuPosition}
         show={showMenu}
+        taskText={draftText}
         on:rename={handleMenuAction}
         on:openWindow={handleMenuAction}
         on:close={() => (showMenu = false)}

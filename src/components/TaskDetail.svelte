@@ -1,19 +1,23 @@
 <script>
-  import { getNode, setNode } from "../common/tree_control.ts";
+  import { getNode, updateNodeDataById } from "../common/tree_control.ts";
   import { tree_data, table_selected_id } from "../stores.js";
   import { debounce } from "lodash";
   import MemoTab from "./MemoTab.svelte";
 
   $: is_selected = $table_selected_id ? true : false;
-  $: node = getNode($table_selected_id, $tree_data.data);
+  $: node = $table_selected_id && $tree_data
+    ? getNode($table_selected_id, $tree_data.data)
+    : undefined;
   $: name = node ? node.data["name"] : "Select Task";
   $: memo = node ? node.data["memo"] : [];
   const changeData = (node, key, value) => {
-    const id = node.id;
-    node = getNode(id, $tree_data.data);
-    node = { ...node, data: { ...node.data, [key]: value } };
-    let data = setNode(node, $tree_data.data);
-    $tree_data = { ...$tree_data, data: data };
+    if (!node) {
+      return;
+    }
+    const data = updateNodeDataById($tree_data.data, node.id, { [key]: value });
+    if (data !== $tree_data.data) {
+      $tree_data = { ...$tree_data, data };
+    }
   };
   // データストア更新処理のdebounce - 全てのUI更新を統合的に処理
   const changeDataDebounce = debounce(changeData, 500);
