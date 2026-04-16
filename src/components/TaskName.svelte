@@ -83,32 +83,38 @@
         draftText = text ?? "";
     };
 
-    const openMenu = (e) => {
-        e.stopPropagation();
-
-        // メニューの位置を計算
-        const rect = e.currentTarget.getBoundingClientRect();
+    const getMenuPosition = (x, y) => {
         const viewportWidth = window.innerWidth;
-
-        // メニューの幅（CSSのmin-widthと同じ値）
         const menuWidth = 180;
 
-        // 右端に近い場合は左側に表示、それ以外は右下に表示
-        if (rect.right + menuWidth > viewportWidth) {
-            menuPosition = {
-                x: rect.left,
-                y: rect.bottom,
+        if (x + menuWidth > viewportWidth) {
+            return {
+                x,
+                y,
                 position: "left",
-            };
-        } else {
-            menuPosition = {
-                x: rect.right,
-                y: rect.bottom,
-                position: "right",
             };
         }
 
+        return {
+            x,
+            y,
+            position: "right",
+        };
+    };
+
+    export function openMenuAt(position) {
+        menuPosition = getMenuPosition(position.x, position.y);
         showMenu = true;
+    }
+
+    const openMenu = (e) => {
+        e.stopPropagation();
+
+        const rect = e.currentTarget.getBoundingClientRect();
+        openMenuAt({
+            x: rect.right,
+            y: rect.bottom,
+        });
     };
 
     // メニューイベントハンドラ

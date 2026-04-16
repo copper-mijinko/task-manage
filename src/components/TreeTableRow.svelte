@@ -16,6 +16,7 @@
   export let canDrop = () => false;
 
   const dispatch = createEventDispatcher();
+  let taskName;
 
   $: id = row.id;
   $: node = row.node;
@@ -112,6 +113,16 @@
     dragOverType = undefined;
     dragged_id = undefined;
   }
+
+  function openContextMenu(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    select(e);
+    taskName?.openMenuAt({
+      x: e.clientX,
+      y: e.clientY,
+    });
+  }
 </script>
 
 <div
@@ -137,6 +148,7 @@
   on:dragover={dragOver}
   on:dragleave={dragLeave}
   on:drop={dragDrop}
+  on:contextmenu={openContextMenu}
 >
   {#each headers as header, i}
     <div class:TableData={true} style:z-index={i + 100}>
@@ -174,6 +186,7 @@
           </div>
         {/if}
         <TaskName
+          bind:this={taskName}
           text={data[header.name]}
           on:commit={(e) => {
             commitData("name", e.detail.value);
