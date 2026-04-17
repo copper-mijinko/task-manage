@@ -163,29 +163,33 @@
 
   const setResizersEvents = (resizers, headers, data_rows) => {
     const handlers = [];
-    // Create resizers and their events
-    for (let i = 0; i < resizers.length; i++) {
-      const header = headers[i];
-      const header_r = headers[i + 1];
-      const resizer = resizers[i];
-      let datas = [];
-      let datas_r = [];
 
-      data_rows.forEach((rows, _) => {
-        datas.push(rows[i]);
-        datas_r.push(rows[i + 1]);
+    const applyColumnWidths = (widths) => {
+      headers.forEach((columnHeader, index) => {
+        columnHeader.style.width = `${widths[index]}px`;
+        data_rows.forEach((data_row) => {
+          data_row[index].style.width = `${widths[index]}px`;
+        });
       });
 
-      const min_w =
-        parseFloat(window.getComputedStyle(header).minWidth, 10) || 10;
-      const min_wr =
-        parseFloat(window.getComputedStyle(header_r).minWidth, 10) || 10;
+      let left = 0;
+      resizers.forEach((columnResizer, index) => {
+        left += widths[index];
+        columnResizer.style.left = `${left - 3}px`;
+      });
+    };
+
+    // Create resizers and their events
+    for (let i = 0; i < resizers.length; i++) {
+      const resizer = resizers[i];
+      const minWidths = headers.map(
+        (columnHeader) =>
+          parseFloat(window.getComputedStyle(columnHeader).minWidth, 10) || 10,
+      );
 
       // Track the current position of mouse
       let x = 0;
-      let w = 0;
-      let wr = 0;
-      let l = 0;
+      let initialWidths = [];
 
       const mouseDownHandler = function (e) {
         let cssText = document.body.style.cssText;
@@ -199,13 +203,9 @@
         x = e.clientX;
 
         // Calculate the current width of column
-        w = header.getBoundingClientRect().width;
-        wr = header_r.getBoundingClientRect().width;
-
-        // Calculate the curent left of resizer
-        l =
-          resizer.getBoundingClientRect().left -
-          resizer.parentNode.getBoundingClientRect().left;
+        initialWidths = headers.map((columnHeader) =>
+          columnHeader.getBoundingClientRect().width,
+        );
 
         // Attach listeners for document's events
         document.addEventListener("mousemove", mouseMoveHandler);
@@ -213,32 +213,53 @@
       };
 
       const mouseMoveHandler = function (e) {
-        // Determine how far the mouse has been moved
         let dx = e.clientX - x;
-        let new_width = w + dx;
-        let new_widthr = wr - dx;
+        const nextWidths = [...initialWidths];
 
-        if (new_width < min_w) {
-          new_widthr = w + wr - min_w;
-          new_width = min_w;
-          dx = new_width - w;
+        if (dx < 0) {
+          const leftShrinkCapacities = initialWidths
+            .slice(0, i + 1)
+            .map((width, index) => width - minWidths[index]);
+          const maxLeftDelta = leftShrinkCapacities.reduce(
+            (partialSum, width) => partialSum + width,
+            0,
+          );
+          const appliedDelta = Math.max(dx, -maxLeftDelta);
+
+          nextWidths[i + 1] = initialWidths[i + 1] - appliedDelta;
+
+          let remainingShrink = -appliedDelta;
+          for (let j = i; j >= 0; j--) {
+            const shrinkCapacity = initialWidths[j] - minWidths[j];
+            const shrinkAmount = Math.min(shrinkCapacity, remainingShrink);
+            nextWidths[j] = initialWidths[j] - shrinkAmount;
+            remainingShrink -= shrinkAmount;
+          }
+
+          applyColumnWidths(nextWidths);
+          return;
         }
-        if (new_widthr < min_wr) {
-          new_width = w + wr - min_wr;
-          new_widthr = min_wr;
-          dx = new_width - w;
+
+        const shrinkCapacities = initialWidths
+          .slice(i + 1)
+          .map((width, index) => width - minWidths[i + 1 + index]);
+        const maxDelta = shrinkCapacities.reduce(
+          (partialSum, width) => partialSum + width,
+          0,
+        );
+        const appliedDelta = Math.min(dx, maxDelta);
+
+        nextWidths[i] = initialWidths[i] + appliedDelta;
+
+        let remainingShrink = appliedDelta;
+        for (let j = i + 1; j < nextWidths.length; j++) {
+          const shrinkCapacity = initialWidths[j] - minWidths[j];
+          const shrinkAmount = Math.min(shrinkCapacity, remainingShrink);
+          nextWidths[j] = initialWidths[j] - shrinkAmount;
+          remainingShrink -= shrinkAmount;
         }
 
-        // Update the width of column
-        header.style.width = `${new_width}px`;
-        header_r.style.width = `${new_widthr}px`;
-        datas.forEach((data, index) => {
-          data.style.width = `${new_width}px`;
-          datas_r[index].style.width = `${new_widthr}px`;
-        });
-
-        // Update resizer pos
-        resizer.style.left = `${l + dx}px`;
+        applyColumnWidths(nextWidths);
       };
 
       // When user releases the mouse, remove the existing event listeners
