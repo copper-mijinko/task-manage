@@ -20,10 +20,6 @@
     getNode,
     getParent,
     getDefaultNode,
-    canMoveNodeUp,
-    canMoveNodeDown,
-    canIndentNode,
-    canOutdentNode,
     moveNodeUp,
     moveNodeDown,
     indentNode,
@@ -330,7 +326,8 @@
 
   function handleMoveUp(event) {
     const { id } = event.detail;
-    if (!canMoveNodeUp(id, $tree_data.data)) {
+    const row = rows.find((item) => item.id === id);
+    if (!row?.canMoveUp) {
       return;
     }
 
@@ -340,7 +337,8 @@
 
   function handleMoveDown(event) {
     const { id } = event.detail;
-    if (!canMoveNodeDown(id, $tree_data.data)) {
+    const row = rows.find((item) => item.id === id);
+    if (!row?.canMoveDown) {
       return;
     }
 
@@ -350,12 +348,13 @@
 
   function handleIndentTask(event) {
     const { id } = event.detail;
+    const row = rows.find((item) => item.id === id);
     const parentNode = getParent(id, $tree_data.data);
     const currentIndex = parentNode?.children.findIndex((child) => child.id === id) ?? -1;
     const newParentId =
       currentIndex > 0 ? parentNode.children[currentIndex - 1]?.id : undefined;
 
-    if (!newParentId || !canIndentNode(id, $tree_data.data)) {
+    if (!newParentId || !row?.canIndent) {
       return;
     }
 
@@ -369,7 +368,8 @@
 
   function handleOutdentTask(event) {
     const { id } = event.detail;
-    if (!canOutdentNode(id, $tree_data.data)) {
+    const row = rows.find((item) => item.id === id);
+    if (!row?.canOutdent) {
       return;
     }
 
@@ -470,10 +470,10 @@
         selected={$table_selected_id === row.id}
         {isDark}
         canDrop={canDropTarget}
-        canMoveUp={canMoveNodeUp(row.id, $tree_data.data)}
-        canMoveDown={canMoveNodeDown(row.id, $tree_data.data)}
-        canIndent={canIndentNode(row.id, $tree_data.data)}
-        canOutdent={canOutdentNode(row.id, $tree_data.data)}
+        canMoveUp={row.canMoveUp}
+        canMoveDown={row.canMoveDown}
+        canIndent={row.canIndent}
+        canOutdent={row.canOutdent}
         on:select={handleSelectRow}
         on:toggle={handleToggleRow}
         on:commit={handleCommit}

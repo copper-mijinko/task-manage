@@ -22,9 +22,16 @@ interface ProjectData {
 export interface VisibleTreeRow {
   id: string,
   depth: number,
+  parentId?: string,
+  siblingIndex: number,
+  siblingCount: number,
   node: TreeData,
   hasChildren: boolean,
   expanded: boolean,
+  canMoveUp: boolean,
+  canMoveDown: boolean,
+  canIndent: boolean,
+  canOutdent: boolean,
 }
 
 export function filterTree(tree, filter): TreeData {
@@ -215,31 +222,49 @@ export function updateNodeDataById(
 export function flattenVisibleTree(
   tree_data: TreeData,
   closedIds: Set<string> = new Set(),
-  depth = 0,
 ): VisibleTreeRow[] {
   if (!tree_data) {
     return [];
   }
 
-  const hasChildren = !!(tree_data.children && tree_data.children.length > 0);
-  const expanded = !closedIds.has(tree_data.id);
-  const rows: VisibleTreeRow[] = [
-    {
-      id: tree_data.id,
+  const rows: VisibleTreeRow[] = [];
+
+  const visit = (
+    node: TreeData,
+    depth: number,
+    parentId: string | undefined,
+    siblingIndex: number,
+    siblingCount: number,
+  ) => {
+    const hasChildren = !!(node.children && node.children.length > 0);
+    const expanded = !closedIds.has(node.id);
+
+    rows.push({
+      id: node.id,
       depth,
-      node: tree_data,
+      parentId,
+      siblingIndex,
+      siblingCount,
+      node,
       hasChildren,
       expanded,
-    },
-  ];
+      canMoveUp: siblingIndex > 0,
+      canMoveDown: siblingIndex < siblingCount - 1,
+      canIndent: siblingIndex > 0,
+      canOutdent: depth > 1,
+    });
 
-  if (!hasChildren || !expanded) {
-    return rows;
-  }
+    if (!hasChildren || !expanded) {
+      return;
+    }
 
-  for (const child of tree_data.children) {
-    rows.push(...flattenVisibleTree(child, closedIds, depth + 1));
-  }
+    const childCount = node.children.length;
+    for (let index = 0; index < childCount; index++) {
+      visit(node.children[index], depth + 1, node.id, index, childCount);
+    }
+  };
+
+  visit(tree_data, 0, undefined, 0, 1);
 
   return rows;
 }
