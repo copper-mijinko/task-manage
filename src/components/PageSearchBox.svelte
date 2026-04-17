@@ -105,33 +105,10 @@
         }
     }
 
-    // すべてのツールチップを削除する関数
-    function removeAllTooltips() {
-        // bodyの直下の要素をすべて取得
-        const allElements = document.body.children;
-
-        // ツールチップの特徴に一致する要素を検索して削除
-        Array.from(allElements).forEach((el) => {
-            if (el instanceof HTMLElement) {
-                // ツールチップの特徴: position: fixed, 高いz-index, padding
-                const style = window.getComputedStyle(el);
-                const isTooltip =
-                    style.position === "fixed" &&
-                    parseInt(style.zIndex, 10) > 9000 &&
-                    !el.classList.contains("search-box-container");
-
-                if (isTooltip) {
-                    document.body.removeChild(el);
-                }
-            }
-        });
-    }
-
     // 検索ボックスを閉じる
     function closeSearch() {
         console.log("Close SearchBox");
         window.electronAPI.stopFindInPage();
-        removeAllTooltips();
         show = false;
         dispatch("close");
     }
@@ -163,24 +140,11 @@
             }
         });
 
-        // ESCキーイベントをグローバルに追加してツールチップを削除
-        const handleGlobalEscape = (e) => {
-            if (e.key === "Escape") {
-                removeAllTooltips();
-            }
-        };
-        // イベントハンドラの登録
-        window.addEventListener("keydown", handleGlobalEscape);
-
-        return () => {
-            window.removeEventListener("keydown", handleGlobalEscape);
-        };
     });
 
     // コンポーネントが破棄される時
     onDestroy(() => {
         window.electronAPI.stopFindInPage();
-        removeAllTooltips();
     });
 </script>
 
