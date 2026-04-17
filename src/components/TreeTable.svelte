@@ -35,6 +35,52 @@
   let minWidth;
   $: rows = $filtered_data ? flattenVisibleTree($filtered_data, $closed_node_ids) : [];
   $: isDark = $theme == "dark";
+  let scrollTop = 0;
+
+  const getRowHeightPx = () => {
+    if (typeof window === "undefined") {
+      return 0;
+    }
+
+    return (
+      parseFloat(window.getComputedStyle(document.documentElement).fontSize) * 2
+    );
+  };
+
+  const buildStickyTrail = (visibleRows, currentScrollTop) => {
+    if (!visibleRows?.length) {
+      return [];
+    }
+
+    const rowHeightPx = getRowHeightPx();
+    if (!rowHeightPx) {
+      return [];
+    }
+
+    const topVisibleIndex = Math.min(
+      visibleRows.length - 1,
+      Math.max(0, Math.floor(currentScrollTop / rowHeightPx)),
+    );
+    const topRow = visibleRows[topVisibleIndex];
+    if (!topRow || topRow.depth === 0) {
+      return [];
+    }
+
+    const rowById = new Map(visibleRows.map((row) => [row.id, row]));
+    const trail = [];
+    let currentRow = topRow;
+
+    while (currentRow) {
+      trail.unshift(currentRow);
+      currentRow = currentRow.parentId
+        ? rowById.get(currentRow.parentId)
+        : undefined;
+    }
+
+    return trail;
+  };
+
+  $: stickyTrail = buildStickyTrail(rows, scrollTop);
 
   let showDeleteConfirm = false;
   let deleteTargetId;
@@ -284,6 +330,10 @@
     $table_selected_id = event.detail.id;
   }
 
+  function handleScroll(event) {
+    scrollTop = event.currentTarget.scrollTop;
+  }
+
   function handleToggleRow(event) {
     const { id } = event.detail;
     if ($closed_node_ids.has(id)) {
@@ -460,8 +510,26 @@
   bind:this={table_root}
   class:TableRoot={true}
   style="--minWidth: {minWidth}"
+  on:scroll={handleScroll}
 >
   <TreeTableHeader headers={$tree_data.headers} />
+  {#if stickyTrail.length > 0}
+    <div class="StickyTrail" aria-hidden="true">
+      <div class="StickyTrailContent">
+        {#each stickyTrail as trailRow, index (trailRow.id)}
+          {#if index > 0}
+            <span class="StickyTrailSeparator">/</span>
+          {/if}
+          <span
+            class:StickyTrailItem={true}
+            class:StickyTrailCurrent={index === stickyTrail.length - 1}
+          >
+            {trailRow.node.data.name}
+          </span>
+        {/each}
+      </div>
+    </div>
+  {/if}
   {#if rows.length > 0}
     {#each rows as row (row.id)}
       <TreeTableRow
@@ -507,6 +575,46 @@
     min-width: var(--minWidth);
     overflow-y: auto;
     position: relative;
+  }
+  .StickyTrail {
+    position: sticky;
+    top: calc(var(--headerHeight, 4rem));
+    z-index: 9998;
+    height: 0;
+    overflow: visible;
+    pointer-events: none;
+  }
+  .StickyTrailContent {
+    min-height: 2rem;
+    margin: 0 0.5rem;
+    padding: 0 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background-color: var(--theme-color-Main-main);
+    border: 1px solid var(--theme-color-Shadow-main);
+    border-top: none;
+    border-radius: 0 0 0.4rem 0.4rem;
+    box-shadow: 0 0.2rem 0.45rem rgba(0, 0, 0, 0.14);
+    color: var(--theme-color-Sub-main);
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .StickyTrailItem {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    opacity: 0.78;
+  }
+  .StickyTrailCurrent {
+    opacity: 1;
+    font-weight: 700;
+    color: var(--theme-color-Accent-dark);
+  }
+  .StickyTrailSeparator {
+    opacity: 0.55;
+    flex-shrink: 0;
   }
   .TableRoot :global(.Resizer) {
     position: absolute;
