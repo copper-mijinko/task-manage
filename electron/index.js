@@ -200,54 +200,58 @@ app.on("ready", () => {
   // タスク詳細ウィンドウの変数
   let taskDetailWindow = null;
 
-  // 画面内検索
-  const webContents = mainWindow.webContents;
-  // found-in-page event. this called in 1. first one found, 2. last one found(finalUpdate).
-  webContents.on('found-in-page', (event, result) => {
-    console.log('Search Result:', result);
-    // see https://www.electronjs.org/docs/latest/api/web-contents/#contentsfindinpagetext-options
+  function bindFindInPageEvents(targetWebContents) {
+    targetWebContents.on('found-in-page', (event, result) => {
+      console.log('Search Result:', result);
+      targetWebContents.send('search-result-updated', result);
+    });
+  }
 
-    webContents.send('search-result-updated', result);
-  });
+  function resolveSearchWebContents(event) {
+    return event?.sender || mainWindow.webContents;
+  }
+
   // 検索ハイライトをリセット
-  async function resetHighlights(notifyResult = false) {
+  async function resetHighlights(targetWebContents, notifyResult = false) {
     console.log('Reset HighLights');
-    // 標準APIでハイライトを消去
-    webContents.stopFindInPage('clearSelection');
+    targetWebContents.stopFindInPage('clearSelection');
 
-    // 結果通知フラグがtrueの場合のみ通知する
     if (notifyResult) {
       const result = { matches: 0, activeMatchOrdinal: 0 };
-      webContents.send('search-result-updated', result);
+      targetWebContents.send('search-result-updated', result);
     }
 
     return true;
   }
+
+  bindFindInPageEvents(mainWindow.webContents);
+
   // find-in-page
   ipcMain.handle('find-in-page', async (event, text, options = {}) => {
     console.log('Execute Search:', text);
+    const targetWebContents = resolveSearchWebContents(event);
 
     // 空の検索テキストの場合は検索をクリア
     if (!text || !text.trim()) {
-      await resetHighlights(true);
+      await resetHighlights(targetWebContents, true);
       return { matches: 0, activeMatchOrdinal: 0 };
     }
 
     try {
       // 前回の検索をクリア (通知なし)
-      await resetHighlights(false);
+      await resetHighlights(targetWebContents, false);
 
       // 少し待機
       await new Promise(resolve => setTimeout(resolve, 200));
 
       // 検索実行
       console.log('Execute findInPage():', text, options);
-      webContents.findInPage(text.trim(), {
+      targetWebContents.findInPage(text.trim(), {
         ...options,
         findNext: false // 新規検索
       });
       // 検索実行（次へ）　※ 新規検索時は一度次へを実行しないと更新されない
-      webContents.findInPage(text.trim(), {
+      targetWebContents.findInPage(text.trim(), {
         findNext: true,
         forward: true
       });
@@ -262,6 +266,7 @@ app.on("ready", () => {
   // 次の検索
   ipcMain.handle('find-in-page-next', async (event, text = '') => {
     console.log('Search next');
+    const targetWebContents = resolveSearchWebContents(event);
 
     // 検索テキストを決定
     if (!text || !text.trim()) {
@@ -270,7 +275,7 @@ app.on("ready", () => {
 
     try {
       // 次の検索を実行
-      webContents.findInPage(text.trim(), {
+      targetWebContents.findInPage(text.trim(), {
         findNext: true,
         forward: true
       });
@@ -285,6 +290,7 @@ app.on("ready", () => {
   // 前の検索
   ipcMain.handle('find-in-page-previous', async (event, text = '') => {
     console.log('Search Previous');
+    const targetWebContents = resolveSearchWebContents(event);
 
     // 検索テキストを決定
     if (!text || !text.trim()) {
@@ -293,7 +299,7 @@ app.on("ready", () => {
 
     try {
       // 前の検索を実行
-      webContents.findInPage(text.trim(), {
+      targetWebContents.findInPage(text.trim(), {
         findNext: true,
         forward: false
       });
@@ -308,9 +314,10 @@ app.on("ready", () => {
   // 検索のクリア
   ipcMain.on('stop-find-in-page', async (event) => {
     console.log('Execute stopFindInPage()');
+    const targetWebContents = resolveSearchWebContents(event);
 
     try {
-      await resetHighlights(true);
+      await resetHighlights(targetWebContents, true);
     } catch (error) {
       console.error('検索クリアエラー:', error);
     }
@@ -354,6 +361,8 @@ app.on("ready", () => {
           taskName: safeDetailData.taskName,
         }
       });
+
+      bindFindInPageEvents(taskDetailWindow.webContents);
 
       global.currentTaskDetailWindowData = safeDetailData;
 
@@ -400,7 +409,7 @@ app.on("ready", () => {
 
   mainWindow.loadFile(path.join(__dirname, "../public/index.html"));
   if (!app.isPackaged) {
-    webContents.openDevTools();
+    mainWindow.webContents.openDevTools();
   }
   mainWindow.on("closed", () => {
     mainWindow = null;
