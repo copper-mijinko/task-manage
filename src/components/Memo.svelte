@@ -33,6 +33,7 @@
 
   // イベントリスナーの参照を保持する変数
   let linkClickListener;
+  let pasteListener;
 
   function applyContent(nextContent) {
     if (!quill) {
@@ -92,6 +93,37 @@
     document.addEventListener("click", linkClickListener, false);
   }
 
+  function handlePastePreservingLeadingNewlines() {
+    const onPaste = (event) => {
+      if (readOnly || !quill) {
+        return;
+      }
+
+      const pastedText = event.clipboardData?.getData("text/plain");
+      if (typeof pastedText !== "string" || !pastedText.startsWith("\n")) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const selection = quill.getSelection(true) ?? {
+        index: quill.getLength(),
+        length: 0,
+      };
+
+      if (selection.length > 0) {
+        quill.deleteText(selection.index, selection.length, "user");
+      }
+
+      quill.insertText(selection.index, pastedText, "user");
+      quill.setSelection(selection.index + pastedText.length, 0, "silent");
+    };
+
+    pasteListener = onPaste;
+    quill.root.addEventListener("paste", pasteListener, true);
+  }
+
   onMount(() => {
     quill = new Quill(editor, {
       theme: "snow",
@@ -145,6 +177,7 @@
 
     // リンクツールチップの処理をセットアップ
     handleLinkTooltips();
+    handlePastePreservingLeadingNewlines();
 
     // クリーンアップ関数を返す
     return () => {
@@ -154,6 +187,10 @@
       if (linkClickListener) {
         document.removeEventListener("click", linkClickListener, false);
         linkClickListener = null;
+      }
+      if (pasteListener && quill?.root) {
+        quill.root.removeEventListener("paste", pasteListener, true);
+        pasteListener = null;
       }
 
       // すべてのリソース解放

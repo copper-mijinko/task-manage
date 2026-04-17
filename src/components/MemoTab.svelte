@@ -27,8 +27,14 @@
   export let renameMemo;
   export let disabled = false;
   let selectedMemoIndex = 0;
-  $: if ($table_selected_id) {
+  let previousTaskId;
+  $: if ($table_selected_id !== previousTaskId) {
+    previousTaskId = $table_selected_id;
     selectedMemoIndex = 0;
+    edit = false;
+  }
+  $: if (selectedMemoIndex >= memo.length && memo.length > 0) {
+    selectedMemoIndex = memo.length - 1;
   }
   $: editedContent =
     memo.length > selectedMemoIndex ? memo[selectedMemoIndex].content : "";
@@ -150,12 +156,14 @@
 
   <div class="memotab-content">
     {#if memo[selectedMemoIndex]}
-      <Memo
-        saveMemo={(editedContent, cursorPosition) =>
-          saveMemo(editedContent, selectedMemoIndex, cursorPosition)}
-        content={editedContent}
-        memoIndex={selectedMemoIndex}
-      />
+      {#key `${$table_selected_id ?? "none"}:${selectedMemoIndex}`}
+        <Memo
+          saveMemo={(editedContent, cursorPosition) =>
+            saveMemo(editedContent, selectedMemoIndex, cursorPosition)}
+          content={editedContent}
+          memoIndex={selectedMemoIndex}
+        />
+      {/key}
     {:else}
       <textarea placeholder="No page" disabled></textarea>
     {/if}
