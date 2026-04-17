@@ -17,10 +17,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openExternalLink: (url) => {
     ipcRenderer.send('open-external-link', url);
   },
-  // 別ウィンドウで検索ボックスを開く
-  openSearchWindow: () => {
-    ipcRenderer.send('open-search-window');
-  },
   // タスク詳細ウィンドウを開く
   openTaskDetailWindow: (detailData) => {
     ipcRenderer.send('open-task-detail-window', detailData);

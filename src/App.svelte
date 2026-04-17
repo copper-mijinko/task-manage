@@ -9,7 +9,7 @@
     showPageSearch,
     theme,
   } from "./stores.js";
-  import { onMount, onDestroy, tick } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import ProjectPage from "./components/ProjectPage.svelte";
   import Header from "./components/Header.svelte";
   import InfoPage from "./components/InfoPage.svelte";
@@ -29,7 +29,6 @@
 
   // ページ内検索ショートカットキー設定
   let searchBox;
-  let isSearchWindow = currentHash === "#search-window";
   let isTaskDetailWindow = currentHash === "#task-detail-window";
   let detailWindowReady = false;
   let detailWindowProjectId = currentSearch.get("projectId") || "";
@@ -84,32 +83,13 @@
     // Ctrl+FまたはCmd+F (Macの場合)
     if ((event.ctrlKey || event.metaKey) && event.key === "f") {
       event.preventDefault();
-      if (window.electronAPI && !isSearchWindow) {
-        // 別ウィンドウで検索ボックスを開く
-        window.electronAPI.openSearchWindow();
-      } else {
-        // 通常の検索ボックスを表示（検索ウィンドウの場合やAPIがない場合）
-        $showPageSearch = true;
-        searchBox?.focusInput();
-      }
+      $showPageSearch = true;
+      searchBox?.focusInput();
     }
   }
 
   onMount(async () => {
-    if (isSearchWindow) {
-      isSearchWindow = true;
-
-      // 検索ウィンドウでは自動的に検索ボックスを表示
-      $showPageSearch = true;
-      await tick();
-      searchBox?.focusInput();
-
-      // ウィンドウサイズを検索ボックスに合わせる
-      document.body.style.overflow = "hidden";
-      document.querySelector(".Container").style.height = "auto";
-      document.querySelector(".Main").style.display = "none";
-      document.querySelector(".Header").style.display = "none";
-    } else if (isTaskDetailWindow) {
+    if (isTaskDetailWindow) {
       await initTaskDetailWindow();
     } else {
       detailWindowReady = true;
@@ -191,12 +171,7 @@
   show={$showPageSearch}
   on:close={() => {
     $showPageSearch = false;
-    if (isSearchWindow && window.electronAPI) {
-      // 検索ウィンドウの場合、閉じるボタンでウィンドウを閉じる
-      window.close();
-    }
   }}
-  {isSearchWindow}
 />
 
 <style>

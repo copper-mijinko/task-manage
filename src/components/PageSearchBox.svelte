@@ -3,7 +3,6 @@
     import IconButton from "./IconButton.svelte";
 
     export let show = false;
-    export let isSearchWindow = false;
 
     let searchInputElement; // bind element
     let searchText = ""; //bind value
@@ -185,7 +184,7 @@
     });
 </script>
 
-<div class:search-window-mode={isSearchWindow} class:hidden={!show}>
+<div class:hidden={!show}>
     <div class="search-box-container">
             <div class="search-box">
                 <div class="search-input-container">
@@ -333,20 +332,6 @@
         border-radius: 4px;
         background-color: var(--theme-color-Main-main);
         border: 1px solid var(--theme-color-Shadow-main);
-    }
-
-    /* 検索ウィンドウモードのスタイル */
-    :global(.search-window-mode) .search-box-container {
-        position: relative;
-        top: 0;
-        left: 0;
-        right: 0;
-        width: 100%;
-        border-radius: 0;
-        border: none;
-        box-shadow: none;
-        padding: 10px;
-        box-sizing: border-box;
     }
 
     .search-box {

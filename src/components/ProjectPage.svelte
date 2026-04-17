@@ -7,12 +7,10 @@
   import Card from "./Card.svelte";
   import Dialog from "./Dialog.svelte";
   import SearchBox from "./SearchBox.svelte";
-  import PageSearchBox from "./PageSearchBox.svelte";
   import {
     table_selected_id,
     tree_data,
     closed_node_ids,
-    showPageSearch,
   } from "../stores.js";
   import {
     getNode,
@@ -208,12 +206,6 @@
     Loading...
   </h1>
 {/if}
-
-<!-- ページ内検索ボックス -->
-<PageSearchBox
-  bind:show={$showPageSearch}
-  on:close={() => ($showPageSearch = false)}
-/>
 
 <style>
   div.Content {
