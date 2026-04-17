@@ -5,12 +5,19 @@
 
   let search_text = "";
   let search_box; //bind
-  const search = () => {
+
+  const applySearch = (value = search_text) => {
+    search_text = value;
     $filter = {
       ...$filter,
-      name: search_text != "" ? [search_text] : null,
+      name: search_text !== "" ? [search_text] : null,
     };
   };
+
+  $: if (($filter?.name?.[0] ?? "") !== search_text && document.activeElement !== search_box) {
+    search_text = $filter?.name?.[0] ?? "";
+  }
+
   const params = {
     color: "var(--theme-color-Main-main)",
     backgroundColor: "var(--theme-color-Sub-main)",
@@ -25,26 +32,27 @@
     bind:this={search_box}
     bind:value={search_text}
     draggable="false"
-    on:blur={(e) => {
-      search();
+    placeholder="filter tasks..."
+    on:input={(e) => {
+      applySearch(e.currentTarget.value);
     }}
-    on:input
     on:click={(e) => {
       e.stopPropagation();
     }}
     on:keydown={(e) => {
       if ("Enter" == e.key) {
-        search();
-        search_box.blur();
+        applySearch(search_text);
       } else if ("Escape" == e.key) {
-        search_box.blur();
+        applySearch("");
+        search_box.focus();
       }
     }}
     use:tooltip={params}
   />
   <IconButton
     on:click={() => {
-      search();
+      applySearch(search_text);
+      search_box?.focus();
     }}
     use_ripple={true}
     normalColor="var(--theme-color-Shadow-sub)"
