@@ -138,4 +138,6 @@ public/build/
 electron/db.json
 electron/meta.json
 image.png
+# Local-only notes
+開発メモ.md
 仕様書.md

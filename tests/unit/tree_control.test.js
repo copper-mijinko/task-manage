@@ -72,6 +72,17 @@ describe("tree_control", () => {
     expect(filtered.children[0].children[0].id).toBe("task-2-1");
   });
 
+  test("filterTree supports multiple filters and removes branches that do not match all conditions", () => {
+    const filtered = filterTree(createTree(), {
+      name: ["ship"],
+      status: ["pending"],
+    });
+
+    expect(filtered.children).toHaveLength(1);
+    expect(filtered.children[0].id).toBe("task-2");
+    expect(filtered.children[0].data.status).toBe("Pending");
+  });
+
   test("updateNodeDataById patches a nested node without mutating siblings", () => {
     const tree = createTree();
     const originalSibling = tree.children[0];
@@ -95,6 +106,27 @@ describe("tree_control", () => {
       depth: 1,
       expanded: false,
       hasChildren: true,
+    });
+  });
+
+  test("flattenVisibleTree exposes movement metadata for each visible row", () => {
+    const rows = flattenVisibleTree(createTree());
+    const task1 = rows.find((row) => row.id === "task-1");
+    const nestedTask = rows.find((row) => row.id === "task-2-1");
+
+    expect(task1).toMatchObject({
+      depth: 1,
+      canMoveUp: false,
+      canMoveDown: true,
+      canIndent: false,
+      canOutdent: false,
+    });
+    expect(nestedTask).toMatchObject({
+      depth: 2,
+      canMoveUp: false,
+      canMoveDown: false,
+      canIndent: false,
+      canOutdent: true,
     });
   });
 
@@ -162,6 +194,23 @@ describe("tree_control", () => {
     ]);
   });
 
+  test("move and hierarchy helpers are no-ops for invalid or blocked operations", () => {
+    const tree = createTree();
+    const snapshot = JSON.parse(JSON.stringify(tree));
+
+    expect(canMoveNodeUp("missing", tree)).toBe(false);
+    expect(canMoveNodeDown("missing", tree)).toBe(false);
+    expect(canIndentNode("task-1", tree)).toBe(false);
+    expect(canOutdentNode("task-1", tree)).toBe(false);
+
+    moveNodeUp("task-1", tree);
+    moveNodeDown("task-2", tree);
+    indentNode("task-1", tree);
+    outdentNode("task-1", tree);
+
+    expect(tree).toEqual(snapshot);
+  });
+
   test("indentNode and outdentNode change hierarchy level", () => {
     const tree = createTree();
     tree.children.push({
@@ -190,5 +239,9 @@ describe("tree_control", () => {
       "task-2",
       "task-3",
     ]);
+  });
+
+  test("getNode returns undefined when the target does not exist", () => {
+    expect(getNode("missing", createTree())).toBeUndefined();
   });
 });

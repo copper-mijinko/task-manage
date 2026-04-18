@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/svelte";
+import { tick } from "svelte";
 import { get } from "svelte/store";
 import SearchBox from "../../src/components/SearchBox.svelte";
 import { filter } from "../../src/stores.ts";
@@ -33,5 +34,14 @@ describe("SearchBox", () => {
     });
     expect(input).toHaveValue("");
     expect(input).toHaveFocus();
+  });
+
+  test("reflects store updates when the input is not focused", async () => {
+    render(SearchBox);
+
+    filter.set({ name: ["backlog"] });
+    await tick();
+
+    expect(screen.getByPlaceholderText("filter tasks...")).toHaveValue("backlog");
   });
 });

@@ -1,43 +1,99 @@
 name: CI
 
 on:
+  pull_request:
   push:
+    branches:
+      - main
+      - master
     tags:
       - "v*"
   workflow_dispatch:
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
-      - run: npm install
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run check
+
+      - run: npm run test:unit
+
+      - run: npm run test:component
+
+      - name: Install xvfb for Electron E2E
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+
+      - name: Run Playwright Electron E2E
+        env:
+          ELECTRON_RUN_AS_NODE: ""
+        run: xvfb-run -a npm run test:e2e
+
+      - name: Upload Playwright artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
       - run: |
           sudo apt update
-          sudo apt install wine64
-          sudo dpkg --add-architecture i386 && sudo apt-get update && sudo apt-get install wine32:i386
+          sudo apt install -y wine64
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y wine32:i386
+
       - id: extract_tag
         run: |
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+            echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
           else
-            echo "version=0.0.0-dev" >> $GITHUB_OUTPUT
+            echo "version=0.0.0-dev" >> "$GITHUB_OUTPUT"
           fi
+
       - run: |
           VERSION=${{ steps.extract_tag.outputs.version }}
-          jq --arg v "$VERSION" '.version = $v' package.json > tmp.json && mv tmp.json package.json
+          jq --arg v "$VERSION" '.version = $v' package.json > tmp.json
+          mv tmp.json package.json
+
       - run: |
           npm run dist
-          sleep 2  # EXE生成後のI/O待ち
+          sleep 2
+
       - run: |
           VERSION=${{ steps.extract_tag.outputs.version }}
           ls dist
           mv dist/win-unpacked dist/task-manage-$VERSION
           cd dist && tar -cvzf task-manage-$VERSION.tar.gz task-manage-$VERSION
-          sleep 2  # tar.gz生成後のI/O待ち
+          sleep 2
 
-      # .tar.gzのみアップロード
       - uses: softprops/action-gh-release@v2.0.4
         with:
           name: Release v${{ steps.extract_tag.outputs.version }}
@@ -45,7 +101,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # .exeのみアップロード
       - uses: softprops/action-gh-release@v2.0.4
         with:
           name: Release v${{ steps.extract_tag.outputs.version }}
