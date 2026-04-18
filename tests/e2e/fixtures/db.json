@@ -1,0 +1,43 @@
+[
+  {
+    "headers": [
+      {
+        "name": "name",
+        "default_ratio": 10
+      },
+      {
+        "name": "status",
+        "default_ratio": 4
+      },
+      {
+        "name": "due date",
+        "default_ratio": 4
+      },
+      {
+        "name": "memo",
+        "default_ratio": 2
+      }
+    ],
+    "data": {
+      "id": "project-1",
+      "data": {
+        "name": "Sample Project",
+        "status": "Open",
+        "due date": null,
+        "memo": []
+      },
+      "children": [
+        {
+          "id": "task-1",
+          "data": {
+            "name": "First Task",
+            "status": "In Progress",
+            "due date": "2026-04-30",
+            "memo": []
+          },
+          "children": []
+        }
+      ]
+    }
+  }
+]

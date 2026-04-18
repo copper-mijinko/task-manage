@@ -22,6 +22,8 @@ lib-cov
 # Coverage directory used by tools like istanbul
 coverage
 *.lcov
+playwright-report/
+test-results/
 
 # nyc test coverage
 .nyc_output
@@ -128,3 +130,12 @@ out
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+# Local workspace artifacts
+.codex
+dist/
+public/build/
+electron/db.json
+electron/meta.json
+image.png
+仕様書.md

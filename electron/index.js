@@ -1,8 +1,29 @@
 const _ = require("lodash")
 const { app, BrowserWindow, ipcMain, shell, WebContents } = require("electron");
+const fs = require("fs");
 const path = require("path");
 const { LowSync, JSONFileSync } = require('@commonify/lowdb');
 const log = require("electron-log");
+
+function resolveAppDataPath(fileName) {
+  const customDataDir = process.env.TASK_MANAGE_DATA_DIR;
+
+  if (customDataDir) {
+    fs.mkdirSync(customDataDir, { recursive: true });
+    return path.join(customDataDir, fileName);
+  }
+
+  return path.join(__dirname, fileName);
+}
+
+function shouldOpenDevTools() {
+  const testLikeEnvironment =
+    process.env.NODE_ENV === "test" ||
+    process.env.PLAYWRIGHT_TEST === "true" ||
+    process.env.TASK_MANAGE_OPEN_DEVTOOLS === "false";
+
+  return !app.isPackaged && !testLikeEnvironment;
+}
 
 app.on("ready", () => {
   let mainWindow = new BrowserWindow({
@@ -22,7 +43,7 @@ app.on("ready", () => {
   }
   // init low db. read after.
   // data
-  const file = path.join(__dirname, 'db.json');
+  const file = resolveAppDataPath('db.json');
   log.info(file);
   const defaultData = []
   const adapter = new JSONFileSync(file);
@@ -31,7 +52,7 @@ app.on("ready", () => {
   db.data ||= defaultData; // initialize
   db.write();
   // meta
-  const file_meta = path.join(__dirname, 'meta.json');
+  const file_meta = resolveAppDataPath('meta.json');
   log.info(file_meta);
   const defaultDataMeta = {
     "theme": "dark"
@@ -408,7 +429,7 @@ app.on("ready", () => {
   });
 
   mainWindow.loadFile(path.join(__dirname, "../public/index.html"));
-  if (!app.isPackaged) {
+  if (shouldOpenDevTools()) {
     mainWindow.webContents.openDevTools();
   }
   mainWindow.on("closed", () => {
