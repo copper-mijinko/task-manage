@@ -378,7 +378,7 @@ app.on("ready", () => {
         const params = new URLSearchParams(safeDetailData);
         taskDetailWindow.loadURL(`http://localhost:5173/?${params.toString()}#task-detail-window`);
       } else {
-        taskDetailWindow.loadFile(path.join(__dirname, '../dist/index.html'), {
+        taskDetailWindow.loadFile(path.join(__dirname, '../renderer/index.html'), {
           hash: '#task-detail-window',
           query: {
             projectId: safeDetailData.projectId,
@@ -436,7 +436,7 @@ app.on("ready", () => {
   if (process.env.VITE_DEV === 'true') {
     mainWindow.loadURL('http://localhost:5173');
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+    mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
   }
   if (shouldOpenDevTools()) {
     mainWindow.webContents.openDevTools();

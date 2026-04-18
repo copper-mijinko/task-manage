@@ -38,7 +38,9 @@ task-manage/
 │  ├─ specification.md
 │  └─ testing.md
 ├─ dist/
-│  └─ （ビルド成果物。git 管理外）
+│  └─ （electron-builder 成果物。git 管理外）
+├─ renderer/
+│  └─ （Vite ビルド成果物。git 管理外）
 ├─ electron/
 │  ├─ index.js
 │  └─ preload.js
@@ -71,6 +73,8 @@ task-manage/
 - `docs/`
   - プロジェクト文書を置く
 - `dist/`
+  - electron-builder のパッケージング成果物を置く
+- `renderer/`
   - Vite のビルド成果物を置く。Electron 本番起動時のロード先
 - `electron/`
   - Electron の main process と preload script を置く

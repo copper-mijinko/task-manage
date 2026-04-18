@@ -23,7 +23,7 @@ export default defineConfig({
 	base: './',
 	publicDir: 'public',
 	build: {
-		outDir: 'dist',
+		outDir: 'renderer',
 		emptyOutDir: true,
 	},
 });

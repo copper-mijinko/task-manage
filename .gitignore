@@ -134,6 +134,7 @@ out
 # Local workspace artifacts
 .codex
 dist/
+renderer/
 public/build/
 electron/db.json
 electron/meta.json

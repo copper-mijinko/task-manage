@@ -10,7 +10,7 @@
     "appId": "testId",
     "asar": "false",
     "files": [
-      "dist/**/*",
+      "renderer/**/*",
       "electron/**/*"
     ],
     "win": {
