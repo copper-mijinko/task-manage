@@ -1,6 +1,6 @@
 <script>
   import { getNode, updateNodeDataById } from "../common/tree_control.ts";
-  import { tree_data, table_selected_id } from "../stores.js";
+  import { tree_data, table_selected_id } from "../stores.ts";
   import { debounce } from "lodash";
   import MemoTab from "./MemoTab.svelte";
 

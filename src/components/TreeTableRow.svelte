@@ -4,7 +4,7 @@
 
 <script>
   import { createEventDispatcher } from "svelte";
-  import { selected_id } from "../stores.js";
+  import { selected_id } from "../stores.ts";
   import { ripple } from "../common/common.js";
   import TaskName from "./TaskName.svelte";
   import StatusSelect from "./StatusSelect.svelte";

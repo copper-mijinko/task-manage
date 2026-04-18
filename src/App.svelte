@@ -8,7 +8,7 @@
     init_store,
     showPageSearch,
     theme,
-  } from "./stores.js";
+  } from "./stores.ts";
   import { onMount, onDestroy } from "svelte";
   import ProjectPage from "./components/ProjectPage.svelte";
   import Header from "./components/Header.svelte";

@@ -1,6 +1,6 @@
 <script>
   import { getNode } from "../common/tree_control.ts";
-  import { selected_id, tree_data } from "../stores.js";
+  import { selected_id, tree_data } from "../stores.ts";
   import Button from "./Button.svelte";
   import Card from "./Card.svelte";
   import TaskDetail from "./TaskDetail.svelte";

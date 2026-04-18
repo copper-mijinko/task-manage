@@ -1,7 +1,7 @@
 <script>
   import IconButton from "./IconButton.svelte";
   import { tooltip } from "../common/common.js";
-  import { filter } from "../stores.js";
+  import { filter } from "../stores.ts";
 
   let search_text = "";
   let search_box; //bind

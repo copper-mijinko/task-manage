@@ -1,21 +1,38 @@
 import { uuidV4 } from "./uuid"
 
-interface TreeData {
+export type TaskStatus =
+  | "Open"
+  | "Pending"
+  | "In Progress"
+  | "Completed"
+  | "Canceled";
+
+export interface MemoEntry {
+  title: string;
+  content: unknown;
+}
+
+export interface TreeNodeData {
+  "name": string,
+  "status": TaskStatus,
+  "due date": `${string}-${string}-${string}` | undefined,
+  "memo": MemoEntry[],
+  [key: string]: unknown,
+}
+
+export interface TreeData {
   "id": string,
-  "data": {
-    "name": string,
-    "status": "Open" | "Pending" | "In Progress" | "Completed" | "Canceled",
-    "due date": `${string}-${string}-${string}` | undefined,
-    "memo": []
-  },
+  "data": TreeNodeData,
   "children": TreeData[]
 }
 
-interface ProjectData {
-  "headers": {
-    "name": string,
-    "default_ratio": number
-  }[],
+export interface ProjectHeader {
+  "name": string,
+  "default_ratio": number
+}
+
+export interface ProjectData {
+  "headers": ProjectHeader[],
   "data": TreeData,
 }
 
@@ -34,7 +51,10 @@ export interface VisibleTreeRow {
   canOutdent: boolean,
 }
 
-export function filterTree(tree, filter): TreeData {
+export function filterTree(
+  tree: TreeData | null | undefined,
+  filter: Record<string, string[]> | null | undefined,
+): TreeData | null | undefined {
   if (!tree || !filter) return tree;
 
   // Check match against all filters
@@ -74,7 +94,7 @@ export function filterTree(tree, filter): TreeData {
   }
 
   // Process child nodes
-  let matchedChildren = [];
+  const matchedChildren: TreeData[] = [];
   for (let child of (tree.children || [])) {
     if (nameFilterMatch && allFiltersMatch) {
       // If name filter matches and all filters match,
@@ -99,12 +119,14 @@ export function filterTree(tree, filter): TreeData {
 }
 
 // Helper function to clone the given tree node and all its children
-function cloneTreeWithAllChildren(tree): TreeData {
+function cloneTreeWithAllChildren(
+  tree: TreeData | null | undefined,
+): TreeData | null {
   if (!tree) return null;
 
-  const children = (tree.children || []).map(child =>
-    cloneTreeWithAllChildren(child)
-  );
+  const children = (tree.children || [])
+    .map((child) => cloneTreeWithAllChildren(child))
+    .filter((child): child is TreeData => child !== null);
 
   return { ...tree, children };
 }
@@ -158,9 +180,15 @@ export function getDefaultProject(): ProjectData {
   }
 }
 
-export function getNode(base: string, tree_data: TreeData): TreeData {
+export function getNode(
+  base: string,
+  tree_data: TreeData | undefined,
+): TreeData | undefined {
   // Depth First Search
-  let base_tree: TreeData;
+  let base_tree: TreeData | undefined;
+  if (!tree_data) {
+    return undefined;
+  }
   if (tree_data.id == base) {
     return tree_data
   }
@@ -178,10 +206,10 @@ export function getNode(base: string, tree_data: TreeData): TreeData {
 }
 
 export function updateNodeDataById(
-  tree_data: TreeData,
+  tree_data: TreeData | undefined,
   targetId: string,
   patch: Partial<TreeData["data"]>,
-): TreeData {
+): TreeData | undefined {
   if (!tree_data) {
     return tree_data;
   }
@@ -220,7 +248,7 @@ export function updateNodeDataById(
 }
 
 export function flattenVisibleTree(
-  tree_data: TreeData,
+  tree_data: TreeData | undefined,
   closedIds: Set<string> = new Set(),
 ): VisibleTreeRow[] {
   if (!tree_data) {
@@ -269,9 +297,15 @@ export function flattenVisibleTree(
   return rows;
 }
 
-export function getParent(base: string, tree_data: TreeData): TreeData {
+export function getParent(
+  base: string,
+  tree_data: TreeData | undefined,
+): TreeData | undefined {
   // Depth First Search
-  let parent_tree;
+  let parent_tree: TreeData | undefined;
+  if (!tree_data) {
+    return undefined;
+  }
   if (tree_data.id == base) {
     return undefined
   }
@@ -293,6 +327,9 @@ export function isChild(target: string, base: string, tree_data: TreeData): bool
     return false;
   }
   const base_tree = getNode(base, tree_data);
+  if (!base_tree) {
+    return false;
+  }
   const target_tree = getNode(target, base_tree)
   if (target_tree) {
     return true;
@@ -328,6 +365,9 @@ export function addNode(
       break;
     case "append":
       const base_tree = getNode(base, tree_data);
+      if (!base_tree) {
+        return tree_data;
+      }
       base_tree.children.push(node);
       break;
   }
@@ -336,6 +376,9 @@ export function addNode(
 
 export function rmNode(target: string, tree_data: TreeData): TreeData {
   const target_parent_tree = getParent(target, tree_data);
+  if (!target_parent_tree) {
+    return tree_data;
+  }
   let index = undefined;
   let i = 0;
   for (let child of target_parent_tree.children) {
@@ -351,6 +394,9 @@ export function rmNode(target: string, tree_data: TreeData): TreeData {
 
 export function reorderTree(target: string, base: string, tree_data: TreeData, action: "insert" | "append"): TreeData {
   const target_tree = getNode(target, tree_data);
+  if (!target_tree) {
+    return tree_data;
+  }
   tree_data = rmNode(target, tree_data);
   tree_data = addNode(target_tree, base, tree_data, action);
   return tree_data

@@ -9,7 +9,7 @@
     closed_node_ids,
     table_selected_id,
     theme,
-  } from "../stores";
+  } from "../stores.ts";
   import {
     flattenVisibleTree,
     updateNodeDataById,

@@ -2,7 +2,7 @@
   import IconButton from "./IconButton.svelte";
   import Drawer from "./Drawer.svelte";
   import ToggleSwitch from "./ToggleSwitch.svelte";
-  import { theme } from "../stores";
+  import { theme } from "../stores.ts";
   import MenuList from "./MenuList.svelte";
   export let title = "Task Manage";
   let show_drawer = false;

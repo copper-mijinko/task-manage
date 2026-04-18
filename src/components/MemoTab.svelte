@@ -1,6 +1,6 @@
 <script>
   import { tick } from "svelte";
-  import { table_selected_id } from "../stores.js";
+  import { table_selected_id } from "../stores.ts";
   import { ripple, tooltip } from "../common/common.js";
   import IconButton from "./IconButton.svelte";
   import Button from "./Button.svelte";

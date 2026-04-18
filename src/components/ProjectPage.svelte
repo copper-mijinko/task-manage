@@ -11,7 +11,7 @@
     table_selected_id,
     tree_data,
     closed_node_ids,
-  } from "../stores.js";
+  } from "../stores.ts";
   import {
     getNode,
     addNode,

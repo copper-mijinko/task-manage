@@ -1,6 +1,10 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
-contextBridge.exposeInMainWorld('electronAPI', {
+/** @typedef {import("../src/types/app").ElectronAPI} ElectronAPI */
+/** @typedef {import("../src/types/app").FindInPageResult} FindInPageResult */
+
+/** @type {ElectronAPI} */
+const electronAPI = {
   setTreeData: (tree_data) => ipcRenderer.send('set-tree-data', tree_data),
   getTreeData: (project_name) => ipcRenderer.invoke('get-tree-data', project_name),
   getMetaData: (key) => ipcRenderer.invoke('get-meta-data', key),
@@ -45,7 +49,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onSearchResultUpdated: (callback) => {
     ipcRenderer.on('search-result-updated', (event, result) => {
       console.log('Receive search-result-updated:', result);
-      callback(result);
+      callback(/** @type {FindInPageResult} */ (result));
     });
   },
   // テーマ変更の通知を受け取る
@@ -69,4 +73,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getCurrentTheme: () => {
     return ipcRenderer.invoke('get-current-theme');
   }
-})
+}
+
+contextBridge.exposeInMainWorld('electronAPI', electronAPI)

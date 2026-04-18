@@ -1,5 +1,5 @@
 <script>
-  import { filter } from "../stores.js";
+  import { filter } from "../stores.ts";
   import MultiSelect from "./MultiSelect.svelte";
   export let headers;
   let selected = [];

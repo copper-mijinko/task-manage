@@ -13,7 +13,7 @@
     info_ids,
     selected_type,
     selected_id,
-  } from "../stores.js";
+  } from "../stores.ts";
 
   // Dialog
   let show_confirm = false;
