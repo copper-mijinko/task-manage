@@ -304,6 +304,7 @@
 
     <button
         class="edit-button"
+        aria-label="Edit task name"
         use:ripple={{ duration: 350, color: color }}
         on:click={(e) => {
             e.stopPropagation();
@@ -323,6 +324,7 @@
 
     <button
         class="menu-button"
+        aria-label="Open task actions"
         use:ripple={{ duration: 350, color: color }}
         on:click={openMenu}
     >

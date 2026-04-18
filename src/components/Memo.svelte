@@ -223,7 +223,7 @@
 </script>
 
 <div class="wrapper">
-  <div bind:this={editor} class="editor" on:blur />
+  <div bind:this={editor} class="editor" on:blur></div>
 </div>
 
 <style>

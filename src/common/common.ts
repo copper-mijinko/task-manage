@@ -1,26 +1,43 @@
+type ActionNode = HTMLElement & { value?: string };
+
+interface TooltipParams {
+  backgroundColor?: string;
+  color?: string;
+  content?: string;
+  disable?: boolean;
+  wrapped?: boolean;
+  force?: boolean;
+}
+
+interface RippleParams {
+  duration?: number;
+  color?: string;
+  disable?: boolean;
+}
+
 // tooltip
 export function tooltip(
-  node, 
-  params={
-          backgroundColor: "white",
-          color: "black",
-          content: undefined,
-          disable: false,
-          wrapped: false,
-          force: false
-        }
-){
-  const backgroundColor = params.backgroundColor;
-  const color = params.color;
-  const disable = params.disable;
-  const force = params.force;
+  node: ActionNode,
+  params: TooltipParams = {
+    backgroundColor: "white",
+    color: "black",
+    content: undefined,
+    disable: false,
+    wrapped: false,
+    force: false,
+  },
+) {
+  const backgroundColor = params.backgroundColor ?? "white";
+  const color = params.color ?? "black";
+  const disable = params.disable ?? false;
+  const force = params.force ?? false;
 
   const judge = () => {
     return !disable && (force || node.scrollWidth > node.offsetWidth);
   }
 
-  let tooltip;
-  const handleMouseEnter = (e) => {
+  let tooltip: HTMLDivElement | undefined;
+  const handleMouseEnter = (e: MouseEvent) => {
     if (!judge()) {
       return;
     }
@@ -28,7 +45,7 @@ export function tooltip(
     if (params.content) {
       tooltip.textContent = params.content;
     } else {
-      tooltip.textContent = node.textContent? node.textContent: node.value;
+      tooltip.textContent = node.textContent ?? node.value ?? "";
     }
 		tooltip.style = `
       display: flex;
@@ -47,18 +64,18 @@ export function tooltip(
 		`;
     document.body.appendChild(tooltip);
   }
-  const handleMouseLeave = (e) => {
-    if (document.body.contains(tooltip)) {
+  const handleMouseLeave = (_event: MouseEvent) => {
+    if (tooltip && document.body.contains(tooltip)) {
       document.body.removeChild(tooltip);
     }
   }
-  const handleMouseMove = (e) => {
+  const handleMouseMove = (e: MouseEvent) => {
     if (tooltip) {
       tooltip.style.left = `calc(${e.pageX}px + 1rem)`;
       tooltip.style.top = `calc(${e.pageY}px + 1rem)`;
     }
   }
-  const target = params.wrapped? node.parentElement: node;
+  const target = params.wrapped ? node.parentElement ?? node : node;
   target.addEventListener('mouseenter', handleMouseEnter);
   target.addEventListener('mouseleave', handleMouseLeave);
 	target.addEventListener('mousemove', handleMouseMove);
@@ -74,28 +91,28 @@ export function tooltip(
 
 // ripple
 export function ripple(
-  node,
-  params={
-          duration: 500,
-          color: "rgba(0, 0, 0, 0.16)",
-          disable: false,
-         }
-){
-  const duration = params.duration;
-  const color = params.color;
-  const disable = params.disable;
+  node: HTMLElement,
+  params: RippleParams = {
+    duration: 500,
+    color: "rgba(0, 0, 0, 0.16)",
+    disable: false,
+  },
+) {
+  const duration = params.duration ?? 500;
+  const color = params.color ?? "rgba(0, 0, 0, 0.16)";
+  const disable = params.disable ?? false;
   if (disable) {
     return;
   }
-  const handleClick = (e) => {
-    if (!node.contains(e.target)) {
+  const handleClick = (e: MouseEvent) => {
+    if (!(e.target instanceof Node) || !node.contains(e.target)) {
       return;
     }
     const rect = node.getBoundingClientRect();
     const style = window.getComputedStyle(node);
 
     if (style.zIndex == "auto") {
-      node.style.zIndex = 0;
+      node.style.zIndex = "0";
     }
 
     const clone = document.createElement("span");
@@ -152,9 +169,13 @@ export function ripple(
 }
 
 // clickOutside
-export function clickOutside(node) {
-	const handleClick = (event) => {
+export function clickOutside(node: HTMLElement) {
+	const handleClick = (event: MouseEvent) => {
     const rect = node.getBoundingClientRect();
+		if (!(event.target instanceof Node)) {
+      return;
+    }
+
 		if (!node.contains(event.target) && rect.width && rect.height) {
 			node.dispatchEvent(new CustomEvent("outclick"));
 		}

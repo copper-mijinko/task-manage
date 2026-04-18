@@ -288,7 +288,7 @@
               data-section={menu.name}
               on:click={(e) => select(e, child.id, menu.name)}
             >
-              <div class:TreeLine={true} style="flex-shrink: 0" />
+              <div class:TreeLine={true} style="flex-shrink: 0"></div>
               <span
                 class:TextOverFlow={true}
                 use:tooltip={{

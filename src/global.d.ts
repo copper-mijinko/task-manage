@@ -1,5 +1,3 @@
-/// <reference types="svelte" />
-
 import type { ElectronAPI } from "./types/app";
 
 declare global {

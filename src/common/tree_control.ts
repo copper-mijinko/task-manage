@@ -119,14 +119,10 @@ export function filterTree(
 }
 
 // Helper function to clone the given tree node and all its children
-function cloneTreeWithAllChildren(
-  tree: TreeData | null | undefined,
-): TreeData | null {
-  if (!tree) return null;
-
-  const children = (tree.children || [])
-    .map((child) => cloneTreeWithAllChildren(child))
-    .filter((child): child is TreeData => child !== null);
+function cloneTreeWithAllChildren(tree: TreeData): TreeData {
+  const children = (tree.children || []).map((child) =>
+    cloneTreeWithAllChildren(child),
+  );
 
   return { ...tree, children };
 }
@@ -230,7 +226,7 @@ export function updateNodeDataById(
 
   let hasChanged = false;
   const updatedChildren = tree_data.children.map((child) => {
-    const nextChild = updateNodeDataById(child, targetId, patch);
+    const nextChild = updateNodeDataById(child, targetId, patch) ?? child;
     if (nextChild !== child) {
       hasChanged = true;
     }
@@ -361,6 +357,9 @@ export function addNode(
         }
         i++;
       }
+      if (index === undefined) {
+        return tree_data;
+      }
       base_parent_tree.children.splice(index, 0, node);
       break;
     case "append":
@@ -387,6 +386,9 @@ export function rmNode(target: string, tree_data: TreeData): TreeData {
       break;
     }
     i++;
+  }
+  if (index === undefined) {
+    return tree_data;
   }
   target_parent_tree.children.splice(index, 1);
   return tree_data

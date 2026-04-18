@@ -35,7 +35,7 @@
 </script>
 
 {#if show}
-  <div class="Mask" />
+  <div class="Mask"></div>
 {/if}
 <div
   class="Modal"

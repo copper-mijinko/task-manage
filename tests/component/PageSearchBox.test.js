@@ -82,8 +82,10 @@ describe("PageSearchBox", () => {
     const { api } = installElectronApiMock();
     const handleClose = vi.fn();
 
-    const { component } = render(PageSearchBox, { props: { show: true } });
-    component.$on("close", handleClose);
+    render(PageSearchBox, {
+      props: { show: true },
+      events: { close: handleClose },
+    });
 
     const input = screen.getByPlaceholderText("search...");
     await fireEvent.keyDown(input, { key: "Escape" });
@@ -117,7 +119,7 @@ describe("PageSearchBox", () => {
   test("resets the search state when the component is hidden", async () => {
     const { api, listeners } = installElectronApiMock();
 
-    const { component } = render(PageSearchBox, { props: { show: true } });
+    const { rerender } = render(PageSearchBox, { props: { show: true } });
 
     const input = screen.getByPlaceholderText("search...");
     await fireEvent.input(input, { target: { value: "task" } });
@@ -125,8 +127,7 @@ describe("PageSearchBox", () => {
     listeners.searchResultUpdated({ matches: 5, activeMatchOrdinal: 4 });
     await tick();
 
-    component.$set({ show: false });
-    await tick();
+    await rerender({ show: false });
 
     expect(api.stopFindInPage).toHaveBeenCalled();
     expect(input).toHaveValue("");

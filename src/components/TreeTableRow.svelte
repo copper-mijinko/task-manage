@@ -165,13 +165,14 @@
     <div class:TableData={true} style:z-index={i + 100}>
       {#if header.name == "name"}
         {#each Array(depth) as _}
-          <div class:TreeLine={true} style="flex-shrink: 0" />
+          <div class:TreeLine={true} style="flex-shrink: 0"></div>
         {/each}
         {#if hasChildren}
           <button
             class:Expanded={expanded}
             class:ExpandButton={true}
             style="flex-shrink: 0"
+            aria-label={expanded ? "Collapse task" : "Expand task"}
             on:click={toggle}
           >
             <svg viewBox="-12 0 32 32" xmlns="http://www.w3.org/2000/svg"

@@ -68,6 +68,7 @@
             use:ripple={{ duration: 350, color: "var(--theme-color-Sub-main)" }}
             class="memotab-item"
             class:selected={i == selectedMemoIndex}
+            aria-label={`Select memo ${memo.title}`}
             on:click={() => {
               selectedMemoIndex = i;
             }}

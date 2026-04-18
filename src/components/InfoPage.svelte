@@ -2,7 +2,7 @@
   export let index = 1;
 </script>
 
-<iframe src="./static/info{index}.html" title="info1" />
+<iframe src="./static/info{index}.html" title="info1"></iframe>
 
 <style>
   iframe {
