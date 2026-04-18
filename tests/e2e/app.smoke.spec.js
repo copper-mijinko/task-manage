@@ -52,6 +52,26 @@ async function closeSeededApp(context) {
   }
 }
 
+async function openTaskDetailWindow(app, detailData = {
+  projectId: "project-1",
+  taskId: "task-1",
+  taskName: "First Task",
+}) {
+  const detailWindowPromise = app.electronApp.waitForEvent("window");
+
+  await app.window.evaluate((payload) => {
+    window.electronAPI.openTaskDetailWindow(payload);
+  }, detailData);
+
+  const detailWindow = await detailWindowPromise;
+  await expect(detailWindow.getByText("Task Detail")).toBeVisible();
+  await expect(
+    detailWindow.getByRole("heading", { name: detailData.taskName }),
+  ).toBeVisible();
+
+  return detailWindow;
+}
+
 test("loads seeded project data in Electron", async () => {
   const app = await launchSeededApp();
 
@@ -138,6 +158,79 @@ test("toggles the theme and persists the new value into meta.json", async () => 
   } finally {
     const metaBeforeClose = readJson(app.tempDir, "meta.json");
     expect(metaBeforeClose.theme).toBe("light");
+    await closeSeededApp(app);
+  }
+});
+
+test("opens the task detail window for the selected task", async () => {
+  const app = await launchSeededApp();
+
+  try {
+    const detailWindow = await openTaskDetailWindow(app);
+    await expect(detailWindow).toHaveURL(/#task-detail-window/);
+  } finally {
+    await closeSeededApp(app);
+  }
+});
+
+test("keeps the task detail window heading in sync when the task name changes", async () => {
+  const app = await launchSeededApp();
+
+  try {
+    const detailWindow = await openTaskDetailWindow(app);
+
+    await app.window.evaluate(async () => {
+      const project = await window.electronAPI.getTreeData("project-1");
+      project.data.children[0].data.name = "Renamed Task";
+      window.electronAPI.setTreeData(project);
+    });
+
+    await expect(
+      detailWindow.getByRole("heading", { name: "Renamed Task" }),
+    ).toBeVisible();
+  } finally {
+    await closeSeededApp(app);
+  }
+});
+
+test("shows a missing-task state when the selected task is deleted", async () => {
+  const app = await launchSeededApp();
+
+  try {
+    const detailWindow = await openTaskDetailWindow(app);
+
+    await app.window.evaluate(async () => {
+      const project = await window.electronAPI.getTreeData("project-1");
+      project.data.children = project.data.children.filter(
+        (child) => child.id !== "task-1",
+      );
+      window.electronAPI.setTreeData(project);
+    });
+
+    await expect(detailWindow.getByText("Task not found.")).toBeVisible();
+    await expect(
+      detailWindow.getByText("The target task was deleted. Rename is still tracked by task ID."),
+    ).toBeVisible();
+  } finally {
+    await closeSeededApp(app);
+  }
+});
+
+test("shows a missing-project state when the source project is deleted", async () => {
+  const app = await launchSeededApp();
+
+  try {
+    const detailWindow = await openTaskDetailWindow(app);
+
+    await app.window.evaluate(() => {
+      window.electronAPI.deleteProject("project-1");
+    });
+
+    await expect(detailWindow.getByText("Project not found.")).toBeVisible();
+    await expect(
+      detailWindow.getByText("The project for this detail window was deleted."),
+    ).toBeVisible();
+  } finally {
     await closeSeededApp(app);
   }
 });

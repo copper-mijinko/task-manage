@@ -82,6 +82,10 @@ Electron アプリ全体を起動して確認する。
 | Electron アプリ全体 | `opens and closes the page search box with keyboard shortcuts` | `Ctrl+F` でページ内検索バーを開き、`Escape` で閉じることを確認する |
 | Electron アプリ全体 | `adds a sibling task from the project toolbar and persists it` | 行選択後にツールバーからタスクを追加し、`db.json` に保存されることを確認する |
 | Electron アプリ全体 | `toggles the theme and persists the new value into meta.json` | テーマ切替操作後に `meta.json` の `theme` が更新されることを確認する |
+| Electron アプリ全体 | `opens the task detail window for the selected task` | タスク詳細ウィンドウを開き、対象タスクのタイトルと URL を確認する |
+| Electron アプリ全体 | `keeps the task detail window heading in sync when the task name changes` | メイン画面でタスク名を更新した時に、詳細ウィンドウ見出しが同期することを確認する |
+| Electron アプリ全体 | `shows a missing-task state when the selected task is deleted` | タスク削除後に詳細ウィンドウが `Task not found.` 表示へ切り替わることを確認する |
+| Electron アプリ全体 | `shows a missing-project state when the source project is deleted` | プロジェクト削除後に詳細ウィンドウが `Project not found.` 表示へ切り替わることを確認する |
 
 ## 3. 実施すべきテストと実装状況
 
@@ -129,7 +133,7 @@ Electron アプリ全体を起動して確認する。
 | Electron アプリ全体 | ページ内検索バー表示と close | 実装済み | [tests/e2e/app.smoke.spec.js](/home/akai/develop/task-manage-roo/tests/e2e/app.smoke.spec.js:1) |
 | Electron アプリ全体 | タスク追加から保存まで | 実装済み | [tests/e2e/app.smoke.spec.js](/home/akai/develop/task-manage-roo/tests/e2e/app.smoke.spec.js:1) |
 | Electron アプリ全体 | テーマ変更の保存 | 実装済み | [tests/e2e/app.smoke.spec.js](/home/akai/develop/task-manage-roo/tests/e2e/app.smoke.spec.js:1) |
-| Electron アプリ全体 | タスク詳細ウィンドウの表示と同期 | 未実装 | 未作成 |
+| Electron アプリ全体 | タスク詳細ウィンドウの表示と同期 | 実装済み | [tests/e2e/app.smoke.spec.js](/home/akai/develop/task-manage-roo/tests/e2e/app.smoke.spec.js:1) |
 
 ## 4. 実行コマンド
 
