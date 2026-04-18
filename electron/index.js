@@ -3,7 +3,7 @@ const { app, BrowserWindow, ipcMain, shell, WebContents } = require("electron");
 const fs = require("fs");
 const path = require("path");
 const { LowSync, JSONFileSync } = require('@commonify/lowdb');
-const log = require("electron-log");
+const log = require("electron-log/main");
 
 function resolveAppDataPath(fileName) {
   const customDataDir = process.env.TASK_MANAGE_DATA_DIR;
@@ -374,14 +374,19 @@ app.on("ready", () => {
         }
       });
 
-      taskDetailWindow.loadFile(path.join(__dirname, "../public/index.html"), {
-        hash: '#task-detail-window',
-        query: {
-          projectId: safeDetailData.projectId,
-          taskId: safeDetailData.taskId,
-          taskName: safeDetailData.taskName,
-        }
-      });
+      if (process.env.VITE_DEV === 'true') {
+        const params = new URLSearchParams(safeDetailData);
+        taskDetailWindow.loadURL(`http://localhost:5173/?${params.toString()}#task-detail-window`);
+      } else {
+        taskDetailWindow.loadFile(path.join(__dirname, '../dist/index.html'), {
+          hash: '#task-detail-window',
+          query: {
+            projectId: safeDetailData.projectId,
+            taskId: safeDetailData.taskId,
+            taskName: safeDetailData.taskName,
+          },
+        });
+      }
 
       bindFindInPageEvents(taskDetailWindow.webContents);
 
@@ -428,7 +433,11 @@ app.on("ready", () => {
     }
   });
 
-  mainWindow.loadFile(path.join(__dirname, "../public/index.html"));
+  if (process.env.VITE_DEV === 'true') {
+    mainWindow.loadURL('http://localhost:5173');
+  } else {
+    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+  }
   if (shouldOpenDevTools()) {
     mainWindow.webContents.openDevTools();
   }
