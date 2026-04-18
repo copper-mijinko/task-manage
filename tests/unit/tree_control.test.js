@@ -1,7 +1,18 @@
 import {
+  addNode,
+  canIndentNode,
+  canMoveNodeDown,
+  canMoveNodeUp,
+  canOutdentNode,
   filterTree,
   flattenVisibleTree,
   getNode,
+  indentNode,
+  moveNodeDown,
+  moveNodeUp,
+  outdentNode,
+  reorderTree,
+  rmNode,
   updateNodeDataById,
 } from "../../src/common/tree_control.ts";
 
@@ -85,5 +96,99 @@ describe("tree_control", () => {
       expanded: false,
       hasChildren: true,
     });
+  });
+
+  test("addNode can append and remove nodes within the tree", () => {
+    const tree = createTree();
+    const newNode = {
+      id: "task-3",
+      data: {
+        name: "Review",
+        status: "Open",
+        "due date": undefined,
+        memo: [],
+      },
+      children: [],
+    };
+
+    addNode(newNode, "task-2", tree, "append");
+    expect(getNode("task-2", tree).children.map((child) => child.id)).toEqual([
+      "task-2-1",
+      "task-3",
+    ]);
+
+    rmNode("task-3", tree);
+    expect(getNode("task-2", tree).children.map((child) => child.id)).toEqual([
+      "task-2-1",
+    ]);
+  });
+
+  test("reorderTree can move a node before another node", () => {
+    const tree = createTree();
+
+    reorderTree("task-2", "task-1", tree, "insert");
+
+    expect(tree.children.map((child) => child.id)).toEqual(["task-2", "task-1"]);
+  });
+
+  test("moveNodeUp and moveNodeDown reorder siblings safely", () => {
+    const tree = createTree();
+    tree.children.push({
+      id: "task-3",
+      data: {
+        name: "Archive",
+        status: "Open",
+        "due date": undefined,
+        memo: [],
+      },
+      children: [],
+    });
+
+    expect(canMoveNodeUp("task-1", tree)).toBe(false);
+    expect(canMoveNodeDown("task-1", tree)).toBe(true);
+
+    moveNodeDown("task-1", tree);
+    expect(tree.children.map((child) => child.id)).toEqual([
+      "task-2",
+      "task-1",
+      "task-3",
+    ]);
+
+    moveNodeUp("task-1", tree);
+    expect(tree.children.map((child) => child.id)).toEqual([
+      "task-1",
+      "task-2",
+      "task-3",
+    ]);
+  });
+
+  test("indentNode and outdentNode change hierarchy level", () => {
+    const tree = createTree();
+    tree.children.push({
+      id: "task-3",
+      data: {
+        name: "Archive",
+        status: "Open",
+        "due date": undefined,
+        memo: [],
+      },
+      children: [],
+    });
+
+    expect(canIndentNode("task-3", tree)).toBe(true);
+    indentNode("task-3", tree);
+    expect(tree.children.map((child) => child.id)).toEqual(["task-1", "task-2"]);
+    expect(getNode("task-2", tree).children.map((child) => child.id)).toEqual([
+      "task-2-1",
+      "task-3",
+    ]);
+
+    expect(canOutdentNode("task-3", tree)).toBe(true);
+    outdentNode("task-3", tree);
+    expect(tree.children.map((child) => child.id)).toEqual([
+      "task-1",
+      "task-2",
+      "task-3",
+    ]);
   });
 });
