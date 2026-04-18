@@ -326,15 +326,13 @@
     <p style="color: white;">loading...</p>
   {/if}
 </div>
-<body style="width: 100%; height: 100%;">
-  <Dialog
-    show={show_confirm}
-    toggle={toggle_confirm}
-    header="Confirm."
-    content={`Do you really delete "${project_name_confirm}"?`}
-    callback={callback_confirm}
-  />
-</body>
+<Dialog
+  show={show_confirm}
+  toggle={toggle_confirm}
+  header="Confirm."
+  content={`Do you really delete "${project_name_confirm}"?`}
+  callback={callback_confirm}
+/>
 
 <style>
   .Container {
