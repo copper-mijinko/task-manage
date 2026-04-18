@@ -42,8 +42,8 @@
     "@rollup/plugin-commonjs": "^17.1.0",
     "@rollup/plugin-node-resolve": "^11.2.1",
     "@rollup/plugin-typescript": "^8.5.0",
-    "@sveltejs/vite-plugin-svelte": "^4.0.4",
-    "@sveltejs/vite-plugin-svelte-inspector": "^3.0.1",
+    "@sveltejs/vite-plugin-svelte": "^5.1.1",
+    "@sveltejs/vite-plugin-svelte-inspector": "^4.0.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/svelte": "^5.3.1",
     "@tsconfig/svelte": "^5.0.8",
@@ -62,8 +62,8 @@
     "svelte-preprocess": "^6.0.3",
     "tslib": "^2.0.0",
     "typescript": "^5.9.3",
-    "vite": "^5.4.21",
-    "vitest": "^0.34.6"
+    "vite": "^6.4.2",
+    "vitest": "^4.1.4"
   },
   "dependencies": {
     "@commonify/lowdb": "^3.0.0",
