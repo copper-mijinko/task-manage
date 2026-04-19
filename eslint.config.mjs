@@ -24,9 +24,6 @@ export default [
         parser: tseslint.parser,
       },
     },
-    rules: {
-      "@typescript-eslint/no-unused-vars": "off",
-    },
   },
   {
     rules: {
@@ -35,6 +32,12 @@ export default [
         "error",
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
       ],
+    },
+  },
+  {
+    files: ["**/*.svelte"],
+    rules: {
+      "@typescript-eslint/no-unused-vars": "off",
     },
   },
   {
