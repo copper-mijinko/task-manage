@@ -81,14 +81,23 @@ export const info_ids = writable<ProjectListItem[]>([
   { id: "9ba28822-6240-4280-9da3-63ac6b8356a6", name: "Usage" },
 ]);
 
+// eslint-disable-next-line prefer-const
 export let project_ids: ProjectIdsStore;
+// eslint-disable-next-line prefer-const
 export let tree_data: TreeDataStore;
+// eslint-disable-next-line prefer-const
 export let selected_type: Writable<SelectedType>;
+// eslint-disable-next-line prefer-const
 export let table_selected_id: Writable<string | undefined>;
+// eslint-disable-next-line prefer-const
 export let closed_node_ids: ClosedNodeIdsStore;
+// eslint-disable-next-line prefer-const
 export let selected_id: SelectedIdStore;
+// eslint-disable-next-line prefer-const
 export let theme: ThemeStore;
+// eslint-disable-next-line prefer-const
 export let filter: FilterStore;
+// eslint-disable-next-line prefer-const
 export let filtered_data: Writable<TreeData | null | undefined>;
 
 export function setTaskDetailWindowTarget(projectId: string, taskId: string) {
