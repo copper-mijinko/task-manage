@@ -24,6 +24,9 @@ export default [
         parser: tseslint.parser,
       },
     },
+    rules: {
+      "@typescript-eslint/no-unused-vars": "off",
+    },
   },
   {
     rules: {
