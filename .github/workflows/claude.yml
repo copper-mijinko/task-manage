@@ -35,7 +35,7 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          claude_args: '--dangerously-allow-all'
+          claude_args: '--allowedTools "Bash(npm install),Bash(npm ci),Bash(git add:*),Bash(git commit:*),Bash(git push:*)"'
 
           # This is an optional setting that allows Claude to read CI results on PRs
           additional_permissions: |
