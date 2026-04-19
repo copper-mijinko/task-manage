@@ -93,7 +93,6 @@ export let table_selected_id: Writable<string | undefined>;
 export let closed_node_ids: ClosedNodeIdsStore;
 // eslint-disable-next-line prefer-const
 export let selected_id: SelectedIdStore;
-// eslint-disable-next-line prefer-const
 export let theme: ThemeStore;
 // eslint-disable-next-line prefer-const
 export let filter: FilterStore;
@@ -597,6 +596,7 @@ selected_type = writable<SelectedType>(undefined);
 table_selected_id = writable<string | undefined>(undefined);
 closed_node_ids = createClosedNodeIds(new Set<string>());
 selected_id = createSelectedID(undefined);
+// eslint-disable-next-line prefer-const
 theme = createTheme(undefined);
 filter = createFilter({});
 filtered_data = writable<TreeData | null | undefined>(undefined);
