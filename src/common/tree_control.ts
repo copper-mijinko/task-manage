@@ -280,9 +280,9 @@ export function flattenVisibleTree(
     }
 
     const childCount = node.children.length;
-    for (let index = 0; index < childCount; index++) {
-      visit(node.children[index], depth + 1, node.id, index, childCount);
-    }
+    node.children.forEach((child, index) => {
+      visit(child, depth + 1, node.id, index, childCount);
+    });
   };
 
   visit(tree_data, 0, undefined, 0, 1);
@@ -340,14 +340,14 @@ export function addNode(
   // insert or append
   switch (action) {
     case "insert":
-    case "insert_after":
+    case "insert_after": {
       const base_parent_tree = getParent(base, tree_data);
       if (!base_parent_tree) {
         return tree_data;
       }
       let index = undefined;
       let i = 0;
-      for (let child of base_parent_tree.children) {
+      for (const child of base_parent_tree.children) {
         if (child.id == base) {
           index = action == "insert" ? i : i + 1;
           break;
@@ -359,13 +359,15 @@ export function addNode(
       }
       base_parent_tree.children.splice(index, 0, node);
       break;
-    case "append":
+    }
+    case "append": {
       const base_tree = getNode(base, tree_data);
       if (!base_tree) {
         return tree_data;
       }
       base_tree.children.push(node);
       break;
+    }
   }
   return tree_data
 }
@@ -377,7 +379,7 @@ export function rmNode(target: string, tree_data: TreeData): TreeData {
   }
   let index = undefined;
   let i = 0;
-  for (let child of target_parent_tree.children) {
+  for (const child of target_parent_tree.children) {
     if (child.id == target) {
       index = i;
       break;

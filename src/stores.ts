@@ -168,7 +168,6 @@ function createProjectIds(
 
       const metaKey = `closed_nodes_${projectId}`;
       window.electronAPI.deleteMetaData(metaKey);
-      console.log(`Delete meta-data in removing a project: ${metaKey}`);
 
       if (projectId === get(selected_id)) {
         selected_type.set(undefined);
@@ -241,7 +240,6 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
 
             const metaKey = `closed_nodes_${projectId}`;
             const idsArray = Array.from(newState);
-            console.log(`Update meta in removing a node: ${metaKey}`, idsArray);
             window.electronAPI.setMetaData(metaKey, idsArray);
 
             return newState;
@@ -496,14 +494,12 @@ function createClosedNodeIds(initialValue: Set<string>): ClosedNodeIdsStore {
     try {
       const metaKey = `closed_nodes_${projectId}`;
       const result = await window.electronAPI.getMetaData(metaKey);
-      console.log(`Read: ${metaKey}`, result);
 
       const newState = isStringArray(result) ? new Set(result) : new Set<string>();
       projectExpandedStates.set(projectId, newState);
       set(newState);
       return newState;
-    } catch (error) {
-      console.error("状態読み込みエラー:", error);
+    } catch {
       return new Set<string>();
     }
   };
@@ -514,10 +510,9 @@ function createClosedNodeIds(initialValue: Set<string>): ClosedNodeIdsStore {
     try {
       const metaKey = `closed_nodes_${projectId}`;
       const idsArray = Array.from(state);
-      console.log(`Save: ${metaKey}`, idsArray);
       window.electronAPI.setMetaData(metaKey, idsArray);
-    } catch (error) {
-      console.error("状態保存エラー:", error);
+    } catch {
+      // ignore save error
     }
   };
 
@@ -580,7 +575,6 @@ function createClosedNodeIds(initialValue: Set<string>): ClosedNodeIdsStore {
 
         const metaKey = `closed_nodes_${projectId}`;
         const idsArray = Array.from(newState);
-        console.log(`Update in removing a node: ${metaKey}`, idsArray);
         window.electronAPI.setMetaData(metaKey, idsArray);
 
         return newState;
