@@ -17,12 +17,7 @@
     {#if ok || cancel}
       <div class="control">
         {#if cancel}
-          <Button
-            use_ripple={false}
-            variant="text"
-            content={cancel}
-            on:click={toggle}
-          />
+          <Button use_ripple={false} variant="text" content={cancel} on:click={toggle} />
         {/if}
         {#if ok}
           <Button

@@ -25,7 +25,7 @@ export function tooltip(
     disable: false,
     wrapped: false,
     force: false,
-  },
+  }
 ) {
   const backgroundColor = params.backgroundColor ?? "white";
   const color = params.color ?? "black";
@@ -34,7 +34,7 @@ export function tooltip(
 
   const judge = () => {
     return !disable && (force || node.scrollWidth > node.offsetWidth);
-  }
+  };
 
   let tooltip: HTMLDivElement | undefined;
   const handleMouseEnter = (e: MouseEvent) => {
@@ -47,7 +47,7 @@ export function tooltip(
     } else {
       tooltip.textContent = node.textContent ?? node.value ?? "";
     }
-		tooltip.style = `
+    tooltip.style = `
       display: flex;
       justify-content: center;
       align-items: center;
@@ -63,30 +63,30 @@ export function tooltip(
       z-index: 9999999999999999999;
 		`;
     document.body.appendChild(tooltip);
-  }
+  };
   const handleMouseLeave = (_event: MouseEvent) => {
     if (tooltip && document.body.contains(tooltip)) {
       document.body.removeChild(tooltip);
     }
-  }
+  };
   const handleMouseMove = (e: MouseEvent) => {
     if (tooltip) {
       tooltip.style.left = `calc(${e.pageX}px + 1rem)`;
       tooltip.style.top = `calc(${e.pageY}px + 1rem)`;
     }
-  }
-  const target = params.wrapped ? node.parentElement ?? node : node;
-  target.addEventListener('mouseenter', handleMouseEnter);
-  target.addEventListener('mouseleave', handleMouseLeave);
-	target.addEventListener('mousemove', handleMouseMove);
+  };
+  const target = params.wrapped ? (node.parentElement ?? node) : node;
+  target.addEventListener("mouseenter", handleMouseEnter);
+  target.addEventListener("mouseleave", handleMouseLeave);
+  target.addEventListener("mousemove", handleMouseMove);
 
   return {
     destroy() {
-      target.removeEventListener('mouseenter', handleMouseEnter);
-      target.removeEventListener('mouseleave', handleMouseLeave);
-      target.removeEventListener('mousemove', handleMouseMove);
-    }
-  }
+      target.removeEventListener("mouseenter", handleMouseEnter);
+      target.removeEventListener("mouseleave", handleMouseLeave);
+      target.removeEventListener("mousemove", handleMouseMove);
+    },
+  };
 }
 
 // ripple
@@ -96,7 +96,7 @@ export function ripple(
     duration: 500,
     color: "rgba(0, 0, 0, 0.16)",
     disable: false,
-  },
+  }
 ) {
   const duration = params.duration ?? 500;
   const color = params.color ?? "rgba(0, 0, 0, 0.16)";
@@ -133,28 +133,31 @@ export function ripple(
     const y = e.clientY;
     const bt = rect.top;
     const bl = rect.left;
-    
+
     const circle = document.createElement("span");
     circle.classList.add("circle");
     const size = Math.max(rect.width, rect.height);
-    circle.style.top = `${y-bt-size/2}px`;
-    circle.style.left = `${x-bl-size/2}px`;
+    circle.style.top = `${y - bt - size / 2}px`;
+    circle.style.left = `${x - bl - size / 2}px`;
     circle.style.width = `${size}px`;
     circle.style.height = `${size}px`;
     circle.style.backgroundColor = color;
     circle.style.position = "absolute";
     circle.style.borderRadius = "50%";
-    circle.animate({
-      opacity: [1, 0],
-      scale: [0, 2]
-    }, {
-      duration: duration,
-      easing: "ease-out"
-    })
-    
-    setTimeout(()=>{
+    circle.animate(
+      {
+        opacity: [1, 0],
+        scale: [0, 2],
+      },
+      {
+        duration: duration,
+        easing: "ease-out",
+      }
+    );
+
+    setTimeout(() => {
       clone.remove();
-    }, duration*0.8);
+    }, duration * 0.8);
 
     clone.appendChild(circle);
   };
@@ -164,28 +167,28 @@ export function ripple(
   return {
     destroy() {
       node.removeEventListener("click", handleClick);
-    }
-  }
+    },
+  };
 }
 
 // clickOutside
 export function clickOutside(node: HTMLElement) {
-	const handleClick = (event: MouseEvent) => {
+  const handleClick = (event: MouseEvent) => {
     const rect = node.getBoundingClientRect();
-		if (!(event.target instanceof Node)) {
+    if (!(event.target instanceof Node)) {
       return;
     }
 
-		if (!node.contains(event.target) && rect.width && rect.height) {
-			node.dispatchEvent(new CustomEvent("outclick"));
-		}
-	};
+    if (!node.contains(event.target) && rect.width && rect.height) {
+      node.dispatchEvent(new CustomEvent("outclick"));
+    }
+  };
 
-	document.addEventListener("click", handleClick, true);
+  document.addEventListener("click", handleClick, true);
 
-	return {
-		destroy() {
-			document.removeEventListener("click", handleClick, true);
-		}
-	};
+  return {
+    destroy() {
+      document.removeEventListener("click", handleClick, true);
+    },
+  };
 }

@@ -36,8 +36,7 @@
   $: if (selectedMemoIndex >= memo.length && memo.length > 0) {
     selectedMemoIndex = memo.length - 1;
   }
-  $: editedContent =
-    memo.length > selectedMemoIndex ? memo[selectedMemoIndex].content : "";
+  $: editedContent = memo.length > selectedMemoIndex ? memo[selectedMemoIndex].content : "";
   let newMemoTitle = "memo";
 
   // 安全にアクセスできるように配列を初期化

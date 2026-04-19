@@ -7,17 +7,8 @@
   import Card from "./Card.svelte";
   import Dialog from "./Dialog.svelte";
   import SearchBox from "./SearchBox.svelte";
-  import {
-    table_selected_id,
-    tree_data,
-    closed_node_ids,
-  } from "../stores.ts";
-  import {
-    getNode,
-    addNode,
-    rmNode,
-    getParent,
-  } from "../common/tree_control.ts";
+  import { table_selected_id, tree_data, closed_node_ids } from "../stores.ts";
+  import { getNode, addNode, rmNode, getParent } from "../common/tree_control.ts";
   import { getDefaultNode } from "../common/tree_control.ts";
 
   // ページ内検索はstoresから共有
@@ -58,12 +49,7 @@
       }
 
       // ノードを追加
-      $tree_data.data = addNode(
-        new_node,
-        $table_selected_id,
-        $tree_data.data,
-        action,
-      );
+      $tree_data.data = addNode(new_node, $table_selected_id, $tree_data.data, action);
 
       // 親ノードが折りたたまれている場合は展開する
       if (parentId && $closed_node_ids.has(parentId)) {
@@ -115,10 +101,7 @@
                 normalColor={"var(--theme-color-Primary-main)"}
                 on:click={(e) => handleAdd(e, "insert_after")}
               >
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
                   ><path
                     d="M12 5V19M5 12H19"
                     stroke="var(--theme-color-Main-main)"
@@ -200,9 +183,7 @@
     cancel={"close"}
   />
 {:else}
-  <h1
-    style="color:var(--theme-color-Sub-main); display:flex; justify-content:center"
-  >
+  <h1 style="color:var(--theme-color-Sub-main); display:flex; justify-content:center">
     Loading...
   </h1>
 {/if}

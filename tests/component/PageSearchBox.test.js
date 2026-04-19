@@ -75,7 +75,9 @@ describe("PageSearchBox", () => {
     listeners.searchResultUpdated({ matches: 4, activeMatchOrdinal: 2 });
     await tick();
 
-    expect(screen.getByText((content) => content.replace(/\s+/g, " ").trim() === "2 / 4")).toBeInTheDocument();
+    expect(
+      screen.getByText((content) => content.replace(/\s+/g, " ").trim() === "2 / 4")
+    ).toBeInTheDocument();
   });
 
   test("closes on Escape and notifies the renderer to clear highlights", async () => {
@@ -112,7 +114,9 @@ describe("PageSearchBox", () => {
 
     expect(api.stopFindInPage).toHaveBeenCalled();
     expect(input).toHaveValue("");
-    expect(screen.getByText((content) => content.replace(/\s+/g, " ").trim() === "0 / 0")).toBeInTheDocument();
+    expect(
+      screen.getByText((content) => content.replace(/\s+/g, " ").trim() === "0 / 0")
+    ).toBeInTheDocument();
     expect(input).toHaveFocus();
   });
 
@@ -131,6 +135,8 @@ describe("PageSearchBox", () => {
 
     expect(api.stopFindInPage).toHaveBeenCalled();
     expect(input).toHaveValue("");
-    expect(screen.getByText((content) => content.replace(/\s+/g, " ").trim() === "0 / 0")).toBeInTheDocument();
+    expect(
+      screen.getByText((content) => content.replace(/\s+/g, " ").trim() === "0 / 0")
+    ).toBeInTheDocument();
   });
 });

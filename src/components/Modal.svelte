@@ -47,9 +47,7 @@
 >
   <Card style="width: 100%; height:100%;">
     <slot>
-      <h1
-        style="color:var(--theme-color-Sub-main); display:flex; justify-content:center"
-      >
+      <h1 style="color:var(--theme-color-Sub-main); display:flex; justify-content:center">
         This is default modal.
       </h1>
     </slot>

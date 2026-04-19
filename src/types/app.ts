@@ -38,10 +38,7 @@ export interface ElectronAPI {
   openExternalLink: (url: string) => void;
   openTaskDetailWindow: (detailData: TaskDetailWindowData) => void;
   getTaskDetailWindowData: () => Promise<TaskDetailWindowData>;
-  findInPage: (
-    text: string,
-    options?: Record<string, unknown>,
-  ) => Promise<FindInPageResult | void>;
+  findInPage: (text: string, options?: Record<string, unknown>) => Promise<FindInPageResult | void>;
   findInPageNext: (text: string) => Promise<void>;
   findInPagePrevious: (text: string) => Promise<FindInPageResult | void>;
   stopFindInPage: () => void;

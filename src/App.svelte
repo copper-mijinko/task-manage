@@ -19,10 +19,11 @@
   import TaskDetailWindow from "./components/TaskDetailWindow.svelte";
   let show = Array(4).fill(false);
 
-  const currentHash =
-    typeof window !== "undefined" ? window.location.hash : "";
+  const currentHash = typeof window !== "undefined" ? window.location.hash : "";
   const currentSearch =
-    typeof window !== "undefined" ? new URLSearchParams(window.location.search) : new URLSearchParams();
+    typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search)
+      : new URLSearchParams();
 
   ////////////// Initial Settings //////////////
   init_store();
@@ -129,9 +130,7 @@
       />
     {:else}
       {#if !($selected_type && $selected_id)}
-        <h1
-          style="color:var(--theme-color-Sub-main); display:flex; justify-content:center"
-        >
+        <h1 style="color:var(--theme-color-Sub-main); display:flex; justify-content:center">
           No data.
         </h1>
       {/if}

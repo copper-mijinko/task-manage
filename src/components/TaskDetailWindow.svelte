@@ -10,9 +10,7 @@
   export let initialProjectId = "";
   export let ready = false;
 
-  $: node = initialTaskId && $tree_data
-    ? getNode(initialTaskId, $tree_data.data)
-    : undefined;
+  $: node = initialTaskId && $tree_data ? getNode(initialTaskId, $tree_data.data) : undefined;
   $: taskName = node?.data?.name || initialTaskName;
   $: isProjectDeleted = ready && initialProjectId && $selected_id !== initialProjectId;
   $: isTaskDeleted =
