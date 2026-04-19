@@ -30,6 +30,7 @@
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "dist": "npm run build && electron-builder -w",
     "lint": "eslint src tests",
+    "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:unit": "vitest run tests/unit",
