@@ -56,8 +56,8 @@
         selected_id.set(detailData.projectId);
         table_selected_id.set(detailData.taskId);
       }
-    } catch (error) {
-      console.error("タスク詳細ウィンドウ初期化エラー:", error);
+    } catch {
+      // ignore initialization error
     } finally {
       detailWindowReady = true;
     }
@@ -74,8 +74,8 @@
           theme.set(currentTheme);
         }
       }
-    } catch (error) {
-      console.error("テーマ初期化エラー:", error);
+    } catch {
+      // ignore theme initialization error
     }
   }
 
@@ -101,7 +101,6 @@
     // テーマ変更通知のリスナー登録
     if (window.electronAPI && window.electronAPI.onThemeChanged) {
       window.electronAPI.onThemeChanged((newTheme) => {
-        console.log("Received theme change:", newTheme);
         theme.set(newTheme);
       });
     }

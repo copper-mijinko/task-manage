@@ -66,7 +66,7 @@ export function filterTree(
   if (!hasFilters) return tree; // Return tree as is if no filters
 
   // Evaluate each filter
-  for (let key in filter) {
+  for (const key in filter) {
     const keywords = filter[key];
     if (!keywords || keywords.length === 0) continue;
 
@@ -95,7 +95,7 @@ export function filterTree(
 
   // Process child nodes
   const matchedChildren: TreeData[] = [];
-  for (let child of (tree.children || [])) {
+  for (const child of (tree.children || [])) {
     if (nameFilterMatch && allFiltersMatch) {
       // If name filter matches and all filters match,
       // include all child nodes (no filtering)
@@ -128,8 +128,6 @@ function cloneTreeWithAllChildren(tree: TreeData): TreeData {
 }
 
 export function getDefaultNode(): TreeData {
-  let date = new Date();
-  date.setDate(date.getDate() + 7);
   return {
     "id": `${uuidV4()}`,
     "data": {
@@ -143,7 +141,6 @@ export function getDefaultNode(): TreeData {
 }
 
 export function getDefaultProject(): ProjectData {
-  let date = new Date();
   return {
     "headers": [
       {
@@ -188,7 +185,7 @@ export function getNode(
   if (tree_data.id == base) {
     return tree_data
   }
-  for (let child of tree_data.children) {
+  for (const child of tree_data.children) {
     if (child.id == base) {
       base_tree = child;
     } else {
@@ -305,7 +302,7 @@ export function getParent(
   if (tree_data.id == base) {
     return undefined
   }
-  for (let child of tree_data.children) {
+  for (const child of tree_data.children) {
     if (child.id == base) {
       parent_tree = tree_data;
     } else {
