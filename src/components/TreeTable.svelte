@@ -42,9 +42,7 @@
       return 0;
     }
 
-    return (
-      parseFloat(window.getComputedStyle(document.documentElement).fontSize) * 2
-    );
+    return parseFloat(window.getComputedStyle(document.documentElement).fontSize) * 2;
   };
 
   const buildStickyTrail = (visibleRows, currentScrollTop) => {
@@ -59,7 +57,7 @@
 
     const topVisibleIndex = Math.min(
       visibleRows.length - 1,
-      Math.max(0, Math.floor(currentScrollTop / rowHeightPx)),
+      Math.max(0, Math.floor(currentScrollTop / rowHeightPx))
     );
     const topRow = visibleRows[topVisibleIndex];
     if (!topRow || topRow.depth === 0) {
@@ -72,9 +70,7 @@
 
     while (currentRow) {
       trail.unshift(currentRow);
-      currentRow = currentRow.parentId
-        ? rowById.get(currentRow.parentId)
-        : undefined;
+      currentRow = currentRow.parentId ? rowById.get(currentRow.parentId) : undefined;
     }
 
     return trail;
@@ -100,11 +96,7 @@
     let mutation_observer = new MutationObserver(() => {
       let headers, data_rows;
       // Create resizres
-      [resizers, headers, data_rows] = createResizers(
-        resizers,
-        false,
-        resize_observer,
-      );
+      [resizers, headers, data_rows] = createResizers(resizers, false, resize_observer);
       // Event listners
       unsetResizerEvents(resizers, handlers);
       handlers = setResizersEvents(resizers, headers, data_rows);
@@ -112,11 +104,7 @@
     mutation_observer.observe(table_root, { subtree: true, childList: true });
   });
 
-  const createResizers = (
-    resizers = [],
-    is_default = true,
-    resize_observer = null,
-  ) => {
+  const createResizers = (resizers = [], is_default = true, resize_observer = null) => {
     // Get elms
     let rows = table_root.querySelectorAll(".TableRow");
     let headers = Array.from(rows[0].querySelectorAll(".TableHeader"));
@@ -129,12 +117,11 @@
     // Set width
     const default_ratio_sum = $tree_data.headers.reduce(
       (partialSum, header) => partialSum + header.default_ratio,
-      0,
+      0
     );
     const default_root_width = rows[0].getBoundingClientRect().width;
     const default_data_widths = $tree_data.headers.map(
-      (header) =>
-        (default_root_width * header.default_ratio) / default_ratio_sum,
+      (header) => (default_root_width * header.default_ratio) / default_ratio_sum
     );
     headers.forEach((header, index) => {
       if (is_default) {
@@ -144,8 +131,7 @@
         });
       } else {
         data_rows.forEach((data_row, _) => {
-          data_row[index].style.width =
-            `${header.getBoundingClientRect().width}px)`;
+          data_row[index].style.width = `${header.getBoundingClientRect().width}px)`;
         });
       }
     });
@@ -183,8 +169,7 @@
       });
       let new_table_width = entries[0].contentRect.width;
       const new_header_widths = headers.map(
-        (h) =>
-          (h.getBoundingClientRect().width * new_table_width) / table_width,
+        (h) => (h.getBoundingClientRect().width * new_table_width) / table_width
       );
       headers.forEach((header, index) => {
         header.style.width = `${new_header_widths[index]}px`;
@@ -225,8 +210,7 @@
     for (let i = 0; i < resizers.length; i++) {
       const resizer = resizers[i];
       const minWidths = headers.map(
-        (columnHeader) =>
-          parseFloat(window.getComputedStyle(columnHeader).minWidth, 10) || 10,
+        (columnHeader) => parseFloat(window.getComputedStyle(columnHeader).minWidth, 10) || 10
       );
 
       // Track the current position of mouse
@@ -235,8 +219,7 @@
 
       const mouseDownHandler = function (e) {
         let cssText = document.body.style.cssText;
-        document.body.style.cssText =
-          cssText + "cursor: col-resize !important;";
+        document.body.style.cssText = cssText + "cursor: col-resize !important;";
 
         // Add HandlingResizer class
         resizer.classList.add("HandlingResizer");
@@ -245,9 +228,7 @@
         x = e.clientX;
 
         // Calculate the current width of column
-        initialWidths = headers.map((columnHeader) =>
-          columnHeader.getBoundingClientRect().width,
-        );
+        initialWidths = headers.map((columnHeader) => columnHeader.getBoundingClientRect().width);
 
         // Attach listeners for document's events
         document.addEventListener("mousemove", mouseMoveHandler);
@@ -264,7 +245,7 @@
             .map((width, index) => width - minWidths[index]);
           const maxLeftDelta = leftShrinkCapacities.reduce(
             (partialSum, width) => partialSum + width,
-            0,
+            0
           );
           const appliedDelta = Math.max(dx, -maxLeftDelta);
 
@@ -285,10 +266,7 @@
         const shrinkCapacities = initialWidths
           .slice(i + 1)
           .map((width, index) => width - minWidths[i + 1 + index]);
-        const maxDelta = shrinkCapacities.reduce(
-          (partialSum, width) => partialSum + width,
-          0,
-        );
+        const maxDelta = shrinkCapacities.reduce((partialSum, width) => partialSum + width, 0);
         const appliedDelta = Math.min(dx, maxDelta);
 
         nextWidths[i] = initialWidths[i] + appliedDelta;
@@ -401,8 +379,7 @@
     const row = rows.find((item) => item.id === id);
     const parentNode = getParent(id, $tree_data.data);
     const currentIndex = parentNode?.children.findIndex((child) => child.id === id) ?? -1;
-    const newParentId =
-      currentIndex > 0 ? parentNode.children[currentIndex - 1]?.id : undefined;
+    const newParentId = currentIndex > 0 ? parentNode.children[currentIndex - 1]?.id : undefined;
 
     if (!newParentId || !row?.canIndent) {
       return;

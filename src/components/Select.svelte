@@ -7,10 +7,7 @@
   export let color = "var(--theme-color-Sub-main)";
 </script>
 
-<div
-  class="select"
-  style="--backgroundColor: {backgroundColor}; --color: {color}; {style}"
->
+<div class="select" style="--backgroundColor: {backgroundColor}; --color: {color}; {style}">
   <select
     {id}
     {value}

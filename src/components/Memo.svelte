@@ -202,11 +202,7 @@
   });
 
   // 外部から更新されたコンテンツとの同期（編集中は同期しない）
-  $: if (
-    quill &&
-    !isEditing &&
-    !isEqual(content, lastSavedContent)
-  ) {
+  $: if (quill && !isEditing && !isEqual(content, lastSavedContent)) {
     // 一時的に編集中フラグを立てる（再描画防止）
     isEditing = true;
 

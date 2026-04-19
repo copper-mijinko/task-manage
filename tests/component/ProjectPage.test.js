@@ -118,7 +118,9 @@ describe("ProjectPage", () => {
     const buttons = container.querySelectorAll(".TableButtons button");
 
     await fireEvent.click(buttons[2]);
-    expect(screen.getByText((content) => content.includes("Do you really delete"))).toBeInTheDocument();
+    expect(
+      screen.getByText((content) => content.includes("Do you really delete"))
+    ).toBeInTheDocument();
 
     await fireEvent.click(screen.getByRole("button", { name: "ok" }));
     await tick();

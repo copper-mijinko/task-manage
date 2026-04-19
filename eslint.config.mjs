@@ -62,12 +62,6 @@ export default [
     },
   },
   {
-    ignores: [
-      "dist/**",
-      "renderer/**",
-      "node_modules/**",
-      "*.config.js",
-      "electron/**",
-    ],
+    ignores: ["dist/**", "renderer/**", "node_modules/**", "*.config.js", "electron/**"],
   },
 ];

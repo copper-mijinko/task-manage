@@ -150,9 +150,7 @@ describe("tree_control", () => {
     ]);
 
     rmNode("task-3", tree);
-    expect(getNode("task-2", tree).children.map((child) => child.id)).toEqual([
-      "task-2-1",
-    ]);
+    expect(getNode("task-2", tree).children.map((child) => child.id)).toEqual(["task-2-1"]);
   });
 
   test("reorderTree can move a node before another node", () => {
@@ -180,18 +178,10 @@ describe("tree_control", () => {
     expect(canMoveNodeDown("task-1", tree)).toBe(true);
 
     moveNodeDown("task-1", tree);
-    expect(tree.children.map((child) => child.id)).toEqual([
-      "task-2",
-      "task-1",
-      "task-3",
-    ]);
+    expect(tree.children.map((child) => child.id)).toEqual(["task-2", "task-1", "task-3"]);
 
     moveNodeUp("task-1", tree);
-    expect(tree.children.map((child) => child.id)).toEqual([
-      "task-1",
-      "task-2",
-      "task-3",
-    ]);
+    expect(tree.children.map((child) => child.id)).toEqual(["task-1", "task-2", "task-3"]);
   });
 
   test("move and hierarchy helpers are no-ops for invalid or blocked operations", () => {
@@ -234,11 +224,7 @@ describe("tree_control", () => {
 
     expect(canOutdentNode("task-3", tree)).toBe(true);
     outdentNode("task-3", tree);
-    expect(tree.children.map((child) => child.id)).toEqual([
-      "task-1",
-      "task-2",
-      "task-3",
-    ]);
+    expect(tree.children.map((child) => child.id)).toEqual(["task-1", "task-2", "task-3"]);
   });
 
   test("getNode returns undefined when the target does not exist", () => {

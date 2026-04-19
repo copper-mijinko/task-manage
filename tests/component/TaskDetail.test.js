@@ -74,9 +74,7 @@ describe("TaskDetail", () => {
     await tick();
 
     expect(screen.getByDisplayValue("memo")).toBeInTheDocument();
-    expect(get(tree_data).data.children[0].data.memo).toEqual([
-      { title: "memo", content: "" },
-    ]);
+    expect(get(tree_data).data.children[0].data.memo).toEqual([{ title: "memo", content: "" }]);
   });
 
   test("deletes the selected memo after confirmation", async () => {
@@ -89,7 +87,9 @@ describe("TaskDetail", () => {
 
     const buttons = container.querySelectorAll(".memotab-control button");
     await fireEvent.click(buttons[1]);
-    expect(screen.getByText((content) => content.includes("Do you really delete"))).toBeInTheDocument();
+    expect(
+      screen.getByText((content) => content.includes("Do you really delete"))
+    ).toBeInTheDocument();
 
     await fireEvent.click(screen.getByRole("button", { name: "ok" }));
     await tick();

@@ -8,12 +8,7 @@
   import IconButton from "./IconButton.svelte";
   import Dialog from "./Dialog.svelte";
   import { ripple, tooltip } from "../common/common.js";
-  import {
-    project_ids,
-    info_ids,
-    selected_type,
-    selected_id,
-  } from "../stores.ts";
+  import { project_ids, info_ids, selected_type, selected_id } from "../stores.ts";
 
   // Dialog
   let show_confirm = false;
@@ -51,9 +46,7 @@
   const handleDelete = (e, project_id) => {
     e.stopPropagation();
     project_id_confirm = project_id;
-    project_name_confirm = $project_ids.filter(
-      (node, i) => node.id == project_id,
-    )[0].name;
+    project_name_confirm = $project_ids.filter((node, i) => node.id == project_id)[0].name;
     show_confirm = true;
   };
 
@@ -79,9 +72,7 @@
     name_tag.innerText = name_text;
     document.body.appendChild(name_tag);
 
-    const rem = parseFloat(
-      window.getComputedStyle(document.documentElement).fontSize,
-    );
+    const rem = parseFloat(window.getComputedStyle(document.documentElement).fontSize);
     e.dataTransfer.setDragImage(name_tag, -rem, -rem);
 
     dragged_id = el.dataset.id;
@@ -106,10 +97,7 @@
     if (el.dataset.section !== "Projects") return;
 
     // If not the dragging item itself or the currently dragged item
-    if (
-      !el.classList.contains("Dragging") &&
-      el.dataset.id !== dragged_id
-    ) {
+    if (!el.classList.contains("Dragging") && el.dataset.id !== dragged_id) {
       dragOverTarget = el;
       const rect = el.getBoundingClientRect();
       const y = e.clientY;
@@ -238,10 +226,7 @@
             >
           {/if}
           {#if menu.name == "Info"}
-            <svg
-              class="Logo"
-              viewBox="0 0 24 24"
-              xmlns="http://www.w3.org/2000/svg"
+            <svg class="Logo" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"
               ><path
                 d="M12 18.5C12.5523 18.5 13 18.0523 13 17.5L13 10.5C13 9.94772 12.5523 9.5 12 9.5C11.4477 9.5 11 9.94772 11 10.5L11 17.5C11 18.0523 11.4477 18.5 12 18.5Z"
               ></path><path
@@ -266,10 +251,7 @@
                   handleAdd(e);
                 }}
               >
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
                   ><path
                     d="M12 5V19M5 12H19"
                     stroke="white"

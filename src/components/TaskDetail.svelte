@@ -5,9 +5,8 @@
   import MemoTab from "./MemoTab.svelte";
 
   $: is_selected = $table_selected_id ? true : false;
-  $: node = $table_selected_id && $tree_data
-    ? getNode($table_selected_id, $tree_data.data)
-    : undefined;
+  $: node =
+    $table_selected_id && $tree_data ? getNode($table_selected_id, $tree_data.data) : undefined;
   $: name = node ? node.data["name"] : "Select Task";
   $: memo = node ? node.data["memo"] : [];
   const changeData = (node, key, value) => {
@@ -32,15 +31,11 @@
     changeData(
       node,
       "memo",
-      node.data.memo.filter((_, i) => i !== index),
+      node.data.memo.filter((_, i) => i !== index)
     );
     return true;
   };
-  const saveMemo = (
-    editedContent,
-    selectedMemoIndex,
-    cursorPosition = null,
-  ) => {
+  const saveMemo = (editedContent, selectedMemoIndex, cursorPosition = null) => {
     // 保存処理を行うが、再描画をトリガーしないようにする
     const updatedMemo = [...node.data["memo"]];
 
@@ -79,9 +74,7 @@
     {#if is_selected}
       <MemoTab {memo} {saveMemo} {addMemo} {deleteMemo} {renameMemo} />
     {:else}
-      <h1
-        style="color:var(--theme-color-Sub-main); display:flex; justify-content:center"
-      >
+      <h1 style="color:var(--theme-color-Sub-main); display:flex; justify-content:center">
         No data.
       </h1>
     {/if}

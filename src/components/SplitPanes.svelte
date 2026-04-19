@@ -37,27 +37,18 @@
     });
   });
 
-  const createResizers = (
-    resizers = [],
-    is_default = true,
-    resize_observer = null
-  ) => {
+  const createResizers = (resizers = [], is_default = true, resize_observer = null) => {
     // Get elms
     let panes = split_pane_root.querySelectorAll(".Pane");
     // Default
     if (is_default) {
       // Set width
       if (panes.length > defaultRatio.length) {
-        defaultRatio = defaultRatio.concat(
-          new Array(panes.length - defaultRatio.length).fill(1)
-        );
+        defaultRatio = defaultRatio.concat(new Array(panes.length - defaultRatio.length).fill(1));
       } else if (panes.length < defaultRatio.length) {
         defaultRatio = defaultRatio.slice(0, panes.length);
       }
-      const defaultRatio_sum = defaultRatio.reduce(
-        (partialSum, a) => partialSum + a,
-        0
-      );
+      const defaultRatio_sum = defaultRatio.reduce((partialSum, a) => partialSum + a, 0);
       const default_root_width = split_pane_root.getBoundingClientRect().width;
       const default_pane_widths = defaultRatio.map(
         (ratio) => (default_root_width * ratio) / defaultRatio_sum
@@ -101,9 +92,7 @@
       let new_root_width = entries[0].contentRect.width;
       let new_pane_widths = [];
       panes.forEach((pane, index) => {
-        new_pane_widths.push(
-          (pane.getBoundingClientRect().width * new_root_width) / root_width
-        );
+        new_pane_widths.push((pane.getBoundingClientRect().width * new_root_width) / root_width);
       });
       panes.forEach((pane, index) => {
         pane.style.width = `${new_pane_widths[index]}px`;
@@ -146,8 +135,7 @@
 
       const mouseDownHandler = function (e) {
         let cssText = document.body.style.cssText;
-        document.body.style.cssText =
-          cssText + "cursor: col-resize !important;";
+        document.body.style.cssText = cssText + "cursor: col-resize !important;";
 
         // Add HandlingResizer class
         resizer.classList.add("HandlingResizer");
@@ -160,9 +148,7 @@
         wr = pane_r.getBoundingClientRect().width;
 
         // Calculate the curent left of resizer
-        l =
-          resizer.getBoundingClientRect().left -
-          resizer.parentNode.getBoundingClientRect().left;
+        l = resizer.getBoundingClientRect().left - resizer.parentNode.getBoundingClientRect().left;
 
         // Attach listeners for document's events
         document.addEventListener("mousemove", mouseMoveHandler);
@@ -217,11 +203,7 @@
   };
 </script>
 
-<div
-  bind:this={split_pane_root}
-  class:SplitPaneRoot={true}
-  style="--minWidth: {minWidth}"
->
+<div bind:this={split_pane_root} class:SplitPaneRoot={true} style="--minWidth: {minWidth}">
   <slot />
 </div>
 

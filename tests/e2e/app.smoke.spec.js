@@ -14,9 +14,7 @@ function createTempDataDirectory() {
 }
 
 function readJson(tempDir, fileName) {
-  return JSON.parse(
-    fs.readFileSync(path.join(tempDir, fileName), "utf8"),
-  );
+  return JSON.parse(fs.readFileSync(path.join(tempDir, fileName), "utf8"));
 }
 
 async function launchSeededApp() {
@@ -52,11 +50,14 @@ async function closeSeededApp(context) {
   }
 }
 
-async function openTaskDetailWindow(app, detailData = {
-  projectId: "project-1",
-  taskId: "task-1",
-  taskName: "First Task",
-}) {
+async function openTaskDetailWindow(
+  app,
+  detailData = {
+    projectId: "project-1",
+    taskId: "task-1",
+    taskName: "First Task",
+  }
+) {
   const detailWindowPromise = app.electronApp.waitForEvent("window");
 
   await app.window.evaluate((payload) => {
@@ -65,9 +66,7 @@ async function openTaskDetailWindow(app, detailData = {
 
   const detailWindow = await detailWindowPromise;
   await expect(detailWindow.getByText("Task Detail")).toBeVisible();
-  await expect(
-    detailWindow.getByRole("heading", { name: detailData.taskName }),
-  ).toBeVisible();
+  await expect(detailWindow.getByRole("heading", { name: detailData.taskName })).toBeVisible();
 
   return detailWindow;
 }
@@ -76,8 +75,12 @@ test("loads seeded project data in Electron", async () => {
   const app = await launchSeededApp();
 
   try {
-    await expect(app.window.locator('#project-1 input[type="text"]').first()).toHaveValue("Sample Project");
-    await expect(app.window.locator('#task-1 input[type="text"]').first()).toHaveValue("First Task");
+    await expect(app.window.locator('#project-1 input[type="text"]').first()).toHaveValue(
+      "Sample Project"
+    );
+    await expect(app.window.locator('#task-1 input[type="text"]').first()).toHaveValue(
+      "First Task"
+    );
   } finally {
     await closeSeededApp(app);
   }
@@ -109,7 +112,7 @@ test("opens and closes the page search box with keyboard shortcuts", async () =>
           key: "f",
           ctrlKey: true,
           bubbles: true,
-        }),
+        })
       );
     });
 
@@ -134,9 +137,7 @@ test("adds a sibling task from the project toolbar and persists it", async () =>
     await app.window.waitForTimeout(1200);
 
     const db = readJson(app.tempDir, "db.json");
-    expect(
-      db[0].data.children.some((child) => child.data.name === "new_task"),
-    ).toBe(true);
+    expect(db[0].data.children.some((child) => child.data.name === "new_task")).toBe(true);
   } finally {
     await closeSeededApp(app);
   }
@@ -185,9 +186,7 @@ test("keeps the task detail window heading in sync when the task name changes", 
       window.electronAPI.setTreeData(project);
     });
 
-    await expect(
-      detailWindow.getByRole("heading", { name: "Renamed Task" }),
-    ).toBeVisible();
+    await expect(detailWindow.getByRole("heading", { name: "Renamed Task" })).toBeVisible();
   } finally {
     await closeSeededApp(app);
   }
@@ -201,15 +200,13 @@ test("shows a missing-task state when the selected task is deleted", async () =>
 
     await app.window.evaluate(async () => {
       const project = await window.electronAPI.getTreeData("project-1");
-      project.data.children = project.data.children.filter(
-        (child) => child.id !== "task-1",
-      );
+      project.data.children = project.data.children.filter((child) => child.id !== "task-1");
       window.electronAPI.setTreeData(project);
     });
 
     await expect(detailWindow.getByText("Task not found.")).toBeVisible();
     await expect(
-      detailWindow.getByText("The target task was deleted. Rename is still tracked by task ID."),
+      detailWindow.getByText("The target task was deleted. Rename is still tracked by task ID.")
     ).toBeVisible();
   } finally {
     await closeSeededApp(app);
@@ -228,7 +225,7 @@ test("shows a missing-project state when the source project is deleted", async (
 
     await expect(detailWindow.getByText("Project not found.")).toBeVisible();
     await expect(
-      detailWindow.getByText("The project for this detail window was deleted."),
+      detailWindow.getByText("The project for this detail window was deleted.")
     ).toBeVisible();
   } finally {
     await closeSeededApp(app);

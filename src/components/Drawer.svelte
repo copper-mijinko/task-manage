@@ -8,12 +8,7 @@
 {#if show}
   <div class="Mask"></div>
 {/if}
-<div
-  class:Container={true}
-  class:Shown={show}
-  use:clickOutside
-  on:outclick={toggle()}
->
+<div class:Container={true} class:Shown={show} use:clickOutside on:outclick={toggle()}>
   <div class="IconButtonContainer">
     <IconButton
       on:click={toggle()}

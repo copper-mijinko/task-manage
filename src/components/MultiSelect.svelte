@@ -70,12 +70,7 @@
     <div class="listContainer">
       {#each list as elm, i}
         <div class="elmContainer">
-          <input
-            style="margin: auto 0.25rem;"
-            id={elm}
-            type="checkbox"
-            bind:checked={checked[i]}
-          />
+          <input style="margin: auto 0.25rem;" id={elm} type="checkbox" bind:checked={checked[i]} />
           <label style="margin: auto 0.25rem;" for={elm}>{elm}</label>
         </div>
       {/each}

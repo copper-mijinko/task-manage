@@ -1,11 +1,6 @@
-import { uuidV4 } from "./uuid"
+import { uuidV4 } from "./uuid";
 
-export type TaskStatus =
-  | "Open"
-  | "Pending"
-  | "In Progress"
-  | "Completed"
-  | "Canceled";
+export type TaskStatus = "Open" | "Pending" | "In Progress" | "Completed" | "Canceled";
 
 export interface MemoEntry {
   title: string;
@@ -13,47 +8,47 @@ export interface MemoEntry {
 }
 
 export interface TreeNodeData {
-  "name": string,
-  "status": TaskStatus,
-  "due date": `${string}-${string}-${string}` | undefined,
-  "memo": MemoEntry[],
-  [key: string]: unknown,
+  name: string;
+  status: TaskStatus;
+  "due date": `${string}-${string}-${string}` | undefined;
+  memo: MemoEntry[];
+  [key: string]: unknown;
 }
 
 export interface TreeData {
-  "id": string,
-  "data": TreeNodeData,
-  "children": TreeData[]
+  id: string;
+  data: TreeNodeData;
+  children: TreeData[];
 }
 
 export interface ProjectHeader {
-  "name": string,
-  "default_ratio": number
+  name: string;
+  default_ratio: number;
 }
 
 export interface ProjectData {
-  "headers": ProjectHeader[],
-  "data": TreeData,
+  headers: ProjectHeader[];
+  data: TreeData;
 }
 
 export interface VisibleTreeRow {
-  id: string,
-  depth: number,
-  parentId?: string,
-  siblingIndex: number,
-  siblingCount: number,
-  node: TreeData,
-  hasChildren: boolean,
-  expanded: boolean,
-  canMoveUp: boolean,
-  canMoveDown: boolean,
-  canIndent: boolean,
-  canOutdent: boolean,
+  id: string;
+  depth: number;
+  parentId?: string;
+  siblingIndex: number;
+  siblingCount: number;
+  node: TreeData;
+  hasChildren: boolean;
+  expanded: boolean;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  canIndent: boolean;
+  canOutdent: boolean;
 }
 
 export function filterTree(
   tree: TreeData | null | undefined,
-  filter: Record<string, string[]> | null | undefined,
+  filter: Record<string, string[]> | null | undefined
 ): TreeData | null | undefined {
   if (!tree || !filter) return tree;
 
@@ -62,7 +57,7 @@ export function filterTree(
   let nameFilterMatch = false;
 
   // Check if filter is empty
-  const hasFilters = Object.keys(filter).some(key => filter[key] && filter[key].length > 0);
+  const hasFilters = Object.keys(filter).some((key) => filter[key] && filter[key].length > 0);
   if (!hasFilters) return tree; // Return tree as is if no filters
 
   // Evaluate each filter
@@ -71,31 +66,31 @@ export function filterTree(
     if (!keywords || keywords.length === 0) continue;
 
     let keyMatch = false;
-    if (key === 'name') {
+    if (key === "name") {
       // In case of name filter
-      keyMatch = keywords.some(keyword =>
-        tree.data.name &&
-        tree.data.name.toLowerCase().includes(keyword.toLowerCase())
+      keyMatch = keywords.some(
+        (keyword) => tree.data.name && tree.data.name.toLowerCase().includes(keyword.toLowerCase())
       );
       nameFilterMatch = keyMatch; // Record if name filter matched
     } else {
       // For other filters
-      keyMatch = keywords.some(keyword =>
-        tree.data[key] &&
-        JSON.stringify(tree.data[key]).toLowerCase().includes(keyword.toLowerCase())
+      keyMatch = keywords.some(
+        (keyword) =>
+          tree.data[key] &&
+          JSON.stringify(tree.data[key]).toLowerCase().includes(keyword.toLowerCase())
       );
     }
 
     if (!keyMatch) {
       allFiltersMatch = false;
       // Early exit only for non-name filters
-      if (key !== 'name') break;
+      if (key !== "name") break;
     }
   }
 
   // Process child nodes
   const matchedChildren: TreeData[] = [];
-  for (const child of (tree.children || [])) {
+  for (const child of tree.children || []) {
     if (nameFilterMatch && allFiltersMatch) {
       // If name filter matches and all filters match,
       // include all child nodes (no filtering)
@@ -120,70 +115,65 @@ export function filterTree(
 
 // Helper function to clone the given tree node and all its children
 function cloneTreeWithAllChildren(tree: TreeData): TreeData {
-  const children = (tree.children || []).map((child) =>
-    cloneTreeWithAllChildren(child),
-  );
+  const children = (tree.children || []).map((child) => cloneTreeWithAllChildren(child));
 
   return { ...tree, children };
 }
 
 export function getDefaultNode(): TreeData {
   return {
-    "id": `${uuidV4()}`,
-    "data": {
-      "name": "new_task",
-      "status": "Open",
+    id: `${uuidV4()}`,
+    data: {
+      name: "new_task",
+      status: "Open",
       "due date": undefined,
-      "memo": [],
+      memo: [],
     },
-    "children": []
-  }
+    children: [],
+  };
 }
 
 export function getDefaultProject(): ProjectData {
   return {
-    "headers": [
+    headers: [
       {
-        "name": "name",
-        "default_ratio": 10
+        name: "name",
+        default_ratio: 10,
       },
       {
-        "name": "status",
-        "default_ratio": 4
+        name: "status",
+        default_ratio: 4,
       },
       {
-        "name": "due date",
-        "default_ratio": 4
+        name: "due date",
+        default_ratio: 4,
       },
       {
-        "name": "memo",
-        "default_ratio": 2
-      }
+        name: "memo",
+        default_ratio: 2,
+      },
     ],
-    "data": {
-      "id": `${uuidV4()}`,
-      "data": {
-        "name": "new_project",
-        "status": "Open",
+    data: {
+      id: `${uuidV4()}`,
+      data: {
+        name: "new_project",
+        status: "Open",
         "due date": undefined,
-        "memo": [],
+        memo: [],
       },
-      "children": []
+      children: [],
     },
-  }
+  };
 }
 
-export function getNode(
-  base: string,
-  tree_data: TreeData | undefined,
-): TreeData | undefined {
+export function getNode(base: string, tree_data: TreeData | undefined): TreeData | undefined {
   // Depth First Search
   let base_tree: TreeData | undefined;
   if (!tree_data) {
     return undefined;
   }
   if (tree_data.id == base) {
-    return tree_data
+    return tree_data;
   }
   for (const child of tree_data.children) {
     if (child.id == base) {
@@ -201,7 +191,7 @@ export function getNode(
 export function updateNodeDataById(
   tree_data: TreeData | undefined,
   targetId: string,
-  patch: Partial<TreeData["data"]>,
+  patch: Partial<TreeData["data"]>
 ): TreeData | undefined {
   if (!tree_data) {
     return tree_data;
@@ -242,7 +232,7 @@ export function updateNodeDataById(
 
 export function flattenVisibleTree(
   tree_data: TreeData | undefined,
-  closedIds: Set<string> = new Set(),
+  closedIds: Set<string> = new Set()
 ): VisibleTreeRow[] {
   if (!tree_data) {
     return [];
@@ -255,7 +245,7 @@ export function flattenVisibleTree(
     depth: number,
     parentId: string | undefined,
     siblingIndex: number,
-    siblingCount: number,
+    siblingCount: number
   ) => {
     const hasChildren = !!(node.children && node.children.length > 0);
     const expanded = !closedIds.has(node.id);
@@ -290,17 +280,14 @@ export function flattenVisibleTree(
   return rows;
 }
 
-export function getParent(
-  base: string,
-  tree_data: TreeData | undefined,
-): TreeData | undefined {
+export function getParent(base: string, tree_data: TreeData | undefined): TreeData | undefined {
   // Depth First Search
   let parent_tree: TreeData | undefined;
   if (!tree_data) {
     return undefined;
   }
   if (tree_data.id == base) {
-    return undefined
+    return undefined;
   }
   for (const child of tree_data.children) {
     if (child.id == base) {
@@ -323,7 +310,7 @@ export function isChild(target: string, base: string, tree_data: TreeData): bool
   if (!base_tree) {
     return false;
   }
-  const target_tree = getNode(target, base_tree)
+  const target_tree = getNode(target, base_tree);
   if (target_tree) {
     return true;
   } else {
@@ -369,7 +356,7 @@ export function addNode(
       break;
     }
   }
-  return tree_data
+  return tree_data;
 }
 
 export function rmNode(target: string, tree_data: TreeData): TreeData {
@@ -390,17 +377,22 @@ export function rmNode(target: string, tree_data: TreeData): TreeData {
     return tree_data;
   }
   target_parent_tree.children.splice(index, 1);
-  return tree_data
+  return tree_data;
 }
 
-export function reorderTree(target: string, base: string, tree_data: TreeData, action: "insert" | "append"): TreeData {
+export function reorderTree(
+  target: string,
+  base: string,
+  tree_data: TreeData,
+  action: "insert" | "append"
+): TreeData {
   const target_tree = getNode(target, tree_data);
   if (!target_tree) {
     return tree_data;
   }
   tree_data = rmNode(target, tree_data);
   tree_data = addNode(target_tree, base, tree_data, action);
-  return tree_data
+  return tree_data;
 }
 
 function getSiblingContext(target: string, tree_data: TreeData) {

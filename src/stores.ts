@@ -51,8 +51,7 @@ interface ClosedNodeIdsStore extends Writable<Set<string>> {
   cleanupNodeMetadata: (nodeId: string) => void;
 }
 
-const currentHash =
-  typeof window !== "undefined" ? window.location.hash : "";
+const currentHash = typeof window !== "undefined" ? window.location.hash : "";
 const currentSearch =
   typeof window !== "undefined"
     ? new URLSearchParams(window.location.search)
@@ -110,12 +109,8 @@ export function setTaskDetailWindowTarget(projectId: string, taskId: string) {
   selected_id.set(projectId);
 }
 
-function createProjectIds(
-  initialValue: ProjectListItem[] | undefined,
-): ProjectIdsStore {
-  const { subscribe, set, update } = writable<ProjectListItem[] | undefined>(
-    initialValue,
-  );
+function createProjectIds(initialValue: ProjectListItem[] | undefined): ProjectIdsStore {
+  const { subscribe, set, update } = writable<ProjectListItem[] | undefined>(initialValue);
   let projectDeleteListenerRegistered = false;
 
   return {
@@ -123,10 +118,7 @@ function createProjectIds(
     set,
     update,
     init: () => {
-      if (
-        !projectDeleteListenerRegistered &&
-        window.electronAPI?.onProjectDeleted
-      ) {
+      if (!projectDeleteListenerRegistered && window.electronAPI?.onProjectDeleted) {
         projectDeleteListenerRegistered = true;
         window.electronAPI.onProjectDeleted((deletedProjectId) => {
           window.electronAPI.getProjectIDs().then((result) => {
@@ -189,16 +181,14 @@ function createProjectIds(
 }
 
 function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
-  const { subscribe, set, update } = writable<ProjectData | undefined>(
-    initialValue,
-  );
+  const { subscribe, set, update } = writable<ProjectData | undefined>(initialValue);
   let previousData: ProjectData | null = null;
   let skipPersistOnce = false;
   let syncListenerRegistered = false;
 
   const findRemovedNodeIds = (
     oldData: ProjectData | null | undefined,
-    newData: ProjectData | null | undefined,
+    newData: ProjectData | null | undefined
   ): string[] => {
     if (!oldData || !newData) return [];
 
@@ -269,10 +259,7 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
     set,
     update,
     init: () => {
-      if (
-        !syncListenerRegistered &&
-        window.electronAPI?.onTreeDataUpdated
-      ) {
+      if (!syncListenerRegistered && window.electronAPI?.onTreeDataUpdated) {
         syncListenerRegistered = true;
         window.electronAPI.onTreeDataUpdated((nextTreeData) => {
           if (!nextTreeData) {
@@ -282,8 +269,7 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
           const currentSelectedType = get(selected_type);
           const currentSelectedId = get(selected_id);
           const shouldSyncCurrentProject =
-            currentSelectedType === "Projects" &&
-            currentSelectedId === nextTreeData.data?.id;
+            currentSelectedType === "Projects" && currentSelectedId === nextTreeData.data?.id;
           const shouldSyncTaskDetailWindow =
             pendingTaskDetailSelection?.projectId === nextTreeData.data?.id;
 
@@ -294,16 +280,8 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
           skipPersistOnce = true;
           set(nextTreeData);
 
-          if (
-            shouldSyncTaskDetailWindow &&
-            pendingTaskDetailSelection?.taskId
-          ) {
-            if (
-              getNode(
-                pendingTaskDetailSelection.taskId,
-                nextTreeData.data,
-              )
-            ) {
+          if (shouldSyncTaskDetailWindow && pendingTaskDetailSelection?.taskId) {
+            if (getNode(pendingTaskDetailSelection.taskId, nextTreeData.data)) {
               table_selected_id.set(pendingTaskDetailSelection.taskId);
             } else {
               clearPendingTaskDetailSelection();
@@ -355,10 +333,7 @@ function createSelectedID(initialValue: string | undefined): SelectedIdStore {
               pendingTaskDetailSelection?.projectId === current &&
               pendingTaskDetailSelection.taskId
             ) {
-              if (
-                result?.data &&
-                getNode(pendingTaskDetailSelection.taskId, result.data)
-              ) {
+              if (result?.data && getNode(pendingTaskDetailSelection.taskId, result.data)) {
                 table_selected_id.set(pendingTaskDetailSelection.taskId);
               } else {
                 clearPendingTaskDetailSelection();
@@ -375,9 +350,7 @@ function createSelectedID(initialValue: string | undefined): SelectedIdStore {
 }
 
 function createTheme(initialValue: ThemeName | undefined): ThemeStore {
-  const { subscribe, set, update } = writable<ThemeName | undefined>(
-    initialValue,
-  );
+  const { subscribe, set, update } = writable<ThemeName | undefined>(initialValue);
 
   const traverse = (palette: ThemePalette, varString: string) => {
     Object.keys(palette).forEach((key) => {
@@ -420,28 +393,21 @@ function createTheme(initialValue: ThemeName | undefined): ThemeStore {
 function createFilter(initialValue: FilterState): FilterStore {
   const { subscribe, set, update } = writable<FilterState>(initialValue);
 
-  const applyFilteredData = debounce(
-    (current: FilterState, currentTreeData: ProjectData) => {
-      const filtered = filterTree(currentTreeData.data, current);
-      if (
-        get(table_selected_id) &&
-        filtered &&
-        getNode(get(table_selected_id) as string, filtered)
-      ) {
-        ;
-      } else {
-        table_selected_id.set(undefined);
-      }
+  const applyFilteredData = debounce((current: FilterState, currentTreeData: ProjectData) => {
+    const filtered = filterTree(currentTreeData.data, current);
+    if (
+      !get(table_selected_id) ||
+      !filtered ||
+      !getNode(get(table_selected_id) as string, filtered)
+    ) {
+      table_selected_id.set(undefined);
+    }
 
-      filtered_data.set(filtered);
-    },
-    300,
-  );
+    filtered_data.set(filtered);
+  }, 300);
 
   const hasActiveFilters = (current: FilterState) =>
-    Object.keys(current || {}).some(
-      (key) => current[key] && current[key].length > 0,
-    );
+    Object.keys(current || {}).some((key) => current[key] && current[key].length > 0);
 
   return {
     subscribe,
@@ -456,12 +422,10 @@ function createFilter(initialValue: FilterState): FilterStore {
           applyFilteredData.cancel();
           const nextTree = currentTreeData.data;
           if (
-            get(table_selected_id) &&
-            nextTree &&
-            getNode(get(table_selected_id) as string, nextTree)
+            !get(table_selected_id) ||
+            !nextTree ||
+            !getNode(get(table_selected_id) as string, nextTree)
           ) {
-            ;
-          } else {
             table_selected_id.set(undefined);
           }
 
@@ -492,9 +456,7 @@ function collectNodeAndDescendantIds(node: TreeData | undefined): string[] {
 
 function createClosedNodeIds(initialValue: Set<string>): ClosedNodeIdsStore {
   const projectExpandedStates = new Map<string, Set<string>>();
-  const { subscribe, set, update } = writable<Set<string>>(
-    initialValue || new Set(),
-  );
+  const { subscribe, set, update } = writable<Set<string>>(initialValue || new Set());
 
   const loadState = async (projectId: string) => {
     if (!projectId) return undefined;
