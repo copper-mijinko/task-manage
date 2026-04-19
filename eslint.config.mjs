@@ -1,45 +1,40 @@
 import js from "@eslint/js";
 import tseslint from "typescript-eslint";
-import sveltePlugin from "eslint-plugin-svelte";
-import svelteParser from "svelte-eslint-parser";
 import globals from "globals";
 
-export default [
+export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
-  ...sveltePlugin.configs["flat/recommended"],
   {
+    files: ["src/**/*.{ts,js,svelte}"],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+      },
+    },
+    rules: {
+      "no-console": "error",
+    },
+  },
+  {
+    files: ["tests/component/**/*.{ts,js}", "tests/unit/**/*.{ts,js}"],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+        ...globals.vitest,
+      },
+    },
+  },
+  {
+    files: ["tests/e2e/**/*.{ts,js}"],
     languageOptions: {
       globals: {
         ...globals.browser,
         ...globals.node,
       },
     },
-  },
-  {
-    files: ["**/*.svelte"],
-    languageOptions: {
-      parser: svelteParser,
-      parserOptions: {
-        parser: tseslint.parser,
-      },
-    },
     rules: {
-      "@typescript-eslint/no-unused-vars": "off",
+      "@typescript-eslint/no-require-imports": "off",
     },
   },
-  {
-    rules: {
-      "no-console": "error",
-    },
-  },
-  {
-    ignores: [
-      "dist/**",
-      "renderer/**",
-      "node_modules/**",
-      "*.config.js",
-      "electron/**",
-    ],
-  },
-];
+);
