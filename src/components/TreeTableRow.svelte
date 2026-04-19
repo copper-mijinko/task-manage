@@ -61,11 +61,9 @@
           taskId: id,
           taskName: taskText,
         });
-      } else {
-        console.error("electronAPI.openTaskDetailWindowが見つかりません");
       }
-    } catch (error) {
-      console.error("タスク詳細ウィンドウを開く際にエラーが発生しました:", error);
+    } catch {
+      // ignore error opening task detail window
     }
   }
 

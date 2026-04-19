@@ -15,7 +15,6 @@
     export async function focusInput() {
         await tick();
         searchInputElement?.focus();
-        console.log("called focustInput");
     }
 
     // focus when the search box is shown.
@@ -34,7 +33,6 @@
 
     // clear in closing the search box.
     $: if (show === false) {
-        console.log("Clear in closing search box");
         searchText = ""; // search box内をクリア
         lastSearchText = ""; // ステータスをクリア
         window.electronAPI.stopFindInPage(); // matchCount, activeMatchOrdinalはMainから0が通知される
@@ -42,11 +40,8 @@
 
     // search
     async function executeSearch() {
-        console.log("Execute Search:", searchText);
-
         // empty, clear
         if (!searchText || !searchText.trim()) {
-            console.log("Clear when empty search box");
             lastSearchText = ""; // ステータスをクリア
             window.electronAPI.stopFindInPage(); // matchCount, activeMatchOrdinalはMainから0が通知される
             return;
@@ -55,17 +50,14 @@
         try {
             // 検索キック
             await window.electronAPI.findInPage(searchText.trim(), {});
-            console.log("Finished findInPage");
             // 検索文字列を保存（検索文字列変更を判定するため）
             lastSearchText = searchText;
         } catch (error) {
-            console.error("Search Error:", error);
         }
     }
 
     // on click search
     function handleSearchButtonClick() {
-        console.log("Clicked Search Button");
         checkAndExecuteSearch();
     }
 
@@ -77,7 +69,6 @@
         if (searchText != lastSearchText) {
             checkAndExecuteSearch();
         }
-        console.log("Execute findInPageNext");
         window.electronAPI.findInPageNext(searchText.trim());
     }
 
@@ -88,7 +79,6 @@
         if (searchText != lastSearchText) {
             checkAndExecuteSearch();
         }
-        console.log("Execute findInPagePrevious");
         window.electronAPI.findInPagePrevious(searchText.trim());
     }
 
@@ -107,7 +97,6 @@
 
     // 検索ボックスを閉じる
     function closeSearch() {
-        console.log("Close SearchBox");
         window.electronAPI.stopFindInPage();
         show = false;
         dispatch("close");
@@ -115,7 +104,6 @@
 
     // 検索結果をクリア - シンプル版
     function clearSearch() {
-        console.log("Clear search result");
         window.electronAPI.stopFindInPage();
         searchText = "";
         matchCount = 0;
@@ -127,17 +115,9 @@
     onMount(() => {
         // メインプロセスからの検索結果更新メッセージを受け取るリスナーを設定
         window.electronAPI.onSearchResultUpdated((result) => {
-            console.log("Receive onSearchResultUpdated:", result);
-
             // 検索結果の件数と現在位置を設定
             matchCount = result.matches || 0;
             activeMatchOrdinal = result.activeMatchOrdinal || 0;
-
-            if (matchCount === 0) {
-                console.log("No result");
-            } else {
-                console.log(`Result: ${activeMatchOrdinal}/${matchCount}`);
-            }
         });
 
     });

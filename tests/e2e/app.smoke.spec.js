@@ -1,7 +1,7 @@
-const fs = require("fs");
-const os = require("os");
-const path = require("path");
-const { test, expect, _electron: electron } = require("@playwright/test");
+import fs from "fs";
+import os from "os";
+import path from "path";
+import { test, expect, _electron as electron } from "@playwright/test";
 
 function createTempDataDirectory() {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "task-manage-"));

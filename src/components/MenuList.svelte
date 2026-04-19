@@ -68,11 +68,12 @@
 
   // Drag start
   function dragStart(e) {
-    if (e.currentTarget.dataset.section !== "Projects") return;
+    const el = e.currentTarget;
+    if (el.dataset.section !== "Projects") return;
 
-    this.classList.add("Dragging");
+    el.classList.add("Dragging");
 
-    const name_text = this.querySelector("span").innerText;
+    const name_text = el.querySelector("span").innerText;
     const name_tag = document.createElement("div");
     name_tag.classList.add("NameTag");
     name_tag.innerText = name_text;
@@ -83,14 +84,15 @@
     );
     e.dataTransfer.setDragImage(name_tag, -rem, -rem);
 
-    dragged_id = e.currentTarget.dataset.id;
+    dragged_id = el.dataset.id;
   }
 
   // Drag end
-  function dragEnd() {
+  function dragEnd(e) {
+    const el = e.currentTarget;
     dragOverType = undefined;
     dragOverTarget = undefined;
-    this.classList.remove("Dragging");
+    el.classList.remove("Dragging");
     const nameTag = document.querySelector(".NameTag");
     if (nameTag) nameTag.remove();
   }
@@ -98,46 +100,49 @@
   // Drag over
   function dragOver(e) {
     e.preventDefault();
+    const el = e.currentTarget;
 
     // Only the project section can be reordered
-    if (this.dataset.section !== "Projects") return;
+    if (el.dataset.section !== "Projects") return;
 
     // If not the dragging item itself or the currently dragged item
     if (
-      !this.classList.contains("Dragging") &&
-      this.dataset.id !== dragged_id
+      !el.classList.contains("Dragging") &&
+      el.dataset.id !== dragged_id
     ) {
-      dragOverTarget = this;
-      const rect = this.getBoundingClientRect();
+      dragOverTarget = el;
+      const rect = el.getBoundingClientRect();
       const y = e.clientY;
 
       if (y <= rect.top + rect.height / 2) {
         if (dragOverType !== "DragOverTop") {
           dragOverType = "DragOverTop";
-          this.classList.remove("DragOverBottom");
-          this.classList.add("DragOverTop");
+          el.classList.remove("DragOverBottom");
+          el.classList.add("DragOverTop");
         }
       } else if (dragOverType !== "DragOverBottom") {
         dragOverType = "DragOverBottom";
-        this.classList.remove("DragOverTop");
-        this.classList.add("DragOverBottom");
+        el.classList.remove("DragOverTop");
+        el.classList.add("DragOverBottom");
       }
     }
   }
 
   // Drag leave
-  function dragLeave() {
+  function dragLeave(e) {
+    const el = e.currentTarget;
     dragOverType = undefined;
-    this.classList.remove("DragOverTop");
-    this.classList.remove("DragOverBottom");
+    el.classList.remove("DragOverTop");
+    el.classList.remove("DragOverBottom");
   }
 
   // Drop
-  function dragDrop() {
-    if (this.dataset.section !== "Projects" || !dragOverType) return;
+  function dragDrop(e) {
+    const el = e.currentTarget;
+    if (el.dataset.section !== "Projects" || !dragOverType) return;
 
     const draggedIndex = $project_ids.findIndex((p) => p.id === dragged_id);
-    const targetIndex = $project_ids.findIndex((p) => p.id === this.dataset.id);
+    const targetIndex = $project_ids.findIndex((p) => p.id === el.dataset.id);
 
     if (draggedIndex !== -1 && targetIndex !== -1) {
       // Clone the project array
@@ -165,8 +170,8 @@
     }
 
     // Reset
-    this.classList.remove("DragOverTop");
-    this.classList.remove("DragOverBottom");
+    el.classList.remove("DragOverTop");
+    el.classList.remove("DragOverBottom");
     dragOverType = undefined;
     dragged_id = undefined;
   }
