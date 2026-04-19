@@ -52,7 +52,8 @@
             await window.electronAPI.findInPage(searchText.trim(), {});
             // 検索文字列を保存（検索文字列変更を判定するため）
             lastSearchText = searchText;
-        } catch (error) {
+        } catch {
+            // ignore search error
         }
     }
 
