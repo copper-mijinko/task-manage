@@ -8,6 +8,8 @@
     init_store,
     showPageSearch,
     theme,
+    undoHistory,
+    redoHistory,
   } from "./stores.ts";
   import { onMount, onDestroy } from "svelte";
   import ProjectPage from "./components/ProjectPage.svelte";
@@ -81,8 +83,24 @@
   }
 
   function handleKeyDown(event) {
+    const ctrl = event.ctrlKey || event.metaKey;
+
+    if (ctrl && !event.shiftKey && event.key.toLowerCase() === "z") {
+      event.preventDefault();
+      event.stopPropagation();
+      undoHistory();
+      return;
+    }
+
+    if (ctrl && (event.key.toLowerCase() === "y" || (event.shiftKey && event.key.toLowerCase() === "z"))) {
+      event.preventDefault();
+      event.stopPropagation();
+      redoHistory();
+      return;
+    }
+
     // Ctrl+FまたはCmd+F (Macの場合)
-    if ((event.ctrlKey || event.metaKey) && event.key === "f") {
+    if (ctrl && event.key === "f") {
       event.preventDefault();
       $showPageSearch = true;
       searchBox?.focusInput();
@@ -106,11 +124,12 @@
       });
     }
 
-    window.addEventListener("keydown", handleKeyDown);
+    // キャプチャフェーズで登録: Quillより先にCtrl+Z/Yを横取りする
+    window.addEventListener("keydown", handleKeyDown, true);
   });
 
   onDestroy(() => {
-    window.removeEventListener("keydown", handleKeyDown);
+    window.removeEventListener("keydown", handleKeyDown, true);
   });
 </script>
 

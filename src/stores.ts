@@ -17,6 +17,75 @@ import type {
   ThemeName,
 } from "./types/app";
 
+// --- History management ---
+const MAX_HISTORY_SIZE = 50;
+let undoStack: ProjectData[] = [];
+let redoStack: ProjectData[] = [];
+let skipHistoryCapture = false;
+
+export const canUndo = writable(false);
+export const canRedo = writable(false);
+export const cancelPendingOperations = writable(0);
+
+function updateHistoryFlags() {
+  canUndo.set(undoStack.length > 0);
+  canRedo.set(redoStack.length > 0);
+}
+
+function captureSnapshot(snapshot: ProjectData) {
+  if (skipHistoryCapture) {
+    skipHistoryCapture = false;
+    return;
+  }
+  undoStack.push(_.cloneDeep(snapshot));
+  if (undoStack.length > MAX_HISTORY_SIZE) {
+    undoStack.shift();
+  }
+  redoStack = [];
+  updateHistoryFlags();
+}
+
+export function clearHistory() {
+  undoStack = [];
+  redoStack = [];
+  skipHistoryCapture = true;
+  updateHistoryFlags();
+}
+
+export function undoHistory() {
+  const current = get(tree_data);
+  if (undoStack.length === 0 || !current) return;
+
+  const previous = undoStack.pop()!;
+  redoStack.push(_.cloneDeep(current));
+  if (redoStack.length > MAX_HISTORY_SIZE) {
+    redoStack.shift();
+  }
+
+  skipHistoryCapture = true;
+  cancelPendingOperations.update((v) => v + 1);
+  tree_data.set(previous);
+
+  updateHistoryFlags();
+}
+
+export function redoHistory() {
+  const current = get(tree_data);
+  if (redoStack.length === 0 || !current) return;
+
+  const next = redoStack.pop()!;
+  undoStack.push(_.cloneDeep(current));
+  if (undoStack.length > MAX_HISTORY_SIZE) {
+    undoStack.shift();
+  }
+
+  skipHistoryCapture = true;
+  cancelPendingOperations.update((v) => v + 1);
+  tree_data.set(next);
+
+  updateHistoryFlags();
+}
+
 type ThemePalette = {
   [key: string]: string | ThemePalette;
 };
@@ -244,6 +313,7 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
           });
         }
       }
+      captureSnapshot(previousData);
     }
 
     previousData = _.cloneDeep(current);
@@ -326,6 +396,7 @@ function createSelectedID(initialValue: string | undefined): SelectedIdStore {
       subscribe((current) => {
         const currentSelectedType = get(selected_type);
         if (currentSelectedType === "Projects" && current) {
+          clearHistory();
           window.electronAPI.getTreeData(current).then((result) => {
             tree_data.set(result);
 
