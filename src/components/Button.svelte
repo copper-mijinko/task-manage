@@ -9,6 +9,7 @@
   export let use_ripple = true;
   export let variant = "filled"; // "outlined", "text"
   export let tooltipContent = undefined;
+  export let ariaLabel = undefined;
   // tooltip
   let use_tooltip = tooltipContent === undefined ? false : true;
   // colors
@@ -47,6 +48,7 @@
 
 <button
   {disabled}
+  aria-label={ariaLabel}
   use:ripple={{
     duration: 700,
     color: disabled ? "var(--theme-color-Shadow-sub)" : rippleColor,

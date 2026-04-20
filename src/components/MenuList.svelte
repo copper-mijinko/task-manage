@@ -245,6 +245,7 @@
             <div class="AddButtonContainer">
               <IconButton
                 tooltipContent="Add a project."
+                ariaLabel="Add a project"
                 normalColor="rgba(255,255,255,0.1)"
                 activeColor="rgba(255,255,255,0.2)"
                 on:click={(e) => {
@@ -288,6 +289,7 @@
                 <div class="DeleteButtonContainer">
                   <IconButton
                     tooltipContent="Delete the project."
+                    ariaLabel="Delete the project"
                     style="height: 100%; margin:0; box-shadow:none;"
                     normalColor="transparent"
                     activeColor="rgba(255,255,255,0.2)"

@@ -12,6 +12,7 @@
   <div class="IconButtonContainer">
     <IconButton
       on:click={toggle()}
+      ariaLabel="Close navigation menu"
       use_ripple={false}
       activeColor={"transparent"}
       normalColor={"transparent"}

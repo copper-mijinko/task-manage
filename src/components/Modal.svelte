@@ -5,6 +5,8 @@
   export let toggle;
   export let width = "90%";
   export let height = "90%";
+  export let label = undefined;
+  export let labelledBy = undefined;
   let modal; // bind
 
   let mask;
@@ -42,6 +44,10 @@
   class:Show={show}
   bind:this={modal}
   style="--width: {width}; --height: {height};"
+  role="dialog"
+  aria-modal={show ? "true" : undefined}
+  aria-label={label}
+  aria-labelledby={labelledBy}
   use:clickOutside
   on:outclick={toggle()}
 >

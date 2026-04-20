@@ -104,6 +104,7 @@
     <div class="memotab-control">
       <IconButton
         tooltipContent="Add a memo."
+        ariaLabel="Add a memo"
         {disabled}
         activeColor={"var(--theme-color-Primary-dark)"}
         normalColor={"var(--theme-color-Primary-main)"}
@@ -125,6 +126,7 @@
       </IconButton>
       <IconButton
         tooltipContent="Delete the selected memo."
+        ariaLabel="Delete the selected memo"
         {disabled}
         activeColor={"var(--theme-color-Error-dark)"}
         normalColor={"var(--theme-color-Error-main)"}

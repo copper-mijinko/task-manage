@@ -46,6 +46,7 @@
       {#if selected.length > 0}
         <IconButton
           style={"margin: 0rem; padding: 0.25rem; margin-left: auto; width: 1.5rem; height: 1.5rem; flex-shrink: 0;"}
+          ariaLabel="Clear filter selection"
           on:click={(e) => {
             expanded = false;
             checked = checked.fill(false);

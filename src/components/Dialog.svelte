@@ -8,11 +8,13 @@
   export let callback = undefined;
   export let ok = "ok";
   export let cancel = "cancel";
+
+  const dialogHeaderId = `dialog-header-${Math.random().toString(36).slice(2)}`;
 </script>
 
-<Modal {show} {toggle} width="30rem" height="15rem">
+<Modal {show} {toggle} width="30rem" height="15rem" labelledBy={dialogHeaderId}>
   <div class="container">
-    <div class="header">{header}</div>
+    <div class="header" id={dialogHeaderId}>{header}</div>
     <div class="content">{content}</div>
     {#if ok || cancel}
       <div class="control">

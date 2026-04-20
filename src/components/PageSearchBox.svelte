@@ -158,6 +158,7 @@
         <IconButton
           on:click={findPrevious}
           tooltipContent="Prev"
+          ariaLabel="Previous match"
           style="width: 24px; height: 24px; padding: 0;"
           normalColor="var(--theme-color-Primary-main)"
           activeColor="var(--theme-color-Primary-dark)"
@@ -176,6 +177,7 @@
         <IconButton
           on:click={findNext}
           tooltipContent="Next"
+          ariaLabel="Next match"
           style="width: 24px; height: 24px; padding: 0;"
           normalColor="var(--theme-color-Primary-main)"
           activeColor="var(--theme-color-Primary-dark)"
@@ -194,6 +196,7 @@
         <IconButton
           on:click={clearSearch}
           tooltipContent="Clear"
+          ariaLabel="Clear search"
           style="width: 24px; height: 24px; padding: 0;"
           normalColor="var(--theme-color-Success-main)"
           activeColor="var(--theme-color-Success-dark)"
@@ -219,6 +222,7 @@
         <IconButton
           on:click={closeSearch}
           tooltipContent="Close(Esc)"
+          ariaLabel="Close search"
           style="width: 24px; height: 24px; padding: 0;"
           normalColor="var(--theme-color-Error-main)"
           activeColor="var(--theme-color-Error-dark)"

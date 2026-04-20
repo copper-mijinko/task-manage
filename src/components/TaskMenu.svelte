@@ -59,7 +59,7 @@
     style:left={position.position === "right" ? `${position.x}px` : undefined}
     style:right={position.position === "left" ? `calc(100vw - ${position.x}px)` : undefined}
   >
-    <ul class="task-menu">
+    <ul class="task-menu" role="menu" aria-label="Task actions">
       {#each menuItems as item}
         <li class="menu-item-shell">
           <button
@@ -67,6 +67,8 @@
             class:disabled={item.disabled}
             class:has-children={item.children?.length > 0}
             disabled={item.disabled}
+            role="menuitem"
+            aria-disabled={item.disabled ? "true" : undefined}
             on:click={(event) => triggerAction(item, event)}
           >
             <span class="menu-item-content">
@@ -88,11 +90,12 @@
 
           {#if item.children?.length}
             <div class={`submenu ${submenuSideClass}`}>
-              <ul class="task-menu">
+              <ul class="task-menu" role="menu">
                 {#each item.children as child}
                   <li class="menu-item-shell">
                     <button
                       class="task-menu-item"
+                      role="menuitem"
                       on:click={(event) => triggerAction(child, event)}
                     >
                       <span class="menu-item-content">

@@ -21,6 +21,7 @@
     on:click={() => {
       show_drawer = !show_drawer;
     }}
+    ariaLabel="Open navigation menu"
     use_ripple={false}
     activeColor={"transparent"}
     normalColor={"transparent"}
