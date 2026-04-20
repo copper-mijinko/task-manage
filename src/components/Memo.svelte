@@ -129,6 +129,9 @@
       theme: "snow",
       modules: {
         toolbar: readOnly ? false : toolbarOptions,
+        clipboard: {
+          matchVisual: false,
+        },
       },
     });
 
