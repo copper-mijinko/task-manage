@@ -1,7 +1,8 @@
 <script>
   import { getNode, updateNodeDataById } from "../common/tree_control.ts";
-  import { tree_data, table_selected_id } from "../stores.ts";
+  import { tree_data, table_selected_id, cancelPendingOperations } from "../stores.ts";
   import { debounce } from "lodash";
+  import { onDestroy } from "svelte";
   import MemoTab from "./MemoTab.svelte";
 
   $: is_selected = $table_selected_id ? true : false;
@@ -20,6 +21,14 @@
   };
   // データストア更新処理のdebounce - 全てのUI更新を統合的に処理
   const changeDataDebounce = debounce(changeData, 500);
+
+  const unsubscribeCancelPending = cancelPendingOperations.subscribe(() => {
+    changeDataDebounce.cancel();
+  });
+
+  onDestroy(() => {
+    unsubscribeCancelPending();
+  });
   const addMemo = (newMemoTitle) => {
     if (newMemoTitle) {
       let newMemo = { title: newMemoTitle, content: "" };
