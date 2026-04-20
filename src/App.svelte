@@ -8,6 +8,8 @@
     init_store,
     showPageSearch,
     theme,
+    undoHistory,
+    redoHistory,
   } from "./stores.ts";
   import { onMount, onDestroy } from "svelte";
   import ProjectPage from "./components/ProjectPage.svelte";
@@ -81,11 +83,28 @@
   }
 
   function handleKeyDown(event) {
-    // Ctrl+FまたはCmd+F (Macの場合)
     if ((event.ctrlKey || event.metaKey) && event.key === "f") {
       event.preventDefault();
       $showPageSearch = true;
       searchBox?.focusInput();
+      return;
+    }
+
+    if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key === "z") {
+      event.preventDefault();
+      event.stopPropagation();
+      undoHistory();
+      return;
+    }
+
+    if (
+      ((event.ctrlKey || event.metaKey) && event.key === "y") ||
+      ((event.ctrlKey || event.metaKey) && event.shiftKey && (event.key === "z" || event.key === "Z"))
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      redoHistory();
+      return;
     }
   }
 
@@ -106,11 +125,11 @@
       });
     }
 
-    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown, true);
   });
 
   onDestroy(() => {
-    window.removeEventListener("keydown", handleKeyDown);
+    window.removeEventListener("keydown", handleKeyDown, true);
   });
 </script>
 

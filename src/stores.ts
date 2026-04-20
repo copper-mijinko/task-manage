@@ -180,6 +180,28 @@ function createProjectIds(initialValue: ProjectListItem[] | undefined): ProjectI
   };
 }
 
+const MAX_HISTORY = 50;
+let undoStack: ProjectData[] = [];
+let redoStack: ProjectData[] = [];
+let skipSnapshot = false;
+let pendingSkipSnapshot = false;
+
+export const cancelPendingOperations = writable<number>(0);
+
+function captureSnapshot(data: ProjectData) {
+  undoStack.push(_.cloneDeep(data));
+  if (undoStack.length > MAX_HISTORY) {
+    undoStack.shift();
+  }
+  redoStack = [];
+}
+
+export function clearHistory() {
+  undoStack = [];
+  redoStack = [];
+  skipSnapshot = true;
+}
+
 function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
   const { subscribe, set, update } = writable<ProjectData | undefined>(initialValue);
   let previousData: ProjectData | null = null;
@@ -226,6 +248,11 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
     }
 
     if (previousData) {
+      if (!pendingSkipSnapshot) {
+        captureSnapshot(previousData);
+      }
+      pendingSkipSnapshot = false;
+
       const removedIds = findRemovedNodeIds(previousData, current);
       if (removedIds.length > 0) {
         const projectId = get(selected_id);
@@ -309,6 +336,13 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
           }
         }
 
+        if (skipSnapshot) {
+          pendingSkipSnapshot = true;
+          skipSnapshot = false;
+        } else if (current !== undefined) {
+          pendingSkipSnapshot = false;
+        }
+
         persistTreeData(current);
       });
     },
@@ -326,6 +360,7 @@ function createSelectedID(initialValue: string | undefined): SelectedIdStore {
       subscribe((current) => {
         const currentSelectedType = get(selected_type);
         if (currentSelectedType === "Projects" && current) {
+          clearHistory();
           window.electronAPI.getTreeData(current).then((result) => {
             tree_data.set(result);
 
@@ -440,6 +475,36 @@ function createFilter(initialValue: FilterState): FilterStore {
 }
 
 tree_data = createTreeData(undefined);
+
+export function undoHistory() {
+  if (undoStack.length === 0) return;
+  const current = get(tree_data);
+  if (current) {
+    redoStack.push(_.cloneDeep(current));
+    if (redoStack.length > MAX_HISTORY) {
+      redoStack.shift();
+    }
+  }
+  const previous = undoStack.pop()!;
+  cancelPendingOperations.update((n) => n + 1);
+  skipSnapshot = true;
+  tree_data.set(previous);
+}
+
+export function redoHistory() {
+  if (redoStack.length === 0) return;
+  const current = get(tree_data);
+  if (current) {
+    undoStack.push(_.cloneDeep(current));
+    if (undoStack.length > MAX_HISTORY) {
+      undoStack.shift();
+    }
+  }
+  const next = redoStack.pop()!;
+  cancelPendingOperations.update((n) => n + 1);
+  skipSnapshot = true;
+  tree_data.set(next);
+}
 
 function collectNodeAndDescendantIds(node: TreeData | undefined): string[] {
   if (!node) return [];
