@@ -99,7 +99,9 @@
 
     if (
       ((event.ctrlKey || event.metaKey) && event.key === "y") ||
-      ((event.ctrlKey || event.metaKey) && event.shiftKey && (event.key === "z" || event.key === "Z"))
+      ((event.ctrlKey || event.metaKey) &&
+        event.shiftKey &&
+        (event.key === "z" || event.key === "Z"))
     ) {
       event.preventDefault();
       event.stopPropagation();
