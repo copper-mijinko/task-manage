@@ -97,6 +97,7 @@
             <div class:TableButtons={true}>
               <IconButton
                 tooltipContent="Add a task under the selected one."
+                ariaLabel="Add a task under the selected one"
                 activeColor={"var(--theme-color-Primary-dark)"}
                 normalColor={"var(--theme-color-Primary-main)"}
                 on:click={(e) => handleAdd(e, "insert_after")}
@@ -113,6 +114,7 @@
               </IconButton>
               <IconButton
                 tooltipContent="Add a child task under the selected one."
+                ariaLabel="Add a child task under the selected one"
                 activeColor={"var(--theme-color-Primary-dark)"}
                 normalColor={"var(--theme-color-Primary-main)"}
                 on:click={(e) => handleAdd(e, "append")}
@@ -132,6 +134,7 @@
               </IconButton>
               <IconButton
                 tooltipContent="Delete the selected task."
+                ariaLabel="Delete the selected task"
                 activeColor={"var(--theme-color-Error-dark)"}
                 normalColor={"var(--theme-color-Error-main)"}
                 on:click={(e) => handleRemove(e)}

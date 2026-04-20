@@ -487,6 +487,8 @@
   bind:this={table_root}
   class:TableRoot={true}
   style="--minWidth: {minWidth}"
+  role="treegrid"
+  aria-label="Task tree"
   on:scroll={handleScroll}
 >
   <TreeTableHeader headers={$tree_data.headers} />

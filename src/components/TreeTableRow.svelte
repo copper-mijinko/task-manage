@@ -132,7 +132,7 @@
 
 <div
   {id}
-  role="button"
+  role="row"
   class:TableRow={true}
   class:Selected={selected}
   class:Dragging={isDragging}
@@ -142,6 +142,9 @@
   use:ripple
   tabindex="0"
   draggable="true"
+  aria-level={depth + 1}
+  aria-selected={selected}
+  aria-expanded={hasChildren ? expanded : undefined}
   on:click={select}
   on:keydown={(e) => {
     if (e.key === "Enter" || e.key === " ") {
@@ -157,7 +160,7 @@
   on:contextmenu={openContextMenu}
 >
   {#each headers as header, i}
-    <div class:TableData={true} style:z-index={i + 100}>
+    <div class:TableData={true} role="gridcell" style:z-index={i + 100}>
       {#if header.name == "name"}
         {#each Array(depth) as _}
           <div class:TreeLine={true} style="flex-shrink: 0"></div>

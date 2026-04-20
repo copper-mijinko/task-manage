@@ -54,6 +54,7 @@
       applySearch(search_text);
       search_box?.focus();
     }}
+    ariaLabel="Search tasks"
     use_ripple={true}
     normalColor="var(--theme-color-Shadow-sub)"
     activeColor="var(--theme-color-Shadow-sub-translucent)"

@@ -9,9 +9,9 @@
   };
 </script>
 
-<div class:TableRow={true}>
+<div class:TableRow={true} role="row">
   {#each headers as header}
-    <div class:TableHeader={true}>
+    <div class:TableHeader={true} role="columnheader">
       <div
         style="display: flex; flex: 1; width:100%; height:100%; justify-content: center; align-items: center;"
       >
