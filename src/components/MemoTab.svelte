@@ -164,7 +164,6 @@
           saveMemo={(editedContent, cursorPosition) =>
             saveMemo(editedContent, selectedMemoIndex, cursorPosition)}
           content={editedContent}
-          memoIndex={selectedMemoIndex}
         />
       {/key}
     {:else}
