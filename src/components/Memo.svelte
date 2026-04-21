@@ -210,7 +210,7 @@
     const contentIsEmpty = !content;
     const lastSavedIsEmpty = !lastSavedContent;
     const needsUpdate =
-      (contentIsEmpty !== lastSavedIsEmpty) ||
+      contentIsEmpty !== lastSavedIsEmpty ||
       (!contentIsEmpty && !isEqual(content, lastSavedContent));
 
     if (needsUpdate) {
