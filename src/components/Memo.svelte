@@ -56,14 +56,13 @@
   // Quillのリンクツールチップを処理するための関数
   function handleLinkTooltips() {
     // イベントハンドラー関数を定義
-    const handleLinkClick = (e) => {
+    const handleLinkClick = async (e) => {
       // Visit (ql-preview) ボタンがクリックされた場合
       if (e.target && e.target.classList.contains("ql-preview")) {
         const href = e.target.getAttribute("href");
         if (href && href.trim() !== "") {
           // 既に処理中なら何もしない（二重実行防止）
           if (isHandlingLink) return;
-          isHandlingLink = true;
 
           // クリックイベントのデフォルト動作を停止（内部ブラウザでの開封を防止）
           e.preventDefault();
@@ -74,14 +73,13 @@
             quill.theme.tooltip.hide();
           }
 
-          // 外部ブラウザでリンクを開く
-          window.electronAPI.openExternalLink(href);
-
-          // フラグをリセット（次のリンククリックのため）
-          // 適切な時間でリセットし、短時間での複数回クリックを防止
-          setTimeout(() => {
+          try {
+            isHandlingLink = true;
+            // 外部ブラウザでリンクを開く
+            await window.electronAPI.openExternalLink(href);
+          } finally {
             isHandlingLink = false;
-          }, 300);
+          }
         }
       }
     };
