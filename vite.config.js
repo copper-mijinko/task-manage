@@ -25,5 +25,10 @@ export default defineConfig({
   build: {
     outDir: "renderer",
     emptyOutDir: true,
+    minify: "esbuild",
+    target: "esnext",
+  },
+  esbuild: {
+    drop: ["console"],
   },
 });

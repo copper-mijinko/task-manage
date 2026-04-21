@@ -30,32 +30,26 @@ const electronAPI = {
   },
   // 画面内検索機能 - シンプル実装
   findInPage: (text, options) => {
-    console.log("Execute find-in-page:", text);
     return ipcRenderer.invoke("find-in-page", text, options);
   },
   findInPageNext: (text) => {
-    console.log("Execute find-in-page-next:", text);
     return ipcRenderer.invoke("find-in-page-next", text);
   },
   findInPagePrevious: (text) => {
-    console.log("Execute find-in-page-previous:", text);
     return ipcRenderer.invoke("find-in-page-previous", text);
   },
   stopFindInPage: () => {
-    console.log("Execute stop-find-in-page:");
     ipcRenderer.send("stop-find-in-page");
   },
   // 検索結果更新イベント
   onSearchResultUpdated: (callback) => {
     ipcRenderer.on("search-result-updated", (event, result) => {
-      console.log("Receive search-result-updated:", result);
       callback(/** @type {FindInPageResult} */ (result));
     });
   },
   // テーマ変更の通知を受け取る
   onThemeChanged: (callback) => {
     ipcRenderer.on("theme-changed", (event, theme) => {
-      console.log("Theme changed:", theme);
       callback(theme);
     });
   },

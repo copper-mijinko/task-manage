@@ -213,7 +213,7 @@ app.on("ready", () => {
   });
   // on message.
   ipcMain.on("message", (event, arg) => {
-    console.log(arg);
+    log.info(arg);
   });
   // 外部リンクを開くためのハンドラ
   ipcMain.on("open-external-link", (event, url) => {
@@ -229,7 +229,7 @@ app.on("ready", () => {
 
   function bindFindInPageEvents(targetWebContents) {
     targetWebContents.on("found-in-page", (event, result) => {
-      console.log("Search Result:", result);
+      log.info("Search Result:", result);
       targetWebContents.send("search-result-updated", result);
     });
   }
@@ -240,7 +240,7 @@ app.on("ready", () => {
 
   // 検索ハイライトをリセット
   async function resetHighlights(targetWebContents, notifyResult = false) {
-    console.log("Reset HighLights");
+    log.info("Reset HighLights");
     targetWebContents.stopFindInPage("clearSelection");
 
     if (notifyResult) {
@@ -255,7 +255,7 @@ app.on("ready", () => {
 
   // find-in-page
   ipcMain.handle("find-in-page", async (event, text, options = {}) => {
-    console.log("Execute Search:", text);
+    log.info("Execute Search:", text);
     const targetWebContents = resolveSearchWebContents(event);
 
     // 空の検索テキストの場合は検索をクリア
@@ -272,7 +272,7 @@ app.on("ready", () => {
       await new Promise((resolve) => setTimeout(resolve, 200));
 
       // 検索実行
-      console.log("Execute findInPage():", text, options);
+      log.info("Execute findInPage():", text, options);
       targetWebContents.findInPage(text.trim(), {
         ...options,
         findNext: false, // 新規検索
@@ -285,14 +285,14 @@ app.on("ready", () => {
 
       return;
     } catch (error) {
-      console.error("検索エラー:", error);
+      log.error("検索エラー:", error);
       return;
     }
   });
 
   // 次の検索
   ipcMain.handle("find-in-page-next", async (event, text = "") => {
-    console.log("Search next");
+    log.info("Search next");
     const targetWebContents = resolveSearchWebContents(event);
 
     // 検索テキストを決定
@@ -309,14 +309,14 @@ app.on("ready", () => {
 
       return;
     } catch (error) {
-      console.error("次の検索エラー:", error);
+      log.error("次の検索エラー:", error);
       return;
     }
   });
 
   // 前の検索
   ipcMain.handle("find-in-page-previous", async (event, text = "") => {
-    console.log("Search Previous");
+    log.info("Search Previous");
     const targetWebContents = resolveSearchWebContents(event);
 
     // 検索テキストを決定
@@ -333,20 +333,20 @@ app.on("ready", () => {
 
       return;
     } catch (error) {
-      console.error("前の検索エラー:", error);
+      log.error("前の検索エラー:", error);
       return;
     }
   });
 
   // 検索のクリア
   ipcMain.on("stop-find-in-page", async (event) => {
-    console.log("Execute stopFindInPage()");
+    log.info("Execute stopFindInPage()");
     const targetWebContents = resolveSearchWebContents(event);
 
     try {
       await resetHighlights(targetWebContents, true);
     } catch (error) {
-      console.error("検索クリアエラー:", error);
+      log.error("検索クリアエラー:", error);
     }
   });
 
@@ -406,7 +406,7 @@ app.on("ready", () => {
       log.info(`Task detail window created for task: ${safeDetailData.taskId}`);
       return taskDetailWindow;
     } catch (error) {
-      console.error("タスク詳細ウィンドウの作成に失敗しました:", error);
+      log.error("タスク詳細ウィンドウの作成に失敗しました:", error);
       return null;
     }
   }
@@ -435,7 +435,7 @@ app.on("ready", () => {
         log.info(`Task detail window shown for task: ${detailData?.taskId || ""}`);
       }
     } catch (error) {
-      console.error("タスク詳細ウィンドウを開く際にエラーが発生しました:", error);
+      log.error("タスク詳細ウィンドウを開く際にエラーが発生しました:", error);
     }
   });
 
