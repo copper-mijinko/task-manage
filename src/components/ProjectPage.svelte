@@ -7,6 +7,7 @@
   import Card from "./Card.svelte";
   import Dialog from "./Dialog.svelte";
   import SearchBox from "./SearchBox.svelte";
+  import { tick } from "svelte";
   import { table_selected_id, tree_data, closed_node_ids } from "../stores.ts";
   import { getNode, addNode, rmNode, getParent } from "../common/tree_control.ts";
   import { getDefaultNode } from "../common/tree_control.ts";
@@ -30,7 +31,7 @@
   };
 
   // Add
-  export function handleAdd(e, action) {
+  export async function handleAdd(e, action) {
     e.stopPropagation();
 
     const new_node = getDefaultNode();
@@ -56,18 +57,14 @@
         closed_node_ids.delete(parentId);
       }
 
-      // 新しいノードを選択状態にする
-      setTimeout(() => {
-        $table_selected_id = new_node.id;
+      // 新しいノードを選択状態にしてDOMの更新を待つ
+      $table_selected_id = new_node.id;
+      await tick();
 
-        // DOMの更新を待ってからスクロール処理を行う
-        setTimeout(() => {
-          const newRow = document.getElementById(new_node.id);
-          if (newRow) {
-            newRow.scrollIntoView({ behavior: "smooth", block: "nearest" });
-          }
-        }, 50); // 少し長めのタイムアウトで確実にDOMが更新されるのを待つ
-      }, 0);
+      const newRow = document.getElementById(new_node.id);
+      if (newRow) {
+        newRow.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
     }
   }
 
