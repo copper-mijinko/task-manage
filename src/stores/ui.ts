@@ -48,15 +48,6 @@ function collectNodeAndDescendantIds(node: TreeData | undefined): string[] {
   return ids;
 }
 
-// eslint-disable-next-line prefer-const
-export let selected_type: Writable<SelectedType>;
-// eslint-disable-next-line prefer-const
-export let table_selected_id: Writable<string | undefined>;
-// eslint-disable-next-line prefer-const
-export let closed_node_ids: ClosedNodeIdsStore;
-// eslint-disable-next-line prefer-const
-export let selected_id: SelectedIdStore;
-
 function createSelectedID(initialValue: string | undefined): SelectedIdStore {
   const { subscribe, set, update } = writable<string | undefined>(initialValue);
 
@@ -191,10 +182,12 @@ function createClosedNodeIds(initialValue: Set<string>): ClosedNodeIdsStore {
   };
 }
 
-selected_type = writable<SelectedType>(undefined);
-table_selected_id = writable<string | undefined>(undefined);
-closed_node_ids = createClosedNodeIds(new Set<string>());
-selected_id = createSelectedID(undefined);
+export const selected_type: Writable<SelectedType> = writable<SelectedType>(undefined);
+export const table_selected_id: Writable<string | undefined> = writable<string | undefined>(
+  undefined
+);
+export const closed_node_ids: ClosedNodeIdsStore = createClosedNodeIds(new Set<string>());
+export const selected_id: SelectedIdStore = createSelectedID(undefined);
 
 export const showPageSearch = writable(false);
 

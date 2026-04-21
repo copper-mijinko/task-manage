@@ -186,9 +186,7 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
   };
 }
 
-// eslint-disable-next-line prefer-const
-export let tree_data: TreeDataStore;
-tree_data = createTreeData(undefined);
+export const tree_data: TreeDataStore = createTreeData(undefined);
 
 export function undoHistory() {
   if (undoStack.length === 0) return;

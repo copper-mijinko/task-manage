@@ -93,6 +93,4 @@ function createProjectIds(initialValue: ProjectListItem[] | undefined): ProjectI
   };
 }
 
-// eslint-disable-next-line prefer-const
-export let project_ids: ProjectIdsStore;
-project_ids = createProjectIds(undefined);
+export const project_ids: ProjectIdsStore = createProjectIds(undefined);

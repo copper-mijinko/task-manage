@@ -9,8 +9,9 @@ export interface FilterStore extends Writable<FilterState> {
   init: () => void;
 }
 
-export let filtered_data: Writable<TreeData | null | undefined>;
-filtered_data = writable<TreeData | null | undefined>(undefined);
+export const filtered_data: Writable<TreeData | null | undefined> = writable<
+  TreeData | null | undefined
+>(undefined);
 
 function createFilter(initialValue: FilterState): FilterStore {
   const { subscribe, set, update } = writable<FilterState>(initialValue);
@@ -61,6 +62,4 @@ function createFilter(initialValue: FilterState): FilterStore {
   };
 }
 
-// eslint-disable-next-line prefer-const
-export let filter: FilterStore;
-filter = createFilter({});
+export const filter: FilterStore = createFilter({});

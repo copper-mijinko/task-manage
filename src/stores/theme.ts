@@ -55,6 +55,4 @@ function createTheme(initialValue: ThemeName | undefined): ThemeStore {
   };
 }
 
-// eslint-disable-next-line prefer-const
-export let theme: ThemeStore;
-theme = createTheme(undefined);
+export const theme: ThemeStore = createTheme(undefined);
