@@ -24,6 +24,7 @@
     "publish": null
   },
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks",
     "build": "vite build",
     "dev": "vite",
     "start": "electron .",
