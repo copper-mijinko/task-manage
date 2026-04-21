@@ -62,6 +62,18 @@ export default [
     },
   },
   {
-    ignores: ["dist/**", "renderer/**", "node_modules/**", "*.config.js", "electron/**"],
+    files: ["electron/**/*.js"],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+      },
+    },
+    rules: {
+      "no-console": "error",
+      "@typescript-eslint/no-require-imports": "off",
+    },
+  },
+  {
+    ignores: ["dist/**", "renderer/**", "node_modules/**", "*.config.js"],
   },
 ];
