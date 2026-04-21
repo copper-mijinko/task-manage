@@ -131,22 +131,20 @@ describe("TaskDetail", () => {
     await fireEvent.click(addButton);
     await tick();
 
-    // Now on the new empty memo (index 1)
-    const memoStub = screen.getByTestId("memo-stub");
-    expect(memoStub.getAttribute("data-memo-index")).toBe("1");
+    // Now on the new empty memo (index 1) - verify "memo" tab is selected
+    expect(screen.getByDisplayValue("memo").closest("button")).toHaveClass("selected");
 
     // Switch to existing memo (index 0)
     await fireEvent.click(screen.getByDisplayValue("existing").closest("button"));
     await tick();
-    expect(screen.getByTestId("memo-stub").getAttribute("data-memo-index")).toBe("0");
+    expect(screen.getByDisplayValue("existing").closest("button")).toHaveClass("selected");
 
     // Switch back to the empty memo (index 1)
     await fireEvent.click(screen.getByDisplayValue("memo").closest("button"));
     await tick();
 
-    const stub = screen.getByTestId("memo-stub");
-    expect(stub.getAttribute("data-memo-index")).toBe("1");
+    expect(screen.getByDisplayValue("memo").closest("button")).toHaveClass("selected");
     // content should be empty string for the new empty memo
-    expect(stub.textContent.trim()).toBe("");
+    expect(screen.getByTestId("memo-stub").textContent.trim()).toBe("");
   });
 });
