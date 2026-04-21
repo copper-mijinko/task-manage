@@ -6,7 +6,6 @@
 
   export let saveMemo;
   export let content = "";
-  export let memoIndex = 0; // メモのインデックスを受け取る
   export let readOnly = false;
 
   let editor;
