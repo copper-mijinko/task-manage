@@ -14,7 +14,7 @@ function isThemeName(value: unknown): value is ThemeName {
   return value === "dark" || value === "light";
 }
 
-export function createTheme(initialValue: ThemeName | undefined): ThemeStore {
+function createTheme(initialValue: ThemeName | undefined): ThemeStore {
   const { subscribe, set, update } = writable<ThemeName | undefined>(initialValue);
 
   const traverse = (palette: ThemePalette, varString: string) => {
