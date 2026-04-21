@@ -41,7 +41,8 @@
     }
 
     if (!nextContent) {
-      quill.setText("");
+      // Use explicit empty Delta to reliably clear Quill content
+      quill.setContents([{ insert: "\n" }]);
       return;
     }
 
@@ -154,9 +155,9 @@
 
           // カーソル位置情報も一緒に送信
           if (currentSelection) {
-            saveMemo(contents, memoIndex, currentSelection);
+            saveMemo(contents, currentSelection);
           } else {
-            saveMemo(contents, memoIndex);
+            saveMemo(contents);
           }
 
           // 編集フラグをリセット
@@ -205,19 +206,28 @@
   });
 
   // 外部から更新されたコンテンツとの同期（編集中は同期しない）
-  $: if (quill && !isEditing && !isEqual(content, lastSavedContent)) {
-    // 一時的に編集中フラグを立てる（再描画防止）
-    isEditing = true;
+  $: if (quill && !isEditing) {
+    // 空コンテンツへの切り替えは常に適用し、既存コンテンツが残らないようにする
+    const contentIsEmpty = !content;
+    const lastSavedIsEmpty = !lastSavedContent;
+    const needsUpdate =
+      (contentIsEmpty !== lastSavedIsEmpty) ||
+      (!contentIsEmpty && !isEqual(content, lastSavedContent));
 
-    // コンテンツを更新
-    applyContent(content);
-    lastSavedContent = content;
+    if (needsUpdate) {
+      // 一時的に編集中フラグを立てる（再描画防止）
+      isEditing = true;
 
-    // 外部更新後はカーソル位置を保存せずにシンプルに編集フラグのみリセット
-    setTimeout(() => {
-      // 編集フラグをリセット
-      isEditing = false;
-    }, 50);
+      // コンテンツを更新
+      applyContent(content);
+      lastSavedContent = content;
+
+      // 外部更新後はカーソル位置を保存せずにシンプルに編集フラグのみリセット
+      setTimeout(() => {
+        // 編集フラグをリセット
+        isEditing = false;
+      }, 50);
+    }
   }
 </script>
 

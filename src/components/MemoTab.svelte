@@ -108,9 +108,10 @@
         {disabled}
         activeColor={"var(--theme-color-Primary-dark)"}
         normalColor={"var(--theme-color-Primary-main)"}
-        on:click={() => {
+        on:click={async () => {
           if (addMemo(newMemoTitle)) {
-            selectedMemoIndex = memo.length;
+            await tick();
+            selectedMemoIndex = memo.length - 1;
           }
         }}
       >

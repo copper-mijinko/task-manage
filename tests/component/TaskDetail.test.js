@@ -117,4 +117,36 @@ describe("TaskDetail", () => {
 
     expect(screen.getByDisplayValue("review").closest("button")).toHaveClass("selected");
   });
+
+  test("shows empty content after switching from existing memo to new empty memo and back", async () => {
+    const project = createProjectData();
+    project.data.children[0].data.memo = [{ title: "existing", content: "some content" }];
+    tree_data.set(project);
+    table_selected_id.set("task-1");
+
+    const { container } = render(TaskDetail);
+
+    // Add a new empty memo
+    const addButton = container.querySelectorAll(".memotab-control button")[0];
+    await fireEvent.click(addButton);
+    await tick();
+
+    // Now on the new empty memo (index 1)
+    const memoStub = screen.getByTestId("memo-stub");
+    expect(memoStub.getAttribute("data-memo-index")).toBe("1");
+
+    // Switch to existing memo (index 0)
+    await fireEvent.click(screen.getByDisplayValue("existing").closest("button"));
+    await tick();
+    expect(screen.getByTestId("memo-stub").getAttribute("data-memo-index")).toBe("0");
+
+    // Switch back to the empty memo (index 1)
+    await fireEvent.click(screen.getByDisplayValue("memo").closest("button"));
+    await tick();
+
+    const stub = screen.getByTestId("memo-stub");
+    expect(stub.getAttribute("data-memo-index")).toBe("1");
+    // content should be empty string for the new empty memo
+    expect(stub.textContent.trim()).toBe("");
+  });
 });
