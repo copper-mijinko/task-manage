@@ -29,6 +29,7 @@
 
   // リンク処理のための変数
   let isHandlingLink = false;
+  let errorMessage = null;
 
   // イベントリスナーの参照を保持する変数
   let linkClickListener;
@@ -77,6 +78,8 @@
             isHandlingLink = true;
             // 外部ブラウザでリンクを開く
             await window.electronAPI.openExternalLink(href);
+          } catch {
+            errorMessage = "リンクを開けませんでした";
           } finally {
             isHandlingLink = false;
           }
@@ -229,6 +232,12 @@
 </script>
 
 <div class="wrapper">
+  {#if errorMessage}
+    <div class="error-banner" role="alert">
+      <span>{errorMessage}</span>
+      <button on:click={() => (errorMessage = null)}>×</button>
+    </div>
+  {/if}
   <div bind:this={editor} class="editor" on:blur></div>
 </div>
 
@@ -249,6 +258,25 @@
     flex-direction: column;
     height: 100%;
     background-color: var(--theme-color-Main-light);
+  }
+  .error-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.4rem 0.75rem;
+    background-color: #c0392b;
+    color: #fff;
+    font-size: 0.875rem;
+    flex-shrink: 0;
+  }
+  .error-banner button {
+    background: none;
+    border: none;
+    color: #fff;
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    padding: 0 0.25rem;
   }
   :global(.ql-picker :not(.ql-active, :hover)) {
     color: var(--theme-color-Sub-light) !important;
