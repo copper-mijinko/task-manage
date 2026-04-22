@@ -266,7 +266,9 @@
       debouncedCommit();
     }}
     on:click={(e) => {
-      e.stopPropagation();
+      if (!disabled) {
+        e.stopPropagation();
+      }
     }}
     on:keydown={(e) => {
       if (e.key === "Enter") {
