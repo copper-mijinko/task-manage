@@ -44,6 +44,7 @@ Electron アプリ全体を起動して確認する。
 ### 2.2 Component テスト
 
 対象ファイル:
+[tests/component/Memo.test.js](/home/akai/develop/task-manage-roo/tests/component/Memo.test.js:1)  
 [tests/component/SearchBox.test.js](/home/akai/develop/task-manage-roo/tests/component/SearchBox.test.js:1)  
 [tests/component/PageSearchBox.test.js](/home/akai/develop/task-manage-roo/tests/component/PageSearchBox.test.js:1)  
 [tests/component/TaskDetail.test.js](/home/akai/develop/task-manage-roo/tests/component/TaskDetail.test.js:1)  
@@ -52,6 +53,13 @@ Electron アプリ全体を起動して確認する。
 
 | 対象                                  | テストケース                                                     | 確認内容                                                    | テストファイル                                                                                                      |
 | ------------------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `src/components/Memo.svelte`          | `shows no error banner initially`                                | 初期状態でエラーバナーが表示されない                        | [tests/component/Memo.test.js](/home/akai/develop/task-manage-roo/tests/component/Memo.test.js:1)                   |
+| `src/components/Memo.svelte`          | `shows error banner when openExternalLink rejects`               | リンク失敗時にエラーバナーを表示する                        | [tests/component/Memo.test.js](/home/akai/develop/task-manage-roo/tests/component/Memo.test.js:1)                   |
+| `src/components/Memo.svelte`          | `dismisses error banner when × button is clicked`                | ×ボタンでエラーバナーを閉じる                              | [tests/component/Memo.test.js](/home/akai/develop/task-manage-roo/tests/component/Memo.test.js:1)                   |
+| `src/components/Memo.svelte`          | `shows no error banner when openExternalLink resolves`           | 成功時にエラーバナーが表示されない                          | [tests/component/Memo.test.js](/home/akai/develop/task-manage-roo/tests/component/Memo.test.js:1)                   |
+| `src/components/Memo.svelte`          | `resets isHandlingLink after error, allowing subsequent clicks`  | エラー後に `isHandlingLink` がリセットされ次のクリックを処理する | [tests/component/Memo.test.js](/home/akai/develop/task-manage-roo/tests/component/Memo.test.js:1)               |
+| `src/components/Memo.svelte`          | `ignores duplicate clicks while a link is being handled`         | 処理中の重複クリックを無視する                              | [tests/component/Memo.test.js](/home/akai/develop/task-manage-roo/tests/component/Memo.test.js:1)                   |
+| `src/components/Memo.svelte`          | `does not open link when href is empty`                          | href が空のリンクでは `openExternalLink` を呼ばない         | [tests/component/Memo.test.js](/home/akai/develop/task-manage-roo/tests/component/Memo.test.js:1)                   |
 | `src/components/SearchBox.svelte`     | `updates the name filter as the user types`                      | 入力に応じて `filter` store を更新する                      | [tests/component/SearchBox.test.js](/home/akai/develop/task-manage-roo/tests/component/SearchBox.test.js:1)         |
 | `src/components/SearchBox.svelte`     | `clears the filter on Escape and keeps focus in the input`       | `Escape` で入力と filter をクリアし、focus を維持する       | [tests/component/SearchBox.test.js](/home/akai/develop/task-manage-roo/tests/component/SearchBox.test.js:1)         |
 | `src/components/SearchBox.svelte`     | `reflects store updates when the input is not focused`           | 外部からの store 更新を入力欄へ反映する                     | [tests/component/SearchBox.test.js](/home/akai/develop/task-manage-roo/tests/component/SearchBox.test.js:1)         |
@@ -108,6 +116,9 @@ Electron アプリ全体を起動して確認する。
 
 | 対象                                  | 確認内容                           | 状態     | テストファイル                                                                                                      |
 | ------------------------------------- | ---------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------- |
+| `src/components/Memo.svelte`          | リンク失敗時のエラーバナー表示     | 実装済み | [tests/component/Memo.test.js](/home/akai/develop/task-manage-roo/tests/component/Memo.test.js:1)                   |
+| `src/components/Memo.svelte`          | エラーバナーの閉じる操作           | 実装済み | [tests/component/Memo.test.js](/home/akai/develop/task-manage-roo/tests/component/Memo.test.js:1)                   |
+| `src/components/Memo.svelte`          | 重複クリック防止                   | 実装済み | [tests/component/Memo.test.js](/home/akai/develop/task-manage-roo/tests/component/Memo.test.js:1)                   |
 | `src/components/SearchBox.svelte`     | 入力による filter 更新             | 実装済み | [tests/component/SearchBox.test.js](/home/akai/develop/task-manage-roo/tests/component/SearchBox.test.js:1)         |
 | `src/components/SearchBox.svelte`     | `Escape` によるクリアと focus 維持 | 実装済み | [tests/component/SearchBox.test.js](/home/akai/develop/task-manage-roo/tests/component/SearchBox.test.js:1)         |
 | `src/components/SearchBox.svelte`     | store 変更の入力欄反映             | 実装済み | [tests/component/SearchBox.test.js](/home/akai/develop/task-manage-roo/tests/component/SearchBox.test.js:1)         |
