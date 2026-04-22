@@ -20,7 +20,7 @@
   import PageSearchBox from "./components/PageSearchBox.svelte";
   import TaskDetailWindow from "./components/TaskDetailWindow.svelte";
   let show = Array(4).fill(false);
-  let saveErrorMessage: string | null = null;
+  let saveErrorMessage = null;
 
   const currentHash = typeof window !== "undefined" ? window.location.hash : "";
   const currentSearch =
