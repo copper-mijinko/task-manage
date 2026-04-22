@@ -143,6 +143,20 @@ test("adds a sibling task from the project toolbar and persists it", async () =>
   }
 });
 
+test("selects a task row when clicking the task name input", async () => {
+  const app = await launchSeededApp();
+
+  try {
+    const taskNameInput = app.window.locator('#task-1 input[type="text"]').first();
+    await taskNameInput.click();
+
+    await expect(app.window.locator("#task-1")).toHaveAttribute("aria-selected", "true");
+    await expect(app.window.locator("#project-1")).toHaveAttribute("aria-selected", "false");
+  } finally {
+    await closeSeededApp(app);
+  }
+});
+
 test("toggles the theme and persists the new value into meta.json", async () => {
   const app = await launchSeededApp();
 
