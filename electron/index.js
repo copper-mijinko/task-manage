@@ -1,5 +1,5 @@
 const _ = require("lodash");
-const { app, BrowserWindow, ipcMain, shell, WebContents } = require("electron");
+const { app, BrowserWindow, ipcMain, shell, WebContents, dialog } = require("electron");
 const fs = require("fs");
 const path = require("path");
 const { LowSync, JSONFileSync } = require("@commonify/lowdb");
@@ -14,6 +14,14 @@ function resolveAppDataPath(fileName) {
   }
 
   return path.join(__dirname, fileName);
+}
+
+function showSaveError(context, err) {
+  log.error(`Failed to write data (${context}):`, err.message);
+  dialog.showErrorBox(
+    "保存エラー",
+    `データの保存に失敗しました。\n操作: ${context}\nエラー: ${err.message}\n\nアプリを閉じると変更内容が失われる可能性があります。`
+  );
 }
 
 function shouldOpenDevTools() {
@@ -93,7 +101,7 @@ app.on("ready", () => {
         }
       }
     } catch (err) {
-      log.error("Failed to write meta_data (set-meta-data):", err.message);
+      showSaveError("set-meta-data", err);
     }
   });
   // on delete-meta-data.
@@ -105,7 +113,7 @@ app.on("ready", () => {
         db_meta.write();
         log.info(`Metadata key deleted: ${key}`);
       } catch (err) {
-        log.error("Failed to write meta_data (delete-meta-data):", err.message);
+        showSaveError("delete-meta-data", err);
       }
     }
   });
@@ -125,8 +133,7 @@ app.on("ready", () => {
       try {
         db.write();
       } catch (err) {
-        // Log the error but continue silently
-        log.error("Failed to write data (set-tree-data):", err.message);
+        showSaveError("set-tree-data", err);
       }
 
       BrowserWindow.getAllWindows().forEach((window) => {
@@ -152,8 +159,7 @@ app.on("ready", () => {
       try {
         db.write();
       } catch (err) {
-        // Log the error but continue silently
-        log.error("Failed to write data (add-project):", err.message);
+        showSaveError("add-project", err);
       }
     }
   });
@@ -164,8 +170,7 @@ app.on("ready", () => {
       try {
         db.write();
       } catch (err) {
-        // Log the error but continue silently
-        log.error("Failed to write data (delete-project):", err.message);
+        showSaveError("delete-project", err);
       }
 
       BrowserWindow.getAllWindows().forEach((window) => {
@@ -206,7 +211,7 @@ app.on("ready", () => {
         try {
           db.write();
         } catch (err) {
-          log.error("Failed to write data (set-project-order):", err.message);
+          showSaveError("set-project-order", err);
         }
       }
     }
