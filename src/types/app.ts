@@ -46,5 +46,6 @@ export interface ElectronAPI {
   onThemeChanged: (callback: (theme: ThemeName) => void) => void;
   onTreeDataUpdated: (callback: (treeData: ProjectData) => void) => void;
   onProjectDeleted: (callback: (projectId: string) => void) => void;
+  onSaveError: (callback: (message: string) => void) => void;
   getCurrentTheme: () => Promise<ThemeName>;
 }

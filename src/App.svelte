@@ -20,6 +20,7 @@
   import PageSearchBox from "./components/PageSearchBox.svelte";
   import TaskDetailWindow from "./components/TaskDetailWindow.svelte";
   let show = Array(4).fill(false);
+  let saveErrorMessage: string | null = null;
 
   const currentHash = typeof window !== "undefined" ? window.location.hash : "";
   const currentSearch =
@@ -128,6 +129,12 @@
     }
 
     window.addEventListener("keydown", handleKeyDown, true);
+
+    if (window.electronAPI?.onSaveError) {
+      window.electronAPI.onSaveError((message) => {
+        saveErrorMessage = message;
+      });
+    }
   });
 
   onDestroy(() => {
@@ -136,6 +143,12 @@
 </script>
 
 <div class:Container={true}>
+  {#if saveErrorMessage}
+    <div class="save-error-banner" role="alert">
+      <span>{saveErrorMessage}</span>
+      <button on:click={() => (saveErrorMessage = null)}>×</button>
+    </div>
+  {/if}
   {#if !isTaskDetailWindow}
     <div class="Header">
       <Header />
@@ -227,5 +240,25 @@
   }
   div.Main.DetailWindowMain {
     height: 100%;
+  }
+  .save-error-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.4rem 0.75rem;
+    background-color: #c0392b;
+    color: #fff;
+    font-size: 0.875rem;
+    flex-shrink: 0;
+    z-index: 10000;
+  }
+  .save-error-banner button {
+    background: none;
+    border: none;
+    color: #fff;
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    padding: 0 0.25rem;
   }
 </style>
