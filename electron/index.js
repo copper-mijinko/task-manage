@@ -1,5 +1,5 @@
 const _ = require("lodash");
-const { app, BrowserWindow, ipcMain, shell, WebContents, dialog } = require("electron");
+const { app, BrowserWindow, ipcMain, shell, WebContents } = require("electron");
 const fs = require("fs");
 const path = require("path");
 const { LowSync, JSONFileSync } = require("@commonify/lowdb");
@@ -18,10 +18,12 @@ function resolveAppDataPath(fileName) {
 
 function showSaveError(context, err) {
   log.error(`Failed to write data (${context}):`, err.message);
-  dialog.showErrorBox(
-    "保存エラー",
-    `データの保存に失敗しました。\n操作: ${context}\nエラー: ${err.message}\n\nアプリを閉じると変更内容が失われる可能性があります。`
-  );
+  const message = `データの保存に失敗しました: ${err.message}`;
+  BrowserWindow.getAllWindows().forEach((win) => {
+    if (!win.isDestroyed()) {
+      win.webContents.send("save-error", message);
+    }
+  });
 }
 
 function shouldOpenDevTools() {

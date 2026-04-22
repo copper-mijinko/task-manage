@@ -63,6 +63,11 @@ const electronAPI = {
       callback(projectId);
     });
   },
+  onSaveError: (callback) => {
+    ipcRenderer.on("save-error", (event, message) => {
+      callback(/** @type {string} */ (message));
+    });
+  },
   // 現在のテーマを取得する
   getCurrentTheme: () => {
     return ipcRenderer.invoke("get-current-theme");
