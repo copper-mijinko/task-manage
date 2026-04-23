@@ -11,6 +11,7 @@ import {
   closed_node_ids,
   pendingTaskDetailSelection,
   clearPendingTaskDetailSelection,
+  saveStatus,
 } from "./ui";
 
 export interface TreeDataStore extends Writable<ProjectData | undefined> {
@@ -69,7 +70,7 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
     return oldIds.filter((id) => !newIds.includes(id));
   };
 
-  const persistTreeData = throttle((current: ProjectData | undefined) => {
+  const persistTreeData = throttle(async (current: ProjectData | undefined) => {
     if (!current) {
       return;
     }
@@ -81,6 +82,7 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
       window.electronAPI.getProjectIDs().then((result) => {
         project_ids.set(result);
       });
+      saveStatus.set("idle");
       return;
     }
 
@@ -112,7 +114,12 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
 
     previousData = _.cloneDeep(current);
     filter.set(get(filter));
-    window.electronAPI.setTreeData(current);
+    try {
+      await window.electronAPI.setTreeData(current);
+      saveStatus.set("saved");
+    } catch {
+      saveStatus.set("error");
+    }
     window.electronAPI.getProjectIDs().then((result) => {
       project_ids.set(result);
     });
@@ -180,6 +187,11 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
           pendingSkipSnapshot = false;
         }
 
+        if (current !== undefined) {
+          saveStatus.set("saving");
+        } else {
+          saveStatus.set("idle");
+        }
         persistTreeData(current);
       });
     },

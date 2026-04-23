@@ -206,3 +206,6 @@ export function setTaskDetailWindowTarget(projectId: string, taskId: string) {
 }
 
 export const showPageSearch = writable(false);
+
+export type SaveStatus = "idle" | "saving" | "saved" | "error";
+export const saveStatus = writable<SaveStatus>("idle");
