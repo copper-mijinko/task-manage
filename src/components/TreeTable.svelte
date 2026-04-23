@@ -9,6 +9,7 @@
     closed_node_ids,
     table_selected_id,
     theme,
+    column_settings,
   } from "../stores.ts";
   import {
     flattenVisibleTree,
@@ -29,13 +30,36 @@
   let table_root; // Bind
 
   // Resize
-  let resizers, handlers, resize_observer;
+  let resizers = [], handlers, resize_observer;
 
-  // Min width
-  let minWidth;
   $: rows = $filtered_data ? flattenVisibleTree($filtered_data, $closed_node_ids) : [];
   $: isDark = $theme == "dark";
   let scrollTop = 0;
+
+  // Compute visible headers from tree_data.headers filtered/ordered by column_settings
+  function computeVisibleHeaders(treeHeaders, settings) {
+    if (!treeHeaders) return [];
+    if (!settings) return treeHeaders;
+
+    const result = [];
+    for (const setting of settings) {
+      if (setting.id === "name" || setting.visible) {
+        const header = treeHeaders.find((h) => h.name === setting.id);
+        if (header) result.push(header);
+      }
+    }
+
+    // Include any headers not covered by settings
+    const settingIds = new Set(settings.map((s) => s.id));
+    for (const header of treeHeaders) {
+      if (!settingIds.has(header.name)) result.push(header);
+    }
+
+    return result;
+  }
+
+  $: visibleHeaders = computeVisibleHeaders($tree_data?.headers, $column_settings);
+  $: minWidth = visibleHeaders.length ? `${4 * visibleHeaders.length}rem` : "auto";
 
   const getRowHeightPx = () => {
     if (typeof window === "undefined") {
@@ -84,109 +108,130 @@
   let deleteTargetName = "";
 
   onMount(() => {
-    let headers, data_rows;
-    // Create resizres
-    [resizers, headers, data_rows, resize_observer] = createResizers();
-    // Event listners
-    handlers = setResizersEvents(resizers, headers, data_rows);
+    let domHeaders, data_rows;
+    [resizers, domHeaders, data_rows, resize_observer] = createResizers(visibleHeaders);
+    handlers = setResizersEvents(resizers, domHeaders, data_rows);
 
-    // Min width
-    minWidth = `${4 * headers.length}rem`; // magic number 4rem defined in TreeTableHeader.
-
-    // Observe slot change
     let mutation_observer = new MutationObserver(() => {
-      let headers, data_rows;
-      // Create resizres
-      [resizers, headers, data_rows] = createResizers(resizers, false, resize_observer);
-      // Event listners
-      unsetResizerEvents(resizers, handlers);
-      handlers = setResizersEvents(resizers, headers, data_rows);
+      const currentDomHeaderCount = Array.from(
+        table_root.querySelectorAll(".TableRow")[0]?.querySelectorAll(".TableHeader") ?? []
+      ).length;
+      const columnCountChanged = currentDomHeaderCount !== resizers.length + 1;
+
+      let newDomHeaders, newDataRows;
+
+      if (columnCountChanged && currentDomHeaderCount > 0) {
+        // Column was added or removed — full reinit
+        resizers.forEach((r) => r.parentNode?.removeChild(r));
+        resizers = [];
+        unsetResizerEvents(resizers, handlers);
+        [resizers, newDomHeaders, newDataRows, resize_observer] = createResizers(
+          visibleHeaders,
+          [],
+          true,
+          resize_observer
+        );
+      } else {
+        [resizers, newDomHeaders, newDataRows] = createResizers(
+          visibleHeaders,
+          resizers,
+          false,
+          resize_observer
+        );
+        unsetResizerEvents(resizers, handlers);
+      }
+
+      handlers = setResizersEvents(resizers, newDomHeaders, newDataRows);
     });
     mutation_observer.observe(table_root, { subtree: true, childList: true });
   });
 
-  const createResizers = (resizers = [], is_default = true, resize_observer = null) => {
+  const createResizers = (
+    currentHeaders,
+    existingResizers = [],
+    is_default = true,
+    existingResizeObserver = null
+  ) => {
     // Get elms
-    let rows = table_root.querySelectorAll(".TableRow");
-    let headers = Array.from(rows[0].querySelectorAll(".TableHeader"));
+    let tableRows = table_root.querySelectorAll(".TableRow");
+    let domHeaders = Array.from(tableRows[0].querySelectorAll(".TableHeader"));
     let data_rows = [];
-    rows.forEach((data_row, index) => {
+    tableRows.forEach((data_row, index) => {
       if (index != 0) {
         data_rows.push(data_row.querySelectorAll(".TableData"));
       }
     });
+
     // Set width
-    const default_ratio_sum = $tree_data.headers.reduce(
-      (partialSum, header) => partialSum + header.default_ratio,
-      0
-    );
-    const default_root_width = rows[0].getBoundingClientRect().width;
-    const default_data_widths = $tree_data.headers.map(
-      (header) => (default_root_width * header.default_ratio) / default_ratio_sum
-    );
-    headers.forEach((header, index) => {
-      if (is_default) {
+    if (is_default) {
+      const default_ratio_sum = currentHeaders.reduce(
+        (partialSum, header) => partialSum + header.default_ratio,
+        0
+      );
+      const default_root_width = tableRows[0].getBoundingClientRect().width;
+      const default_data_widths = currentHeaders.map(
+        (header) => (default_root_width * header.default_ratio) / default_ratio_sum
+      );
+      domHeaders.forEach((header, index) => {
         header.style.width = `calc(${default_data_widths[index]}px)`;
         data_rows.forEach((data_row, _) => {
           data_row[index].style.width = `calc(${default_data_widths[index]}px)`;
         });
-      } else {
-        data_rows.forEach((data_row, _) => {
-          data_row[index].style.width = `${header.getBoundingClientRect().width}px)`;
-        });
-      }
-    });
-    // Create resizer
-    if (is_default) {
-      headers.forEach((header, index) => {
+      });
+
+      // Create resizer elements
+      domHeaders.forEach((header, index) => {
         if (index == 0) {
           return;
         }
-        // Create resizer
         const resizer = document.createElement("div");
         resizer.classList.add("Resizer");
-        resizer.style.height = `${table_root.offsetHeight}px`; //テーブルの高さ
-        // Postions of resizer
+        resizer.style.height = `${table_root.offsetHeight}px`;
         resizer.style.left = `calc(${default_data_widths.reduce((partialSum, width) => partialSum + width, 0) - 3}px)`;
-        // Add resizer into Dom
         header.parentNode.insertBefore(resizer, header);
-        // Keep resizer
-        resizers.push(resizer);
+        existingResizers.push(resizer);
+      });
+    } else {
+      domHeaders.forEach((header, index) => {
+        data_rows.forEach((data_row, _) => {
+          data_row[index].style.width = `${header.getBoundingClientRect().width}px`;
+        });
       });
     }
+
     // For table_root resizing
-    if (resize_observer) {
-      resize_observer.disconnect(table_root);
+    if (existingResizeObserver) {
+      existingResizeObserver.disconnect(table_root);
     }
-    resize_observer = new ResizeObserver((entries) => {
+    const newResizeObserver = new ResizeObserver((entries) => {
       // Height setting
-      for (let resizer of resizers) {
+      for (let resizer of existingResizers) {
         resizer.style.height = `${entries[0].contentRect.height}px`;
       }
       // Width setting
       let table_width = 0;
-      headers.forEach((header, index) => {
+      domHeaders.forEach((header, index) => {
         table_width += header.getBoundingClientRect().width;
       });
       let new_table_width = entries[0].contentRect.width;
-      const new_header_widths = headers.map(
+      const new_header_widths = domHeaders.map(
         (h) => (h.getBoundingClientRect().width * new_table_width) / table_width
       );
-      headers.forEach((header, index) => {
+      domHeaders.forEach((header, index) => {
         header.style.width = `${new_header_widths[index]}px`;
         data_rows.forEach((data_row) => {
           data_row[index].style.width = `${new_header_widths[index]}px`;
         });
       });
       let left = 0;
-      resizers.forEach((resizer, index) => {
+      existingResizers.forEach((resizer, index) => {
         resizer.style.left = `${left + new_header_widths[index] - 3}px`;
         left += new_header_widths[index];
       });
     });
-    resize_observer.observe(table_root);
-    // Return
-    return [resizers, headers, data_rows, resize_observer];
+    newResizeObserver.observe(table_root);
+
+    return [existingResizers, domHeaders, data_rows, newResizeObserver];
   };
 
   const setResizersEvents = (resizers, headers, data_rows) => {
@@ -299,6 +344,7 @@
     }
     return handlers;
   };
+
   const unsetResizerEvents = (resizers, handlers) => {
     resizers.forEach((resizer, index) => {
       resizer.removeEventListener("mousedown", handlers[index]);
@@ -492,7 +538,7 @@
   aria-label="Task tree"
   on:scroll={handleScroll}
 >
-  <TreeTableHeader headers={$tree_data.headers} />
+  <TreeTableHeader headers={visibleHeaders} />
   {#if stickyTrail.length > 0}
     <div class="StickyTrail" aria-hidden="true">
       <div class="StickyTrailContent">
@@ -514,7 +560,7 @@
     {#each rows as row (row.id)}
       <TreeTableRow
         {row}
-        headers={$tree_data.headers}
+        headers={visibleHeaders}
         selected={$table_selected_id === row.id}
         {isDark}
         canDrop={canDropTarget}
