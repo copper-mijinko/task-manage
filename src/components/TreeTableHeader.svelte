@@ -4,6 +4,7 @@
   import MultiSelect from "./MultiSelect.svelte";
 
   export let headers;
+  export let allHeaders = [];
 
   let selected = [];
   $: $filter = {
@@ -15,7 +16,7 @@
   let panelElement;
   let panelStyle = "";
 
-  $: availableIds = new Set(headers.map((h) => h.name));
+  $: availableIds = new Set(allHeaders.map((h) => h.name));
 
   function openPanel(e) {
     e.stopPropagation();

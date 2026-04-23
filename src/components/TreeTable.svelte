@@ -540,7 +540,7 @@
   aria-label="Task tree"
   on:scroll={handleScroll}
 >
-  <TreeTableHeader headers={visibleHeaders} />
+  <TreeTableHeader headers={visibleHeaders} allHeaders={$tree_data?.headers ?? []} />
   {#if stickyTrail.length > 0}
     <div class="StickyTrail" aria-hidden="true">
       <div class="StickyTrailContent">
