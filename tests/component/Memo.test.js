@@ -2,6 +2,8 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { tick } from "svelte";
 import { vi } from "vitest";
 
+const quillInstances = [];
+
 vi.mock("quill", () => {
   class MockQuill {
     constructor() {
@@ -18,6 +20,7 @@ vi.mock("quill", () => {
       this.setSelection = vi.fn();
       this.deleteText = vi.fn();
       this.insertText = vi.fn();
+      quillInstances.push(this);
     }
   }
   return { default: MockQuill };
@@ -29,6 +32,7 @@ describe("Memo - link click handling", () => {
   let saveMemo;
 
   beforeEach(() => {
+    quillInstances.length = 0;
     saveMemo = vi.fn();
     window.electronAPI = {
       openExternalLink: vi.fn().mockResolvedValue(undefined),
@@ -135,5 +139,82 @@ describe("Memo - link click handling", () => {
     await tick();
 
     expect(window.electronAPI.openExternalLink).not.toHaveBeenCalled();
+  });
+
+  test("preserves leading newlines for plain-text paste", async () => {
+    render(Memo, { props: { saveMemo, content: "" } });
+    const quill = quillInstances.at(-1);
+    expect(quill).toBeDefined();
+
+    const pasteEvent = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(pasteEvent, "clipboardData", {
+      value: {
+        getData: (type) => (type === "text/plain" ? "\nhello" : ""),
+        items: [],
+      },
+      configurable: true,
+    });
+
+    quill.root.dispatchEvent(pasteEvent);
+
+    expect(quill.insertText).toHaveBeenCalledWith(0, "\nhello", "user");
+    expect(pasteEvent.defaultPrevented).toBe(true);
+  });
+
+  test("does not intercept paste when clipboard has rich HTML content", async () => {
+    render(Memo, { props: { saveMemo, content: "" } });
+    const quill = quillInstances.at(-1);
+
+    const pasteEvent = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(pasteEvent, "clipboardData", {
+      value: {
+        getData: (type) => (type === "text/plain" ? "\n" : "<p><img src='x'></p>"),
+        items: [],
+      },
+      configurable: true,
+    });
+
+    quill.root.dispatchEvent(pasteEvent);
+
+    expect(quill.insertText).not.toHaveBeenCalled();
+    expect(pasteEvent.defaultPrevented).toBe(false);
+  });
+
+  test("does not intercept paste when clipboard has image file items", async () => {
+    render(Memo, { props: { saveMemo, content: "" } });
+    const quill = quillInstances.at(-1);
+
+    const pasteEvent = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(pasteEvent, "clipboardData", {
+      value: {
+        getData: (type) => (type === "text/plain" ? "\n" : ""),
+        items: [{ kind: "file", type: "image/png" }],
+      },
+      configurable: true,
+    });
+
+    quill.root.dispatchEvent(pasteEvent);
+
+    expect(quill.insertText).not.toHaveBeenCalled();
+    expect(pasteEvent.defaultPrevented).toBe(false);
+  });
+
+  test("does not intercept paste while readOnly", async () => {
+    render(Memo, { props: { saveMemo, content: "", readOnly: true } });
+    const quill = quillInstances.at(-1);
+
+    const pasteEvent = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(pasteEvent, "clipboardData", {
+      value: {
+        getData: (type) => (type === "text/plain" ? "\nhello" : ""),
+        items: [],
+      },
+      configurable: true,
+    });
+
+    quill.root.dispatchEvent(pasteEvent);
+
+    expect(quill.insertText).not.toHaveBeenCalled();
+    expect(pasteEvent.defaultPrevented).toBe(false);
   });
 });

@@ -100,7 +100,18 @@
         return;
       }
 
-      const pastedText = event.clipboardData?.getData("text/plain");
+      const clipboardData = event.clipboardData;
+      const pastedText = clipboardData?.getData("text/plain");
+      const pastedHtml = clipboardData?.getData("text/html");
+      const hasRichContent = typeof pastedHtml === "string" && pastedHtml.trim() !== "";
+      const hasImageFile = Array.from(clipboardData?.items ?? []).some(
+        (item) => item.kind === "file" && typeof item.type === "string" && item.type.startsWith("image/")
+      );
+
+      if (hasRichContent || hasImageFile) {
+        return;
+      }
+
       if (typeof pastedText !== "string" || !pastedText.startsWith("\n")) {
         return;
       }

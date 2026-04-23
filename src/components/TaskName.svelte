@@ -16,7 +16,7 @@
   export let canOutdent = false;
   let draftText = text ?? "";
   let input;
-  let disabled = true;
+  let isEditing = false;
   let showMenu = false;
   let menuPosition = { x: 0, y: 0 };
   const menuOwnerId = Math.random().toString(36).slice(2);
@@ -124,7 +124,7 @@
   const dispatch = createEventDispatcher();
 
   let lastSubmittedText = null;
-  $: if (disabled) {
+  $: if (!isEditing) {
     draftText = text ?? "";
   }
   $: if ((text ?? "") === lastSubmittedText) {
@@ -154,8 +154,8 @@
   });
 
   const toggle = async () => {
-    disabled = !disabled;
-    if (!disabled) {
+    isEditing = !isEditing;
+    if (isEditing) {
       await tick();
       input.focus();
     }
@@ -255,44 +255,51 @@
     type="text"
     bind:this={input}
     value={draftText}
-    {disabled}
+    readonly={!isEditing}
+    aria-readonly={!isEditing}
     draggable="true"
     on:blur={() => {
+      if (!isEditing) {
+        return;
+      }
       flushCommit();
-      disabled = true;
+      isEditing = false;
     }}
     on:input={(e) => {
       draftText = e.currentTarget.value;
       debouncedCommit();
     }}
     on:click={(e) => {
-      if (!disabled) {
+      if (isEditing) {
         e.stopPropagation();
       }
     }}
     on:keydown={(e) => {
+      if (!isEditing) {
+        return;
+      }
       if (e.key === "Enter") {
         flushCommit();
-        disabled = true;
+        isEditing = false;
       } else if (e.key === "Escape") {
         resetDraft();
-        disabled = true;
+        isEditing = false;
       }
     }}
     on:dragstart={(e) => {
-      if (!disabled) {
+      if (isEditing) {
         e.preventDefault();
         e.stopPropagation();
       }
     }}
     on:drag={(e) => {
-      if (!disabled) {
+      if (isEditing) {
         e.preventDefault();
         e.stopPropagation();
       }
     }}
     on:dragend={(e) => {
-      if (!disabled) {
+      if (isEditing) {
         e.preventDefault();
         e.stopPropagation();
       }
@@ -369,7 +376,7 @@
   input:focus {
     outline: auto;
   }
-  input:disabled {
+  input[readonly] {
     background-color: var(--backgroundColor);
     color: var(--color);
   }
