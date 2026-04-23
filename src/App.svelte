@@ -148,11 +148,20 @@
   {#if saveErrorMessage}
     <div class="save-error-banner" role="alert">
       <span>{saveErrorMessage}</span>
-      <button on:click={() => { saveErrorMessage = null; $saveStatus = "idle"; }}>×</button>
+      <button
+        on:click={() => {
+          saveErrorMessage = null;
+          $saveStatus = "idle";
+        }}>×</button
+      >
     </div>
   {/if}
   {#if !saveErrorMessage && $saveStatus !== "idle"}
-    <div class="save-status-indicator" data-testid="save-status-indicator" data-status={$saveStatus}>
+    <div
+      class="save-status-indicator"
+      data-testid="save-status-indicator"
+      data-status={$saveStatus}
+    >
       {#if $saveStatus === "saving"}
         保存中...
       {:else if $saveStatus === "saved"}
