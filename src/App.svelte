@@ -10,6 +10,7 @@
     theme,
     undoHistory,
     redoHistory,
+    saveStatus,
   } from "./stores.ts";
   import { onMount, onDestroy } from "svelte";
   import ProjectPage from "./components/ProjectPage.svelte";
@@ -133,6 +134,7 @@
     if (window.electronAPI?.onSaveError) {
       window.electronAPI.onSaveError((message) => {
         saveErrorMessage = message;
+        saveStatus.set("error");
       });
     }
   });
@@ -146,7 +148,18 @@
   {#if saveErrorMessage}
     <div class="save-error-banner" role="alert">
       <span>{saveErrorMessage}</span>
-      <button on:click={() => (saveErrorMessage = null)}>×</button>
+      <button on:click={() => { saveErrorMessage = null; $saveStatus = "idle"; }}>×</button>
+    </div>
+  {/if}
+  {#if !saveErrorMessage && $saveStatus !== "idle"}
+    <div class="save-status-indicator" data-testid="save-status-indicator" data-status={$saveStatus}>
+      {#if $saveStatus === "saving"}
+        保存中...
+      {:else if $saveStatus === "saved"}
+        保存済み
+      {:else if $saveStatus === "error"}
+        保存失敗
+      {/if}
     </div>
   {/if}
   {#if !isTaskDetailWindow}
@@ -260,5 +273,21 @@
     font-size: 1rem;
     line-height: 1;
     padding: 0 0.25rem;
+  }
+  .save-status-indicator {
+    position: fixed;
+    bottom: 0.75rem;
+    right: 0.75rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 0.25rem;
+    font-size: 0.75rem;
+    opacity: 0.85;
+    pointer-events: none;
+    z-index: 9999;
+    background-color: rgba(0, 0, 0, 0.55);
+    color: #fff;
+  }
+  .save-status-indicator[data-status="error"] {
+    background-color: #c0392b;
   }
 </style>
