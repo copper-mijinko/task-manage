@@ -55,9 +55,10 @@
       return [];
     }
 
+    const stickyOverlayRows = 1;
     const topVisibleIndex = Math.min(
       visibleRows.length - 1,
-      Math.max(0, Math.floor(currentScrollTop / rowHeightPx))
+      Math.max(0, Math.floor(currentScrollTop / rowHeightPx) - stickyOverlayRows)
     );
     const topRow = visibleRows[topVisibleIndex];
     if (!topRow || topRow.depth === 0) {
