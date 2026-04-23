@@ -30,7 +30,9 @@
   let table_root; // Bind
 
   // Resize
-  let resizers = [], handlers, resize_observer;
+  let resizers = [],
+    handlers,
+    resize_observer;
 
   $: rows = $filtered_data ? flattenVisibleTree($filtered_data, $closed_node_ids) : [];
   $: isDark = $theme == "dark";
