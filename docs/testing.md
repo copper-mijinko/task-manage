@@ -49,7 +49,8 @@ Electron アプリ全体を起動して確認する。
 [tests/component/PageSearchBox.test.js](/home/akai/develop/task-manage-roo/tests/component/PageSearchBox.test.js:1)  
 [tests/component/TaskDetail.test.js](/home/akai/develop/task-manage-roo/tests/component/TaskDetail.test.js:1)  
 [tests/component/ProjectPage.test.js](/home/akai/develop/task-manage-roo/tests/component/ProjectPage.test.js:1)  
-[tests/component/TreeTable.test.js](/home/akai/develop/task-manage-roo/tests/component/TreeTable.test.js:1)
+[tests/component/TreeTable.test.js](/home/akai/develop/task-manage-roo/tests/component/TreeTable.test.js:1)  
+[tests/component/TaskName.test.js](/home/akai/develop/task-manage-roo/tests/component/TaskName.test.js:1)
 
 | 対象                                  | テストケース                                                     | 確認内容                                                         | テストファイル                                                                                                      |
 | ------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
@@ -80,6 +81,7 @@ Electron アプリ全体を起動して確認する。
 | `src/components/ProjectPage.svelte`   | `removes the selected task after confirmation`                   | 削除確認後に選択中タスクを削除する                               | [tests/component/ProjectPage.test.js](/home/akai/develop/task-manage-roo/tests/component/ProjectPage.test.js:1)     |
 | `src/components/TreeTable.svelte`     | `selects a row and reflects the selected state`                  | 行選択で `table_selected_id` と選択状態表示を更新する            | [tests/component/TreeTable.test.js](/home/akai/develop/task-manage-roo/tests/component/TreeTable.test.js:1)         |
 | `src/components/TreeTable.svelte`     | `collapses and expands a branch by toggling the row`             | 折りたたみ操作で子行の表示と `closed_node_ids` を切り替える      | [tests/component/TreeTable.test.js](/home/akai/develop/task-manage-roo/tests/component/TreeTable.test.js:1)         |
+| `src/components/TaskName.svelte`      | `allows click on read-only input to bubble to row selection handler` | 非編集（read-only）入力欄クリックでも行選択ハンドラまでイベントを伝播させる（Issue #49 の再発防止） | [tests/component/TaskName.test.js](/home/akai/develop/task-manage-roo/tests/component/TaskName.test.js:1)       |
 
 ### 2.3 E2E テスト
 
@@ -136,6 +138,7 @@ Electron アプリ全体を起動して確認する。
 | `src/components/ProjectPage.svelte`   | ルートノード削除禁止               | 実装済み | [tests/component/ProjectPage.test.js](/home/akai/develop/task-manage-roo/tests/component/ProjectPage.test.js:1)     |
 | `src/components/TreeTable.svelte`     | 行選択                             | 実装済み | [tests/component/TreeTable.test.js](/home/akai/develop/task-manage-roo/tests/component/TreeTable.test.js:1)         |
 | `src/components/TreeTable.svelte`     | 折りたたみ / 展開                  | 実装済み | [tests/component/TreeTable.test.js](/home/akai/develop/task-manage-roo/tests/component/TreeTable.test.js:1)         |
+| `src/components/TaskName.svelte`      | 非編集入力欄クリック時の行選択イベント伝播 | 実装済み | [tests/component/TaskName.test.js](/home/akai/develop/task-manage-roo/tests/component/TaskName.test.js:1)         |
 
 ### 3.3 E2E テスト
 
