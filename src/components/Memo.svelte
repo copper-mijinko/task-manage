@@ -105,7 +105,8 @@
       const pastedHtml = clipboardData?.getData("text/html");
       const hasRichContent = typeof pastedHtml === "string" && pastedHtml.trim() !== "";
       const hasImageFile = Array.from(clipboardData?.items ?? []).some(
-        (item) => item.kind === "file" && typeof item.type === "string" && item.type.startsWith("image/")
+        (item) =>
+          item.kind === "file" && typeof item.type === "string" && item.type.startsWith("image/")
       );
 
       if (hasRichContent || hasImageFile) {
