@@ -1,7 +1,9 @@
 import { get, writable, type Writable } from "svelte/store";
 import { getNode, type TreeData } from "../common/tree_control";
+import { workspaceToProjectData } from "../common/workspace_tree";
 import type { PendingTaskDetailSelection, SelectedType } from "../types/app";
 import { clearHistory, tree_data } from "./tree";
+import { workspace_store } from "./workspace";
 
 const currentHash = typeof window !== "undefined" ? window.location.hash : "";
 const currentSearch =
@@ -77,6 +79,16 @@ function createSelectedID(initialValue: string | undefined): SelectedIdStore {
             } else {
               table_selected_id.set(undefined);
             }
+          });
+        } else if (currentSelectedType === "WorkspaceProject" && current) {
+          clearHistory();
+          const { activeProjectDir } = get(workspace_store);
+          if (!activeProjectDir) return;
+          window.electronAPI.wsReadProject?.(activeProjectDir).then((result) => {
+            if (!result) return;
+            const converted = workspaceToProjectData(result.tasks, current);
+            tree_data.set(converted);
+            table_selected_id.set(undefined);
           });
         }
       });

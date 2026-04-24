@@ -7,7 +7,7 @@ import type {
 } from "./workspace";
 
 export type ThemeName = "dark" | "light";
-export type SelectedType = "Projects" | "Info" | undefined;
+export type SelectedType = "Projects" | "Info" | "WorkspaceProject" | undefined;
 export type FilterState = Record<string, string[]>;
 
 export interface ProjectListItem {
