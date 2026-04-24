@@ -1,55 +1,89 @@
-import { render } from "@testing-library/svelte";
+import { fireEvent, render, waitFor } from "@testing-library/svelte";
+import { tick } from "svelte";
 import { vi } from "vitest";
 
 import Memo from "../../src/components/Memo.svelte";
 
-describe("Memo (CodeMirror 6)", () => {
+describe("Memo - view mode (default)", () => {
   let saveMemo;
 
   beforeEach(() => {
     saveMemo = vi.fn();
   });
 
-  test("renders the CM6 editor container", () => {
+  test("renders in view mode by default (no CM6 editor)", () => {
     render(Memo, { props: { saveMemo, content: "" } });
-    expect(document.querySelector(".cm-editor")).toBeInTheDocument();
+    expect(document.querySelector(".cm-editor")).not.toBeInTheDocument();
+    expect(document.querySelector(".preview-mode")).toBeInTheDocument();
   });
 
-  test("displays initial string content in the editor", () => {
-    render(Memo, { props: { saveMemo, content: "hello world" } });
-    expect(document.querySelector(".cm-content")).toHaveTextContent("hello world");
-  });
-
-  test("handles empty content without error", () => {
+  test("shows placeholder when content is empty", () => {
     render(Memo, { props: { saveMemo, content: "" } });
-    expect(document.querySelector(".cm-editor")).toBeInTheDocument();
+    expect(document.querySelector(".placeholder")).toBeInTheDocument();
   });
 
-  test("converts legacy Quill Delta object to JSON string", () => {
+  test("renders markdown content as HTML in view mode", () => {
+    render(Memo, { props: { saveMemo, content: "# Hello\n\nWorld" } });
+    const preview = document.querySelector(".preview");
+    expect(preview).toBeInTheDocument();
+    expect(preview.querySelector("h1")).toHaveTextContent("Hello");
+  });
+
+  test("converts legacy Quill Delta object to JSON string for display", () => {
     const delta = { ops: [{ insert: "hello" }] };
     render(Memo, { props: { saveMemo, content: delta } });
-    expect(document.querySelector(".cm-content")).toHaveTextContent('"ops"');
+    expect(document.querySelector(".preview")).toBeInTheDocument();
   });
 
-  test("converts null/undefined content to empty string", () => {
-    render(Memo, { props: { saveMemo, content: null } });
-    expect(document.querySelector(".cm-editor")).toBeInTheDocument();
-    expect(document.querySelector(".cm-content").textContent.trim()).toBe("");
+  test("readOnly: no placeholder shown when empty", () => {
+    render(Memo, { props: { saveMemo, content: "", readOnly: true } });
+    expect(document.querySelector(".placeholder")).not.toBeInTheDocument();
+  });
+});
+
+describe("Memo - edit mode", () => {
+  let saveMemo;
+
+  beforeEach(() => {
+    saveMemo = vi.fn();
   });
 
-  test("editable by default: contenteditable is true", () => {
-    render(Memo, { props: { saveMemo, content: "" } });
-    const content = document.querySelector(".cm-content");
-    expect(content).toHaveAttribute("contenteditable", "true");
+  test("clicking preview enters edit mode and shows CM6 editor", async () => {
+    render(Memo, { props: { saveMemo, content: "hello" } });
+    await fireEvent.click(document.querySelector(".preview-mode"));
+    await waitFor(() => {
+      expect(document.querySelector(".cm-editor")).toBeInTheDocument();
+    });
   });
 
-  test("readOnly: contenteditable is false", () => {
-    render(Memo, { props: { saveMemo, content: "read only text", readOnly: true } });
-    const content = document.querySelector(".cm-content");
-    expect(content).not.toHaveAttribute("contenteditable", "true");
+  test("edit mode shows 完了 button", async () => {
+    render(Memo, { props: { saveMemo, content: "hello" } });
+    await fireEvent.click(document.querySelector(".preview-mode"));
+    await waitFor(() => {
+      expect(document.querySelector(".done-btn")).toBeInTheDocument();
+    });
   });
 
-  test("readOnly: saveMemo is never called", async () => {
+  test("clicking 完了 returns to view mode", async () => {
+    render(Memo, { props: { saveMemo, content: "hello" } });
+    await fireEvent.click(document.querySelector(".preview-mode"));
+    await waitFor(() => expect(document.querySelector(".done-btn")).toBeInTheDocument());
+
+    await fireEvent.click(document.querySelector(".done-btn"));
+    await tick();
+
+    expect(document.querySelector(".cm-editor")).not.toBeInTheDocument();
+    expect(document.querySelector(".preview-mode")).toBeInTheDocument();
+  });
+
+  test("readOnly: clicking does not enter edit mode", async () => {
+    render(Memo, { props: { saveMemo, content: "hello", readOnly: true } });
+    await fireEvent.click(document.querySelector(".preview-mode"));
+    await tick();
+    expect(document.querySelector(".cm-editor")).not.toBeInTheDocument();
+  });
+
+  test("saveMemo is not called in readOnly mode", async () => {
     vi.useFakeTimers();
     render(Memo, { props: { saveMemo, content: "text", readOnly: true } });
     vi.runAllTimers();
