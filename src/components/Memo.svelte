@@ -41,11 +41,16 @@
 
   function escapeHtml(value: string): string {
     return value
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#39;");
+      .split("&")
+      .join("&amp;")
+      .split("<")
+      .join("&lt;")
+      .split(">")
+      .join("&gt;")
+      .split('"')
+      .join("&quot;")
+      .split("'")
+      .join("&#39;");
   }
 
   function preprocessWikiLinks(markdownText: string): string {
@@ -217,8 +222,8 @@
   {#if isEditing}
     <div class="edit-mode">
       <div class="edit-bar">
-        <span class="shortcut-hint">Ctrl/Cmd+S で保存 / Ctrl/Cmd+Enter で完了</span>
-        <button class="done-btn" on:click={stopEdit}>完了</button>
+        <span class="shortcut-hint">Ctrl/Cmd+S 縺ｧ菫晏ｭ・/ Ctrl/Cmd+Enter 縺ｧ螳御ｺ・/span>
+        <button class="done-btn" on:click={stopEdit}>螳御ｺ・/button>
       </div>
       <div class="editor" bind:this={container}></div>
     </div>
@@ -233,7 +238,7 @@
         <!-- eslint-disable-next-line svelte/no-at-html-tags -->
         <div class="preview">{@html renderedHtml}</div>
       {:else if !readOnly}
-        <div class="placeholder">クリックしてメモを書き始める...</div>
+        <div class="placeholder">繧ｯ繝ｪ繝・け縺励※繝｡繝｢繧呈嶌縺榊ｧ九ａ繧・..</div>
       {/if}
     </div>
   {/if}
@@ -361,7 +366,7 @@
   }
 
   .preview :global(a.wiki-link.is-external)::after {
-    content: "↗";
+    content: "竊・;
     font-size: 0.8em;
   }
 
