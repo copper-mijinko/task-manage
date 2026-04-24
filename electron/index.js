@@ -6,6 +6,13 @@ const { LowSync, JSONFileSync } = require("@commonify/lowdb");
 const log = require("electron-log/main");
 const workspace = require("./workspace");
 
+function countNodes(treeData) {
+  if (!treeData) return 0;
+  let n = 1;
+  for (const child of treeData.children || []) n += countNodes(child);
+  return n;
+}
+
 function resolveAppDataPath(fileName) {
   const customDataDir = process.env.TASK_MANAGE_DATA_DIR;
 
@@ -581,5 +588,41 @@ app.on("ready", () => {
       log.error("ws:create-project error:", err.message);
       return { success: false, error: err.message };
     }
+  });
+
+  ipcMain.handle("ws:migrate-projects", async (event, { workspacePath }) => {
+    const migrated = [];
+    const errors = [];
+
+    // Back up db.json before migrating
+    const dbPath = resolveAppDataPath("db.json");
+    const bakPath = resolveAppDataPath("db.json.bak");
+    try {
+      if (fs.existsSync(dbPath)) fs.copyFileSync(dbPath, bakPath);
+    } catch (err) {
+      log.warn("db.json backup failed:", err.message);
+    }
+
+    for (const projectData of db.data || []) {
+      const name = projectData.data?.data?.name || "unknown";
+      try {
+        const { count } = workspace.migrateProjectData(workspacePath, projectData);
+        migrated.push({ name, count });
+        log.info(`Migrated project "${name}" (${count} tasks)`);
+      } catch (err) {
+        log.error(`Migration error for "${name}":`, err.message);
+        errors.push({ name, error: err.message });
+      }
+    }
+
+    return { success: errors.length === 0, migrated, errors };
+  });
+
+  ipcMain.handle("ws:get-legacy-projects", async () => {
+    return (db.data || []).map((p) => ({
+      id: p.data?.id ?? "",
+      name: p.data?.data?.name ?? "unnamed",
+      taskCount: countNodes(p.data),
+    }));
   });
 });

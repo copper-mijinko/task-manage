@@ -86,6 +86,9 @@ const electronAPI = {
   wsCreateProject: (workspacePath, name, id) =>
     ipcRenderer.invoke("ws:create-project", { workspacePath, name, id }),
   wsSelectDirectory: () => ipcRenderer.invoke("ws:select-directory"),
+  wsGetLegacyProjects: () => ipcRenderer.invoke("ws:get-legacy-projects"),
+  wsMigrateProjects: (workspacePath) =>
+    ipcRenderer.invoke("ws:migrate-projects", { workspacePath }),
 };
 
 contextBridge.exposeInMainWorld("electronAPI", electronAPI);

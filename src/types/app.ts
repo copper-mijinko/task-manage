@@ -74,4 +74,10 @@ export interface ElectronAPI {
     id: string
   ) => Promise<{ success: boolean; projectDir?: string; dirName?: string; error?: string }>;
   wsSelectDirectory: () => Promise<string | null>;
+  wsGetLegacyProjects: () => Promise<{ id: string; name: string; taskCount: number }[]>;
+  wsMigrateProjects: (workspacePath: string) => Promise<{
+    success: boolean;
+    migrated: { name: string; count: number }[];
+    errors: { name: string; error: string }[];
+  }>;
 }

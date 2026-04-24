@@ -1,6 +1,7 @@
 <script lang="ts">
   import Modal from "./Modal.svelte";
   import IconButton from "./IconButton.svelte";
+  import MigrationWizard from "./MigrationWizard.svelte";
   import { workspace_store } from "../stores/workspace";
 
   export let show = false;
@@ -9,6 +10,7 @@
   let pendingPath: string | null = null;
   let pendingLabel = "";
   let errorMessage = "";
+  let showMigration = false;
 
   async function handleSelectDirectory() {
     errorMessage = "";
@@ -102,6 +104,15 @@
       {#if errorMessage}
         <p class="error">{errorMessage}</p>
       {/if}
+
+      <!-- Migration -->
+      <p class="section-label">移行</p>
+      <div class="migrate-area">
+        <p class="migrate-note">既存の db.json プロジェクトをワークスペース形式に変換します。</p>
+        <button class="migrate-link-btn" on:click={() => (showMigration = true)}>
+          レガシーデータを移行...
+        </button>
+      </div>
     </div>
 
     <div class="footer">
@@ -109,6 +120,8 @@
     </div>
   </div>
 </Modal>
+
+<MigrationWizard show={showMigration} toggle={() => (showMigration = !showMigration)} />
 
 <style>
   .container {
@@ -273,5 +286,28 @@
   }
   .close-btn:hover {
     opacity: 0.8;
+  }
+  .migrate-area {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+  .migrate-note {
+    font-size: 0.85rem;
+    color: var(--theme-color-Sub-dark);
+    margin: 0;
+  }
+  .migrate-link-btn {
+    align-self: flex-start;
+    cursor: pointer;
+    border: none;
+    background: none;
+    color: var(--theme-color-Accent-main);
+    font-size: 0.9rem;
+    padding: 0;
+    text-decoration: underline;
+  }
+  .migrate-link-btn:hover {
+    opacity: 0.75;
   }
 </style>
