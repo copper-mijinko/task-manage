@@ -150,7 +150,7 @@
       on:keydown={(e) => e.key === "Enter" && startEdit()}
     >
       {#if currentContent.trim()}
-        <!-- ローカルコンテンツのみのためサニタイズ不要 -->
+        <!-- eslint-disable-next-line svelte/no-at-html-tags -->
         <div class="preview">{@html renderedHtml}</div>
       {:else if !readOnly}
         <div class="placeholder">クリックして編集...</div>
