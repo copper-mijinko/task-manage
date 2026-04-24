@@ -1,4 +1,10 @@
 import type { ProjectData } from "../common/tree_control";
+import type {
+  WorkspaceInfo,
+  WorkspaceProject,
+  WorkspaceProjectListItem,
+  WorkspaceTask,
+} from "./workspace";
 
 export type ThemeName = "dark" | "light";
 export type SelectedType = "Projects" | "Info" | undefined;
@@ -48,4 +54,13 @@ export interface ElectronAPI {
   onProjectDeleted: (callback: (projectId: string) => void) => void;
   onSaveError: (callback: (message: string) => void) => void;
   getCurrentTheme: () => Promise<ThemeName>;
+
+  // Workspace API
+  wsGetWorkspaces: () => Promise<{ workspaces: WorkspaceInfo[]; activeWorkspace: string | null }>;
+  wsSetWorkspaces: (config: { workspaces: WorkspaceInfo[]; activeWorkspace?: string }) => void;
+  wsListProjects: (workspacePath: string) => Promise<WorkspaceProjectListItem[]>;
+  wsReadProject: (projectDir: string) => Promise<WorkspaceProject>;
+  wsWriteTask: (projectDir: string, task: WorkspaceTask) => Promise<{ success: boolean; error?: string }>;
+  wsDeleteTask: (projectDir: string, taskId: string) => Promise<{ success: boolean; error?: string }>;
+  wsCreateProject: (workspacePath: string, name: string, id: string) => Promise<{ success: boolean; projectDir?: string; dirName?: string; error?: string }>;
 }
