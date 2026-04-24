@@ -60,7 +60,17 @@ export interface ElectronAPI {
   wsSetWorkspaces: (config: { workspaces: WorkspaceInfo[]; activeWorkspace?: string }) => void;
   wsListProjects: (workspacePath: string) => Promise<WorkspaceProjectListItem[]>;
   wsReadProject: (projectDir: string) => Promise<WorkspaceProject>;
-  wsWriteTask: (projectDir: string, task: WorkspaceTask) => Promise<{ success: boolean; error?: string }>;
-  wsDeleteTask: (projectDir: string, taskId: string) => Promise<{ success: boolean; error?: string }>;
-  wsCreateProject: (workspacePath: string, name: string, id: string) => Promise<{ success: boolean; projectDir?: string; dirName?: string; error?: string }>;
+  wsWriteTask: (
+    projectDir: string,
+    task: WorkspaceTask
+  ) => Promise<{ success: boolean; error?: string }>;
+  wsDeleteTask: (
+    projectDir: string,
+    taskId: string
+  ) => Promise<{ success: boolean; error?: string }>;
+  wsCreateProject: (
+    workspacePath: string,
+    name: string,
+    id: string
+  ) => Promise<{ success: boolean; projectDir?: string; dirName?: string; error?: string }>;
 }

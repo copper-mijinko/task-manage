@@ -78,12 +78,9 @@ const electronAPI = {
   // ワークスペース操作
   wsGetWorkspaces: () => ipcRenderer.invoke("ws:get-workspaces"),
   wsSetWorkspaces: (config) => ipcRenderer.send("ws:set-workspaces", config),
-  wsListProjects: (workspacePath) =>
-    ipcRenderer.invoke("ws:list-projects", { workspacePath }),
-  wsReadProject: (projectDir) =>
-    ipcRenderer.invoke("ws:read-project", { projectDir }),
-  wsWriteTask: (projectDir, task) =>
-    ipcRenderer.invoke("ws:write-task", { projectDir, task }),
+  wsListProjects: (workspacePath) => ipcRenderer.invoke("ws:list-projects", { workspacePath }),
+  wsReadProject: (projectDir) => ipcRenderer.invoke("ws:read-project", { projectDir }),
+  wsWriteTask: (projectDir, task) => ipcRenderer.invoke("ws:write-task", { projectDir, task }),
   wsDeleteTask: (projectDir, taskId) =>
     ipcRenderer.invoke("ws:delete-task", { projectDir, taskId }),
   wsCreateProject: (workspacePath, name, id) =>
