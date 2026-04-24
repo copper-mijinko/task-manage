@@ -196,10 +196,7 @@ function writeTask(projectDir, task, taskDirs) {
   for (const f of existing) fs.unlinkSync(path.join(taskDir, f));
   for (const memo of task.memos || []) {
     const id = memo.id || crypto.randomUUID();
-    fs.writeFileSync(
-      path.join(taskDir, `${id}.md`),
-      stringifyFrontmatter({ id }, memo.content)
-    );
+    fs.writeFileSync(path.join(taskDir, `${id}.md`), stringifyFrontmatter({ id }, memo.content));
   }
 }
 

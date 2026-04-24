@@ -265,7 +265,14 @@ describe("file system operations", () => {
   it("readMemos assigns a generated id to legacy memo files without frontmatter", () => {
     const { projectDir } = createProject(tmpDir, "Proj", "root-id");
     const taskDirs = new Map([["root-id", "_project"]]);
-    const task = { id: "task-legacy", name: "Legacy", status: "Open", parents: ["root-id"], memos: [], createdAt: "2026-04-24" };
+    const task = {
+      id: "task-legacy",
+      name: "Legacy",
+      status: "Open",
+      parents: ["root-id"],
+      memos: [],
+      createdAt: "2026-04-24",
+    };
     writeTask(projectDir, task, taskDirs);
 
     // Write an old-format memo file directly (no frontmatter)
