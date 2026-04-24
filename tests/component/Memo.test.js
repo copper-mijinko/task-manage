@@ -90,4 +90,50 @@ describe("Memo - edit mode", () => {
     expect(saveMemo).not.toHaveBeenCalled();
     vi.useRealTimers();
   });
+
+  test("clicking 完了 without changes does not call saveMemo", async () => {
+    render(Memo, { props: { saveMemo, content: "hello" } });
+    await fireEvent.click(document.querySelector(".preview-mode"));
+    await waitFor(() => expect(document.querySelector(".done-btn")).toBeInTheDocument());
+
+    await fireEvent.click(document.querySelector(".done-btn"));
+    await tick();
+
+    expect(saveMemo).not.toHaveBeenCalled();
+  });
+});
+
+describe("Memo - link handling in preview", () => {
+  let saveMemo;
+
+  beforeEach(() => {
+    saveMemo = vi.fn();
+    window.electronAPI = { openExternalLink: vi.fn() };
+  });
+
+  afterEach(() => {
+    delete window.electronAPI;
+  });
+
+  test("clicking a link opens it externally and does not enter edit mode", async () => {
+    render(Memo, { props: { saveMemo, content: "[Visit](https://example.com)" } });
+    const link = document.querySelector(".preview a");
+    expect(link).toBeInTheDocument();
+
+    await fireEvent.click(link);
+    await tick();
+
+    expect(window.electronAPI.openExternalLink).toHaveBeenCalledWith(
+      expect.stringContaining("example.com")
+    );
+    expect(document.querySelector(".cm-editor")).not.toBeInTheDocument();
+  });
+
+  test("clicking non-link area enters edit mode", async () => {
+    render(Memo, { props: { saveMemo, content: "plain text" } });
+    await fireEvent.click(document.querySelector(".preview-mode"));
+    await waitFor(() => {
+      expect(document.querySelector(".cm-editor")).toBeInTheDocument();
+    });
+  });
 });
