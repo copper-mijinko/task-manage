@@ -65,6 +65,15 @@ describe("TaskDetail", () => {
     expect(screen.getByText("No data.")).toBeInTheDocument();
   });
 
+  test("shows a guided empty state when the selected task has no notes", () => {
+    table_selected_id.set("task-1");
+    render(TaskDetail);
+
+    expect(screen.getByTestId("memo-empty-state")).toBeInTheDocument();
+    expect(screen.getByText("No notes yet")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create first note" })).toBeInTheDocument();
+  });
+
   test("adds a memo tab to the selected task", async () => {
     table_selected_id.set("task-1");
     const { container } = render(TaskDetail);
@@ -97,7 +106,20 @@ describe("TaskDetail", () => {
     await tick();
 
     expect(get(tree_data).data.children[0].data.memo).toEqual([]);
-    expect(screen.getByText("Tabs here")).toBeInTheDocument();
+    expect(screen.getByText("No notes yet")).toBeInTheDocument();
+  });
+
+  test("creates the first note from the empty state action", async () => {
+    table_selected_id.set("task-1");
+    render(TaskDetail);
+
+    await fireEvent.click(screen.getByRole("button", { name: "Create first note" }));
+    await tick();
+
+    expect(screen.getByDisplayValue("memo")).toBeInTheDocument();
+    expect(get(tree_data).data.children[0].data.memo).toEqual([
+      expect.objectContaining({ title: "memo", content: "" }),
+    ]);
   });
 
   test("resets the selected memo tab when the selected task changes", async () => {
