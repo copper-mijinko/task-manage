@@ -1,6 +1,7 @@
 export type WorkspaceTaskStatus = "Open" | "Pending" | "In Progress" | "Completed" | "Canceled";
 
 export interface WorkspaceMemo {
+  id: string;
   title: string;
   content: string; // Markdown
 }
