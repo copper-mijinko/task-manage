@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 
@@ -79,10 +80,12 @@ function readMemos(taskDir) {
     .filter((f) => f.endsWith(".md") && f !== "_index.md")
     .sort();
   for (const file of files) {
-    const content = fs.readFileSync(path.join(taskDir, file), "utf8");
-    const headingMatch = content.match(/^#\s+(.+)/m);
+    const raw = fs.readFileSync(path.join(taskDir, file), "utf8");
+    const { data, body } = parseFrontmatter(raw);
+    const id = data.id || crypto.randomUUID();
+    const headingMatch = body.match(/^#\s+(.+)/m);
     const title = headingMatch ? headingMatch[1].trim() : file.replace(/\.md$/, "");
-    memos.push({ title, content: content.trim() });
+    memos.push({ id, title, content: body.trim() });
   }
   return memos;
 }
@@ -176,7 +179,7 @@ function writeTask(projectDir, task, taskDirs) {
 
   let dirName = taskDirs.get(task.id);
   if (!dirName) {
-    dirName = uniqueName(projectDir, slugify(task.name));
+    dirName = task.id;
     taskDirs.set(task.id, dirName);
   }
   const taskDir = path.join(projectDir, dirName);
@@ -192,9 +195,11 @@ function writeTask(projectDir, task, taskDirs) {
   const existing = fs.readdirSync(taskDir).filter((f) => f.endsWith(".md") && f !== "_index.md");
   for (const f of existing) fs.unlinkSync(path.join(taskDir, f));
   for (const memo of task.memos || []) {
-    const base = `${slugify(memo.title) || "memo"}.md`;
-    const fileName = uniqueName(taskDir, base);
-    fs.writeFileSync(path.join(taskDir, fileName), memo.content + "\n");
+    const id = memo.id || crypto.randomUUID();
+    fs.writeFileSync(
+      path.join(taskDir, `${id}.md`),
+      stringifyFrontmatter({ id }, memo.content)
+    );
   }
 }
 
@@ -330,7 +335,7 @@ function migrateProjectData(workspacePath, projectData) {
         // Quill Delta or other object → preserve as JSON fenced block
         content = `# ${m.title || "Memo"}\n\n\`\`\`json\n${JSON.stringify(m.content, null, 2)}\n\`\`\``;
       }
-      return { title: String(m.title || "Memo"), content };
+      return { id: crypto.randomUUID(), title: String(m.title || "Memo"), content };
     });
 
     tasks.push({

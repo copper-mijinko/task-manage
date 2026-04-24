@@ -3,6 +3,7 @@ import { uuidV4 } from "./uuid";
 export type TaskStatus = "Open" | "Pending" | "In Progress" | "Completed" | "Canceled";
 
 export interface MemoEntry {
+  id: string;
   title: string;
   content: unknown;
 }

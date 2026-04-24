@@ -37,7 +37,7 @@ export function workspaceToProjectData(
         name: task.name,
         status: task.status,
         "due date": task.dueDate as `${string}-${string}-${string}` | undefined,
-        memo: task.memos.map((m) => ({ title: m.title, content: m.content })),
+        memo: task.memos.map((m) => ({ id: m.id, title: m.title, content: m.content })),
       },
       children: childIds.map((cid) => buildNode(cid)),
     };

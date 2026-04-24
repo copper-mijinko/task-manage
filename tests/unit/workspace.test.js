@@ -240,10 +240,15 @@ describe("file system operations", () => {
       status: "In Progress",
       dueDate: "2026-06-01",
       parents: ["root-id"],
-      memos: [{ title: "Notes", content: "# Notes\n\nSome content" }],
+      memos: [{ id: "memo-uuid-1", title: "Notes", content: "# Notes\n\nSome content" }],
       createdAt: "2026-04-24",
     };
     writeTask(projectDir, task, taskDirs);
+
+    // Task directory should be named after task.id (UUID)
+    expect(fs.existsSync(path.join(projectDir, "task-1"))).toBe(true);
+    // Memo file should be named after memo.id
+    expect(fs.existsSync(path.join(projectDir, "task-1", "memo-uuid-1.md"))).toBe(true);
 
     const { tasks } = readProject(projectDir);
     const loaded = tasks.get("task-1");
@@ -253,7 +258,26 @@ describe("file system operations", () => {
     expect(loaded.dueDate).toBe("2026-06-01");
     expect(loaded.parents).toEqual(["root-id"]);
     expect(loaded.memos).toHaveLength(1);
+    expect(loaded.memos[0].id).toBe("memo-uuid-1");
     expect(loaded.memos[0].title).toBe("Notes");
+  });
+
+  it("readMemos assigns a generated id to legacy memo files without frontmatter", () => {
+    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
+    const taskDirs = new Map([["root-id", "_project"]]);
+    const task = { id: "task-legacy", name: "Legacy", status: "Open", parents: ["root-id"], memos: [], createdAt: "2026-04-24" };
+    writeTask(projectDir, task, taskDirs);
+
+    // Write an old-format memo file directly (no frontmatter)
+    const taskDir = path.join(projectDir, "task-legacy");
+    fs.writeFileSync(path.join(taskDir, "old-memo.md"), "# Old Memo\n\nLegacy content");
+
+    const { tasks } = readProject(projectDir);
+    const loaded = tasks.get("task-legacy");
+    expect(loaded.memos).toHaveLength(1);
+    expect(loaded.memos[0].title).toBe("Old Memo");
+    expect(typeof loaded.memos[0].id).toBe("string");
+    expect(loaded.memos[0].id.length).toBeGreaterThan(0);
   });
 
   it("deleteTaskDir removes the task directory", () => {

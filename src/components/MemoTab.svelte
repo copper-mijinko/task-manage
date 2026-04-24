@@ -62,7 +62,7 @@
       {#if memo.length == 0}
         <span class="memotab-item">{"Tabs here"}</span>
       {:else}
-        {#each memo as memo, i (i)}
+        {#each memo as memo, i (memo.id)}
           <button
             use:ripple={{ duration: 350, color: "var(--theme-color-Sub-main)" }}
             class="memotab-item"

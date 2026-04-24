@@ -1,5 +1,6 @@
 <script>
   import { getNode, updateNodeDataById } from "../common/tree_control.ts";
+  import { uuidV4 } from "../common/uuid";
   import { tree_data, table_selected_id, cancelPendingOperations } from "../stores.ts";
   import { debounce } from "lodash";
   import { onDestroy } from "svelte";
@@ -31,7 +32,7 @@
   });
   const addMemo = (newMemoTitle) => {
     if (newMemoTitle) {
-      let newMemo = { title: newMemoTitle, content: "" };
+      let newMemo = { id: uuidV4(), title: newMemoTitle, content: "" };
       changeData(node, "memo", [...node.data.memo, newMemo]);
       return true;
     }
