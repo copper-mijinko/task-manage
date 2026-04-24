@@ -25,6 +25,7 @@ export interface WorkspaceProjectListItem {
   name: string;
   rootId: string;
   dirName: string;
+  projectDir: string;
 }
 
 export interface WorkspaceProject {

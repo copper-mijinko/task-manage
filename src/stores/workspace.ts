@@ -4,6 +4,7 @@ import type { WorkspaceInfo, WorkspaceProjectListItem } from "../types/workspace
 export interface WorkspaceState {
   workspaces: WorkspaceInfo[];
   activeWorkspacePath: string | null;
+  activeProjectDir: string | null;
   projects: WorkspaceProjectListItem[];
 }
 
@@ -14,12 +15,14 @@ export interface WorkspaceStore extends Writable<WorkspaceState> {
   removeWorkspace: (path: string) => void;
   setActive: (path: string) => Promise<void>;
   refreshProjects: () => Promise<void>;
+  setActiveProject: (projectDir: string) => void;
 }
 
 function createWorkspaceStore(): WorkspaceStore {
   const { subscribe, set, update } = writable<WorkspaceState>({
     workspaces: [],
     activeWorkspacePath: null,
+    activeProjectDir: null,
     projects: [],
   });
 
@@ -51,6 +54,7 @@ function createWorkspaceStore(): WorkspaceStore {
         set({
           workspaces: workspaces ?? [],
           activeWorkspacePath: activeWorkspace,
+          activeProjectDir: null,
           projects,
         });
       })();
@@ -96,6 +100,10 @@ function createWorkspaceStore(): WorkspaceStore {
       if (!activeWorkspacePath) return;
       const projects = await loadProjects(activeWorkspacePath);
       update((s) => ({ ...s, projects }));
+    },
+
+    setActiveProject(projectDir: string) {
+      update((s) => ({ ...s, activeProjectDir: projectDir }));
     },
   };
 }

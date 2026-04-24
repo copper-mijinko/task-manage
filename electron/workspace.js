@@ -238,7 +238,12 @@ function listProjects(workspacePath) {
     try {
       const content = fs.readFileSync(projectFile, "utf8");
       const { data } = parseFrontmatter(content);
-      projects.push({ name: data.name || entry.name, rootId: data.id, dirName: entry.name });
+      projects.push({
+        name: data.name || entry.name,
+        rootId: data.id,
+        dirName: entry.name,
+        projectDir: path.join(workspacePath, entry.name),
+      });
     } catch (_) {}
   }
   return projects;

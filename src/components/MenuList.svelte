@@ -12,6 +12,12 @@
   import { project_ids, info_ids, selected_type, selected_id } from "../stores.ts";
   import { workspace_store } from "../stores/workspace";
 
+  function selectWorkspaceProject(proj) {
+    workspace_store.setActiveProject(proj.projectDir);
+    $selected_type = "WorkspaceProject";
+    $selected_id = proj.rootId;
+  }
+
   let show_workspace_setup = false;
 
   // Dialog
@@ -270,6 +276,28 @@
       </button>
     {/if}
   </div>
+  {#if $workspace_store.projects.length > 0}
+    <div class="Contents">
+      {#each $workspace_store.projects as proj (proj.rootId)}
+        <button
+          class="MenuRow"
+          class:Selected={proj.rootId === $selected_id && $selected_type === "WorkspaceProject"}
+          use:ripple
+          on:click={() => selectWorkspaceProject(proj)}
+        >
+          <div class="TreeLine" style="flex-shrink: 0"></div>
+          <span
+            class="TextOverFlow"
+            use:tooltip={{
+              color: "var(--theme-color-Main-main)",
+              backgroundColor: "var(--theme-color-Sub-main)",
+              content: proj.name,
+            }}>{proj.name}</span
+          >
+        </button>
+      {/each}
+    </div>
+  {/if}
 
   {#if menu_data}
     {#each menu_data as menu, i}
