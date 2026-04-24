@@ -1,256 +1,103 @@
 <script>
-  import { onMount, createEventDispatcher } from "svelte";
-  import Quill from "quill";
-  import "../..//node_modules/quill/dist/quill.snow.css";
-  import { isEqual, debounce } from "lodash";
+  import { onMount } from "svelte";
+  import { EditorView, keymap } from "@codemirror/view";
+  import { EditorState } from "@codemirror/state";
+  import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
+  import { syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language";
+  import { languages } from "@codemirror/language-data";
+  import { history, defaultKeymap, historyKeymap } from "@codemirror/commands";
+  import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
 
   export let saveMemo;
   export let content = "";
   export let readOnly = false;
 
-  let editor;
-  // 編集中のフラグとカーソル位置を保存する変数
-  let isEditing = false;
-  let savedSelection = null;
-  let lastSavedContent = null;
-  let toolbarOptions = [
-    [{ font: [] }],
-    [{ header: [1, 2, false] }],
-    [{ color: [] }, { background: [] }], // dropdown with defaults from theme
-    ["bold", "italic", "underline", "strike"], // toggled buttons
-    ["blockquote", "code-block", { list: "ordered" }, { list: "bullet" }],
-    [{ script: "sub" }, { script: "super" }], // superscript/subscript
-    [{ indent: "-1" }, { indent: "+1" }], // outdent/indent
-    [{ align: [] }],
-    ["link", "image"],
-    ["clean"], // remove formatting button
-  ];
-  let quill = null;
+  let container;
+  let saveTimer;
 
-  // リンク処理のための変数
-  let isHandlingLink = false;
-  let errorMessage = null;
-
-  // イベントリスナーの参照を保持する変数
-  let linkClickListener;
-  let pasteListener;
-
-  function applyContent(nextContent) {
-    if (!quill) {
-      return;
-    }
-
-    if (!nextContent) {
-      // Use explicit empty Delta to reliably clear Quill content
-      quill.setContents([{ insert: "\n" }]);
-      return;
-    }
-
-    if (typeof nextContent === "string") {
-      quill.setText(nextContent);
-      return;
-    }
-
-    quill.setContents(nextContent);
-  }
-
-  // Quillのリンクツールチップを処理するための関数
-  function handleLinkTooltips() {
-    // イベントハンドラー関数を定義
-    const handleLinkClick = async (e) => {
-      // Visit (ql-preview) ボタンがクリックされた場合
-      if (e.target && e.target.classList.contains("ql-preview")) {
-        const href = e.target.getAttribute("href");
-        if (href && href.trim() !== "") {
-          // 既に処理中なら何もしない（二重実行防止）
-          if (isHandlingLink) return;
-
-          // クリックイベントのデフォルト動作を停止（内部ブラウザでの開封を防止）
-          e.preventDefault();
-          e.stopPropagation();
-
-          // Quillの標準ツールチップを適切に閉じる
-          if (quill && quill.theme && quill.theme.tooltip) {
-            quill.theme.tooltip.hide();
-          }
-
-          try {
-            isHandlingLink = true;
-            // 外部ブラウザでリンクを開く
-            await window.electronAPI.openExternalLink(href);
-          } catch {
-            errorMessage = "リンクを開けませんでした";
-          } finally {
-            isHandlingLink = false;
-          }
-        }
-      }
-    };
-
-    // 参照を保存してクリーンアップで使用できるようにする
-    linkClickListener = handleLinkClick;
-
-    // ドキュメント全体のクリックイベントリスナーを設定
-    document.addEventListener("click", linkClickListener, false);
-  }
-
-  function handlePastePreservingLeadingNewlines() {
-    const onPaste = (event) => {
-      if (readOnly || !quill) {
-        return;
-      }
-
-      const clipboardData = event.clipboardData;
-      const pastedText = clipboardData?.getData("text/plain");
-      const pastedHtml = clipboardData?.getData("text/html");
-      const hasRichContent = typeof pastedHtml === "string" && pastedHtml.trim() !== "";
-      const hasImageFile = Array.from(clipboardData?.items ?? []).some(
-        (item) =>
-          item.kind === "file" && typeof item.type === "string" && item.type.startsWith("image/")
-      );
-
-      if (hasRichContent || hasImageFile) {
-        return;
-      }
-
-      if (typeof pastedText !== "string" || !pastedText.startsWith("\n")) {
-        return;
-      }
-
-      event.preventDefault();
-      event.stopPropagation();
-
-      const selection = quill.getSelection(true) ?? {
-        index: quill.getLength(),
-        length: 0,
-      };
-
-      if (selection.length > 0) {
-        quill.deleteText(selection.index, selection.length, "user");
-      }
-
-      quill.insertText(selection.index, pastedText, "user");
-      quill.setSelection(selection.index + pastedText.length, 0, "silent");
-    };
-
-    pasteListener = onPaste;
-    quill.root.addEventListener("paste", pasteListener, true);
+  // Quill Delta (object) が残っている場合は JSON 文字列に変換してフォールバック表示
+  function toMarkdown(val) {
+    if (!val) return "";
+    if (typeof val === "string") return val;
+    return JSON.stringify(val, null, 2);
   }
 
   onMount(() => {
-    quill = new Quill(editor, {
-      theme: "snow",
-      modules: {
-        toolbar: readOnly ? false : toolbarOptions,
-        clipboard: {
-          matchVisual: false,
-        },
+    const theme = EditorView.theme({
+      "&": {
+        height: "100%",
+        backgroundColor: "var(--theme-color-Main-light)",
+        color: "var(--theme-color-Sub-light)",
+      },
+      ".cm-scroller": {
+        overflow: "auto",
+        fontFamily: "inherit",
+        fontSize: "0.9rem",
+        lineHeight: "1.7",
+      },
+      ".cm-content": {
+        padding: "1rem",
+        caretColor: "var(--theme-color-Sub-light)",
+        minHeight: "100%",
+      },
+      "&.cm-focused .cm-selectionBackground, .cm-selectionBackground": {
+        backgroundColor: "var(--theme-color-Accent-dark) !important",
+      },
+      ".cm-selectionMatch": {
+        backgroundColor: "var(--theme-color-Accent-main)",
+        opacity: "0.35",
+      },
+      ".cm-cursor, .cm-dropCursor": {
+        borderLeftColor: "var(--theme-color-Sub-light)",
+      },
+      ".cm-activeLine": {
+        backgroundColor: "rgba(255, 255, 255, 0.02)",
+      },
+      ".cm-gutters": {
+        display: "none",
       },
     });
 
-    applyContent(content);
-    quill.enable(!readOnly);
+    const baseExtensions = [
+      theme,
+      markdown({ base: markdownLanguage, codeLanguages: languages }),
+      syntaxHighlighting(defaultHighlightStyle),
+      highlightSelectionMatches(),
+      keymap.of([...defaultKeymap, ...searchKeymap]),
+      EditorView.lineWrapping,
+    ];
 
-    if (!readOnly) {
-      // テキスト変更のみを検知して保存処理を行う
-      quill.on("text-change", function (delta, oldDelta, source) {
-        if (source === "user") {
-          // 編集中フラグを設定
-          isEditing = true;
+    const extensions = readOnly
+      ? [...baseExtensions, EditorState.readOnly.of(true)]
+      : [
+          ...baseExtensions,
+          history(),
+          keymap.of(historyKeymap),
+          EditorView.updateListener.of((update) => {
+            if (update.docChanged) {
+              clearTimeout(saveTimer);
+              saveTimer = setTimeout(() => saveMemo(update.state.doc.toString()), 500);
+            }
+          }),
+        ];
 
-          // 現在のカーソル位置を取得
-          const currentSelection = quill.hasFocus() ? quill.getSelection() : null;
+    const view = new EditorView({
+      state: EditorState.create({
+        doc: toMarkdown(content),
+        extensions,
+      }),
+      parent: container,
+    });
 
-          // 内容を保存（カーソル位置も一緒に送信）
-          const contents = quill.getContents();
-          lastSavedContent = contents;
-
-          // カーソル位置情報も一緒に送信
-          if (currentSelection) {
-            saveMemo(contents, currentSelection);
-          } else {
-            saveMemo(contents);
-          }
-
-          // 編集フラグをリセット
-          setTimeout(() => {
-            isEditing = false;
-          }, 100);
-        }
-      });
-
-      // カーソル位置の変更のみを検出（保存は行わない）
-      quill.on("selection-change", function (range, oldRange, source) {
-        if (range && source === "user") {
-          // カーソル位置を保存（ローカルのみ）
-          savedSelection = {
-            index: range.index,
-            length: range.length,
-          };
-        }
-      });
-    }
-
-    // リンクツールチップの処理をセットアップ
-    handleLinkTooltips();
-    handlePastePreservingLeadingNewlines();
-
-    // クリーンアップ関数を返す
     return () => {
-      // コンポーネントがアンマウントされる時に必要なクリーンアップを行う
-
-      // イベントリスナーを削除
-      if (linkClickListener) {
-        document.removeEventListener("click", linkClickListener, false);
-        linkClickListener = null;
-      }
-      if (pasteListener && quill?.root) {
-        quill.root.removeEventListener("paste", pasteListener, true);
-        pasteListener = null;
-      }
-
-      // すべてのリソース解放
-      isEditing = false;
-      savedSelection = null;
-      lastSavedContent = null;
-      quill = null;
+      clearTimeout(saveTimer);
+      view.destroy();
     };
   });
-
-  // 外部から更新されたコンテンツとの同期（編集中は同期しない）
-  $: if (quill && !isEditing) {
-    // 空コンテンツへの切り替えは常に適用し、既存コンテンツが残らないようにする
-    const contentIsEmpty = !content;
-    const lastSavedIsEmpty = !lastSavedContent;
-    const needsUpdate =
-      contentIsEmpty !== lastSavedIsEmpty ||
-      (!contentIsEmpty && !isEqual(content, lastSavedContent));
-
-    if (needsUpdate) {
-      // 一時的に編集中フラグを立てる（再描画防止）
-      isEditing = true;
-
-      // コンテンツを更新
-      applyContent(content);
-      lastSavedContent = content;
-
-      // 外部更新後はカーソル位置を保存せずにシンプルに編集フラグのみリセット
-      setTimeout(() => {
-        // 編集フラグをリセット
-        isEditing = false;
-      }, 50);
-    }
-  }
 </script>
 
 <div class="wrapper">
-  {#if errorMessage}
-    <div class="error-banner" role="alert">
-      <span>{errorMessage}</span>
-      <button on:click={() => (errorMessage = null)}>×</button>
-    </div>
-  {/if}
-  <div bind:this={editor} class="editor" on:blur></div>
+  <div class="editor" bind:this={container}></div>
 </div>
 
 <style>
@@ -259,47 +106,13 @@
     flex-direction: column;
     flex: 1;
     height: 100%;
-    border: none !important;
-    color: var(--theme-color-Sub-light);
-    background-color: var(--theme-color-Main-dark);
-  }
-  .editor {
-    flex: 1;
-    overflow: auto;
-    display: flex;
-    flex-direction: column;
-    height: 100%;
+    overflow: hidden;
     background-color: var(--theme-color-Main-light);
   }
-  .error-banner {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0.4rem 0.75rem;
-    background-color: #c0392b;
-    color: #fff;
-    font-size: 0.875rem;
-    flex-shrink: 0;
-  }
-  .error-banner button {
-    background: none;
-    border: none;
-    color: #fff;
-    cursor: pointer;
-    font-size: 1rem;
-    line-height: 1;
-    padding: 0 0.25rem;
-  }
-  :global(.ql-picker :not(.ql-active, :hover)) {
-    color: var(--theme-color-Sub-light) !important;
-  }
-  :global(.ql-picker-options) {
-    background-color: var(--theme-color-Main-light) !important;
-  }
-  :global(*:not(.ql-active, :hover) > svg > .ql-stroke) {
-    stroke: var(--theme-color-Sub-light) !important;
-  }
-  :global(*:not(.ql-active, :hover) > svg > .ql-fill) {
-    fill: var(--theme-color-Sub-light) !important;
+
+  .editor {
+    flex: 1;
+    height: 100%;
+    overflow: hidden;
   }
 </style>
