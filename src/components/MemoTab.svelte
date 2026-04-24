@@ -24,19 +24,23 @@
   export let deleteMemo;
   export let renameMemo;
   export let disabled = false;
+
   let selectedMemoIndex = 0;
   let previousTaskId;
+
   $: if ($table_selected_id !== previousTaskId) {
     previousTaskId = $table_selected_id;
     selectedMemoIndex = 0;
     edit = false;
   }
+
   $: if (selectedMemoIndex >= memo.length && memo.length > 0) {
     selectedMemoIndex = memo.length - 1;
   }
-  $: editedContent = memo.length > selectedMemoIndex ? memo[selectedMemoIndex].content : "";
-  let newMemoTitle = "memo";
 
+  $: editedContent = memo.length > selectedMemoIndex ? memo[selectedMemoIndex].content : "";
+
+  let newMemoTitle = "memo";
   let inputs = Array(100).fill(null);
   let edit = false;
 
@@ -45,12 +49,16 @@
   }
 
   const selectMemoByTitle = (title) => {
-    const nextIndex = memo.findIndex((entry) => normalizeMemoTitle(entry.title) === normalizeMemoTitle(title));
+    const nextIndex = memo.findIndex(
+      (entry) => normalizeMemoTitle(entry.title) === normalizeMemoTitle(title)
+    );
+
     if (nextIndex >= 0) {
       selectedMemoIndex = nextIndex;
       edit = false;
       return true;
     }
+
     return false;
   };
 
@@ -200,9 +208,11 @@
     border-radius: 0;
     background-color: transparent;
   }
+
   button:focus-visible {
     outline: auto;
   }
+
   .container {
     display: flex;
     flex-direction: column;
@@ -210,12 +220,14 @@
     width: 100%;
     box-sizing: border-box;
   }
+
   .memotab-container {
     display: flex;
     flex-direction: row;
     height: 3rem;
     width: 100%;
   }
+
   .memotab {
     display: flex;
     flex-direction: row;
@@ -224,6 +236,7 @@
     overflow-x: auto;
     flex: 1;
   }
+
   .memotab-control {
     display: flex;
     flex-direction: row;
@@ -231,6 +244,7 @@
     flex-shrink: 0;
     margin-left: auto;
   }
+
   input {
     border: none;
     padding: 0;
@@ -238,17 +252,21 @@
     width: 100%;
     text-align: center;
   }
+
   input:focus {
     outline: auto;
     cursor: text !important;
   }
+
   input:disabled {
     color: var(--theme-color-Sub-main);
     background-color: transparent;
   }
+
   input:hover {
     cursor: pointer;
   }
+
   .memotab-item {
     display: flex;
     box-sizing: border-box;
@@ -261,6 +279,7 @@
     align-items: center;
     color: var(--theme-color-Sub-main);
   }
+
   span.memotab-item {
     display: inline-block;
     vertical-align: middle;
@@ -270,12 +289,15 @@
     line-height: 100%;
     cursor: default !important;
   }
+
   .memotab-item:hover {
     cursor: pointer;
   }
+
   .selected {
     border-bottom: 0.2rem solid var(--theme-color-Accent-main);
   }
+
   .memotab-content {
     display: flex;
     box-sizing: border-box;
@@ -283,6 +305,7 @@
     flex: 1;
     overflow: hidden;
   }
+
   .memotab-content textarea {
     height: 100%;
     width: 100%;
