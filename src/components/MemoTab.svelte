@@ -161,8 +161,7 @@
     {#if memo[selectedMemoIndex]}
       {#key `${$table_selected_id ?? "none"}:${selectedMemoIndex}`}
         <Memo
-          saveMemo={(editedContent, cursorPosition) =>
-            saveMemo(editedContent, selectedMemoIndex, cursorPosition)}
+          saveMemo={(editedContent) => saveMemo(editedContent, selectedMemoIndex)}
           content={editedContent}
         />
       {/key}

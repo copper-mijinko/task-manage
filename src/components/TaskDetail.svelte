@@ -44,27 +44,13 @@
     );
     return true;
   };
-  const saveMemo = (editedContent, selectedMemoIndex, cursorPosition = null) => {
-    // 保存処理を行うが、再描画をトリガーしないようにする
+  const saveMemo = (editedContent, selectedMemoIndex) => {
     const updatedMemo = [...node.data["memo"]];
-
-    // カーソル位置情報も含めて保存
-    if (cursorPosition) {
-      // コンテンツとカーソル位置の両方を更新
-      updatedMemo[selectedMemoIndex] = {
-        ...updatedMemo[selectedMemoIndex],
-        content: editedContent,
-        cursorPosition: cursorPosition,
-      };
-    } else {
-      // 後方互換性のためコンテンツのみ更新
-      updatedMemo[selectedMemoIndex].content = editedContent;
-    }
-
-    // 直接ノードのデータを更新（リアクティブな更新をトリガーしない方法）
+    updatedMemo[selectedMemoIndex] = {
+      ...updatedMemo[selectedMemoIndex],
+      content: editedContent,
+    };
     node.data["memo"] = updatedMemo;
-
-    // データストアの更新（debounceされる）
     changeDataDebounce(node, "memo", updatedMemo);
     return true;
   };
