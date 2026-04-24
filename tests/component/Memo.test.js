@@ -29,6 +29,21 @@ describe("Memo - view mode (default)", () => {
     expect(preview.querySelector("h1")).toHaveTextContent("Hello");
   });
 
+  test("renders wiki links with resolved state when memo exists", () => {
+    render(Memo, {
+      props: {
+        saveMemo,
+        content: "[[Daily Notes]] and [[Missing Note]]",
+        memoTitles: ["Daily Notes"],
+      },
+    });
+
+    const links = document.querySelectorAll(".preview .wiki-link");
+    expect(links).toHaveLength(2);
+    expect(links[0]).toHaveClass("is-resolved");
+    expect(links[1]).toHaveClass("is-unresolved");
+  });
+
   test("converts legacy Quill Delta object to JSON string for display", () => {
     const delta = { ops: [{ insert: "hello" }] };
     render(Memo, { props: { saveMemo, content: delta } });
@@ -56,7 +71,7 @@ describe("Memo - edit mode", () => {
     });
   });
 
-  test("edit mode shows 完了 button", async () => {
+  test("edit mode shows complete button", async () => {
     render(Memo, { props: { saveMemo, content: "hello" } });
     await fireEvent.click(document.querySelector(".preview-mode"));
     await waitFor(() => {
@@ -64,7 +79,7 @@ describe("Memo - edit mode", () => {
     });
   });
 
-  test("clicking 完了 returns to view mode", async () => {
+  test("clicking complete returns to view mode", async () => {
     render(Memo, { props: { saveMemo, content: "hello" } });
     await fireEvent.click(document.querySelector(".preview-mode"));
     await waitFor(() => expect(document.querySelector(".done-btn")).toBeInTheDocument());
@@ -91,7 +106,7 @@ describe("Memo - edit mode", () => {
     vi.useRealTimers();
   });
 
-  test("clicking 完了 without changes does not call saveMemo", async () => {
+  test("clicking complete without changes does not call saveMemo", async () => {
     render(Memo, { props: { saveMemo, content: "hello" } });
     await fireEvent.click(document.querySelector(".preview-mode"));
     await waitFor(() => expect(document.querySelector(".done-btn")).toBeInTheDocument());
@@ -115,7 +130,7 @@ describe("Memo - link handling in preview", () => {
     delete window.electronAPI;
   });
 
-  test("clicking a link opens it externally and does not enter edit mode", async () => {
+  test("clicking a markdown link opens it externally and does not enter edit mode", async () => {
     render(Memo, { props: { saveMemo, content: "[Visit](https://example.com)" } });
     const link = document.querySelector(".preview a");
     expect(link).toBeInTheDocument();
@@ -127,6 +142,39 @@ describe("Memo - link handling in preview", () => {
       expect.stringContaining("example.com")
     );
     expect(document.querySelector(".cm-editor")).not.toBeInTheDocument();
+  });
+
+  test("clicking a wiki link opens the target memo and does not enter edit mode", async () => {
+    const openMemoLink = vi.fn();
+    render(Memo, {
+      props: {
+        saveMemo,
+        content: "[[Research Notes]]",
+        memoTitles: ["Research Notes"],
+        openMemoLink,
+      },
+    });
+
+    const link = document.querySelector(".preview a[data-memo-link]");
+    expect(link).toBeInTheDocument();
+
+    await fireEvent.click(link);
+    await tick();
+
+    expect(openMemoLink).toHaveBeenCalledWith("Research Notes");
+    expect(window.electronAPI.openExternalLink).not.toHaveBeenCalled();
+    expect(document.querySelector(".cm-editor")).not.toBeInTheDocument();
+  });
+
+  test("clicking an external wiki link opens it externally", async () => {
+    render(Memo, { props: { saveMemo, content: "[[https://example.com|Example]]" } });
+    const link = document.querySelector(".preview a");
+    expect(link).toBeInTheDocument();
+
+    await fireEvent.click(link);
+    await tick();
+
+    expect(window.electronAPI.openExternalLink).toHaveBeenCalledWith("https://example.com/");
   });
 
   test("clicking non-link area enters edit mode", async () => {
