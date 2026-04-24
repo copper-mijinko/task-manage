@@ -27,7 +27,6 @@
   function toMarkdown(val: unknown): string {
     if (!val) return "";
     if (typeof val === "string") return val;
-    // Legacy Quill Delta JSON fallback
     return JSON.stringify(val, null, 2);
   }
 
@@ -222,8 +221,8 @@
   {#if isEditing}
     <div class="edit-mode">
       <div class="edit-bar">
-        <span class="shortcut-hint">Ctrl/Cmd+S 縺ｧ菫晏ｭ・/ Ctrl/Cmd+Enter 縺ｧ螳御ｺ・/span>
-        <button class="done-btn" on:click={stopEdit}>螳御ｺ・/button>
+        <span class="shortcut-hint">Ctrl/Cmd+S to save / Ctrl/Cmd+Enter to finish</span>
+        <button class="done-btn" on:click={stopEdit}>Done</button>
       </div>
       <div class="editor" bind:this={container}></div>
     </div>
@@ -238,7 +237,7 @@
         <!-- eslint-disable-next-line svelte/no-at-html-tags -->
         <div class="preview">{@html renderedHtml}</div>
       {:else if !readOnly}
-        <div class="placeholder">繧ｯ繝ｪ繝・け縺励※繝｡繝｢繧呈嶌縺榊ｧ九ａ繧・..</div>
+        <div class="placeholder">Click to start writing...</div>
       {/if}
     </div>
   {/if}
@@ -366,7 +365,7 @@
   }
 
   .preview :global(a.wiki-link.is-external)::after {
-    content: "竊・;
+    content: "ext";
     font-size: 0.8em;
   }
 
