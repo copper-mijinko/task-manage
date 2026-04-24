@@ -69,7 +69,13 @@
       keymap.of([
         ...defaultKeymap,
         ...searchKeymap,
-        { key: "Escape", run: () => { stopEdit(); return true; } },
+        {
+          key: "Escape",
+          run: () => {
+            stopEdit();
+            return true;
+          },
+        },
       ]),
       keymap.of(historyKeymap),
       EditorView.lineWrapping,
@@ -238,9 +244,15 @@
     color: var(--theme-color-Sub-light);
   }
 
-  .preview :global(h1) { font-size: 1.5rem; }
-  .preview :global(h2) { font-size: 1.25rem; }
-  .preview :global(h3) { font-size: 1.1rem; }
+  .preview :global(h1) {
+    font-size: 1.5rem;
+  }
+  .preview :global(h2) {
+    font-size: 1.25rem;
+  }
+  .preview :global(h3) {
+    font-size: 1.1rem;
+  }
 
   .preview :global(p) {
     margin: 0.5em 0;
