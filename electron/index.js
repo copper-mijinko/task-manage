@@ -1,5 +1,5 @@
 const _ = require("lodash");
-const { app, BrowserWindow, ipcMain, shell, WebContents } = require("electron");
+const { app, BrowserWindow, ipcMain, shell, WebContents, dialog } = require("electron");
 const fs = require("fs");
 const path = require("path");
 const { LowSync, JSONFileSync } = require("@commonify/lowdb");
@@ -563,6 +563,14 @@ app.on("ready", () => {
       log.error("ws:delete-task error:", err.message);
       return { success: false, error: err.message };
     }
+  });
+
+  ipcMain.handle("ws:select-directory", async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ["openDirectory"],
+      title: "ワークスペースフォルダを選択",
+    });
+    return result.canceled ? null : (result.filePaths[0] ?? null);
   });
 
   ipcMain.handle("ws:create-project", async (event, { workspacePath, name, id }) => {
