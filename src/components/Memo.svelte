@@ -68,7 +68,7 @@
     ];
 
     const extensions = readOnly
-      ? [...baseExtensions, EditorState.readOnly.of(true)]
+      ? [...baseExtensions, EditorState.readOnly.of(true), EditorView.editable.of(false)]
       : [
           ...baseExtensions,
           history(),
