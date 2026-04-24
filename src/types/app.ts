@@ -73,4 +73,5 @@ export interface ElectronAPI {
     name: string,
     id: string
   ) => Promise<{ success: boolean; projectDir?: string; dirName?: string; error?: string }>;
+  wsSelectDirectory: () => Promise<string | null>;
 }

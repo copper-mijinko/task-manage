@@ -85,6 +85,7 @@ const electronAPI = {
     ipcRenderer.invoke("ws:delete-task", { projectDir, taskId }),
   wsCreateProject: (workspacePath, name, id) =>
     ipcRenderer.invoke("ws:create-project", { workspacePath, name, id }),
+  wsSelectDirectory: () => ipcRenderer.invoke("ws:select-directory"),
 };
 
 contextBridge.exposeInMainWorld("electronAPI", electronAPI);

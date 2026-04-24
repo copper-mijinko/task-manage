@@ -7,8 +7,12 @@
   import { slide } from "svelte/transition";
   import IconButton from "./IconButton.svelte";
   import Dialog from "./Dialog.svelte";
+  import WorkspaceSetup from "./WorkspaceSetup.svelte";
   import { ripple, tooltip } from "../common/common.js";
   import { project_ids, info_ids, selected_type, selected_id } from "../stores.ts";
+  import { workspace_store } from "../stores/workspace";
+
+  let show_workspace_setup = false;
 
   // Dialog
   let show_confirm = false;
@@ -204,7 +208,69 @@
   });
 </script>
 
+<WorkspaceSetup
+  show={show_workspace_setup}
+  toggle={() => {
+    show_workspace_setup = !show_workspace_setup;
+  }}
+/>
+
 <div class="Container">
+  <!-- Workspace section -->
+  <br />
+  <div class="Section">
+    <svg class="Logo" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path
+        d="M3 7C3 5.89543 3.89543 5 5 5H9.58579C9.851 5 10.1054 5.10536 10.2929 5.29289L11.7071 6.70711C11.8946 6.89464 12.149 7 12.4142 7H19C20.1046 7 21 7.89543 21 9V17C21 18.1046 20.1046 19 19 19H5C3.89543 19 3 18.1046 3 17V7Z"
+        fill="none"
+        stroke="white"
+        stroke-width="2"
+        stroke-linejoin="round"
+      />
+    </svg>
+    <span class="TextOverFlow">Workspace</span>
+    <div class="AddButtonContainer">
+      <IconButton
+        tooltipContent="ワークスペースを管理"
+        ariaLabel="ワークスペースを管理"
+        normalColor="rgba(255,255,255,0.1)"
+        activeColor="rgba(255,255,255,0.2)"
+        on:click={() => {
+          show_workspace_setup = true;
+        }}
+      >
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="12" cy="12" r="3" stroke="white" stroke-width="2" />
+          <path
+            d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"
+            stroke="white"
+            stroke-width="2"
+            stroke-linecap="round"
+          />
+        </svg>
+      </IconButton>
+    </div>
+  </div>
+  <div class="WorkspaceInfo">
+    {#if $workspace_store.activeWorkspacePath}
+      <span class="WorkspaceName TextOverFlow">
+        {$workspace_store.workspaces.find((w) => w.path === $workspace_store.activeWorkspacePath)
+          ?.label ??
+          $workspace_store.activeWorkspacePath.split(/[/\\]/).pop() ??
+          ""}
+      </span>
+    {:else}
+      <button
+        class="NoWorkspace"
+        on:click={() => {
+          show_workspace_setup = true;
+        }}
+      >
+        ＋ ワークスペースを設定
+      </button>
+    {/if}
+  </div>
+
   {#if menu_data}
     {#each menu_data as menu, i}
       {#if menu.children}
@@ -462,5 +528,29 @@
     box-sizing: border-box;
     z-index: 999999;
     pointer-events: none;
+  }
+
+  .WorkspaceInfo {
+    display: flex;
+    align-items: center;
+    padding: 0 0.5rem 0.5rem 1rem;
+    min-height: 1.75rem;
+  }
+  .WorkspaceName {
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.75);
+    max-width: 100%;
+  }
+  .NoWorkspace {
+    font-size: 0.8rem;
+    color: var(--theme-color-Accent-main);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    text-align: left;
+  }
+  .NoWorkspace:hover {
+    text-decoration: underline;
   }
 </style>
