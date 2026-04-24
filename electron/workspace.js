@@ -306,6 +306,59 @@ function bfsFromRoot(tasks, rootId) {
   return order;
 }
 
+/**
+ * Migrate a ProjectData (legacy db.json tree format) to workspace flat-file format.
+ * @param {string} workspacePath  Destination workspace directory.
+ * @param {object} projectData    ProjectData: { headers, data: TreeData }
+ * @returns {{ dirName: string, projectDir: string, count: number }}
+ */
+function migrateProjectData(workspacePath, projectData) {
+  const tasks = [];
+  const today = new Date().toISOString().slice(0, 10);
+
+  function traverse(node, parentIds) {
+    const memos = (node.data.memo || []).map((m) => {
+      let content = "";
+      if (typeof m.content === "string") {
+        content = m.content;
+      } else if (m.content !== null && m.content !== undefined) {
+        // Quill Delta or other object → preserve as JSON fenced block
+        content = `# ${m.title || "Memo"}\n\n\`\`\`json\n${JSON.stringify(m.content, null, 2)}\n\`\`\``;
+      }
+      return { title: String(m.title || "Memo"), content };
+    });
+
+    tasks.push({
+      id: node.id,
+      name: node.data.name || "",
+      status: node.data.status || "Open",
+      dueDate: node.data["due date"] || undefined,
+      parents: [...parentIds],
+      memos,
+      createdAt: today,
+    });
+
+    for (const child of node.children || []) {
+      traverse(child, [node.id]);
+    }
+  }
+
+  if (!projectData || !projectData.data) throw new Error("Invalid project data");
+  traverse(projectData.data, []);
+
+  const rootName = tasks[0].name || "project";
+  const dirName = uniqueName(workspacePath, slugify(rootName) || "project");
+  const projectDir = path.join(workspacePath, dirName);
+  fs.mkdirSync(projectDir, { recursive: true });
+
+  const taskDirs = new Map();
+  for (const task of tasks) {
+    writeTask(projectDir, task, taskDirs);
+  }
+
+  return { dirName, projectDir, count: tasks.length };
+}
+
 module.exports = {
   slugify,
   parseFrontmatter,
@@ -317,4 +370,5 @@ module.exports = {
   listProjects,
   wouldCreateCycle,
   bfsFromRoot,
+  migrateProjectData,
 };
