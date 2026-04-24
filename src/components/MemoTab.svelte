@@ -43,6 +43,7 @@
   let newMemoTitle = "memo";
   let inputs = Array(100).fill(null);
   let edit = false;
+  const hasSelectedMemo = () => Boolean(memo[selectedMemoIndex]);
 
   function normalizeMemoTitle(title) {
     return String(title || "")
@@ -75,13 +76,20 @@
       }
     }
   };
+
+  const createFirstMemo = async () => {
+    if (addMemo(newMemoTitle)) {
+      await tick();
+      selectedMemoIndex = memo.length - 1;
+    }
+  };
 </script>
 
 <div class="container">
   <div class="memotab-container">
     <div class="memotab">
       {#if memo.length == 0}
-        <span class="memotab-item">{"Tabs here"}</span>
+        <span class="memotab-item empty-tab-label">No notes yet</span>
       {:else}
         {#each memo as memo, i (memo.id)}
           <button
@@ -124,17 +132,12 @@
     </div>
     <div class="memotab-control">
       <IconButton
-        tooltipContent="Add a memo."
+        tooltipContent="Create a note."
         ariaLabel="Add a memo"
         {disabled}
         activeColor={"var(--theme-color-Primary-dark)"}
         normalColor={"var(--theme-color-Primary-main)"}
-        on:click={async () => {
-          if (addMemo(newMemoTitle)) {
-            await tick();
-            selectedMemoIndex = memo.length - 1;
-          }
-        }}
+        on:click={createFirstMemo}
       >
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
           ><path
@@ -149,10 +152,13 @@
       <IconButton
         tooltipContent="Delete the selected memo."
         ariaLabel="Delete the selected memo"
-        {disabled}
+        disabled={disabled || memo.length === 0}
         activeColor={"var(--theme-color-Error-dark)"}
         normalColor={"var(--theme-color-Error-main)"}
         on:click={() => {
+          if (!hasSelectedMemo()) {
+            return;
+          }
           show_confirm = true;
           name_confirm = memo[selectedMemoIndex].title;
         }}
@@ -168,7 +174,7 @@
         >
       </IconButton>
       <Button
-        {disabled}
+        disabled={disabled || memo.length === 0}
         variant={"text"}
         activeColor={"var(--theme-color-Info-dark)"}
         normalColor={"var(--theme-color-Info-main)"}
@@ -189,7 +195,21 @@
         />
       {/key}
     {:else}
-      <textarea placeholder="No page" disabled></textarea>
+      <div class="empty-state" data-testid="memo-empty-state">
+        <p class="eyebrow">Notes</p>
+        <h2>Create the first note for this task</h2>
+        <p class="empty-copy">
+          Capture context, next steps, or research here. Notes stay with the task so they are easy
+          to revisit later.
+        </p>
+        <Button
+          content="Create first note"
+          ariaLabel="Create first note"
+          activeColor={"var(--theme-color-Primary-dark)"}
+          normalColor={"var(--theme-color-Primary-main)"}
+          on:click={createFirstMemo}
+        />
+      </div>
     {/if}
   </div>
 </div>
@@ -292,6 +312,10 @@
     cursor: default !important;
   }
 
+  .empty-tab-label {
+    opacity: 0.8;
+  }
+
   .memotab-item:hover {
     cursor: pointer;
   }
@@ -308,10 +332,38 @@
     overflow: hidden;
   }
 
-  .memotab-content textarea {
-    height: 100%;
-    width: 100%;
+  .empty-state {
+    display: flex;
     flex: 1;
-    resize: none;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 2rem;
+    border: 0.1rem dashed var(--theme-color-Shadow-main);
+    border-radius: 1rem;
+    margin: 1rem;
+    background:
+      linear-gradient(135deg, var(--theme-color-Shadow-sub), transparent 70%),
+      var(--theme-color-Main-main);
+    color: var(--theme-color-Sub-main);
+  }
+
+  .eyebrow {
+    margin: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 0.8rem;
+  }
+
+  .empty-state h2 {
+    margin: 0;
+    color: var(--theme-color-Primary-main);
+  }
+
+  .empty-copy {
+    margin: 0;
+    max-width: 34rem;
+    line-height: 1.5;
   }
 </style>
