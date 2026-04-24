@@ -45,7 +45,9 @@
   let edit = false;
 
   function normalizeMemoTitle(title) {
-    return String(title || "").trim().toLocaleLowerCase();
+    return String(title || "")
+      .trim()
+      .toLocaleLowerCase();
   }
 
   const selectMemoByTitle = (title) => {
