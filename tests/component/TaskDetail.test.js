@@ -44,7 +44,7 @@ function createProjectData() {
             name: "Second Task",
             status: "Pending",
             "due date": undefined,
-            memo: [{ title: "review", content: "" }],
+            memo: [{ id: "memo-review", title: "review", content: "" }],
           },
           children: [],
         },
@@ -74,12 +74,14 @@ describe("TaskDetail", () => {
     await tick();
 
     expect(screen.getByDisplayValue("memo")).toBeInTheDocument();
-    expect(get(tree_data).data.children[0].data.memo).toEqual([{ title: "memo", content: "" }]);
+    expect(get(tree_data).data.children[0].data.memo).toEqual([
+      expect.objectContaining({ title: "memo", content: "" }),
+    ]);
   });
 
   test("deletes the selected memo after confirmation", async () => {
     const project = createProjectData();
-    project.data.children[0].data.memo = [{ title: "draft", content: "" }];
+    project.data.children[0].data.memo = [{ id: "memo-draft", title: "draft", content: "" }];
     tree_data.set(project);
     table_selected_id.set("task-1");
 
@@ -101,8 +103,8 @@ describe("TaskDetail", () => {
   test("resets the selected memo tab when the selected task changes", async () => {
     const project = createProjectData();
     project.data.children[0].data.memo = [
-      { title: "draft", content: "" },
-      { title: "notes", content: "" },
+      { id: "memo-draft", title: "draft", content: "" },
+      { id: "memo-notes", title: "notes", content: "" },
     ];
     tree_data.set(project);
     table_selected_id.set("task-1");
@@ -120,7 +122,9 @@ describe("TaskDetail", () => {
 
   test("shows empty content after switching from existing memo to new empty memo and back", async () => {
     const project = createProjectData();
-    project.data.children[0].data.memo = [{ title: "existing", content: "some content" }];
+    project.data.children[0].data.memo = [
+      { id: "memo-existing", title: "existing", content: "some content" },
+    ];
     tree_data.set(project);
     table_selected_id.set("task-1");
 
