@@ -106,11 +106,7 @@ function readRootTask(projectDir) {
 function readTaskDir(taskDir) {
   const content = fs.readFileSync(path.join(taskDir, "_index.md"), "utf8");
   const { data } = parseFrontmatter(content);
-  const parents = Array.isArray(data.parents)
-    ? data.parents
-    : data.parents
-      ? [data.parents]
-      : [];
+  const parents = Array.isArray(data.parents) ? data.parents : data.parents ? [data.parents] : [];
   return {
     id: data.id,
     name: data.name || "",
@@ -193,9 +189,7 @@ function writeTask(projectDir, task, taskDirs) {
   fs.writeFileSync(path.join(taskDir, "_index.md"), stringifyFrontmatter(data));
 
   // Replace all memo files
-  const existing = fs
-    .readdirSync(taskDir)
-    .filter((f) => f.endsWith(".md") && f !== "_index.md");
+  const existing = fs.readdirSync(taskDir).filter((f) => f.endsWith(".md") && f !== "_index.md");
   for (const f of existing) fs.unlinkSync(path.join(taskDir, f));
   for (const memo of task.memos || []) {
     const base = `${slugify(memo.title) || "memo"}.md`;

@@ -550,7 +550,7 @@ app.on("ready", () => {
 
       // Orphan check: any task whose only parent is taskId would be orphaned
       const wouldOrphan = [...tasks.values()].some(
-        (t) => t.parents.length === 1 && t.parents[0] === taskId,
+        (t) => t.parents.length === 1 && t.parents[0] === taskId
       );
       if (wouldOrphan) {
         return { success: false, error: "子タスクが孤立するため削除できません" };
