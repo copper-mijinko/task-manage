@@ -12,6 +12,8 @@
   export let saveMemo: (content: string) => void;
   export let content: unknown = "";
   export let readOnly = false;
+  export let memoTitles: string[] = [];
+  export let openMemoLink: ((title: string) => void) | undefined = undefined;
 
   let container: HTMLElement;
   let view: EditorView | null = null;
@@ -20,11 +22,59 @@
   let hasChanges = false;
   let currentContent = toMarkdown(content);
 
+  const EXTERNAL_LINK_PATTERN = /^(https?:\/\/|mailto:|file:\/\/)/i;
+
   function toMarkdown(val: unknown): string {
     if (!val) return "";
     if (typeof val === "string") return val;
-    // Legacy Quill Delta → JSON fallback
+    // Legacy Quill Delta JSON fallback
     return JSON.stringify(val, null, 2);
+  }
+
+  function normalizeMemoTitle(title: string): string {
+    return title.trim().toLocaleLowerCase();
+  }
+
+  function isExternalLink(target: string): boolean {
+    return EXTERNAL_LINK_PATTERN.test(target.trim());
+  }
+
+  function escapeHtml(value: string): string {
+    return value
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
+  }
+
+  function preprocessWikiLinks(markdownText: string): string {
+    const knownTitles = new Set(memoTitles.map((title) => normalizeMemoTitle(String(title || ""))));
+
+    return markdownText.replace(/\[\[([^\]]+)\]\]/g, (fullMatch, rawTarget) => {
+      const [targetPart, aliasPart] = String(rawTarget).split("|");
+      const target = String(targetPart || "").trim();
+      const alias = String(aliasPart || "").trim() || target;
+
+      if (!target) return fullMatch;
+
+      if (isExternalLink(target)) {
+        return `<a href="${escapeHtml(target)}" class="wiki-link is-external">${escapeHtml(alias)}</a>`;
+      }
+
+      const resolvedClass = knownTitles.has(normalizeMemoTitle(target))
+        ? "is-resolved"
+        : "is-unresolved";
+
+      return `<a href="#" class="wiki-link ${resolvedClass}" data-memo-link="${escapeHtml(target)}">${escapeHtml(alias)}</a>`;
+    });
+  }
+
+  function flushSave(nextContent: string) {
+    clearTimeout(saveTimer);
+    currentContent = nextContent;
+    saveMemo(currentContent);
+    hasChanges = false;
   }
 
   const editorTheme = EditorView.theme({
@@ -70,6 +120,20 @@
         ...defaultKeymap,
         ...searchKeymap,
         {
+          key: "Mod-s",
+          run: (editorView) => {
+            flushSave(editorView.state.doc.toString());
+            return true;
+          },
+        },
+        {
+          key: "Mod-Enter",
+          run: () => {
+            stopEdit();
+            return true;
+          },
+        },
+        {
           key: "Escape",
           run: () => {
             stopEdit();
@@ -85,9 +149,7 @@
           hasChanges = true;
           clearTimeout(saveTimer);
           saveTimer = setTimeout(() => {
-            currentContent = update.view.state.doc.toString();
-            saveMemo(currentContent);
-            hasChanges = false;
+            flushSave(update.view.state.doc.toString());
           }, 500);
         }
       }),
@@ -110,8 +172,7 @@
       clearTimeout(saveTimer);
       currentContent = view.state.doc.toString();
       if (hasChanges) {
-        saveMemo(currentContent);
-        hasChanges = false;
+        flushSave(currentContent);
       }
       view.destroy();
       view = null;
@@ -122,13 +183,18 @@
   onDestroy(() => {
     if (view) {
       clearTimeout(saveTimer);
-      if (hasChanges) saveMemo(view.state.doc.toString());
+      if (hasChanges) flushSave(view.state.doc.toString());
       view.destroy();
     }
   });
 
   function handlePreviewClick(e: MouseEvent) {
     const link = (e.target as Element).closest("a") as HTMLAnchorElement | null;
+    if (link?.dataset.memoLink) {
+      e.preventDefault();
+      openMemoLink?.(link.dataset.memoLink);
+      return;
+    }
     if (link?.href) {
       e.preventDefault();
       window.electronAPI?.openExternalLink(link.href);
@@ -137,13 +203,21 @@
     startEdit();
   }
 
-  $: renderedHtml = marked.parse(currentContent || "") as string;
+  $: normalizedContent = toMarkdown(content);
+  $: if (!isEditing && normalizedContent !== currentContent) {
+    currentContent = normalizedContent;
+  }
+  $: renderedHtml = marked.parse(preprocessWikiLinks(currentContent || ""), {
+    gfm: true,
+    breaks: true,
+  }) as string;
 </script>
 
 <div class="wrapper">
   {#if isEditing}
     <div class="edit-mode">
       <div class="edit-bar">
+        <span class="shortcut-hint">Ctrl/Cmd+S で保存 / Ctrl/Cmd+Enter で完了</span>
         <button class="done-btn" on:click={stopEdit}>完了</button>
       </div>
       <div class="editor" bind:this={container}></div>
@@ -159,7 +233,7 @@
         <!-- eslint-disable-next-line svelte/no-at-html-tags -->
         <div class="preview">{@html renderedHtml}</div>
       {:else if !readOnly}
-        <div class="placeholder">クリックして編集...</div>
+        <div class="placeholder">クリックしてメモを書き始める...</div>
       {/if}
     </div>
   {/if}
@@ -175,7 +249,6 @@
     background-color: var(--theme-color-Main-light);
   }
 
-  /* ---- Edit mode ---- */
   .edit-mode {
     display: flex;
     flex-direction: column;
@@ -185,11 +258,17 @@
 
   .edit-bar {
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
+    gap: 0.75rem;
     align-items: center;
     padding: 0.25rem 0.5rem;
     background-color: var(--theme-color-Main-dark);
     flex-shrink: 0;
+  }
+
+  .shortcut-hint {
+    color: var(--theme-color-Sub-main);
+    font-size: 0.75rem;
   }
 
   .done-btn {
@@ -211,7 +290,6 @@
     overflow: hidden;
   }
 
-  /* ---- View mode ---- */
   .preview-mode {
     flex: 1;
     height: 100%;
@@ -233,7 +311,6 @@
     font-style: italic;
   }
 
-  /* Markdown preview element styles */
   .preview :global(h1),
   .preview :global(h2),
   .preview :global(h3),
@@ -247,9 +324,11 @@
   .preview :global(h1) {
     font-size: 1.5rem;
   }
+
   .preview :global(h2) {
     font-size: 1.25rem;
   }
+
   .preview :global(h3) {
     font-size: 1.1rem;
   }
@@ -262,6 +341,28 @@
     color: var(--theme-color-Accent-main);
     text-decoration: underline;
     cursor: pointer;
+  }
+
+  .preview :global(a.wiki-link) {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    padding: 0.05rem 0.45rem;
+    border-radius: 999px;
+    text-decoration: none;
+    font-weight: 600;
+    background: color-mix(in srgb, var(--theme-color-Accent-main) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--theme-color-Accent-main) 45%, transparent);
+  }
+
+  .preview :global(a.wiki-link.is-unresolved) {
+    opacity: 0.8;
+    border-style: dashed;
+  }
+
+  .preview :global(a.wiki-link.is-external)::after {
+    content: "↗";
+    font-size: 0.8em;
   }
 
   .preview :global(code) {
@@ -299,8 +400,26 @@
     padding-left: 1.5em;
   }
 
+  .preview :global(ul.contains-task-list) {
+    list-style: none;
+    padding-left: 0;
+  }
+
   .preview :global(li) {
     margin: 0.2em 0;
+  }
+
+  .preview :global(.task-list-item) {
+    list-style: none;
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-start;
+  }
+
+  .preview :global(.task-list-item input[type="checkbox"]) {
+    margin-top: 0.3rem;
+    accent-color: var(--theme-color-Primary-main);
+    pointer-events: none;
   }
 
   .preview :global(hr) {

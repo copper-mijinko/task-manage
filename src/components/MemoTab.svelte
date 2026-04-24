@@ -7,7 +7,6 @@
   import Memo from "./Memo.svelte";
   import Dialog from "./Dialog.svelte";
 
-  // Dialog
   let show_confirm = false;
   const toggle_confirm = () => {
     show_confirm = !show_confirm;
@@ -19,7 +18,6 @@
     }
   };
 
-  // Create a writable store for the memo
   export let memo = [];
   export let saveMemo;
   export let addMemo;
@@ -39,15 +37,28 @@
   $: editedContent = memo.length > selectedMemoIndex ? memo[selectedMemoIndex].content : "";
   let newMemoTitle = "memo";
 
-  // 安全にアクセスできるように配列を初期化
   let inputs = Array(100).fill(null);
   let edit = false;
+
+  function normalizeMemoTitle(title) {
+    return String(title || "").trim().toLocaleLowerCase();
+  }
+
+  const selectMemoByTitle = (title) => {
+    const nextIndex = memo.findIndex((entry) => normalizeMemoTitle(entry.title) === normalizeMemoTitle(title));
+    if (nextIndex >= 0) {
+      selectedMemoIndex = nextIndex;
+      edit = false;
+      return true;
+    }
+    return false;
+  };
+
   const toggle = async () => {
     if (memo.length > 0) {
       edit = !edit;
       if (edit) {
         await tick();
-        // 要素が存在することを確認してからfocusを呼び出す
         if (inputs[selectedMemoIndex]) {
           inputs[selectedMemoIndex].focus();
         }
@@ -163,6 +174,8 @@
         <Memo
           saveMemo={(editedContent) => saveMemo(editedContent, selectedMemoIndex)}
           content={editedContent}
+          memoTitles={memo.map((entry) => entry.title)}
+          openMemoLink={selectMemoByTitle}
         />
       {/key}
     {:else}
