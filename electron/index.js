@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const { LowSync, JSONFileSync } = require("@commonify/lowdb");
 const log = require("electron-log/main");
+const workspace = require("./workspace");
 
 function resolveAppDataPath(fileName) {
   const customDataDir = process.env.TASK_MANAGE_DATA_DIR;
@@ -464,5 +465,113 @@ app.on("ready", () => {
   // 検索ウィンドウからテーマ情報を要求された場合
   ipcMain.handle("get-current-theme", async (event) => {
     return db_meta.data.theme || "dark";
+  });
+
+  ////////////// Workspace IPC //////////////
+  // projectDir → { tasks: Map, taskDirs: Map } のインメモリキャッシュ
+  const wsCache = new Map();
+
+  ipcMain.handle("ws:get-workspaces", async () => {
+    return {
+      workspaces: db_meta.data.workspaces || [],
+      activeWorkspace: db_meta.data.activeWorkspace || null,
+    };
+  });
+
+  ipcMain.on("ws:set-workspaces", (event, { workspaces, activeWorkspace }) => {
+    db_meta.data.workspaces = workspaces;
+    if (activeWorkspace !== undefined) db_meta.data.activeWorkspace = activeWorkspace;
+    try {
+      db_meta.write();
+    } catch (err) {
+      showSaveError("ws:set-workspaces", err);
+    }
+  });
+
+  ipcMain.handle("ws:list-projects", async (event, { workspacePath }) => {
+    try {
+      return workspace.listProjects(workspacePath);
+    } catch (err) {
+      log.error("ws:list-projects error:", err.message);
+      return [];
+    }
+  });
+
+  ipcMain.handle("ws:read-project", async (event, { projectDir }) => {
+    try {
+      const { tasks, taskDirs } = workspace.readProject(projectDir);
+      wsCache.set(projectDir, { tasks, taskDirs });
+      // Map → plain object for IPC serialisation
+      return { tasks: Object.fromEntries(tasks) };
+    } catch (err) {
+      log.error("ws:read-project error:", err.message);
+      throw err;
+    }
+  });
+
+  ipcMain.handle("ws:write-task", async (event, { projectDir, task }) => {
+    try {
+      let cached = wsCache.get(projectDir);
+      if (!cached) {
+        const { tasks, taskDirs } = workspace.readProject(projectDir);
+        cached = { tasks, taskDirs };
+        wsCache.set(projectDir, cached);
+      }
+      const { tasks, taskDirs } = cached;
+
+      // Cycle check when parents are being set
+      if (task.parents && task.parents.length > 0) {
+        // Merge updated task into the map for a correct check
+        const tasksWithUpdate = new Map(tasks);
+        tasksWithUpdate.set(task.id, task);
+        if (workspace.wouldCreateCycle(tasksWithUpdate, task.id, task.parents)) {
+          return { success: false, error: "循環が発生するため保存できません" };
+        }
+      }
+
+      workspace.writeTask(projectDir, task, taskDirs);
+      tasks.set(task.id, task);
+      return { success: true };
+    } catch (err) {
+      log.error("ws:write-task error:", err.message);
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle("ws:delete-task", async (event, { projectDir, taskId }) => {
+    try {
+      let cached = wsCache.get(projectDir);
+      if (!cached) {
+        const { tasks, taskDirs } = workspace.readProject(projectDir);
+        cached = { tasks, taskDirs };
+        wsCache.set(projectDir, cached);
+      }
+      const { tasks, taskDirs } = cached;
+
+      // Orphan check: any task whose only parent is taskId would be orphaned
+      const wouldOrphan = [...tasks.values()].some(
+        (t) => t.parents.length === 1 && t.parents[0] === taskId,
+      );
+      if (wouldOrphan) {
+        return { success: false, error: "子タスクが孤立するため削除できません" };
+      }
+
+      workspace.deleteTaskDir(projectDir, taskDirs, taskId);
+      tasks.delete(taskId);
+      return { success: true };
+    } catch (err) {
+      log.error("ws:delete-task error:", err.message);
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle("ws:create-project", async (event, { workspacePath, name, id }) => {
+    try {
+      const result = workspace.createProject(workspacePath, name, id);
+      return { success: true, ...result };
+    } catch (err) {
+      log.error("ws:create-project error:", err.message);
+      return { success: false, error: err.message };
+    }
   });
 });
