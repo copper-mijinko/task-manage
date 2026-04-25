@@ -334,10 +334,18 @@
     --backgroundColor: var(--theme-color-Main-light);
   }
   .TableRow.OverdueRow :global(*) {
-    --backgroundColor: color-mix(in srgb, var(--theme-color-Error-main) 12%, var(--theme-color-Main-light));
+    --backgroundColor: color-mix(
+      in srgb,
+      var(--theme-color-Error-main) 12%,
+      var(--theme-color-Main-light)
+    );
   }
   .TableRow.DueSoonRow :global(*) {
-    --backgroundColor: color-mix(in srgb, var(--theme-color-Warning-main) 12%, var(--theme-color-Main-light));
+    --backgroundColor: color-mix(
+      in srgb,
+      var(--theme-color-Warning-main) 12%,
+      var(--theme-color-Main-light)
+    );
   }
   .TableRow:focus-visible {
     outline: auto;
