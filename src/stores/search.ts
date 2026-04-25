@@ -12,6 +12,32 @@ export interface FilterStore extends Writable<FilterState> {
 function createFilter(initialValue: FilterState): FilterStore {
   const { subscribe, set, update } = writable<FilterState>(initialValue);
 
+  const syncFilteredData = (current: FilterState, currentTreeData: ProjectData | undefined) => {
+    if (!currentTreeData) {
+      applyFilteredData.cancel();
+      filtered_data.set(undefined);
+      table_selected_id.set(undefined);
+      return;
+    }
+
+    if (!hasActiveFilters(current)) {
+      applyFilteredData.cancel();
+      const nextTree = currentTreeData.data;
+      if (
+        !get(table_selected_id) ||
+        !nextTree ||
+        !getNode(get(table_selected_id) as string, nextTree)
+      ) {
+        table_selected_id.set(undefined);
+      }
+
+      filtered_data.set(nextTree);
+      return;
+    }
+
+    applyFilteredData(current, currentTreeData);
+  };
+
   const applyFilteredData = debounce((current: FilterState, currentTreeData: ProjectData) => {
     const filtered = filterTree(currentTreeData.data, current);
     if (
@@ -34,25 +60,11 @@ function createFilter(initialValue: FilterState): FilterStore {
     update,
     init: () => {
       subscribe((current) => {
-        const currentTreeData = get(tree_data);
-        if (!currentTreeData) return;
+        syncFilteredData(current, get(tree_data));
+      });
 
-        if (!hasActiveFilters(current)) {
-          applyFilteredData.cancel();
-          const nextTree = currentTreeData.data;
-          if (
-            !get(table_selected_id) ||
-            !nextTree ||
-            !getNode(get(table_selected_id) as string, nextTree)
-          ) {
-            table_selected_id.set(undefined);
-          }
-
-          filtered_data.set(nextTree);
-          return;
-        }
-
-        applyFilteredData(current, currentTreeData);
+      tree_data.subscribe((currentTreeData) => {
+        syncFilteredData(get({ subscribe } as Writable<FilterState>), currentTreeData);
       });
     },
   };

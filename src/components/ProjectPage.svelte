@@ -34,23 +34,31 @@
   export async function handleAdd(e, action) {
     e.stopPropagation();
 
+    if (!$tree_data?.data) {
+      return;
+    }
+
     const new_node = getDefaultNode();
-    if ($table_selected_id) {
+    const rootId = $tree_data.data.id;
+    const selectedId = $table_selected_id ?? rootId;
+    const addAction = selectedId === rootId ? "append" : action;
+
+    if (selectedId) {
       // 親ノードのIDを特定
       let parentId;
-      if (action === "append") {
+      if (addAction === "append") {
         // appendの場合は選択されているノードが親
-        parentId = $table_selected_id;
+        parentId = selectedId;
       } else {
         // insert_afterの場合は選択されているノードの親
-        const parentNode = getParent($table_selected_id, $tree_data.data);
+        const parentNode = getParent(selectedId, $tree_data.data);
         if (parentNode) {
           parentId = parentNode.id;
         }
       }
 
       // ノードを追加
-      $tree_data.data = addNode(new_node, $table_selected_id, $tree_data.data, action);
+      $tree_data.data = addNode(new_node, selectedId, $tree_data.data, addAction);
 
       // 親ノードが折りたたまれている場合は展開する
       if (parentId && $closed_node_ids.has(parentId)) {

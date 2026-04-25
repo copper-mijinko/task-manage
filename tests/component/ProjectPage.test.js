@@ -86,6 +86,42 @@ describe("ProjectPage", () => {
     expect(get(table_selected_id)).toBe(get(tree_data).data.children[1].id);
   });
 
+  test("adds the first task under the project root when nothing is selected", async () => {
+    const data = createProjectData();
+    data.data.children = [];
+    tree_data.set(data);
+    table_selected_id.set(undefined);
+
+    const { container } = render(ProjectPage);
+    const buttons = container.querySelectorAll(".TableButtons button");
+
+    await fireEvent.click(buttons[0]);
+    await vi.runAllTimersAsync();
+    await tick();
+
+    expect(get(tree_data).data.children).toHaveLength(1);
+    expect(get(tree_data).data.children[0].data.name).toBe("new_task");
+    expect(get(table_selected_id)).toBe(get(tree_data).data.children[0].id);
+  });
+
+  test("adds a task under the project root when the root is selected", async () => {
+    const data = createProjectData();
+    data.data.children = [];
+    tree_data.set(data);
+    table_selected_id.set("project-1");
+
+    const { container } = render(ProjectPage);
+    const buttons = container.querySelectorAll(".TableButtons button");
+
+    await fireEvent.click(buttons[0]);
+    await vi.runAllTimersAsync();
+    await tick();
+
+    expect(get(tree_data).data.children).toHaveLength(1);
+    expect(get(tree_data).data.children[0].data.name).toBe("new_task");
+    expect(get(table_selected_id)).toBe(get(tree_data).data.children[0].id);
+  });
+
   test("adds a child task and expands the parent when it was collapsed", async () => {
     closed_node_ids.set(new Set(["task-1"]));
 
