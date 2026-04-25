@@ -94,12 +94,13 @@ function stringifyFrontmatter(data, body = "") {
   return lines.join("\n") + "\n";
 }
 
-/** Read memos from a task directory (all .md files except _index.md). */
-function readMemos(taskDir) {
+/** Read memos from a task directory. */
+function readMemos(taskDir, reservedFiles = ["_index.md"]) {
   const memos = [];
+  const reserved = new Set(reservedFiles);
   const files = fs
     .readdirSync(taskDir)
-    .filter((f) => f.endsWith(".md") && f !== "_index.md")
+    .filter((f) => f.endsWith(".md") && !reserved.has(f))
     .sort();
   for (const file of files) {
     const raw = fs.readFileSync(path.join(taskDir, file), "utf8");
@@ -122,7 +123,7 @@ function readRootTask(projectDir) {
     status: data.status || "Open",
     dueDate: data.due || undefined,
     parents: [],
-    memos: [],
+    memos: readMemos(projectDir, ["_project.md"]),
     createdAt: data.created || "",
   };
 }
@@ -179,6 +180,15 @@ function readProject(projectDir) {
   return { tasks, taskDirs };
 }
 
+function writeMemoFiles(taskDir, indexFileName, memos) {
+  const existing = fs.readdirSync(taskDir).filter((f) => f.endsWith(".md") && f !== indexFileName);
+  for (const f of existing) fs.unlinkSync(path.join(taskDir, f));
+  for (const memo of memos || []) {
+    const id = memo.id || crypto.randomUUID();
+    fs.writeFileSync(path.join(taskDir, `${id}.md`), stringifyFrontmatter({ id }, memo.content));
+  }
+}
+
 /** Write root task to _project.md. */
 function writeRootTask(projectDir, task) {
   fs.mkdirSync(projectDir, { recursive: true });
@@ -186,6 +196,7 @@ function writeRootTask(projectDir, task) {
   if (task.dueDate) data.due = task.dueDate;
   data.created = task.createdAt || new Date().toISOString().slice(0, 10);
   fs.writeFileSync(path.join(projectDir, "_project.md"), stringifyFrontmatter(data));
+  writeMemoFiles(projectDir, "_project.md", task.memos);
 }
 
 /**
@@ -213,13 +224,7 @@ function writeTask(projectDir, task, taskDirs) {
   data.created = task.createdAt || new Date().toISOString().slice(0, 10);
   fs.writeFileSync(path.join(taskDir, "_index.md"), stringifyFrontmatter(data));
 
-  // Replace all memo files
-  const existing = fs.readdirSync(taskDir).filter((f) => f.endsWith(".md") && f !== "_index.md");
-  for (const f of existing) fs.unlinkSync(path.join(taskDir, f));
-  for (const memo of task.memos || []) {
-    const id = memo.id || crypto.randomUUID();
-    fs.writeFileSync(path.join(taskDir, `${id}.md`), stringifyFrontmatter({ id }, memo.content));
-  }
+  writeMemoFiles(taskDir, "_index.md", task.memos);
 }
 
 function saveMemoImage(projectDir, taskDirs, taskId, bytes, mimeType) {

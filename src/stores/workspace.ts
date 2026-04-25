@@ -19,6 +19,10 @@ export interface WorkspaceStore extends Writable<WorkspaceState> {
   setActive: (path: string) => Promise<void>;
   refreshProjects: () => Promise<void>;
   setActiveProject: (projectDir: string) => void;
+  createProject: (
+    name: string,
+    id: string
+  ) => Promise<{ success: boolean; projectDir?: string; error?: string }>;
 }
 
 function createWorkspaceStore(): WorkspaceStore {
@@ -107,6 +111,26 @@ function createWorkspaceStore(): WorkspaceStore {
 
     setActiveProject(projectDir: string) {
       update((s) => ({ ...s, activeProjectDir: projectDir }));
+    },
+
+    async createProject(name: string, id: string) {
+      const { activeWorkspacePath } = get({ subscribe } as WorkspaceStore);
+      if (!activeWorkspacePath) {
+        return { success: false, error: "No active workspace" };
+      }
+
+      const result = await window.electronAPI?.wsCreateProject?.(activeWorkspacePath, name, id);
+      if (!result?.success || !result.projectDir) {
+        return { success: false, error: result?.error ?? "Failed to create workspace project" };
+      }
+
+      const projects = await loadProjects(activeWorkspacePath);
+      update((s) => ({
+        ...s,
+        projects,
+        activeProjectDir: result.projectDir ?? s.activeProjectDir,
+      }));
+      return { success: true, projectDir: result.projectDir };
     },
   };
 }

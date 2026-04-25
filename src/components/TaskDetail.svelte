@@ -28,7 +28,6 @@
       $tree_data = { ...$tree_data, data };
     }
   };
-  // データストア更新処理のdebounce - 全てのUI更新を統合的に処理
   const changeDataDebounce = debounce(changeData, 500);
 
   const unsubscribeCancelPending = cancelPendingOperations.subscribe(() => {
