@@ -125,6 +125,114 @@
     });
   }
 
+  function wrapInline(marker: string, markerEnd = marker) {
+    if (!view) return;
+    const { from, to } = view.state.selection.main;
+    const selected = view.state.doc.sliceString(from, to);
+    if (selected) {
+      view.dispatch({
+        changes: { from, to, insert: `${marker}${selected}${markerEnd}` },
+        selection: { anchor: from + marker.length, head: to + marker.length },
+      });
+    } else {
+      view.dispatch({
+        changes: { from, insert: `${marker}${markerEnd}` },
+        selection: { anchor: from + marker.length },
+      });
+    }
+    view.focus();
+  }
+
+  function formatBold() { wrapInline("**"); }
+  function formatItalic() { wrapInline("*"); }
+  function formatInlineCode() { wrapInline("`"); }
+
+  function formatHeading(level: 1 | 2 | 3) {
+    if (!view) return;
+    const { from } = view.state.selection.main;
+    const line = view.state.doc.lineAt(from);
+    const newPrefix = "#".repeat(level) + " ";
+    const headingMatch = line.text.match(/^(#{1,6}) /);
+    if (headingMatch && headingMatch[0] === newPrefix) {
+      view.dispatch({
+        changes: { from: line.from, to: line.from + newPrefix.length, insert: "" },
+        selection: { anchor: Math.max(line.from, from - newPrefix.length) },
+      });
+    } else if (headingMatch) {
+      const oldLen = headingMatch[0].length;
+      view.dispatch({
+        changes: { from: line.from, to: line.from + oldLen, insert: newPrefix },
+        selection: { anchor: from - oldLen + newPrefix.length },
+      });
+    } else {
+      view.dispatch({
+        changes: { from: line.from, insert: newPrefix },
+        selection: { anchor: from + newPrefix.length },
+      });
+    }
+    view.focus();
+  }
+
+  function formatCheckbox() {
+    if (!view) return;
+    const prefix = "- [ ] ";
+    const { from } = view.state.selection.main;
+    const line = view.state.doc.lineAt(from);
+    if (line.text.startsWith(prefix)) {
+      view.dispatch({
+        changes: { from: line.from, to: line.from + prefix.length, insert: "" },
+        selection: { anchor: Math.max(line.from, from - prefix.length) },
+      });
+    } else {
+      view.dispatch({
+        changes: { from: line.from, insert: prefix },
+        selection: { anchor: from + prefix.length },
+      });
+    }
+    view.focus();
+  }
+
+  function formatLink() {
+    if (!view) return;
+    const { from, to } = view.state.selection.main;
+    const selected = view.state.doc.sliceString(from, to);
+    if (selected) {
+      const insert = `[${selected}](url)`;
+      view.dispatch({
+        changes: { from, to, insert },
+        selection: { anchor: from + selected.length + 3, head: from + insert.length - 1 },
+      });
+    } else {
+      view.dispatch({
+        changes: { from, insert: "[](url)" },
+        selection: { anchor: from + 1 },
+      });
+    }
+    view.focus();
+  }
+
+  function formatCodeBlock() {
+    if (!view) return;
+    const { from, to } = view.state.selection.main;
+    const doc = view.state.doc;
+    const selected = doc.sliceString(from, to);
+    const needsNewline = from > doc.lineAt(from).from;
+    const pre = needsNewline ? "\n" : "";
+    if (selected) {
+      const insert = `${pre}\`\`\`\n${selected}\n\`\`\`\n`;
+      view.dispatch({
+        changes: { from, to, insert },
+        selection: { anchor: from + pre.length + 4, head: from + pre.length + 4 + selected.length },
+      });
+    } else {
+      view.dispatch({
+        changes: { from, insert: `${pre}\`\`\`\n\n\`\`\`\n` },
+        selection: { anchor: from + pre.length + 4 },
+      });
+    }
+    view.focus();
+  }
+
   async function resolveImageSources(html: string): Promise<string> {
     if (!workspaceProjectDir || !taskId || !window.electronAPI?.wsResolveMemoAsset) {
       return html;
@@ -212,6 +320,9 @@
       syntaxHighlighting(defaultHighlightStyle),
       highlightSelectionMatches(),
       keymap.of([
+        { key: "Mod-b", run: () => { formatBold(); return true; } },
+        { key: "Mod-i", run: () => { formatItalic(); return true; } },
+        { key: "Mod-k", run: () => { formatLink(); return true; } },
         ...defaultKeymap,
         ...searchKeymap,
         {
@@ -344,8 +455,23 @@
   {#if isEditing}
     <div class="edit-mode">
       <div class="edit-bar">
-        <span class="shortcut-hint">Ctrl/Cmd+S to save / Ctrl/Cmd+Enter to finish</span>
-        <button class="done-btn" on:click={stopEdit}>Done</button>
+        <div class="toolbar">
+          <button class="tool-btn tool-bold" title="太字 (Ctrl+B)" on:mousedown|preventDefault on:click={formatBold}>B</button>
+          <button class="tool-btn tool-italic" title="斜体 (Ctrl+I)" on:mousedown|preventDefault on:click={formatItalic}>I</button>
+          <span class="tool-sep"></span>
+          <button class="tool-btn" title="見出し1" on:mousedown|preventDefault on:click={() => formatHeading(1)}>H1</button>
+          <button class="tool-btn" title="見出し2" on:mousedown|preventDefault on:click={() => formatHeading(2)}>H2</button>
+          <button class="tool-btn" title="見出し3" on:mousedown|preventDefault on:click={() => formatHeading(3)}>H3</button>
+          <span class="tool-sep"></span>
+          <button class="tool-btn" title="リンク (Ctrl+K)" on:mousedown|preventDefault on:click={formatLink}>[url]</button>
+          <button class="tool-btn" title="チェックリスト" on:mousedown|preventDefault on:click={formatCheckbox}>☐</button>
+          <button class="tool-btn tool-mono" title="インラインコード" on:mousedown|preventDefault on:click={formatInlineCode}>`</button>
+          <button class="tool-btn tool-mono" title="コードブロック" on:mousedown|preventDefault on:click={formatCodeBlock}>```</button>
+        </div>
+        <div class="edit-bar-end">
+          <span class="shortcut-hint">Ctrl+S · Ctrl+Enter</span>
+          <button class="done-btn" on:click={stopEdit}>Done</button>
+        </div>
       </div>
       <div class="editor" bind:this={container}></div>
     </div>
@@ -386,16 +512,71 @@
   .edit-bar {
     display: flex;
     justify-content: space-between;
-    gap: 0.75rem;
     align-items: center;
     padding: 0.25rem 0.5rem;
     background-color: var(--theme-color-Main-dark);
+    flex-shrink: 0;
+    gap: 0.5rem;
+  }
+
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.1rem;
+    flex-wrap: nowrap;
+  }
+
+  .tool-btn {
+    padding: 0.15rem 0.35rem;
+    font-size: 0.75rem;
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    color: var(--theme-color-Sub-main);
+    cursor: pointer;
+    line-height: 1.4;
+    min-width: 1.6rem;
+    text-align: center;
+  }
+
+  .tool-btn:hover {
+    background-color: color-mix(in srgb, var(--theme-color-Sub-dark) 30%, transparent);
+    border-color: var(--theme-color-Sub-dark);
+    color: var(--theme-color-Sub-light);
+  }
+
+  .tool-bold {
+    font-weight: bold;
+  }
+
+  .tool-italic {
+    font-style: italic;
+  }
+
+  .tool-mono {
+    font-family: monospace;
+    font-size: 0.7rem;
+  }
+
+  .tool-sep {
+    width: 1px;
+    height: 1rem;
+    background-color: var(--theme-color-Sub-dark);
+    margin: 0 0.15rem;
+    flex-shrink: 0;
+  }
+
+  .edit-bar-end {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
     flex-shrink: 0;
   }
 
   .shortcut-hint {
     color: var(--theme-color-Sub-main);
     font-size: 0.75rem;
+    white-space: nowrap;
   }
 
   .done-btn {
