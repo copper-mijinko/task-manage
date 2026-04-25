@@ -560,6 +560,29 @@ app.on("ready", () => {
     }
   );
 
+  ipcMain.handle("ws:resolve-memo-asset", async (event, { projectDir, taskId, assetPath }) => {
+    try {
+      let cached = wsCache.get(projectDir);
+      if (!cached) {
+        const { tasks, taskDirs } = workspace.readProject(projectDir);
+        cached = { tasks, taskDirs };
+        wsCache.set(projectDir, cached);
+      }
+
+      const fileUrl = workspace.resolveMemoAssetPath(
+        projectDir,
+        cached.taskDirs,
+        taskId,
+        assetPath
+      );
+
+      return { success: Boolean(fileUrl), url: fileUrl ?? undefined };
+    } catch (err) {
+      log.error("ws:resolve-memo-asset error:", err.message);
+      return { success: false, error: err.message };
+    }
+  });
+
   ipcMain.handle("ws:delete-task", async (event, { projectDir, taskId }) => {
     try {
       let cached = wsCache.get(projectDir);

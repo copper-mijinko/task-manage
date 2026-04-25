@@ -70,6 +70,11 @@ export interface ElectronAPI {
     bytes: Uint8Array,
     mimeType?: string
   ) => Promise<{ success: boolean; path?: string; error?: string }>;
+  wsResolveMemoAsset: (
+    projectDir: string,
+    taskId: string,
+    assetPath: string
+  ) => Promise<{ success: boolean; url?: string; error?: string }>;
   wsWriteProject: (
     projectDir: string,
     tasks: WorkspaceTask[]
