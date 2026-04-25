@@ -64,6 +64,11 @@ export interface ElectronAPI {
     projectDir: string,
     task: WorkspaceTask
   ) => Promise<{ success: boolean; error?: string }>;
+  wsResolveMemoAsset: (
+    projectDir: string,
+    taskId: string,
+    assetPath: string
+  ) => Promise<{ success: boolean; url?: string; error?: string }>;
   wsDeleteTask: (
     projectDir: string,
     taskId: string

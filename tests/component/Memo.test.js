@@ -9,6 +9,11 @@ describe("Memo - view mode (default)", () => {
 
   beforeEach(() => {
     saveMemo = vi.fn();
+    window.electronAPI = { wsResolveMemoAsset: vi.fn(), openExternalLink: vi.fn() };
+  });
+
+  afterEach(() => {
+    delete window.electronAPI;
   });
 
   test("renders in view mode by default (no CM6 editor)", () => {
@@ -42,6 +47,30 @@ describe("Memo - view mode (default)", () => {
     expect(links).toHaveLength(2);
     expect(links[0]).toHaveClass("is-resolved");
     expect(links[1]).toHaveClass("is-unresolved");
+  });
+
+  test("resolves workspace image paths to previewable file URLs", async () => {
+    window.electronAPI.wsResolveMemoAsset.mockResolvedValue({
+      success: true,
+      url: "file:///C:/workspace/project/task-1/assets/diagram.png",
+    });
+
+    render(Memo, {
+      props: {
+        saveMemo,
+        content: "![Diagram](./assets/diagram.png)",
+        workspaceProjectDir: "C:\\workspace\\project",
+        taskId: "task-1",
+      },
+    });
+
+    await waitFor(() => {
+      const image = document.querySelector(".preview img");
+      expect(image).toBeInTheDocument();
+      expect(image.getAttribute("src")).toBe(
+        "file:///C:/workspace/project/task-1/assets/diagram.png"
+      );
+    });
   });
 
   test("converts legacy Quill Delta object to JSON string for display", () => {
@@ -123,7 +152,7 @@ describe("Memo - link handling in preview", () => {
 
   beforeEach(() => {
     saveMemo = vi.fn();
-    window.electronAPI = { openExternalLink: vi.fn() };
+    window.electronAPI = { openExternalLink: vi.fn(), wsResolveMemoAsset: vi.fn() };
   });
 
   afterEach(() => {

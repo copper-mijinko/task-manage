@@ -11,6 +11,7 @@ import {
   createProject,
   readProject,
   writeTask,
+  resolveMemoAssetPath,
   deleteTaskDir,
   listProjects,
   migrateProjectData,
@@ -306,6 +307,34 @@ describe("file system operations", () => {
     deleteTaskDir(projectDir, taskDirs, "task-del");
     expect(fs.existsSync(path.join(projectDir, dirName))).toBe(false);
     expect(taskDirs.has("task-del")).toBe(false);
+  });
+
+  it("resolveMemoAssetPath returns a file URL for existing task assets", () => {
+    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
+    const taskDirs = new Map([["root-id", "_project"]]);
+    const task = {
+      id: "task-preview",
+      name: "Preview",
+      status: "Open",
+      parents: ["root-id"],
+      memos: [],
+      createdAt: "2026-04-24",
+    };
+    writeTask(projectDir, task, taskDirs);
+
+    const assetDir = path.join(projectDir, "task-preview", "assets");
+    fs.mkdirSync(assetDir, { recursive: true });
+    const assetPath = path.join(assetDir, "diagram.png");
+    fs.writeFileSync(assetPath, "png-data");
+
+    const fileUrl = resolveMemoAssetPath(
+      projectDir,
+      taskDirs,
+      "task-preview",
+      "./assets/diagram.png"
+    );
+
+    expect(fileUrl).toBe(`file:///${assetPath.replace(/\\/g, "/")}`);
   });
 });
 

@@ -1,6 +1,7 @@
-const crypto = require("crypto");
+﻿const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
+const { pathToFileURL } = require("url");
 
 /** Convert a human name to a filesystem-safe slug. */
 function slugify(name) {
@@ -8,7 +9,7 @@ function slugify(name) {
     String(name)
       .trim()
       .toLowerCase()
-      .replace(/[/\\:*?"<>|\x00]/g, "")
+      .replace(/[/\\:*?"<>|]/g, "")
       .replace(/\s+/g, "-")
       .replace(/^-+|-+$/g, "")
       .slice(0, 64) || "task"
@@ -37,7 +38,7 @@ function parseFrontmatter(content) {
   let currentKey = null;
 
   for (const line of yaml.split(/\r?\n/)) {
-    const listMatch = line.match(/^  - (.+)/);
+    const listMatch = line.match(/^ {2}- (.+)/);
     if (listMatch && currentKey) {
       if (!Array.isArray(data[currentKey])) data[currentKey] = [];
       data[currentKey].push(listMatch[1].trim());
@@ -149,7 +150,7 @@ function readProject(projectDir) {
         tasks.set(task.id, task);
         taskDirs.set(task.id, entry.name);
       }
-    } catch (_) {
+    } catch {
       // Skip malformed task directories
     }
   }
@@ -200,6 +201,28 @@ function writeTask(projectDir, task, taskDirs) {
   }
 }
 
+function resolveMemoAssetPath(projectDir, taskDirs, taskId, assetPath) {
+  const dirName = taskDirs.get(taskId);
+  if (!dirName || !assetPath) {
+    return null;
+  }
+
+  const taskDir = dirName === "_project" ? projectDir : path.join(projectDir, dirName);
+  const normalizedAssetPath = String(assetPath).replace(/\\/g, "/").trim();
+  const resolvedPath = path.resolve(taskDir, normalizedAssetPath);
+  const relative = path.relative(taskDir, resolvedPath);
+
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    return null;
+  }
+
+  if (!fs.existsSync(resolvedPath)) {
+    return null;
+  }
+
+  return pathToFileURL(resolvedPath).toString();
+}
+
 /**
  * Delete a task's directory (and its files).
  * The root task (_project) cannot be deleted here.
@@ -246,11 +269,12 @@ function listProjects(workspacePath) {
         dirName: entry.name,
         projectDir: path.join(workspacePath, entry.name),
       });
-    } catch (_) {}
+    } catch {
+      // Ignore malformed project entries
+    }
   }
   return projects;
 }
-
 /**
  * DAG cycle check: would setting taskId's parents to newParents create a cycle?
  * tasks: Map<id, { parents: string[] }>
@@ -270,7 +294,7 @@ function wouldCreateCycle(tasks, taskId, newParents) {
     }
   }
 
-  // BFS from taskId following children. If any newParent is reachable → cycle.
+  // BFS from taskId following children. If any newParent is reachable 竊・cycle.
   const visited = new Set();
   const queue = [taskId];
   while (queue.length > 0) {
@@ -329,7 +353,7 @@ function migrateProjectData(workspacePath, projectData) {
       if (typeof m.content === "string") {
         content = m.content;
       } else if (m.content !== null && m.content !== undefined) {
-        // Quill Delta or other object → preserve as JSON fenced block
+        // Quill Delta or other object 竊・preserve as JSON fenced block
         content = `# ${m.title || "Memo"}\n\n\`\`\`json\n${JSON.stringify(m.content, null, 2)}\n\`\`\``;
       }
       return { id: crypto.randomUUID(), title: String(m.title || "Memo"), content };
@@ -372,6 +396,7 @@ module.exports = {
   stringifyFrontmatter,
   readProject,
   writeTask,
+  resolveMemoAssetPath,
   deleteTaskDir,
   createProject,
   listProjects,

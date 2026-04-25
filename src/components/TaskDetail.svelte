@@ -1,7 +1,13 @@
 <script>
   import { getNode, updateNodeDataById } from "../common/tree_control.ts";
   import { uuidV4 } from "../common/uuid";
-  import { tree_data, table_selected_id, cancelPendingOperations } from "../stores.ts";
+  import {
+    tree_data,
+    table_selected_id,
+    cancelPendingOperations,
+    selected_type,
+    workspace_store,
+  } from "../stores.ts";
   import { debounce } from "lodash";
   import { onDestroy } from "svelte";
   import MemoTab from "./MemoTab.svelte";
@@ -11,6 +17,8 @@
     $table_selected_id && $tree_data ? getNode($table_selected_id, $tree_data.data) : undefined;
   $: name = node ? node.data["name"] : "Select Task";
   $: memo = node ? node.data["memo"] : [];
+  $: workspaceProjectDir =
+    $selected_type === "WorkspaceProject" ? $workspace_store.activeProjectDir : null;
   const changeData = (node, key, value) => {
     if (!node) {
       return;
@@ -68,7 +76,15 @@
 <div class="container">
   <div class="memotab-container">
     {#if is_selected}
-      <MemoTab {memo} {saveMemo} {addMemo} {deleteMemo} {renameMemo} />
+      <MemoTab
+        {memo}
+        {saveMemo}
+        {addMemo}
+        {deleteMemo}
+        {renameMemo}
+        {workspaceProjectDir}
+        taskId={$table_selected_id ?? null}
+      />
     {:else}
       <h1 style="color:var(--theme-color-Sub-main); display:flex; justify-content:center">
         No data.

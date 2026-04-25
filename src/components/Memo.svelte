@@ -14,6 +14,8 @@
   export let readOnly = false;
   export let memoTitles: string[] = [];
   export let openMemoLink: ((title: string) => void) | undefined = undefined;
+  export let workspaceProjectDir: string | null = null;
+  export let taskId: string | null = null;
 
   let container: HTMLElement;
   let view: EditorView | null = null;
@@ -21,6 +23,8 @@
   let isEditing = false;
   let hasChanges = false;
   let currentContent = toMarkdown(content);
+  let renderedHtml = "";
+  let renderSequence = 0;
 
   const EXTERNAL_LINK_PATTERN = /^(https?:\/\/|mailto:|file:\/\/)/i;
 
@@ -79,6 +83,52 @@
     currentContent = nextContent;
     saveMemo(currentContent);
     hasChanges = false;
+  }
+
+  async function resolveImageSources(html: string): Promise<string> {
+    if (!workspaceProjectDir || !taskId || !window.electronAPI?.wsResolveMemoAsset) {
+      return html;
+    }
+
+    const template = document.createElement("template");
+    template.innerHTML = html;
+    const images = Array.from(template.content.querySelectorAll("img[src]"));
+
+    await Promise.all(
+      images.map(async (image) => {
+        const src = image.getAttribute("src");
+        if (!src || isExternalLink(src) || src.startsWith("data:")) {
+          return;
+        }
+
+        const result = await window.electronAPI.wsResolveMemoAsset(
+          workspaceProjectDir,
+          taskId,
+          src
+        );
+        if (result.success && result.url) {
+          image.setAttribute("src", result.url);
+        } else {
+          image.setAttribute("data-missing-image", "true");
+        }
+      })
+    );
+
+    return template.innerHTML;
+  }
+
+  async function updateRenderedHtml(markdownText: string) {
+    const sequence = ++renderSequence;
+    const baseHtml = marked.parse(preprocessWikiLinks(markdownText), {
+      gfm: true,
+      breaks: true,
+    }) as string;
+    renderedHtml = baseHtml;
+    const nextHtml = await resolveImageSources(baseHtml);
+
+    if (sequence === renderSequence) {
+      renderedHtml = nextHtml;
+    }
   }
 
   const editorTheme = EditorView.theme({
@@ -211,10 +261,9 @@
   $: if (!isEditing && normalizedContent !== currentContent) {
     currentContent = normalizedContent;
   }
-  $: renderedHtml = marked.parse(preprocessWikiLinks(currentContent || ""), {
-    gfm: true,
-    breaks: true,
-  }) as string;
+  $: if (!isEditing) {
+    void updateRenderedHtml(currentContent || "");
+  }
 </script>
 
 <div class="wrapper">
@@ -339,6 +388,23 @@
 
   .preview :global(p) {
     margin: 0.5em 0;
+  }
+
+  .preview :global(img) {
+    display: block;
+    max-width: min(100%, 48rem);
+    height: auto;
+    margin: 0.75rem 0;
+    border-radius: 0.75rem;
+    border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 25%, transparent);
+    background: color-mix(in srgb, var(--theme-color-Main-dark) 80%, transparent);
+    box-shadow: 0 0.75rem 1.5rem rgba(0, 0, 0, 0.18);
+  }
+
+  .preview :global(img[data-missing-image="true"]) {
+    min-height: 6rem;
+    object-fit: contain;
+    opacity: 0.65;
   }
 
   .preview :global(a) {
