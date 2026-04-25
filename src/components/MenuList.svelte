@@ -11,11 +11,23 @@
   import { ripple, tooltip } from "../common/common.js";
   import { project_ids, info_ids, selected_type, selected_id } from "../stores.ts";
   import { workspace_store } from "../stores/workspace";
+  import { getDefaultProject } from "../common/tree_control";
 
   function selectWorkspaceProject(proj) {
     workspace_store.setActiveProject(proj.projectDir);
     $selected_type = "WorkspaceProject";
     $selected_id = proj.rootId;
+  }
+
+  async function addWorkspaceProject(e) {
+    e.stopPropagation();
+    const project = getDefaultProject();
+    const result = await workspace_store.createProject(project.data.data.name, project.data.id);
+    if (result.success && result.projectDir) {
+      workspace_store.setActiveProject(result.projectDir);
+      $selected_type = "WorkspaceProject";
+      $selected_id = project.data.id;
+    }
   }
 
   let show_workspace_setup = false;
@@ -236,9 +248,28 @@
     </svg>
     <span class="TextOverFlow">Workspace</span>
     <div class="AddButtonContainer">
+      {#if $workspace_store.activeWorkspacePath}
+        <IconButton
+          tooltipContent="Add a workspace project."
+          ariaLabel="Add a workspace project"
+          normalColor="rgba(255,255,255,0.1)"
+          activeColor="rgba(255,255,255,0.2)"
+          on:click={addWorkspaceProject}
+        >
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
+            ><path
+              d="M12 5V19M5 12H19"
+              stroke="white"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            ></path></svg
+          >
+        </IconButton>
+      {/if}
       <IconButton
-        tooltipContent="ワークスペースを管理"
-        ariaLabel="ワークスペースを管理"
+        tooltipContent="Manage workspaces"
+        ariaLabel="Manage workspaces"
         normalColor="rgba(255,255,255,0.1)"
         activeColor="rgba(255,255,255,0.2)"
         on:click={() => {
@@ -272,7 +303,7 @@
           show_workspace_setup = true;
         }}
       >
-        ＋ ワークスペースを設定
+        Set workspace
       </button>
     {/if}
   </div>

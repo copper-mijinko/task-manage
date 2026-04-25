@@ -219,6 +219,32 @@
     view.focus();
   }
 
+  function toggleLinePrefix(prefix: string) {
+    if (!view) return;
+    const { from } = view.state.selection.main;
+    const line = view.state.doc.lineAt(from);
+    if (line.text.startsWith(prefix)) {
+      view.dispatch({
+        changes: { from: line.from, to: line.from + prefix.length, insert: "" },
+        selection: { anchor: Math.max(line.from, from - prefix.length) },
+      });
+    } else {
+      view.dispatch({
+        changes: { from: line.from, insert: prefix },
+        selection: { anchor: from + prefix.length },
+      });
+    }
+    view.focus();
+  }
+
+  function formatBulletList() {
+    toggleLinePrefix("- ");
+  }
+
+  function formatQuote() {
+    toggleLinePrefix("> ");
+  }
+
   function formatLink() {
     if (!view) return;
     const { from, to } = view.state.selection.main;
@@ -435,9 +461,12 @@
       EditorView.updateListener.of((update) => {
         if (update.docChanged) {
           hasChanges = true;
+          const nextContent = update.view.state.doc.toString();
+          currentContent = nextContent;
+          void updateRenderedHtml(nextContent);
           clearTimeout(saveTimer);
           saveTimer = setTimeout(() => {
-            flushSave(update.view.state.doc.toString());
+            flushSave(nextContent);
           }, 500);
         }
       }),
@@ -507,67 +536,86 @@
         <div class="toolbar">
           <button
             class="tool-btn tool-bold"
-            title="太字 (Ctrl+B)"
+            title="Bold (Ctrl+B)"
             on:mousedown|preventDefault
             on:click={formatBold}>B</button
           >
           <button
             class="tool-btn tool-italic"
-            title="斜体 (Ctrl+I)"
+            title="Italic (Ctrl+I)"
             on:mousedown|preventDefault
             on:click={formatItalic}>I</button
+          >
+          <button
+            class="tool-btn tool-mono"
+            title="Inline code"
+            on:mousedown|preventDefault
+            on:click={formatInlineCode}>`</button
           >
           <span class="tool-sep"></span>
           <button
             class="tool-btn"
-            title="見出し1"
+            title="Heading 1"
             on:mousedown|preventDefault
             on:click={() => formatHeading(1)}>H1</button
           >
           <button
             class="tool-btn"
-            title="見出し2"
+            title="Heading 2"
             on:mousedown|preventDefault
             on:click={() => formatHeading(2)}>H2</button
           >
           <button
             class="tool-btn"
-            title="見出し3"
+            title="Heading 3"
             on:mousedown|preventDefault
             on:click={() => formatHeading(3)}>H3</button
           >
           <span class="tool-sep"></span>
           <button
             class="tool-btn"
-            title="リンク (Ctrl+K)"
+            title="Link (Ctrl+K)"
             on:mousedown|preventDefault
-            on:click={formatLink}>[url]</button
+            on:click={formatLink}>[]</button
           >
           <button
             class="tool-btn"
-            title="チェックリスト"
+            title="Bullet list"
             on:mousedown|preventDefault
-            on:click={formatCheckbox}>☐</button
+            on:click={formatBulletList}>-</button
+          >
+          <button
+            class="tool-btn"
+            title="Checklist"
+            on:mousedown|preventDefault
+            on:click={formatCheckbox}>[ ]</button
+          >
+          <button class="tool-btn" title="Quote" on:mousedown|preventDefault on:click={formatQuote}
+            >&gt;</button
           >
           <button
             class="tool-btn tool-mono"
-            title="インラインコード"
-            on:mousedown|preventDefault
-            on:click={formatInlineCode}>`</button
-          >
-          <button
-            class="tool-btn tool-mono"
-            title="コードブロック"
+            title="Code block"
             on:mousedown|preventDefault
             on:click={formatCodeBlock}>```</button
           >
         </div>
         <div class="edit-bar-end">
-          <span class="shortcut-hint">Ctrl+S · Ctrl+Enter</span>
+          <span class="shortcut-hint">Ctrl+S / Ctrl+Enter</span>
           <button class="done-btn" on:click={stopEdit}>Done</button>
         </div>
       </div>
-      <div class="editor" bind:this={container}></div>
+      <div class="edit-body">
+        <div class="editor" bind:this={container}></div>
+        <div class="live-preview" aria-label="Markdown preview">
+          {#if currentContent.trim()}
+            <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+            <div class="preview">{@html renderedHtml}</div>
+          {:else}
+            <div class="placeholder">Preview</div>
+          {/if}
+        </div>
+      </div>
     </div>
   {:else}
     <!-- svelte-ignore a11y-no-static-element-interactions -->
@@ -690,6 +738,21 @@
   .editor {
     flex: 1;
     overflow: hidden;
+    min-width: 0;
+  }
+
+  .edit-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(16rem, 0.9fr);
+    min-height: 0;
+    flex: 1;
+  }
+
+  .live-preview {
+    min-width: 0;
+    overflow: auto;
+    border-left: 1px solid var(--theme-color-Sub-dark);
+    background-color: color-mix(in srgb, var(--theme-color-Main-light) 92%, black);
   }
 
   .preview-mode {
@@ -704,6 +767,16 @@
     color: var(--theme-color-Sub-light);
     font-size: 0.9rem;
     line-height: 1.7;
+  }
+
+  @media (max-width: 900px) {
+    .edit-body {
+      grid-template-columns: 1fr;
+    }
+
+    .live-preview {
+      display: none;
+    }
   }
 
   .placeholder {

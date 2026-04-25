@@ -234,6 +234,30 @@ describe("file system operations", () => {
     expect(root.parents).toEqual([]);
   });
 
+  it("writeTask + readProject round-trips root memos", () => {
+    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
+    const taskDirs = new Map([["root-id", "_project"]]);
+    const rootTask = {
+      id: "root-id",
+      name: "Proj",
+      status: "Open",
+      parents: [],
+      memos: [{ id: "root-memo", title: "Root Notes", content: "# Root Notes\n\nStored here" }],
+      createdAt: "2026-04-24",
+    };
+
+    writeTask(projectDir, rootTask, taskDirs);
+
+    expect(fs.existsSync(path.join(projectDir, "root-memo.md"))).toBe(true);
+
+    const { tasks } = readProject(projectDir);
+    const loaded = tasks.get("root-id");
+    expect(loaded.memos).toHaveLength(1);
+    expect(loaded.memos[0].id).toBe("root-memo");
+    expect(loaded.memos[0].title).toBe("Root Notes");
+    expect(loaded.memos[0].content).toContain("Stored here");
+  });
+
   it("writeTask + readProject round-trips a regular task", () => {
     const { projectDir } = createProject(tmpDir, "Proj", "root-id");
     const taskDirs = new Map([["root-id", "_project"]]);
