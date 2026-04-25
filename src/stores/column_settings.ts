@@ -30,6 +30,7 @@ function isColumnSettingsArray(value: unknown): value is ColumnSetting[] {
         typeof item === "object" &&
         item !== null &&
         typeof (item as Record<string, unknown>).id === "string" &&
+        typeof (item as Record<string, unknown>).label === "string" &&
         typeof (item as Record<string, unknown>).visible === "boolean"
     )
   );
