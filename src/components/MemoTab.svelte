@@ -107,7 +107,7 @@
               type="text"
               value={memo.title}
               bind:this={inputs[i]}
-              disabled={!edit || i != selectedMemoIndex}
+              readonly={!edit || i != selectedMemoIndex}
               on:blur={() => {
                 edit = false;
               }}
@@ -115,7 +115,9 @@
                 renameMemo(e.target.value, selectedMemoIndex);
               }}
               on:click={(e) => {
-                e.stopPropagation();
+                if (edit && i == selectedMemoIndex) {
+                  e.stopPropagation();
+                }
               }}
               on:keydown={(e) => {
                 if (e.key == "Enter") {
@@ -284,7 +286,7 @@
     cursor: text !important;
   }
 
-  input:disabled {
+  input[readonly] {
     color: var(--theme-color-Sub-main);
     background-color: transparent;
   }
