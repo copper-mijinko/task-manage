@@ -143,9 +143,15 @@
     view.focus();
   }
 
-  function formatBold() { wrapInline("**"); }
-  function formatItalic() { wrapInline("*"); }
-  function formatInlineCode() { wrapInline("`"); }
+  function formatBold() {
+    wrapInline("**");
+  }
+  function formatItalic() {
+    wrapInline("*");
+  }
+  function formatInlineCode() {
+    wrapInline("`");
+  }
 
   function formatHeading(level: 1 | 2 | 3) {
     if (!view) return;
@@ -320,9 +326,27 @@
       syntaxHighlighting(defaultHighlightStyle),
       highlightSelectionMatches(),
       keymap.of([
-        { key: "Mod-b", run: () => { formatBold(); return true; } },
-        { key: "Mod-i", run: () => { formatItalic(); return true; } },
-        { key: "Mod-k", run: () => { formatLink(); return true; } },
+        {
+          key: "Mod-b",
+          run: () => {
+            formatBold();
+            return true;
+          },
+        },
+        {
+          key: "Mod-i",
+          run: () => {
+            formatItalic();
+            return true;
+          },
+        },
+        {
+          key: "Mod-k",
+          run: () => {
+            formatLink();
+            return true;
+          },
+        },
         ...defaultKeymap,
         ...searchKeymap,
         {
@@ -456,17 +480,62 @@
     <div class="edit-mode">
       <div class="edit-bar">
         <div class="toolbar">
-          <button class="tool-btn tool-bold" title="太字 (Ctrl+B)" on:mousedown|preventDefault on:click={formatBold}>B</button>
-          <button class="tool-btn tool-italic" title="斜体 (Ctrl+I)" on:mousedown|preventDefault on:click={formatItalic}>I</button>
+          <button
+            class="tool-btn tool-bold"
+            title="太字 (Ctrl+B)"
+            on:mousedown|preventDefault
+            on:click={formatBold}>B</button
+          >
+          <button
+            class="tool-btn tool-italic"
+            title="斜体 (Ctrl+I)"
+            on:mousedown|preventDefault
+            on:click={formatItalic}>I</button
+          >
           <span class="tool-sep"></span>
-          <button class="tool-btn" title="見出し1" on:mousedown|preventDefault on:click={() => formatHeading(1)}>H1</button>
-          <button class="tool-btn" title="見出し2" on:mousedown|preventDefault on:click={() => formatHeading(2)}>H2</button>
-          <button class="tool-btn" title="見出し3" on:mousedown|preventDefault on:click={() => formatHeading(3)}>H3</button>
+          <button
+            class="tool-btn"
+            title="見出し1"
+            on:mousedown|preventDefault
+            on:click={() => formatHeading(1)}>H1</button
+          >
+          <button
+            class="tool-btn"
+            title="見出し2"
+            on:mousedown|preventDefault
+            on:click={() => formatHeading(2)}>H2</button
+          >
+          <button
+            class="tool-btn"
+            title="見出し3"
+            on:mousedown|preventDefault
+            on:click={() => formatHeading(3)}>H3</button
+          >
           <span class="tool-sep"></span>
-          <button class="tool-btn" title="リンク (Ctrl+K)" on:mousedown|preventDefault on:click={formatLink}>[url]</button>
-          <button class="tool-btn" title="チェックリスト" on:mousedown|preventDefault on:click={formatCheckbox}>☐</button>
-          <button class="tool-btn tool-mono" title="インラインコード" on:mousedown|preventDefault on:click={formatInlineCode}>`</button>
-          <button class="tool-btn tool-mono" title="コードブロック" on:mousedown|preventDefault on:click={formatCodeBlock}>```</button>
+          <button
+            class="tool-btn"
+            title="リンク (Ctrl+K)"
+            on:mousedown|preventDefault
+            on:click={formatLink}>[url]</button
+          >
+          <button
+            class="tool-btn"
+            title="チェックリスト"
+            on:mousedown|preventDefault
+            on:click={formatCheckbox}>☐</button
+          >
+          <button
+            class="tool-btn tool-mono"
+            title="インラインコード"
+            on:mousedown|preventDefault
+            on:click={formatInlineCode}>`</button
+          >
+          <button
+            class="tool-btn tool-mono"
+            title="コードブロック"
+            on:mousedown|preventDefault
+            on:click={formatCodeBlock}>```</button
+          >
         </div>
         <div class="edit-bar-end">
           <span class="shortcut-hint">Ctrl+S · Ctrl+Enter</span>
