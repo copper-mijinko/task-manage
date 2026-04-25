@@ -1,0 +1,42 @@
+{
+  "repo_notes": "task-manage は Electron + Svelte 5 で作られたデスクトップ向けタスク管理アプリ。プロジェクトごとにタスクをツリー構造で管理し、ステータス・期限日・メモを持つ。データは lowdb を使いローカル JSON ファイルに永続化される。TypeScript と JavaScript が混在した構成で、ビルドは Vite、テストは Vitest と Playwright を使う。",
+  "pages": [
+    {
+      "title": "Overview",
+      "purpose": "アプリの目的・主要機能・技術スタックの概要を説明する。どんな問題を解決するアプリで、何ができるかを一望できるページ。"
+    },
+    {
+      "title": "Architecture",
+      "purpose": "Electron メインプロセス (electron/)、Vite + Svelte レンダラープロセス (src/)、IPC 通信の全体像を説明する。プロセス間の責務分担と通信方式を図示する。",
+      "parent": "Overview"
+    },
+    {
+      "title": "Data Model",
+      "purpose": "src/types/app.ts と src/types/workspace.ts で定義されるタスク・プロジェクト・ワークスペースのデータ構造を説明する。各フィールドの意味と制約、JSON ファイルへの永続化フォーマットも含む。",
+      "parent": "Overview"
+    },
+    {
+      "title": "State Management",
+      "purpose": "src/stores/ 配下の Svelte ストア群を説明する。workspace・project・tree・search・ui・column_settings・theme の各ストアの役割、相互依存関係、更新フローを解説する。",
+      "parent": "Overview"
+    },
+    {
+      "title": "UI Components",
+      "purpose": "src/components/ 配下の Svelte コンポーネントを機能グループ別に説明する。TreeTable・TaskDetail・ProjectPage などの主要コンポーネントの責務と props、コンポーネント間の親子関係を解説する。",
+      "parent": "Overview"
+    },
+    {
+      "title": "Electron Integration",
+      "purpose": "electron/index.js (メインプロセス)・electron/preload.js・electron/workspace.js の役割を説明する。ウィンドウ管理、contextBridge による API 公開、ワークスペース（データファイル）の読み書き処理を解説する。",
+      "parent": "Architecture"
+    },
+    {
+      "title": "Testing",
+      "purpose": "テスト基盤の構成を説明する。Vitest によるユニットテスト (tests/unit)・コンポーネントテスト (tests/component)、Playwright による E2E テスト (tests/e2e) のそれぞれの対象範囲・実行方法・設定ファイルを解説する。"
+    },
+    {
+      "title": "Development Guide",
+      "purpose": "ローカル開発環境のセットアップ手順、よく使うコマンド (dev / build / check / lint / format / test)、Git フック (.githooks) の仕組みを説明する。"
+    }
+  ]
+}
