@@ -472,9 +472,10 @@
     }
 
     const newNode = getDefaultNode();
+    const addAction = targetId === $tree_data.data.id ? "append" : action;
     let parentId;
 
-    if (action === "append") {
+    if (addAction === "append") {
       parentId = targetId;
     } else {
       const parentNode = getParent(targetId, $tree_data.data);
@@ -483,7 +484,7 @@
       }
     }
 
-    const data = addNode(newNode, targetId, $tree_data.data, action);
+    const data = addNode(newNode, targetId, $tree_data.data, addAction);
     $tree_data = { ...$tree_data, data };
 
     if (parentId && $closed_node_ids.has(parentId)) {
