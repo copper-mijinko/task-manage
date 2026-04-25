@@ -41,7 +41,7 @@
       return (val as { ops: { insert?: unknown }[] }).ops
         .map((op) => (typeof op.insert === "string" ? op.insert : ""))
         .join("")
-        .trimEnd();
+        .replace(/\s+$/, "");
     }
     return JSON.stringify(val, null, 2);
   }
