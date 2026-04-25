@@ -31,6 +31,18 @@
   function toMarkdown(val: unknown): string {
     if (!val) return "";
     if (typeof val === "string") return val;
+    // Convert legacy Quill Delta format to plain text
+    if (
+      typeof val === "object" &&
+      val !== null &&
+      "ops" in val &&
+      Array.isArray((val as { ops: unknown }).ops)
+    ) {
+      return (val as { ops: { insert?: unknown }[] }).ops
+        .map((op) => (typeof op.insert === "string" ? op.insert : ""))
+        .join("")
+        .trimEnd();
+    }
     return JSON.stringify(val, null, 2);
   }
 
@@ -108,6 +120,15 @@
   function buildImageMarkdown(relativePath: string, label = ""): string {
     const alt = label.replace(/\.[^.]+$/, "").trim();
     return alt ? `![${alt}](${relativePath})` : `![](${relativePath})`;
+  }
+
+  function imageToDataUrl(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
   }
 
   function insertTextAtSelection(editorView: EditorView, text: string) {
@@ -380,7 +401,7 @@
             item.type.startsWith("image/")
           );
 
-          if (!imageItem || !canSavePastedImages()) {
+          if (!imageItem) {
             return false;
           }
 
@@ -391,16 +412,20 @@
 
           event.preventDefault();
           void (async () => {
-            const savedPath = await persistPastedImage(file);
-            if (!savedPath) {
+            let imageSrc: string | null;
+            if (canSavePastedImages()) {
+              imageSrc = await persistPastedImage(file);
+            } else {
+              imageSrc = await imageToDataUrl(file);
+            }
+            if (!imageSrc) {
               return;
             }
 
             const prefix = editorView.state.doc.length === 0 ? "" : "\n";
-            const suffix = "\n";
             insertTextAtSelection(
               editorView,
-              `${prefix}${buildImageMarkdown(savedPath, file.name || "Pasted image")}${suffix}`
+              `${prefix}${buildImageMarkdown(imageSrc, file.name || "Pasted image")}\n`
             );
           })();
 
