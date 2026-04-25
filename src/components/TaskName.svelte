@@ -157,9 +157,8 @@
     return parts;
   }
 
-  $: highlightParts = !isEditing && $pageSearchQuery
-    ? splitHighlight(text, $pageSearchQuery)
-    : null;
+  $: highlightParts =
+    !isEditing && $pageSearchQuery ? splitHighlight(text, $pageSearchQuery) : null;
 
   const dispatchCommitIfChanged = () => {
     const currentText = text ?? "";
