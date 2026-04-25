@@ -28,21 +28,35 @@
 
   const EXTERNAL_LINK_PATTERN = /^(https?:\/\/|mailto:|file:\/\/)/i;
 
+  function isQuillDelta(value: unknown): value is { ops: Array<{ insert?: unknown }> } {
+    return (
+      typeof value === "object" && value !== null && Array.isArray((value as { ops?: unknown }).ops)
+    );
+  }
+
+  function quillDeltaToMarkdown(delta: { ops: Array<{ insert?: unknown }> }): string {
+    return delta.ops
+      .map((op) => {
+        if (typeof op.insert === "string") {
+          return op.insert;
+        }
+        if (
+          typeof op.insert === "object" &&
+          op.insert !== null &&
+          typeof (op.insert as { image?: unknown }).image === "string"
+        ) {
+          return `![](${(op.insert as { image: string }).image})`;
+        }
+        return "";
+      })
+      .join("")
+      .replace(/\s+$/, "");
+  }
+
   function toMarkdown(val: unknown): string {
     if (!val) return "";
     if (typeof val === "string") return val;
-    // Convert legacy Quill Delta format to plain text
-    if (
-      typeof val === "object" &&
-      val !== null &&
-      "ops" in val &&
-      Array.isArray((val as { ops: unknown }).ops)
-    ) {
-      return (val as { ops: { insert?: unknown }[] }).ops
-        .map((op) => (typeof op.insert === "string" ? op.insert : ""))
-        .join("")
-        .replace(/\s+$/, "");
-    }
+    if (isQuillDelta(val)) return quillDeltaToMarkdown(val);
     return JSON.stringify(val, null, 2);
   }
 
@@ -98,12 +112,23 @@
   }
 
   function canSavePastedImages(): boolean {
-    return Boolean(workspaceProjectDir && taskId && window.electronAPI?.wsSaveMemoImage);
+    return Boolean(
+      (workspaceProjectDir && taskId && window.electronAPI?.wsSaveMemoImage) || !workspaceProjectDir
+    );
+  }
+
+  function readFileAsDataUrl(file: File): Promise<string | null> {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : null);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(file);
+    });
   }
 
   async function persistPastedImage(file: File): Promise<string | null> {
     if (!workspaceProjectDir || !taskId || !window.electronAPI?.wsSaveMemoImage) {
-      return null;
+      return readFileAsDataUrl(file);
     }
 
     const bytes = new Uint8Array(await file.arrayBuffer());

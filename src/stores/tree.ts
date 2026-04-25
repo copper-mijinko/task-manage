@@ -69,7 +69,8 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
 
     const oldIds = oldData.data ? collectNodeIds(oldData.data) : [];
     const newIds = newData.data ? collectNodeIds(newData.data) : [];
-    return oldIds.filter((id) => !newIds.includes(id));
+    const newIdSet = new Set(newIds);
+    return oldIds.filter((id) => !newIdSet.has(id));
   };
 
   const persistTreeData = throttle(async (current: ProjectData | undefined) => {

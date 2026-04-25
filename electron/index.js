@@ -133,7 +133,7 @@ app.on("ready", () => {
     if (arg) {
       db.data = db.chain
         .map((o) => {
-          if (o.data.id == arg.data.id) {
+          if (o.data.id === arg.data.id) {
             return arg;
           } else {
             return o;

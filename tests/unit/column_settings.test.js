@@ -137,6 +137,19 @@ describe("column_settings store", () => {
     expect(settings).toEqual(DEFAULT_COLUMN_SETTINGS);
   });
 
+  test("init keeps defaults when saved settings are missing labels", async () => {
+    mockGetMetaData.mockResolvedValue([
+      { id: "name", visible: true },
+      { id: "status", visible: false },
+    ]);
+
+    await column_settings.init();
+    await new Promise((r) => setTimeout(r, 0));
+
+    const settings = get(column_settings);
+    expect(settings).toEqual(DEFAULT_COLUMN_SETTINGS);
+  });
+
   test("init keeps defaults when metaData fails", async () => {
     mockGetMetaData.mockRejectedValue(new Error("network error"));
 

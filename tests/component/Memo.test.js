@@ -73,11 +73,12 @@ describe("Memo - view mode (default)", () => {
     });
   });
 
-  test("converts legacy Quill Delta object to plain text for display", () => {
-    const delta = { ops: [{ insert: "hello" }] };
+  test("converts legacy Quill Delta object to readable markdown text", () => {
+    const delta = { ops: [{ insert: "hello" }, { insert: "\nworld" }] };
     render(Memo, { props: { saveMemo, content: delta } });
-    expect(document.querySelector(".preview")).toBeInTheDocument();
-    expect(document.querySelector(".preview").textContent).toContain("hello");
+    expect(document.querySelector(".preview")).toHaveTextContent("hello");
+    expect(document.querySelector(".preview")).toHaveTextContent("world");
+    expect(document.querySelector(".preview")).not.toHaveTextContent('"ops"');
   });
 
   test("readOnly: no placeholder shown when empty", () => {
@@ -203,6 +204,48 @@ describe("Memo - edit mode", () => {
         "![pasted-image](./assets/pasted-image.png)"
       );
     });
+
+    Range.prototype.getClientRects = originalGetClientRects;
+  });
+
+  test("pasting an image in db.json mode inserts a data URL image", async () => {
+    const originalGetClientRects = Range.prototype.getClientRects;
+    Range.prototype.getClientRects = () => [];
+
+    render(Memo, {
+      props: {
+        saveMemo,
+        content: "",
+        taskId: "task-1",
+      },
+    });
+
+    await fireEvent.click(document.querySelector(".preview-mode"));
+    await waitFor(() => {
+      expect(document.querySelector(".cm-editor")).toBeInTheDocument();
+    });
+
+    const file = new File(["image-bytes"], "pasted-image.png", { type: "image/png" });
+    const pasteEvent = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(pasteEvent, "clipboardData", {
+      value: {
+        items: [
+          {
+            type: "image/png",
+            getAsFile: () => file,
+          },
+        ],
+      },
+    });
+
+    document.querySelector(".cm-content").dispatchEvent(pasteEvent);
+
+    await waitFor(() => {
+      expect(document.querySelector(".cm-content").textContent).toContain(
+        "![pasted-image](data:image/png;base64,"
+      );
+    });
+    expect(window.electronAPI.wsSaveMemoImage).not.toHaveBeenCalled();
 
     Range.prototype.getClientRects = originalGetClientRects;
   });
