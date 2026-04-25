@@ -61,6 +61,11 @@ describe("Memo - edit mode", () => {
 
   beforeEach(() => {
     saveMemo = vi.fn();
+    window.electronAPI = { wsSaveMemoImage: vi.fn() };
+  });
+
+  afterEach(() => {
+    delete window.electronAPI;
   });
 
   test("clicking preview enters edit mode and shows CM6 editor", async () => {
@@ -115,6 +120,61 @@ describe("Memo - edit mode", () => {
     await tick();
 
     expect(saveMemo).not.toHaveBeenCalled();
+  });
+
+  test("pasting an image in workspace mode saves it and inserts markdown", async () => {
+    window.electronAPI.wsSaveMemoImage.mockResolvedValue({
+      success: true,
+      path: "./assets/pasted-image.png",
+    });
+    const originalGetClientRects = Range.prototype.getClientRects;
+    Range.prototype.getClientRects = () => [];
+
+    render(Memo, {
+      props: {
+        saveMemo,
+        content: "",
+        workspaceProjectDir: "C:\\project",
+        taskId: "task-1",
+      },
+    });
+
+    await fireEvent.click(document.querySelector(".preview-mode"));
+    await waitFor(() => {
+      expect(document.querySelector(".cm-editor")).toBeInTheDocument();
+    });
+
+    const file = new File(["image-bytes"], "pasted-image.png", { type: "image/png" });
+    const pasteEvent = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(pasteEvent, "clipboardData", {
+      value: {
+        items: [
+          {
+            type: "image/png",
+            getAsFile: () => file,
+          },
+        ],
+      },
+    });
+
+    document.querySelector(".cm-content").dispatchEvent(pasteEvent);
+
+    await waitFor(() => {
+      expect(window.electronAPI.wsSaveMemoImage).toHaveBeenCalledWith(
+        "C:\\project",
+        "task-1",
+        expect.any(Uint8Array),
+        "image/png"
+      );
+    });
+
+    await waitFor(() => {
+      expect(document.querySelector(".cm-content").textContent).toContain(
+        "![pasted-image](./assets/pasted-image.png)"
+      );
+    });
+
+    Range.prototype.getClientRects = originalGetClientRects;
   });
 });
 

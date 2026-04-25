@@ -14,6 +14,8 @@
   export let readOnly = false;
   export let memoTitles: string[] = [];
   export let openMemoLink: ((title: string) => void) | undefined = undefined;
+  export let workspaceProjectDir: string | null = null;
+  export let taskId: string | null = null;
 
   let container: HTMLElement;
   let view: EditorView | null = null;
@@ -79,6 +81,46 @@
     currentContent = nextContent;
     saveMemo(currentContent);
     hasChanges = false;
+  }
+
+  function canSavePastedImages(): boolean {
+    return Boolean(workspaceProjectDir && taskId && window.electronAPI?.wsSaveMemoImage);
+  }
+
+  async function persistPastedImage(file: File): Promise<string | null> {
+    if (!workspaceProjectDir || !taskId || !window.electronAPI?.wsSaveMemoImage) {
+      return null;
+    }
+
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const result = await window.electronAPI.wsSaveMemoImage(
+      workspaceProjectDir,
+      taskId,
+      bytes,
+      file.type || "image/png"
+    );
+
+    return result.success ? (result.path ?? null) : null;
+  }
+
+  function buildImageMarkdown(relativePath: string, label = ""): string {
+    const alt = label.replace(/\.[^.]+$/, "").trim();
+    return alt ? `![${alt}](${relativePath})` : `![](${relativePath})`;
+  }
+
+  function insertTextAtSelection(editorView: EditorView, text: string) {
+    const range = editorView.state.selection.main;
+    editorView.dispatch({
+      changes: {
+        from: range.from,
+        to: range.to,
+        insert: text,
+      },
+      selection: {
+        anchor: range.from + text.length,
+      },
+      scrollIntoView: true,
+    });
   }
 
   const editorTheme = EditorView.theme({
@@ -148,6 +190,39 @@
       keymap.of(historyKeymap),
       EditorView.lineWrapping,
       history(),
+      EditorView.domEventHandlers({
+        paste(event, editorView) {
+          const imageItem = Array.from(event.clipboardData?.items ?? []).find((item) =>
+            item.type.startsWith("image/")
+          );
+
+          if (!imageItem || !canSavePastedImages()) {
+            return false;
+          }
+
+          const file = imageItem.getAsFile();
+          if (!file) {
+            return false;
+          }
+
+          event.preventDefault();
+          void (async () => {
+            const savedPath = await persistPastedImage(file);
+            if (!savedPath) {
+              return;
+            }
+
+            const prefix = editorView.state.doc.length === 0 ? "" : "\n";
+            const suffix = "\n";
+            insertTextAtSelection(
+              editorView,
+              `${prefix}${buildImageMarkdown(savedPath, file.name || "Pasted image")}${suffix}`
+            );
+          })();
+
+          return true;
+        },
+      }),
       EditorView.updateListener.of((update) => {
         if (update.docChanged) {
           hasChanges = true;

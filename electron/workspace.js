@@ -8,7 +8,9 @@ function slugify(name) {
     String(name)
       .trim()
       .toLowerCase()
-      .replace(/[/\\:*?"<>|\x00]/g, "")
+      .replace(/[/\\:*?"<>|]/g, "")
+      .split("\0")
+      .join("")
       .replace(/\s+/g, "-")
       .replace(/^-+|-+$/g, "")
       .slice(0, 64) || "task"
@@ -21,6 +23,25 @@ function uniqueName(parentDir, baseName) {
   let i = 2;
   while (fs.existsSync(path.join(parentDir, `${baseName}-${i}`))) i++;
   return `${baseName}-${i}`;
+}
+
+function extensionFromMimeType(mimeType) {
+  switch (String(mimeType || "").toLowerCase()) {
+    case "image/png":
+      return "png";
+    case "image/jpeg":
+      return "jpg";
+    case "image/gif":
+      return "gif";
+    case "image/webp":
+      return "webp";
+    case "image/bmp":
+      return "bmp";
+    case "image/svg+xml":
+      return "svg";
+    default:
+      return "png";
+  }
 }
 
 /**
@@ -37,7 +58,7 @@ function parseFrontmatter(content) {
   let currentKey = null;
 
   for (const line of yaml.split(/\r?\n/)) {
-    const listMatch = line.match(/^  - (.+)/);
+    const listMatch = line.match(/^ {2}- (.+)/);
     if (listMatch && currentKey) {
       if (!Array.isArray(data[currentKey])) data[currentKey] = [];
       data[currentKey].push(listMatch[1].trim());
@@ -149,7 +170,7 @@ function readProject(projectDir) {
         tasks.set(task.id, task);
         taskDirs.set(task.id, entry.name);
       }
-    } catch (_) {
+    } catch {
       // Skip malformed task directories
     }
   }
@@ -200,6 +221,30 @@ function writeTask(projectDir, task, taskDirs) {
   }
 }
 
+function saveMemoImage(projectDir, taskDirs, taskId, bytes, mimeType) {
+  const dirName = taskDirs.get(taskId);
+  if (!dirName) {
+    throw new Error("Task directory was not found");
+  }
+
+  const targetDir = dirName === "_project" ? projectDir : path.join(projectDir, dirName);
+  const assetsDir = path.join(targetDir, "assets");
+  fs.mkdirSync(assetsDir, { recursive: true });
+
+  const extension = extensionFromMimeType(mimeType);
+  const fileName = `pasted-${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${extension}`;
+  const assetPath = path.join(assetsDir, fileName);
+  const buffer = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
+
+  fs.writeFileSync(assetPath, buffer);
+
+  return {
+    fileName,
+    relativePath: `./assets/${fileName}`,
+    assetPath,
+  };
+}
+
 /**
  * Delete a task's directory (and its files).
  * The root task (_project) cannot be deleted here.
@@ -246,7 +291,9 @@ function listProjects(workspacePath) {
         dirName: entry.name,
         projectDir: path.join(workspacePath, entry.name),
       });
-    } catch (_) {}
+    } catch {
+      // Ignore malformed project entries
+    }
   }
   return projects;
 }
@@ -270,7 +317,7 @@ function wouldCreateCycle(tasks, taskId, newParents) {
     }
   }
 
-  // BFS from taskId following children. If any newParent is reachable → cycle.
+  // BFS from taskId following children. If any newParent is reachable, a cycle exists.
   const visited = new Set();
   const queue = [taskId];
   while (queue.length > 0) {
@@ -329,7 +376,7 @@ function migrateProjectData(workspacePath, projectData) {
       if (typeof m.content === "string") {
         content = m.content;
       } else if (m.content !== null && m.content !== undefined) {
-        // Quill Delta or other object → preserve as JSON fenced block
+        // Preserve legacy Quill Delta objects as JSON fenced blocks.
         content = `# ${m.title || "Memo"}\n\n\`\`\`json\n${JSON.stringify(m.content, null, 2)}\n\`\`\``;
       }
       return { id: crypto.randomUUID(), title: String(m.title || "Memo"), content };
@@ -372,6 +419,7 @@ module.exports = {
   stringifyFrontmatter,
   readProject,
   writeTask,
+  saveMemoImage,
   deleteTaskDir,
   createProject,
   listProjects,
