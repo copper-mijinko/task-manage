@@ -1,6 +1,7 @@
 <script>
   import { onMount, onDestroy, createEventDispatcher, tick } from "svelte";
   import IconButton from "./IconButton.svelte";
+  import { pageSearchQuery } from "../stores/search";
 
   export let show = false;
 
@@ -35,8 +36,11 @@
   $: if (show === false) {
     searchText = ""; // search box内をクリア
     lastSearchText = ""; // ステータスをクリア
+    pageSearchQuery.set("");
     window.electronAPI.stopFindInPage(); // matchCount, activeMatchOrdinalはMainから0が通知される
   }
+
+  $: pageSearchQuery.set(show && searchText.trim() ? searchText.trim() : "");
 
   // search
   async function executeSearch() {
@@ -109,6 +113,7 @@
     searchText = "";
     matchCount = 0;
     activeMatchOrdinal = 0;
+    pageSearchQuery.set("");
     focusInput();
   }
 
