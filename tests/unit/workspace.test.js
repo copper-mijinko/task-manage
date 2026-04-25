@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "fs";
 import path from "path";
 import os from "os";
+import { pathToFileURL } from "url";
 import {
   slugify,
   parseFrontmatter,
@@ -12,6 +13,7 @@ import {
   readProject,
   writeTask,
   saveMemoImage,
+  resolveMemoAssetPath,
   deleteTaskDir,
   listProjects,
   migrateProjectData,
@@ -333,6 +335,34 @@ describe("file system operations", () => {
     expect(result.relativePath).toMatch(/^\.\/assets\/pasted-.+\.png$/);
     expect(fs.existsSync(result.assetPath)).toBe(true);
     expect(path.dirname(result.assetPath)).toBe(path.join(projectDir, "task-assets", "assets"));
+  });
+
+  it("resolveMemoAssetPath returns a file URL for existing task assets", () => {
+    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
+    const taskDirs = new Map([["root-id", "_project"]]);
+    const task = {
+      id: "task-preview",
+      name: "Preview",
+      status: "Open",
+      parents: ["root-id"],
+      memos: [],
+      createdAt: "2026-04-24",
+    };
+    writeTask(projectDir, task, taskDirs);
+
+    const assetDir = path.join(projectDir, "task-preview", "assets");
+    fs.mkdirSync(assetDir, { recursive: true });
+    const assetPath = path.join(assetDir, "diagram.png");
+    fs.writeFileSync(assetPath, "png-data");
+
+    const fileUrl = resolveMemoAssetPath(
+      projectDir,
+      taskDirs,
+      "task-preview",
+      "./assets/diagram.png"
+    );
+
+    expect(fileUrl).toBe(pathToFileURL(assetPath).toString());
   });
 });
 

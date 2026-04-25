@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
+const { pathToFileURL } = require("url");
 
 /** Convert a human name to a filesystem-safe slug. */
 function slugify(name) {
@@ -245,6 +246,28 @@ function saveMemoImage(projectDir, taskDirs, taskId, bytes, mimeType) {
   };
 }
 
+function resolveMemoAssetPath(projectDir, taskDirs, taskId, assetPath) {
+  const dirName = taskDirs.get(taskId);
+  if (!dirName || !assetPath) {
+    return null;
+  }
+
+  const taskDir = dirName === "_project" ? projectDir : path.join(projectDir, dirName);
+  const normalizedAssetPath = String(assetPath).replace(/\\/g, "/").trim();
+  const resolvedPath = path.resolve(taskDir, normalizedAssetPath);
+  const relativePath = path.relative(taskDir, resolvedPath);
+
+  if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+    return null;
+  }
+
+  if (!fs.existsSync(resolvedPath)) {
+    return null;
+  }
+
+  return pathToFileURL(resolvedPath).toString();
+}
+
 /**
  * Delete a task's directory (and its files).
  * The root task (_project) cannot be deleted here.
@@ -420,6 +443,7 @@ module.exports = {
   readProject,
   writeTask,
   saveMemoImage,
+  resolveMemoAssetPath,
   deleteTaskDir,
   createProject,
   listProjects,
