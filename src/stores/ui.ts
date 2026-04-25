@@ -3,7 +3,7 @@ import { getNode, type TreeData } from "../common/tree_control";
 import { workspaceToProjectData } from "../common/workspace_tree";
 import type { PendingTaskDetailSelection, SelectedType } from "../types/app";
 import { clearHistory, tree_data } from "./tree";
-import { workspace_store } from "./workspace";
+import { workspace_store, workspace_tasks_cache } from "./workspace";
 
 const currentHash = typeof window !== "undefined" ? window.location.hash : "";
 const currentSearch =
@@ -86,6 +86,7 @@ function createSelectedID(initialValue: string | undefined): SelectedIdStore {
           if (!activeProjectDir) return;
           window.electronAPI.wsReadProject?.(activeProjectDir).then((result) => {
             if (!result) return;
+            workspace_tasks_cache.set(result.tasks);
             const converted = workspaceToProjectData(result.tasks, current);
             tree_data.set(converted);
             table_selected_id.set(undefined);

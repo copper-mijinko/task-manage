@@ -587,6 +587,32 @@ app.on("ready", () => {
     }
   });
 
+  ipcMain.handle("ws:write-project", async (event, { projectDir, tasks }) => {
+    try {
+      const { taskDirs } = workspace.readProject(projectDir);
+      const newTaskIds = new Set(tasks.map((t) => t.id));
+
+      // Delete task dirs no longer in the new task list
+      for (const id of [...taskDirs.keys()]) {
+        if (!newTaskIds.has(id)) {
+          workspace.deleteTaskDir(projectDir, taskDirs, id);
+        }
+      }
+
+      for (const task of tasks) {
+        workspace.writeTask(projectDir, task, taskDirs);
+      }
+
+      // Invalidate cache so next read reflects the new state
+      wsCache.delete(projectDir);
+
+      return { success: true };
+    } catch (err) {
+      log.error("ws:write-project error:", err.message);
+      return { success: false, error: err.message };
+    }
+  });
+
   ipcMain.handle("ws:select-directory", async () => {
     const result = await dialog.showOpenDialog({
       properties: ["openDirectory"],

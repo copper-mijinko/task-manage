@@ -1,4 +1,4 @@
-import type { WorkspaceTask } from "../types/workspace";
+import type { WorkspaceTask, WorkspaceTaskStatus } from "../types/workspace";
 import type { ProjectData, TreeData } from "./tree_control";
 
 const DEFAULT_HEADERS = [
@@ -55,4 +55,41 @@ export function workspaceToProjectData(
   }
 
   return { headers: DEFAULT_HEADERS, data: buildNode(rootId) };
+}
+
+/**
+ * Convert a ProjectData tree back to a flat WorkspaceTask array.
+ * Preserves createdAt from existingTasks when available.
+ */
+export function projectDataToWorkspaceTasks(
+  projectData: ProjectData,
+  existingTasks: Record<string, WorkspaceTask>
+): WorkspaceTask[] {
+  const result: WorkspaceTask[] = [];
+  const today = new Date().toISOString().slice(0, 10);
+
+  function traverse(node: TreeData, parentIds: string[]) {
+    const existing = existingTasks[node.id];
+    result.push({
+      id: node.id,
+      name: node.data.name,
+      status: (node.data.status as WorkspaceTaskStatus) || "Open",
+      dueDate: node.data["due date"] || undefined,
+      parents: parentIds,
+      memos: (node.data.memo || []).map((m) => ({
+        id: m.id || "",
+        title: m.title || "",
+        content: typeof m.content === "string" ? m.content : "",
+      })),
+      createdAt: existing?.createdAt || today,
+    });
+    for (const child of node.children || []) {
+      traverse(child, [node.id]);
+    }
+  }
+
+  if (projectData.data) {
+    traverse(projectData.data, []);
+  }
+  return result;
 }
