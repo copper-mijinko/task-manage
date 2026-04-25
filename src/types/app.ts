@@ -64,6 +64,12 @@ export interface ElectronAPI {
     projectDir: string,
     task: WorkspaceTask
   ) => Promise<{ success: boolean; error?: string }>;
+  wsSaveMemoImage: (
+    projectDir: string,
+    taskId: string,
+    bytes: Uint8Array,
+    mimeType?: string
+  ) => Promise<{ success: boolean; path?: string; error?: string }>;
   wsDeleteTask: (
     projectDir: string,
     taskId: string

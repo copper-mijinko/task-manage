@@ -1,5 +1,5 @@
 const _ = require("lodash");
-const { app, BrowserWindow, ipcMain, shell, WebContents, dialog } = require("electron");
+const { app, BrowserWindow, ipcMain, shell, dialog } = require("electron");
 const fs = require("fs");
 const path = require("path");
 const { LowSync, JSONFileSync } = require("@commonify/lowdb");
@@ -26,7 +26,7 @@ function resolveAppDataPath(fileName) {
 
 function showSaveError(context, err) {
   log.error(`Failed to write data (${context}):`, err.message);
-  const message = `データの保存に失敗しました: ${err.message}`;
+  const message = `Failed to save data: ${err.message}`;
   BrowserWindow.getAllWindows().forEach((win) => {
     if (!win.isDestroyed()) {
       win.webContents.send("save-error", message);
@@ -84,7 +84,7 @@ app.on("ready", () => {
   ////////////// IPC //////////////
   // on get-initial-tree-data.
   // return data to renderer.
-  ipcMain.handle("get-initial-tree-data", async (event, arg) => {
+  ipcMain.handle("get-initial-tree-data", async () => {
     return db.data[0];
   });
   // on get-tree-data.
@@ -104,7 +104,7 @@ app.on("ready", () => {
     try {
       db_meta.write();
 
-      // テーマが変更された場合、他のウィンドウにも通知
+      // 繝・・繝槭′螟画峩縺輔ｌ縺溷ｴ蜷医∽ｻ悶・繧ｦ繧｣繝ｳ繝峨え縺ｫ繧る夂衍
       if (key === "theme") {
         if (taskDetailWindow && !taskDetailWindow.isDestroyed()) {
           taskDetailWindow.webContents.send("theme-changed", value);
@@ -116,8 +116,8 @@ app.on("ready", () => {
   });
   // on delete-meta-data.
   // completely remove a key from meta data.
-  ipcMain.on("delete-meta-data", (event, key) => {
-    if (key && db_meta.data.hasOwnProperty(key)) {
+  ipcMain.on("delete-meta-data", (_event, key) => {
+    if (key && Object.prototype.hasOwnProperty.call(db_meta.data, key)) {
       delete db_meta.data[key];
       try {
         db_meta.write();
@@ -155,7 +155,7 @@ app.on("ready", () => {
   });
   // on get-project-ids.
   // return data to renderer.
-  ipcMain.handle("get-project-ids", async (event, arg) => {
+  ipcMain.handle("get-project-ids", async () => {
     return db.chain
       .map((o) => {
         return { name: o.data.data.name, id: o.data.id };
@@ -176,7 +176,7 @@ app.on("ready", () => {
   // on delete-project.
   ipcMain.on("delete-project", (event, arg) => {
     if (arg) {
-      db.data = db.data.filter((node, i) => node.data.id !== arg);
+      db.data = db.data.filter((node) => node.data.id !== arg);
       try {
         db.write();
       } catch (err) {
@@ -193,25 +193,23 @@ app.on("ready", () => {
   // on set-project-order.
   ipcMain.on("set-project-order", (event, projects) => {
     if (projects && Array.isArray(projects) && projects.length > 0) {
-      // 既存のプロジェクトデータをIDでインデックス化
       const projectMap = {};
       db.data.forEach((item) => {
         projectMap[item.data.id] = item;
       });
 
-      // 新しい順序でプロジェクトを並べ替え
       const newOrder = [];
       let hasChanges = false;
 
       projects.forEach((project) => {
         if (projectMap[project.id]) {
           newOrder.push(projectMap[project.id]);
-          delete projectMap[project.id]; // 処理済みのプロジェクトを削除
+          delete projectMap[project.id]; // 蜃ｦ逅・ｸ医∩縺ｮ繝励Ο繧ｸ繧ｧ繧ｯ繝医ｒ蜑企勁
           hasChanges = true;
         }
       });
 
-      // 残りのプロジェクト（配列に含まれていなかったプロジェクト）があれば追加
+      // 谿九ｊ縺ｮ繝励Ο繧ｸ繧ｧ繧ｯ繝茨ｼ磯・蛻励↓蜷ｫ縺ｾ繧後※縺・↑縺九▲縺溘・繝ｭ繧ｸ繧ｧ繧ｯ繝茨ｼ峨′縺ゅｌ縺ｰ霑ｽ蜉
       Object.values(projectMap).forEach((project) => {
         newOrder.push(project);
       });
@@ -230,16 +228,16 @@ app.on("ready", () => {
   ipcMain.on("message", (event, arg) => {
     log.info(arg);
   });
-  // 外部リンクを開くためのハンドラ
+  // 螟夜Κ繝ｪ繝ｳ繧ｯ繧帝幕縺上◆繧√・繝上Φ繝峨Λ
   ipcMain.on("open-external-link", (event, url) => {
     if (url && typeof url === "string") {
       shell.openExternal(url).catch((err) => {
-        log.error("外部リンクを開く際にエラーが発生しました:", err);
+        log.error("Failed to open external link:", err);
       });
     }
   });
 
-  // タスク詳細ウィンドウの変数
+  // 繧ｿ繧ｹ繧ｯ隧ｳ邏ｰ繧ｦ繧｣繝ｳ繝峨え縺ｮ螟画焚
   let taskDetailWindow = null;
 
   function bindFindInPageEvents(targetWebContents) {
@@ -253,7 +251,7 @@ app.on("ready", () => {
     return event?.sender || mainWindow.webContents;
   }
 
-  // 検索ハイライトをリセット
+  // 讀懃ｴ｢繝上う繝ｩ繧､繝医ｒ繝ｪ繧ｻ繝・ヨ
   async function resetHighlights(targetWebContents, notifyResult = false) {
     log.info("Reset HighLights");
     targetWebContents.stopFindInPage("clearSelection");
@@ -273,26 +271,23 @@ app.on("ready", () => {
     log.info("Execute Search:", text);
     const targetWebContents = resolveSearchWebContents(event);
 
-    // 空の検索テキストの場合は検索をクリア
+    // 遨ｺ縺ｮ讀懃ｴ｢繝・く繧ｹ繝医・蝣ｴ蜷医・讀懃ｴ｢繧偵け繝ｪ繧｢
     if (!text || !text.trim()) {
       await resetHighlights(targetWebContents, true);
       return { matches: 0, activeMatchOrdinal: 0 };
     }
 
     try {
-      // 前回の検索をクリア (通知なし)
+      // 蜑榊屓縺ｮ讀懃ｴ｢繧偵け繝ｪ繧｢ (騾夂衍縺ｪ縺・
       await resetHighlights(targetWebContents, false);
 
-      // 少し待機
       await new Promise((resolve) => setTimeout(resolve, 200));
 
-      // 検索実行
       log.info("Execute findInPage():", text, options);
       targetWebContents.findInPage(text.trim(), {
         ...options,
-        findNext: false, // 新規検索
+        findNext: false, // 譁ｰ隕乗､懃ｴ｢
       });
-      // 検索実行（次へ）　※ 新規検索時は一度次へを実行しないと更新されない
       targetWebContents.findInPage(text.trim(), {
         findNext: true,
         forward: true,
@@ -300,23 +295,21 @@ app.on("ready", () => {
 
       return;
     } catch (error) {
-      log.error("検索エラー:", error);
+      log.error("Search error:", error);
       return;
     }
   });
 
-  // 次の検索
+  // 谺｡縺ｮ讀懃ｴ｢
   ipcMain.handle("find-in-page-next", async (event, text = "") => {
     log.info("Search next");
     const targetWebContents = resolveSearchWebContents(event);
 
-    // 検索テキストを決定
     if (!text || !text.trim()) {
       return;
     }
 
     try {
-      // 次の検索を実行
       targetWebContents.findInPage(text.trim(), {
         findNext: true,
         forward: true,
@@ -324,23 +317,21 @@ app.on("ready", () => {
 
       return;
     } catch (error) {
-      log.error("次の検索エラー:", error);
+      log.error("谺｡縺ｮSearch error:", error);
       return;
     }
   });
 
-  // 前の検索
+  // 蜑阪・讀懃ｴ｢
   ipcMain.handle("find-in-page-previous", async (event, text = "") => {
     log.info("Search Previous");
     const targetWebContents = resolveSearchWebContents(event);
 
-    // 検索テキストを決定
     if (!text || !text.trim()) {
       return { matches: 0, activeMatchOrdinal: 0 };
     }
 
     try {
-      // 前の検索を実行
       targetWebContents.findInPage(text.trim(), {
         findNext: true,
         forward: false,
@@ -348,12 +339,12 @@ app.on("ready", () => {
 
       return;
     } catch (error) {
-      log.error("前の検索エラー:", error);
+      log.error("蜑阪・Search error:", error);
       return;
     }
   });
 
-  // 検索のクリア
+  // 讀懃ｴ｢縺ｮ繧ｯ繝ｪ繧｢
   ipcMain.on("stop-find-in-page", async (event) => {
     log.info("Execute stopFindInPage()");
     const targetWebContents = resolveSearchWebContents(event);
@@ -361,11 +352,11 @@ app.on("ready", () => {
     try {
       await resetHighlights(targetWebContents, true);
     } catch (error) {
-      log.error("検索クリアエラー:", error);
+      log.error("Search reset error:", error);
     }
   });
 
-  // タスク詳細用のウィンドウを作成する関数
+  // 繧ｿ繧ｹ繧ｯ隧ｳ邏ｰ逕ｨ縺ｮ繧ｦ繧｣繝ｳ繝峨え繧剃ｽ懈・縺吶ｋ髢｢謨ｰ
   function createTaskDetailWindow(detailData) {
     try {
       const safeDetailData = {
@@ -421,7 +412,7 @@ app.on("ready", () => {
       log.info(`Task detail window created for task: ${safeDetailData.taskId}`);
       return taskDetailWindow;
     } catch (error) {
-      log.error("タスク詳細ウィンドウの作成に失敗しました:", error);
+      log.error("Failed to create task detail window:", error);
       return null;
     }
   }
@@ -436,8 +427,7 @@ app.on("ready", () => {
     );
   });
 
-  // 別ウィンドウでタスク詳細を開く
-  ipcMain.on("open-task-detail-window", async (event, detailData) => {
+  ipcMain.on("open-task-detail-window", async (_event, detailData) => {
     try {
       global.currentTaskDetailWindowData = detailData;
       const window = createTaskDetailWindow(detailData);
@@ -450,7 +440,7 @@ app.on("ready", () => {
         log.info(`Task detail window shown for task: ${detailData?.taskId || ""}`);
       }
     } catch (error) {
-      log.error("タスク詳細ウィンドウを開く際にエラーが発生しました:", error);
+      log.error("Failed to open task detail window:", error);
     }
   });
 
@@ -469,13 +459,12 @@ app.on("ready", () => {
     }
   });
 
-  // 検索ウィンドウからテーマ情報を要求された場合
-  ipcMain.handle("get-current-theme", async (event) => {
+  ipcMain.handle("get-current-theme", async () => {
     return db_meta.data.theme || "dark";
   });
 
   ////////////// Workspace IPC //////////////
-  // projectDir → { tasks: Map, taskDirs: Map } のインメモリキャッシュ
+  // projectDir 竊・{ tasks: Map, taskDirs: Map } 縺ｮ繧､繝ｳ繝｡繝｢繝ｪ繧ｭ繝｣繝・す繝･
   const wsCache = new Map();
 
   ipcMain.handle("ws:get-workspaces", async () => {
@@ -508,7 +497,7 @@ app.on("ready", () => {
     try {
       const { tasks, taskDirs } = workspace.readProject(projectDir);
       wsCache.set(projectDir, { tasks, taskDirs });
-      // Map → plain object for IPC serialisation
+      // Map 竊・plain object for IPC serialisation
       return { tasks: Object.fromEntries(tasks) };
     } catch (err) {
       log.error("ws:read-project error:", err.message);
@@ -532,7 +521,7 @@ app.on("ready", () => {
         const tasksWithUpdate = new Map(tasks);
         tasksWithUpdate.set(task.id, task);
         if (workspace.wouldCreateCycle(tasksWithUpdate, task.id, task.parents)) {
-          return { success: false, error: "循環が発生するため保存できません" };
+          return { success: false, error: "Cannot save because this would create a cycle" };
         }
       }
 
@@ -544,6 +533,32 @@ app.on("ready", () => {
       return { success: false, error: err.message };
     }
   });
+
+  ipcMain.handle(
+    "ws:save-memo-image",
+    async (event, { projectDir, taskId, bytes, mimeType = "image/png" }) => {
+      try {
+        let cached = wsCache.get(projectDir);
+        if (!cached) {
+          const { tasks, taskDirs } = workspace.readProject(projectDir);
+          cached = { tasks, taskDirs };
+          wsCache.set(projectDir, cached);
+        }
+
+        const result = workspace.saveMemoImage(
+          projectDir,
+          cached.taskDirs,
+          taskId,
+          bytes,
+          mimeType
+        );
+        return { success: true, path: result.relativePath };
+      } catch (err) {
+        log.error("ws:save-memo-image error:", err.message);
+        return { success: false, error: err.message };
+      }
+    }
+  );
 
   ipcMain.handle("ws:delete-task", async (event, { projectDir, taskId }) => {
     try {
@@ -560,7 +575,7 @@ app.on("ready", () => {
         (t) => t.parents.length === 1 && t.parents[0] === taskId
       );
       if (wouldOrphan) {
-        return { success: false, error: "子タスクが孤立するため削除できません" };
+        return { success: false, error: "Cannot delete because this would orphan child tasks" };
       }
 
       workspace.deleteTaskDir(projectDir, taskDirs, taskId);
@@ -575,7 +590,7 @@ app.on("ready", () => {
   ipcMain.handle("ws:select-directory", async () => {
     const result = await dialog.showOpenDialog({
       properties: ["openDirectory"],
-      title: "ワークスペースフォルダを選択",
+      title: "Select workspace folder",
     });
     return result.canceled ? null : (result.filePaths[0] ?? null);
   });

@@ -11,6 +11,7 @@ import {
   createProject,
   readProject,
   writeTask,
+  saveMemoImage,
   deleteTaskDir,
   listProjects,
   migrateProjectData,
@@ -306,6 +307,32 @@ describe("file system operations", () => {
     deleteTaskDir(projectDir, taskDirs, "task-del");
     expect(fs.existsSync(path.join(projectDir, dirName))).toBe(false);
     expect(taskDirs.has("task-del")).toBe(false);
+  });
+
+  it("saveMemoImage writes pasted images into task assets and returns a relative path", () => {
+    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
+    const taskDirs = new Map([["root-id", "_project"]]);
+    const task = {
+      id: "task-assets",
+      name: "Assets",
+      status: "Open",
+      parents: ["root-id"],
+      memos: [],
+      createdAt: "2026-04-24",
+    };
+    writeTask(projectDir, task, taskDirs);
+
+    const result = saveMemoImage(
+      projectDir,
+      taskDirs,
+      "task-assets",
+      Uint8Array.from([137, 80, 78, 71]),
+      "image/png"
+    );
+
+    expect(result.relativePath).toMatch(/^\.\/assets\/pasted-.+\.png$/);
+    expect(fs.existsSync(result.assetPath)).toBe(true);
+    expect(path.dirname(result.assetPath)).toBe(path.join(projectDir, "task-assets", "assets"));
   });
 });
 

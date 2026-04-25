@@ -24,6 +24,8 @@
   export let deleteMemo;
   export let renameMemo;
   export let disabled = false;
+  export let workspaceProjectDir = null;
+  export let taskId = null;
 
   let selectedMemoIndex = 0;
   let previousTaskId;
@@ -192,6 +194,8 @@
           content={editedContent}
           memoTitles={memo.map((entry) => entry.title)}
           openMemoLink={selectMemoByTitle}
+          {workspaceProjectDir}
+          {taskId}
         />
       {/key}
     {:else}
