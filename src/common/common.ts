@@ -72,7 +72,7 @@ export function tooltip(
   const handleMouseMove = (e: MouseEvent) => {
     if (tooltip) {
       tooltip.style.left = `calc(${e.pageX}px + 1rem)`;
-      tooltip.style.top  = `calc(${e.pageY}px + 1rem)`;
+      tooltip.style.top = `calc(${e.pageY}px + 1rem)`;
     }
   };
   const target = params.wrapped ? (node.parentElement ?? node) : node;
