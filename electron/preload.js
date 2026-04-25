@@ -83,6 +83,8 @@ const electronAPI = {
   wsWriteTask: (projectDir, task) => ipcRenderer.invoke("ws:write-task", { projectDir, task }),
   wsSaveMemoImage: (projectDir, taskId, bytes, mimeType) =>
     ipcRenderer.invoke("ws:save-memo-image", { projectDir, taskId, bytes, mimeType }),
+  wsWriteProject: (projectDir, tasks) =>
+    ipcRenderer.invoke("ws:write-project", { projectDir, tasks }),
   wsDeleteTask: (projectDir, taskId) =>
     ipcRenderer.invoke("ws:delete-task", { projectDir, taskId }),
   wsCreateProject: (workspacePath, name, id) =>

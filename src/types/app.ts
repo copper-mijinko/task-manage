@@ -70,6 +70,10 @@ export interface ElectronAPI {
     bytes: Uint8Array,
     mimeType?: string
   ) => Promise<{ success: boolean; path?: string; error?: string }>;
+  wsWriteProject: (
+    projectDir: string,
+    tasks: WorkspaceTask[]
+  ) => Promise<{ success: boolean; error?: string }>;
   wsDeleteTask: (
     projectDir: string,
     taskId: string

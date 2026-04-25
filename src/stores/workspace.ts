@@ -1,5 +1,8 @@
 import { writable, get, type Writable } from "svelte/store";
-import type { WorkspaceInfo, WorkspaceProjectListItem } from "../types/workspace";
+import type { WorkspaceInfo, WorkspaceProjectListItem, WorkspaceTask } from "../types/workspace";
+
+/** Last loaded workspace tasks, keyed by task id. Used during save to preserve metadata. */
+export const workspace_tasks_cache = writable<Record<string, WorkspaceTask>>({});
 
 export interface WorkspaceState {
   workspaces: WorkspaceInfo[];

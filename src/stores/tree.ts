@@ -2,6 +2,7 @@ import { throttle } from "lodash";
 import _ from "lodash";
 import { get, writable, type Writable } from "svelte/store";
 import { getNode, type ProjectData, type TreeData } from "../common/tree_control";
+import { projectDataToWorkspaceTasks } from "../common/workspace_tree";
 import { filter } from "./search";
 import { project_ids } from "./project";
 import {
@@ -13,6 +14,7 @@ import {
   clearPendingTaskDetailSelection,
   saveStatus,
 } from "./ui";
+import { workspace_store, workspace_tasks_cache } from "./workspace";
 
 export interface TreeDataStore extends Writable<ProjectData | undefined> {
   init: () => void;
@@ -75,13 +77,17 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
       return;
     }
 
+    const isWorkspace = get(selected_type) === "WorkspaceProject";
+
     if (skipPersistOnce) {
       skipPersistOnce = false;
       previousData = _.cloneDeep(current);
       filter.set(get(filter));
-      window.electronAPI.getProjectIDs().then((result) => {
-        project_ids.set(result);
-      });
+      if (!isWorkspace) {
+        window.electronAPI.getProjectIDs().then((result) => {
+          project_ids.set(result);
+        });
+      }
       saveStatus.set("idle");
       return;
     }
@@ -114,15 +120,29 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
 
     previousData = _.cloneDeep(current);
     filter.set(get(filter));
-    try {
-      await window.electronAPI.setTreeData(current);
-      saveStatus.set("saved");
-    } catch {
-      saveStatus.set("error");
+
+    if (isWorkspace) {
+      const { activeProjectDir } = get(workspace_store);
+      if (!activeProjectDir) return;
+      const cachedTasks = get(workspace_tasks_cache);
+      const tasks = projectDataToWorkspaceTasks(current, cachedTasks);
+      try {
+        await window.electronAPI.wsWriteProject?.(activeProjectDir, tasks);
+        saveStatus.set("saved");
+      } catch {
+        saveStatus.set("error");
+      }
+    } else {
+      try {
+        await window.electronAPI.setTreeData(current);
+        saveStatus.set("saved");
+      } catch {
+        saveStatus.set("error");
+      }
+      window.electronAPI.getProjectIDs().then((result) => {
+        project_ids.set(result);
+      });
     }
-    window.electronAPI.getProjectIDs().then((result) => {
-      project_ids.set(result);
-    });
   }, 1000);
 
   return {
