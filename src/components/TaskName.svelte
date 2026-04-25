@@ -3,6 +3,7 @@
   import { debounce } from "lodash";
   import { ripple, tooltip } from "../common/common.js";
   import TaskMenu from "./TaskMenu.svelte";
+  import { pageSearchQuery } from "../stores/search";
 
   export let text;
   export let color = "var(--theme-color-Sub-main)";
@@ -137,6 +138,29 @@
     wrapped: true,
   };
 
+  function splitHighlight(str, query) {
+    if (!query) return [{ t: str ?? "", h: false }];
+    const lower = (str ?? "").toLowerCase();
+    const lowerQ = query.toLowerCase();
+    const parts = [];
+    let pos = 0;
+    while (pos <= lower.length) {
+      const idx = lower.indexOf(lowerQ, pos);
+      if (idx === -1) {
+        parts.push({ t: (str ?? "").slice(pos), h: false });
+        break;
+      }
+      if (idx > pos) parts.push({ t: (str ?? "").slice(pos, idx), h: false });
+      parts.push({ t: (str ?? "").slice(idx, idx + lowerQ.length), h: true });
+      pos = idx + lowerQ.length;
+    }
+    return parts;
+  }
+
+  $: highlightParts = !isEditing && $pageSearchQuery
+    ? splitHighlight(text, $pageSearchQuery)
+    : null;
+
   const dispatchCommitIfChanged = () => {
     const currentText = text ?? "";
     if (draftText === currentText || draftText === lastSubmittedText) {
@@ -251,6 +275,13 @@
 </script>
 
 <div style="--color:{color}; --backgroundColor:{backgroundColor};">
+  {#if highlightParts}
+    <span class="highlight-display" title={text ?? ""}>
+      {#each highlightParts as part}
+        {#if part.h}<mark>{part.t}</mark>{:else}{part.t}{/if}
+      {/each}
+    </span>
+  {/if}
   <input
     type="text"
     bind:this={input}
@@ -258,6 +289,7 @@
     readonly={!isEditing}
     aria-readonly={!isEditing}
     draggable="true"
+    class:hidden-by-highlight={highlightParts}
     on:blur={() => {
       if (!isEditing) {
         return;
@@ -365,6 +397,29 @@
     align-items: center;
     flex: 1;
     position: relative;
+  }
+  .highlight-display {
+    position: relative;
+    border: none;
+    padding: 0;
+    margin: 0;
+    width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: var(--color);
+    background-color: var(--backgroundColor);
+    font: inherit;
+    cursor: default;
+  }
+  .highlight-display mark {
+    background-color: color-mix(in srgb, #f5c518 60%, transparent);
+    color: inherit;
+    border-radius: 2px;
+    padding: 0 1px;
+  }
+  input.hidden-by-highlight {
+    display: none;
   }
   input {
     border: none;

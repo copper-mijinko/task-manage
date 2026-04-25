@@ -34,6 +34,19 @@
   let isDragging = false;
   let isMenuOpen = false;
 
+  const DAYS_5_MS = 5 * 24 * 60 * 60 * 1000;
+  const DAY_MS = 24 * 60 * 60 * 1000;
+
+  function getDueDateUrgency(dueDate, status) {
+    if (!dueDate || status === "Completed" || status === "Canceled") return null;
+    const diff = new Date(dueDate) - new Date() + DAY_MS - 1;
+    if (diff < 0) return "overdue";
+    if (diff < DAYS_5_MS) return "due-soon";
+    return null;
+  }
+
+  $: dueDateUrgency = getDueDateUrgency(data["due date"], data["status"]);
+
   function select(e) {
     e.stopPropagation();
     dispatch("select", { id });
@@ -139,6 +152,8 @@
   class:MenuOpen={isMenuOpen}
   class:DragOverTop={dragOverType === "DragOverTop"}
   class:DragOverBottom={dragOverType === "DragOverBottom"}
+  class:OverdueRow={dueDateUrgency === "overdue"}
+  class:DueSoonRow={dueDateUrgency === "due-soon"}
   use:ripple
   tabindex="0"
   draggable="true"
@@ -317,6 +332,12 @@
   }
   .TableRow :global(*) {
     --backgroundColor: var(--theme-color-Main-light);
+  }
+  .TableRow.OverdueRow :global(*) {
+    --backgroundColor: color-mix(in srgb, var(--theme-color-Error-main) 12%, var(--theme-color-Main-light));
+  }
+  .TableRow.DueSoonRow :global(*) {
+    --backgroundColor: color-mix(in srgb, var(--theme-color-Warning-main) 12%, var(--theme-color-Main-light));
   }
   .TableRow:focus-visible {
     outline: auto;

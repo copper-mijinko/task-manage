@@ -61,3 +61,4 @@ function createFilter(initialValue: FilterState): FilterStore {
 // eslint-disable-next-line prefer-const
 export let filter: FilterStore = createFilter({});
 export const filtered_data = writable<TreeData | null | undefined>(undefined);
+export const pageSearchQuery = writable<string>("");
