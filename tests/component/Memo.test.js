@@ -73,10 +73,11 @@ describe("Memo - view mode (default)", () => {
     });
   });
 
-  test("converts legacy Quill Delta object to JSON string for display", () => {
+  test("converts legacy Quill Delta object to plain text for display", () => {
     const delta = { ops: [{ insert: "hello" }] };
     render(Memo, { props: { saveMemo, content: delta } });
     expect(document.querySelector(".preview")).toBeInTheDocument();
+    expect(document.querySelector(".preview").textContent).toContain("hello");
   });
 
   test("readOnly: no placeholder shown when empty", () => {
