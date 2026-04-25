@@ -12,36 +12,44 @@
   export let ariaLabel = undefined;
   // tooltip
   let use_tooltip = tooltipContent === undefined ? false : true;
-  // colors
-  // default "filled"
-  let afcolor = disabled ? "gray" : "var(--theme-color-Main-light)";
-  let abgcolor = disabled ? "gray" : activeColor;
-  let abdcolor = disabled ? "gray" : "none";
-  let fcolor = disabled ? "gray" : "var(--theme-color-Main-light)";
-  let bgcolor = disabled ? "gray" : normalColor;
-  let bdcolor = disabled ? "gray" : "none";
-  // shadow
+  let afcolor = "gray";
+  let abgcolor = "gray";
+  let abdcolor = "gray";
+  let fcolor = "gray";
+  let bgcolor = "gray";
+  let bdcolor = "gray";
   let shadow = "0 .2rem .5rem rgba(0,0,0,0.25), 0 .1em .25rem rgba(0,0,0,0);";
-  if (!disabled) {
-    switch (variant) {
-      case "outlined":
-        afcolor = activeColor;
-        abgcolor = "var(--theme-color-Shadow-sub)";
-        abdcolor = activeColor;
-        fcolor = normalColor;
-        bgcolor = "transparent";
-        bdcolor = normalColor;
-        shadow = "none";
-        break;
-      case "text":
-        afcolor = activeColor;
-        abgcolor = "var(--theme-color-Shadow-sub)";
-        abdcolor = "none";
-        fcolor = normalColor;
-        bgcolor = "transparent";
-        bdcolor = "none";
-        shadow = "none";
-        break;
+
+  $: {
+    afcolor = disabled ? "gray" : "var(--theme-color-Main-light)";
+    abgcolor = disabled ? "gray" : activeColor;
+    abdcolor = disabled ? "gray" : "none";
+    fcolor = disabled ? "gray" : "var(--theme-color-Main-light)";
+    bgcolor = disabled ? "gray" : normalColor;
+    bdcolor = disabled ? "gray" : "none";
+    shadow = "0 .2rem .5rem rgba(0,0,0,0.25), 0 .1em .25rem rgba(0,0,0,0);";
+
+    if (!disabled) {
+      switch (variant) {
+        case "outlined":
+          afcolor = activeColor;
+          abgcolor = "var(--theme-color-Shadow-sub)";
+          abdcolor = activeColor;
+          fcolor = normalColor;
+          bgcolor = "transparent";
+          bdcolor = normalColor;
+          shadow = "none";
+          break;
+        case "text":
+          afcolor = activeColor;
+          abgcolor = "var(--theme-color-Shadow-sub)";
+          abdcolor = "none";
+          fcolor = normalColor;
+          bgcolor = "transparent";
+          bdcolor = "none";
+          shadow = "none";
+          break;
+      }
     }
   }
 </script>
