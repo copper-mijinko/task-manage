@@ -58,8 +58,8 @@ export function tooltip(
       border-radius: 0.5rem;
 			padding: 0.5rem;
 			position: fixed;
-			top: calc(${e.pageX}px + 1rem);
-			left: calc(${e.pageY}px + 1rem);
+			top: calc(${e.pageY}px + 1rem);
+			left: calc(${e.pageX}px + 1rem);
       z-index: 9999999999999999999;
 		`;
     document.body.appendChild(tooltip);
@@ -72,7 +72,7 @@ export function tooltip(
   const handleMouseMove = (e: MouseEvent) => {
     if (tooltip) {
       tooltip.style.left = `calc(${e.pageX}px + 1rem)`;
-      tooltip.style.top = `calc(${e.pageY}px + 1rem)`;
+      tooltip.style.top  = `calc(${e.pageY}px + 1rem)`;
     }
   };
   const target = params.wrapped ? (node.parentElement ?? node) : node;
