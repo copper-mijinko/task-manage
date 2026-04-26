@@ -4,14 +4,14 @@ import TaskNameClickHarness from "../mocks/TaskNameClickHarness.svelte";
 import TaskNameCommitHarness from "../mocks/TaskNameCommitHarness.svelte";
 
 describe("TaskName", () => {
-  test("allows click on read-only input to bubble to row selection handler", async () => {
+  test("keeps the task name disabled until editing while row clicks still select", async () => {
     render(TaskNameClickHarness);
 
     const input = screen.getByDisplayValue("Task 1");
-    expect(input).not.toBeDisabled();
-    expect(input).toHaveAttribute("readonly");
+    expect(input).toBeDisabled();
+    expect(input).not.toHaveAttribute("readonly");
 
-    await fireEvent.click(input);
+    await fireEvent.click(screen.getByTestId("row"));
 
     expect(screen.getByTestId("count")).toHaveTextContent("1");
   });
@@ -20,6 +20,7 @@ describe("TaskName", () => {
     async function enterEditingMode() {
       const editButton = screen.getByRole("button", { name: /edit task name/i });
       await fireEvent.click(editButton);
+      expect(screen.getByDisplayValue("Original")).not.toBeDisabled();
     }
 
     test("does not commit empty string on blur", async () => {
