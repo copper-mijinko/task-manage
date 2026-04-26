@@ -1,0 +1,9 @@
+#!/bin/sh
+# Auto-format staged files with prettier before commit
+
+STAGED=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(svelte|ts|js|css|json|md)$')
+
+if [ -n "$STAGED" ]; then
+  echo "$STAGED" | xargs npx prettier --write
+  echo "$STAGED" | xargs git add
+fi
