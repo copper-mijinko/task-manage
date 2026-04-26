@@ -34,8 +34,17 @@
       mask.remove();
     }
   }
+
+  function handleKeydown(e) {
+    if (e.key === "Escape") {
+      toggle();
+    }
+  }
 </script>
 
+{#if show}
+  <svelte:window on:keydown={handleKeydown} />
+{/if}
 {#if show}
   <div class="Mask"></div>
 {/if}
@@ -49,7 +58,7 @@
   aria-label={label}
   aria-labelledby={labelledBy}
   use:clickOutside
-  on:outclick={toggle()}
+  on:outclick={toggle}
 >
   <Card style="width: 100%; height:100%;">
     <slot>
