@@ -25,7 +25,7 @@
   };
 </script>
 
-<div>
+<div class="SearchBoxRoot">
   <input
     class="SearchBoxInput"
     type="text"
@@ -73,21 +73,25 @@
 </div>
 
 <style>
-  div {
-    width: 20rem;
+  .SearchBoxRoot {
+    width: clamp(9rem, 100%, 20rem);
+    max-width: 100%;
     height: 2rem;
-    margin: 0.5rem;
+    margin: 0;
     display: flex;
     flex-direction: row;
     align-items: center;
     box-sizing: border-box;
+    min-width: 0;
   }
   .SearchBoxInput {
     box-sizing: border-box;
     margin: 0;
     padding: 0 1rem;
     height: 100%;
-    width: calc(100% - 2rem);
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
     border-radius: 100vh;
   }
 </style>
