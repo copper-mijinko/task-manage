@@ -297,8 +297,7 @@
     type="text"
     bind:this={input}
     value={draftText}
-    readonly={!isEditing}
-    aria-readonly={!isEditing}
+    disabled={!isEditing}
     draggable="true"
     class:hidden-by-highlight={highlightParts}
     on:blur={() => {
@@ -433,21 +432,27 @@
     display: none;
   }
   input {
+    appearance: none;
+    background-color: var(--backgroundColor);
     border: none;
+    color: var(--color);
     padding: 0;
     margin: 0;
     width: 100%;
     position: relative;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   input:focus-visible {
     outline: auto;
   }
-  input[readonly] {
+  input:disabled {
     background-color: var(--backgroundColor);
     color: var(--color);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    -webkit-text-fill-color: var(--color);
+    opacity: 1;
+    pointer-events: none;
   }
   button {
     height: calc(100% - 0.5rem);
