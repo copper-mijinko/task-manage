@@ -23,6 +23,7 @@
   let newMemoTitle = "memo";
   let inputs = Array(100).fill(null);
   let edit = false;
+  const hasSelectedMemo = () => Boolean(memo[selectedMemoIndex]);
 
   const toggle_confirm = () => {
     show_confirm = !show_confirm;
@@ -106,7 +107,7 @@
               type="text"
               value={memo.title}
               bind:this={inputs[i]}
-              disabled={!edit || i != selectedMemoIndex}
+              readonly={!edit || i != selectedMemoIndex}
               on:blur={() => {
                 edit = false;
               }}
@@ -114,7 +115,9 @@
                 renameMemo(e.target.value, selectedMemoIndex);
               }}
               on:click={(e) => {
-                e.stopPropagation();
+                if (edit && i == selectedMemoIndex) {
+                  e.stopPropagation();
+                }
               }}
               on:keydown={(e) => {
                 if (e.key == "Enter") {
@@ -157,6 +160,9 @@
         activeColor={"var(--theme-color-Error-dark)"}
         normalColor={"var(--theme-color-Error-main)"}
         on:click={() => {
+          if (!hasSelectedMemo()) {
+            return;
+          }
           show_confirm = true;
           name_confirm = memo[selectedMemoIndex].title;
         }}
@@ -267,7 +273,7 @@
     cursor: text !important;
   }
 
-  input:disabled {
+  input[readonly] {
     color: var(--theme-color-Sub-main);
     background-color: transparent;
   }
