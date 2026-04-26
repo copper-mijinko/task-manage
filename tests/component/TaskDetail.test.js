@@ -82,9 +82,9 @@ describe("TaskDetail", () => {
     await fireEvent.click(buttons[0]);
     await tick();
 
-    expect(screen.getByDisplayValue("memo")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Note")).toBeInTheDocument();
     expect(get(tree_data).data.children[0].data.memo).toEqual([
-      expect.objectContaining({ title: "memo", content: "" }),
+      expect.objectContaining({ title: "Note", content: "" }),
     ]);
   });
 
@@ -97,10 +97,8 @@ describe("TaskDetail", () => {
     const { container } = render(TaskDetail);
 
     const buttons = container.querySelectorAll(".memotab-control button");
-    await fireEvent.click(buttons[1]);
-    expect(
-      screen.getByText((content) => content.includes("Do you really delete"))
-    ).toBeInTheDocument();
+    await fireEvent.click(buttons[2]);
+    expect(screen.getByText('Delete "draft"?')).toBeInTheDocument();
 
     await fireEvent.click(screen.getByRole("button", { name: "ok" }));
     await tick();
@@ -116,9 +114,9 @@ describe("TaskDetail", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Create first note" }));
     await tick();
 
-    expect(screen.getByDisplayValue("memo")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Note")).toBeInTheDocument();
     expect(get(tree_data).data.children[0].data.memo).toEqual([
-      expect.objectContaining({ title: "memo", content: "" }),
+      expect.objectContaining({ title: "Note", content: "" }),
     ]);
   });
 
@@ -133,13 +131,13 @@ describe("TaskDetail", () => {
 
     render(TaskDetail);
 
-    await fireEvent.click(screen.getByDisplayValue("notes").closest("button"));
-    expect(screen.getByDisplayValue("notes").closest("button")).toHaveClass("selected");
+    await fireEvent.click(screen.getByRole("button", { name: "Select memo notes" }));
+    expect(screen.getByRole("button", { name: "Select memo notes" })).toHaveClass("selected");
 
     table_selected_id.set("task-2");
     await tick();
 
-    expect(screen.getByDisplayValue("review").closest("button")).toHaveClass("selected");
+    expect(screen.getByRole("button", { name: "Select memo review" })).toHaveClass("selected");
   });
 
   test("shows empty content after switching from existing memo to new empty memo and back", async () => {
@@ -157,19 +155,19 @@ describe("TaskDetail", () => {
     await fireEvent.click(addButton);
     await tick();
 
-    // Now on the new empty memo (index 1) - verify "memo" tab is selected
-    expect(screen.getByDisplayValue("memo").closest("button")).toHaveClass("selected");
+    // Now on the new empty memo (index 1) - verify "Note" tab is selected
+    expect(screen.getByDisplayValue("Note").closest("button")).toHaveClass("selected");
 
     // Switch to existing memo (index 0)
-    await fireEvent.click(screen.getByDisplayValue("existing").closest("button"));
+    await fireEvent.click(screen.getByRole("button", { name: "Select memo existing" }));
     await tick();
-    expect(screen.getByDisplayValue("existing").closest("button")).toHaveClass("selected");
+    expect(screen.getByRole("button", { name: "Select memo existing" })).toHaveClass("selected");
 
     // Switch back to the empty memo (index 1)
-    await fireEvent.click(screen.getByDisplayValue("memo").closest("button"));
+    await fireEvent.click(screen.getByRole("button", { name: "Select memo Note" }));
     await tick();
 
-    expect(screen.getByDisplayValue("memo").closest("button")).toHaveClass("selected");
+    expect(screen.getByRole("button", { name: "Select memo Note" })).toHaveClass("selected");
     // content should be empty string for the new empty memo
     expect(screen.getByTestId("memo-stub").textContent.trim()).toBe("");
   });

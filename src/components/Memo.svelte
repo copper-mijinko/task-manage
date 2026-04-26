@@ -20,8 +20,10 @@
   let container: HTMLElement;
   let view: EditorView | null = null;
   let saveTimer: ReturnType<typeof setTimeout>;
+  let savedTimer: ReturnType<typeof setTimeout>;
   let isEditing = false;
   let hasChanges = false;
+  let saveState: "clean" | "dirty" | "saved" = "clean";
   let currentContent = toMarkdown(content);
   let renderedHtml = "";
   let renderSequence = 0;
@@ -109,6 +111,13 @@
     currentContent = nextContent;
     saveMemo(currentContent);
     hasChanges = false;
+    saveState = "saved";
+    clearTimeout(savedTimer);
+    savedTimer = setTimeout(() => {
+      if (!hasChanges) {
+        saveState = "clean";
+      }
+    }, 1600);
   }
 
   function canSavePastedImages(): boolean {
@@ -486,6 +495,7 @@
       EditorView.updateListener.of((update) => {
         if (update.docChanged) {
           hasChanges = true;
+          saveState = "dirty";
           const nextContent = update.view.state.doc.toString();
           currentContent = nextContent;
           void updateRenderedHtml(nextContent);
@@ -499,9 +509,10 @@
   }
 
   async function startEdit() {
-    if (readOnly) return;
+    if (readOnly || isEditing) return;
     isEditing = true;
     await tick();
+    if (!container || view) return;
     view = new EditorView({
       state: EditorState.create({ doc: currentContent, extensions: buildExtensions() }),
       parent: container,
@@ -523,6 +534,7 @@
   }
 
   onDestroy(() => {
+    clearTimeout(savedTimer);
     if (view) {
       clearTimeout(saveTimer);
       if (hasChanges) flushSave(view.state.doc.toString());
@@ -530,7 +542,7 @@
     }
   });
 
-  function handlePreviewClick(e: MouseEvent) {
+  function handlePreviewClick(e: MouseEvent | KeyboardEvent) {
     const link = (e.target as Element).closest("a") as HTMLAnchorElement | null;
     if (link?.dataset.memoLink) {
       e.preventDefault();
@@ -542,12 +554,20 @@
       window.electronAPI?.openExternalLink(link.href);
       return;
     }
-    startEdit();
+  }
+
+  function handlePreviewKeydown(e: KeyboardEvent) {
+    if (e.key === "Enter" || e.key === " ") {
+      handlePreviewClick(e);
+    }
   }
 
   $: normalizedContent = toMarkdown(content);
   $: if (!isEditing && normalizedContent !== currentContent) {
     currentContent = normalizedContent;
+  }
+  $: if (readOnly && isEditing) {
+    stopEdit();
   }
   $: if (!isEditing) {
     void updateRenderedHtml(currentContent || "");
@@ -626,8 +646,15 @@
           >
         </div>
         <div class="edit-bar-end">
-          <span class="shortcut-hint">Ctrl+S / Ctrl+Enter</span>
-          <button class="done-btn" on:click={stopEdit}>Done</button>
+          <span class="save-status" aria-live="polite">
+            {saveState === "dirty" ? "Unsaved" : saveState === "saved" ? "Saved" : ""}
+          </span>
+          <div class="mode-switch" role="group" aria-label="Memo mode">
+            <button class="read-mode-btn" type="button" aria-pressed="false" on:click={stopEdit}
+              >Read</button
+            >
+            <button class="edit-mode-btn active" type="button" aria-pressed="true">Edit</button>
+          </div>
         </div>
       </div>
       <div class="edit-body">
@@ -644,16 +671,25 @@
     </div>
   {:else}
     <!-- svelte-ignore a11y-no-static-element-interactions -->
-    <div
-      class="preview-mode"
-      on:click={handlePreviewClick}
-      on:keydown={(e) => e.key === "Enter" && startEdit()}
-    >
+    <div class="preview-mode" on:click={handlePreviewClick} on:keydown={handlePreviewKeydown}>
+      {#if !readOnly}
+        <div class="preview-bar">
+          <div class="mode-switch" role="group" aria-label="Memo mode">
+            <button class="read-mode-btn active" type="button" aria-pressed="true">Read</button>
+            <button
+              class="edit-mode-btn"
+              type="button"
+              aria-pressed="false"
+              on:click|stopPropagation={startEdit}>Edit</button
+            >
+          </div>
+        </div>
+      {/if}
       {#if currentContent.trim()}
         <!-- eslint-disable-next-line svelte/no-at-html-tags -->
         <div class="preview">{@html renderedHtml}</div>
       {:else if !readOnly}
-        <div class="placeholder">Click to start writing...</div>
+        <div class="placeholder">No content</div>
       {/if}
     </div>
   {/if}
@@ -736,28 +772,48 @@
   .edit-bar-end {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0.5rem;
     flex-shrink: 0;
   }
 
-  .shortcut-hint {
+  .save-status {
+    min-width: 4rem;
+    text-align: right;
     color: var(--theme-color-Sub-main);
     font-size: 0.75rem;
     white-space: nowrap;
   }
 
-  .done-btn {
-    padding: 0.2rem 0.75rem;
-    font-size: 0.8rem;
-    background-color: var(--theme-color-Primary-main);
-    color: var(--theme-color-Main-dark);
-    border: none;
+  .mode-switch {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.15rem;
+    border: 1px solid var(--theme-color-Sub-dark);
     border-radius: 4px;
+    background-color: var(--theme-color-Main-main);
+    gap: 0.15rem;
+  }
+
+  .mode-switch button {
+    border: none;
+    border-radius: 3px;
+    background-color: transparent;
+    color: var(--theme-color-Sub-main);
+    padding: 0.2rem 0.55rem;
+    min-width: 3.25rem;
+    font-size: 0.78rem;
     cursor: pointer;
   }
 
-  .done-btn:hover {
+  .mode-switch button:hover {
+    color: var(--theme-color-Sub-light);
+    background-color: color-mix(in srgb, var(--theme-color-Sub-dark) 30%, transparent);
+  }
+
+  .mode-switch button.active {
     background-color: var(--theme-color-Primary-dark);
+    color: var(--theme-color-Main-dark);
+    cursor: default;
   }
 
   .editor {
@@ -784,7 +840,17 @@
     flex: 1;
     height: 100%;
     overflow: auto;
-    cursor: text;
+  }
+
+  .preview-bar {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: flex;
+    justify-content: flex-end;
+    padding: 0.45rem 0.6rem;
+    border-bottom: 1px solid var(--theme-color-Shadow-main);
+    background-color: color-mix(in srgb, var(--theme-color-Main-light) 94%, black);
   }
 
   .preview {
