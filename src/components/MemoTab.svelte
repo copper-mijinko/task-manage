@@ -107,7 +107,7 @@
               type="text"
               value={memo.title}
               bind:this={inputs[i]}
-              readonly={!edit || i != selectedMemoIndex}
+              disabled={!edit || i != selectedMemoIndex}
               on:blur={() => {
                 edit = false;
               }}
@@ -178,7 +178,7 @@
         >
       </IconButton>
       <Button
-        {disabled}
+        disabled={disabled || memo.length === 0}
         variant={"text"}
         activeColor={"var(--theme-color-Info-dark)"}
         normalColor={"var(--theme-color-Info-main)"}
@@ -249,7 +249,6 @@
     padding: 0.5rem;
     overflow-x: auto;
     flex: 1;
-    min-width: 0;
   }
 
   .memotab-control {
@@ -261,7 +260,10 @@
   }
 
   input {
+    appearance: none;
+    background: transparent;
     border: none;
+    color: var(--theme-color-Sub-main);
     padding: 0;
     margin: 0;
     width: 100%;
@@ -273,9 +275,12 @@
     cursor: text !important;
   }
 
-  input[readonly] {
+  input:disabled {
     color: var(--theme-color-Sub-main);
+    -webkit-text-fill-color: var(--theme-color-Sub-main);
     background-color: transparent;
+    opacity: 1;
+    pointer-events: none;
   }
 
   input:hover {
@@ -316,8 +321,8 @@
   .memotab-content {
     display: flex;
     box-sizing: border-box;
+    height: calc(100% - 5.5rem);
     flex: 1;
-    min-height: 0;
     overflow: hidden;
   }
 
