@@ -190,7 +190,7 @@
           No data.
         </h1>
       {/if}
-      {#if $selected_type == "Projects"}
+      {#if $selected_type == "Projects" || $selected_type == "WorkspaceProject"}
         <ProjectPage />
       {/if}
       {#if $selected_type == "Info"}
