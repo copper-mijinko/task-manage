@@ -99,28 +99,28 @@ describe("Memo - edit mode", () => {
     delete window.electronAPI;
   });
 
-  test("clicking preview enters edit mode and shows CM6 editor", async () => {
+  test("clicking edit mode switch shows CM6 editor", async () => {
     render(Memo, { props: { saveMemo, content: "hello" } });
-    await fireEvent.click(document.querySelector(".preview-mode"));
+    await fireEvent.click(document.querySelector(".edit-mode-btn"));
     await waitFor(() => {
       expect(document.querySelector(".cm-editor")).toBeInTheDocument();
     });
   });
 
-  test("edit mode shows complete button", async () => {
+  test("edit mode shows read mode switch", async () => {
     render(Memo, { props: { saveMemo, content: "hello" } });
-    await fireEvent.click(document.querySelector(".preview-mode"));
+    await fireEvent.click(document.querySelector(".edit-mode-btn"));
     await waitFor(() => {
-      expect(document.querySelector(".done-btn")).toBeInTheDocument();
+      expect(document.querySelector(".read-mode-btn")).toBeInTheDocument();
     });
   });
 
-  test("clicking complete returns to view mode", async () => {
+  test("clicking read mode switch returns to view mode", async () => {
     render(Memo, { props: { saveMemo, content: "hello" } });
-    await fireEvent.click(document.querySelector(".preview-mode"));
-    await waitFor(() => expect(document.querySelector(".done-btn")).toBeInTheDocument());
+    await fireEvent.click(document.querySelector(".edit-mode-btn"));
+    await waitFor(() => expect(document.querySelector(".read-mode-btn")).toBeInTheDocument());
 
-    await fireEvent.click(document.querySelector(".done-btn"));
+    await fireEvent.click(document.querySelector(".read-mode-btn"));
     await tick();
 
     expect(document.querySelector(".cm-editor")).not.toBeInTheDocument();
@@ -142,12 +142,12 @@ describe("Memo - edit mode", () => {
     vi.useRealTimers();
   });
 
-  test("clicking complete without changes does not call saveMemo", async () => {
+  test("switching back to read mode without changes does not call saveMemo", async () => {
     render(Memo, { props: { saveMemo, content: "hello" } });
-    await fireEvent.click(document.querySelector(".preview-mode"));
-    await waitFor(() => expect(document.querySelector(".done-btn")).toBeInTheDocument());
+    await fireEvent.click(document.querySelector(".edit-mode-btn"));
+    await waitFor(() => expect(document.querySelector(".read-mode-btn")).toBeInTheDocument());
 
-    await fireEvent.click(document.querySelector(".done-btn"));
+    await fireEvent.click(document.querySelector(".read-mode-btn"));
     await tick();
 
     expect(saveMemo).not.toHaveBeenCalled();
@@ -170,7 +170,7 @@ describe("Memo - edit mode", () => {
       },
     });
 
-    await fireEvent.click(document.querySelector(".preview-mode"));
+    await fireEvent.click(document.querySelector(".edit-mode-btn"));
     await waitFor(() => {
       expect(document.querySelector(".cm-editor")).toBeInTheDocument();
     });
@@ -220,7 +220,7 @@ describe("Memo - edit mode", () => {
       },
     });
 
-    await fireEvent.click(document.querySelector(".preview-mode"));
+    await fireEvent.click(document.querySelector(".edit-mode-btn"));
     await waitFor(() => {
       expect(document.querySelector(".cm-editor")).toBeInTheDocument();
     });
@@ -310,11 +310,10 @@ describe("Memo - link handling in preview", () => {
     expect(window.electronAPI.openExternalLink).toHaveBeenCalledWith("https://example.com/");
   });
 
-  test("clicking non-link area enters edit mode", async () => {
+  test("clicking non-link preview area stays in read mode", async () => {
     render(Memo, { props: { saveMemo, content: "plain text" } });
     await fireEvent.click(document.querySelector(".preview-mode"));
-    await waitFor(() => {
-      expect(document.querySelector(".cm-editor")).toBeInTheDocument();
-    });
+    await tick();
+    expect(document.querySelector(".cm-editor")).not.toBeInTheDocument();
   });
 });

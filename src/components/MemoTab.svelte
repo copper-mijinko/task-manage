@@ -1,22 +1,11 @@
 <script>
   import { tick } from "svelte";
   import { table_selected_id } from "../stores.ts";
-  import { ripple, tooltip } from "../common/common.js";
+  import { ripple } from "../common/common.js";
   import IconButton from "./IconButton.svelte";
   import Button from "./Button.svelte";
   import Memo from "./Memo.svelte";
   import Dialog from "./Dialog.svelte";
-
-  let show_confirm = false;
-  const toggle_confirm = () => {
-    show_confirm = !show_confirm;
-  };
-  let name_confirm = "";
-  const callback_confirm = () => {
-    if (deleteMemo(selectedMemoIndex)) {
-      selectedMemoIndex = selectedMemoIndex == 0 ? 0 : selectedMemoIndex - 1;
-    }
-  };
 
   export let memo = [];
   export let saveMemo;
@@ -27,24 +16,18 @@
   export let workspaceProjectDir = null;
   export let taskId = null;
 
+  let show_confirm = false;
+  let name_confirm = "";
   let selectedMemoIndex = 0;
   let previousTaskId;
+  let renamingIndex = null;
+  let draftTitle = "";
+  let renameInput;
 
-  $: if ($table_selected_id !== previousTaskId) {
-    previousTaskId = $table_selected_id;
-    selectedMemoIndex = 0;
-    edit = false;
-  }
+  const toggle_confirm = () => {
+    show_confirm = !show_confirm;
+  };
 
-  $: if (selectedMemoIndex >= memo.length && memo.length > 0) {
-    selectedMemoIndex = memo.length - 1;
-  }
-
-  $: editedContent = memo.length > selectedMemoIndex ? memo[selectedMemoIndex].content : "";
-
-  let newMemoTitle = "memo";
-  let inputs = Array(100).fill(null);
-  let edit = false;
   const hasSelectedMemo = () => Boolean(memo[selectedMemoIndex]);
 
   function normalizeMemoTitle(title) {
@@ -53,38 +36,103 @@
       .toLocaleLowerCase();
   }
 
+  function cancelRename() {
+    renamingIndex = null;
+    draftTitle = "";
+  }
+
+  function commitRename() {
+    if (renamingIndex === null) {
+      return;
+    }
+
+    const index = renamingIndex;
+    const nextTitle = draftTitle.trim();
+    renamingIndex = null;
+
+    if (nextTitle && nextTitle !== memo[index]?.title) {
+      renameMemo(nextTitle, index);
+    }
+  }
+
+  const callback_confirm = () => {
+    if (deleteMemo(selectedMemoIndex)) {
+      selectedMemoIndex = selectedMemoIndex == 0 ? 0 : selectedMemoIndex - 1;
+      cancelRename();
+    }
+  };
+
+  function buildNextMemoTitle() {
+    const existingTitles = new Set(memo.map((entry) => normalizeMemoTitle(entry.title)));
+    const baseTitle = "Note";
+
+    if (!existingTitles.has(normalizeMemoTitle(baseTitle))) {
+      return baseTitle;
+    }
+
+    let suffix = memo.length + 1;
+    let title = `${baseTitle} ${suffix}`;
+    while (existingTitles.has(normalizeMemoTitle(title))) {
+      suffix += 1;
+      title = `${baseTitle} ${suffix}`;
+    }
+    return title;
+  }
+
+  function selectMemo(index) {
+    if (renamingIndex !== null && renamingIndex !== index) {
+      commitRename();
+    }
+    selectedMemoIndex = index;
+  }
+
+  const beginRename = async (index = selectedMemoIndex) => {
+    if (disabled || !memo[index]) {
+      return;
+    }
+
+    selectedMemoIndex = index;
+    draftTitle = memo[index].title || "";
+    renamingIndex = index;
+    await tick();
+    renameInput?.focus();
+    renameInput?.select();
+  };
+
   const selectMemoByTitle = (title) => {
     const nextIndex = memo.findIndex(
       (entry) => normalizeMemoTitle(entry.title) === normalizeMemoTitle(title)
     );
 
     if (nextIndex >= 0) {
+      commitRename();
       selectedMemoIndex = nextIndex;
-      edit = false;
       return true;
     }
 
     return false;
   };
 
-  const toggle = async () => {
-    if (memo.length > 0) {
-      edit = !edit;
-      if (edit) {
-        await tick();
-        if (inputs[selectedMemoIndex]) {
-          inputs[selectedMemoIndex].focus();
-        }
-      }
+  const createFirstMemo = async () => {
+    if (addMemo(buildNextMemoTitle())) {
+      await tick();
+      selectedMemoIndex = memo.length - 1;
+      await beginRename(selectedMemoIndex);
     }
   };
 
-  const createFirstMemo = async () => {
-    if (addMemo(newMemoTitle)) {
-      await tick();
-      selectedMemoIndex = memo.length - 1;
-    }
-  };
+  $: if ($table_selected_id !== previousTaskId) {
+    previousTaskId = $table_selected_id;
+    selectedMemoIndex = 0;
+    cancelRename();
+  }
+
+  $: if (selectedMemoIndex >= memo.length && memo.length > 0) {
+    selectedMemoIndex = memo.length - 1;
+  }
+
+  $: editedContent = memo.length > selectedMemoIndex ? memo[selectedMemoIndex].content : "";
+  $: selectedMemo = memo[selectedMemoIndex];
 </script>
 
 <div class="container">
@@ -100,36 +148,33 @@
             class:selected={i == selectedMemoIndex}
             aria-label={`Select memo ${memo.title}`}
             on:click={() => {
-              selectedMemoIndex = i;
+              selectMemo(i);
+            }}
+            on:dblclick={() => {
+              beginRename(i);
             }}
           >
-            <input
-              type="text"
-              value={memo.title}
-              bind:this={inputs[i]}
-              readonly={!edit || i != selectedMemoIndex}
-              on:blur={() => {
-                edit = false;
-              }}
-              on:input={(e) => {
-                renameMemo(e.target.value, selectedMemoIndex);
-              }}
-              on:click={(e) => {
-                if (edit && i == selectedMemoIndex) {
-                  e.stopPropagation();
-                }
-              }}
-              on:keydown={(e) => {
-                if (e.key == "Enter") {
-                  edit = false;
-                }
-              }}
-              use:tooltip={{
-                color: "var(--theme-color-Main-main)",
-                backgroundColor: "var(--theme-color-Sub-main)",
-                wrapped: true,
-              }}
-            />
+            {#if renamingIndex === i}
+              <input
+                class="tab-rename"
+                type="text"
+                bind:this={renameInput}
+                bind:value={draftTitle}
+                aria-label={`Rename memo ${memo.title}`}
+                on:click|stopPropagation
+                on:blur={commitRename}
+                on:keydown={(e) => {
+                  if (e.key == "Enter") {
+                    commitRename();
+                  }
+                  if (e.key == "Escape") {
+                    cancelRename();
+                  }
+                }}
+              />
+            {:else}
+              <span class="tab-title" title={memo.title}>{memo.title || "Untitled"}</span>
+            {/if}
           </button>
         {/each}
       {/if}
@@ -154,7 +199,27 @@
         >
       </IconButton>
       <IconButton
-        tooltipContent="Delete the selected memo."
+        tooltipContent="Rename the selected note."
+        ariaLabel="Rename the selected memo"
+        disabled={disabled || memo.length === 0}
+        activeColor={"var(--theme-color-Info-dark)"}
+        normalColor={"var(--theme-color-Info-main)"}
+        on:click={() => {
+          beginRename();
+        }}
+      >
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
+          ><path
+            d="M4 20H20M5 16.5L6 12.5L15.5 3L19 6.5L9.5 16L5 16.5Z"
+            stroke="var(--theme-color-Main-main)"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          ></path></svg
+        >
+      </IconButton>
+      <IconButton
+        tooltipContent="Delete the selected note."
         ariaLabel="Delete the selected memo"
         disabled={disabled || memo.length === 0}
         activeColor={"var(--theme-color-Error-dark)"}
@@ -177,19 +242,11 @@
           /></svg
         >
       </IconButton>
-      <Button
-        disabled={disabled || memo.length === 0}
-        variant={"text"}
-        activeColor={"var(--theme-color-Info-dark)"}
-        normalColor={"var(--theme-color-Info-main)"}
-        on:click={toggle}
-        content="rename"
-      />
     </div>
   </div>
 
   <div class="memotab-content">
-    {#if memo[selectedMemoIndex]}
+    {#if selectedMemo}
       {#key `${$table_selected_id ?? "none"}:${selectedMemoIndex}`}
         <Memo
           saveMemo={(editedContent) => saveMemo(editedContent, selectedMemoIndex)}
@@ -202,12 +259,7 @@
       {/key}
     {:else}
       <div class="empty-state" data-testid="memo-empty-state">
-        <p class="eyebrow">Notes</p>
-        <h2>Create the first note for this task</h2>
-        <p class="empty-copy">
-          Capture context, next steps, or research here. Notes stay with the task so they are easy
-          to revisit later.
-        </p>
+        <h2>Create a note</h2>
         <Button
           content="Create first note"
           ariaLabel="Create first note"
@@ -223,8 +275,8 @@
 <Dialog
   show={show_confirm}
   toggle={toggle_confirm}
-  header="Confirm."
-  content={`Do you really delete "${name_confirm}"?`}
+  header="Delete note?"
+  content={`Delete "${name_confirm}"?`}
   callback={callback_confirm}
 />
 
@@ -252,17 +304,22 @@
   .memotab-container {
     display: flex;
     flex-direction: row;
-    height: 3rem;
+    height: 3.25rem;
     width: 100%;
+    border-bottom: 1px solid var(--theme-color-Shadow-main);
+    background-color: var(--theme-color-Main-main);
   }
 
   .memotab {
     display: flex;
     flex-direction: row;
-    height: 2rem;
-    padding: 0.5rem;
+    align-items: center;
+    height: 100%;
+    padding: 0.35rem 0.5rem;
+    gap: 0.35rem;
     overflow-x: auto;
     flex: 1;
+    box-sizing: border-box;
   }
 
   .memotab-control {
@@ -271,41 +328,45 @@
     align-items: center;
     flex-shrink: 0;
     margin-left: auto;
+    padding-right: 0.25rem;
+    border-left: 1px solid var(--theme-color-Shadow-main);
   }
 
-  input {
+  .tab-rename {
     border: none;
-    padding: 0;
+    padding: 0.15rem 0.25rem;
     margin: 0;
     width: 100%;
-    text-align: center;
-  }
-
-  input:focus {
-    outline: auto;
+    min-width: 0;
+    text-align: left;
+    color: var(--theme-color-Sub-light);
+    background-color: var(--theme-color-Main-dark);
+    border-radius: 4px;
     cursor: text !important;
   }
 
-  input[readonly] {
-    color: var(--theme-color-Sub-main);
-    background-color: transparent;
-  }
-
-  input:hover {
-    cursor: pointer;
+  .tab-rename:focus {
+    outline: 2px solid var(--theme-color-Accent-main);
   }
 
   .memotab-item {
     display: flex;
     box-sizing: border-box;
-    height: 100%;
-    min-width: 5rem;
-    max-width: 10rem;
-    padding: 0.5rem;
-    flex: 1;
-    justify-content: center;
+    height: 2.25rem;
+    width: clamp(7rem, 16vw, 13rem);
+    min-width: 7rem;
+    padding: 0.35rem 0.65rem;
+    flex: 0 0 auto;
+    justify-content: flex-start;
     align-items: center;
     color: var(--theme-color-Sub-main);
+    border-radius: 0.45rem;
+    border: 1px solid transparent;
+    background-color: transparent;
+    transition:
+      background-color 120ms ease,
+      border-color 120ms ease,
+      color 120ms ease;
   }
 
   span.memotab-item {
@@ -318,23 +379,38 @@
     cursor: default !important;
   }
 
+  .tab-title {
+    min-width: 0;
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: left;
+    font-size: 0.9rem;
+  }
+
   .empty-tab-label {
     opacity: 0.8;
   }
 
   .memotab-item:hover {
     cursor: pointer;
+    background-color: var(--theme-color-Shadow-sub);
+    color: var(--theme-color-Sub-light);
   }
 
   .selected {
-    border-bottom: 0.2rem solid var(--theme-color-Accent-main);
+    border-color: color-mix(in srgb, var(--theme-color-Accent-main) 55%, transparent);
+    background-color: var(--theme-color-Main-light);
+    color: var(--theme-color-Sub-light);
+    box-shadow: inset 0 -0.2rem 0 var(--theme-color-Accent-main);
   }
 
   .memotab-content {
     display: flex;
     box-sizing: border-box;
-    height: calc(100% - 5.5rem);
     flex: 1;
+    min-height: 0;
     overflow: hidden;
   }
 
@@ -343,33 +419,16 @@
     flex: 1;
     flex-direction: column;
     justify-content: center;
-    align-items: flex-start;
-    gap: 0.75rem;
+    align-items: center;
+    gap: 0.85rem;
     padding: 2rem;
-    border: 0.1rem dashed var(--theme-color-Shadow-main);
-    border-radius: 1rem;
-    margin: 1rem;
-    background:
-      linear-gradient(135deg, var(--theme-color-Shadow-sub), transparent 70%),
-      var(--theme-color-Main-main);
+    background-color: var(--theme-color-Main-light);
     color: var(--theme-color-Sub-main);
-  }
-
-  .eyebrow {
-    margin: 0;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    font-size: 0.8rem;
   }
 
   .empty-state h2 {
     margin: 0;
-    color: var(--theme-color-Primary-main);
-  }
-
-  .empty-copy {
-    margin: 0;
-    max-width: 34rem;
-    line-height: 1.5;
+    color: var(--theme-color-Sub-light);
+    font-size: 1.1rem;
   }
 </style>
