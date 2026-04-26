@@ -45,7 +45,7 @@ export function tooltip(
     if (params.content) {
       tooltip.textContent = params.content;
     } else {
-      tooltip.textContent = node.textContent ?? node.value ?? "";
+      tooltip.textContent = node.textContent || node.value || "";
     }
     tooltip.style = `
       display: flex;

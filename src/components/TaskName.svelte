@@ -138,6 +138,11 @@
     wrapped: true,
   };
 
+  const spanTooltipParams = {
+    color: "var(--theme-color-Main-main)",
+    backgroundColor: "var(--theme-color-Sub-main)",
+  };
+
   function splitHighlight(str, query) {
     if (!query) return [{ t: str ?? "", h: false }];
     const lower = (str ?? "").toLowerCase();
@@ -275,7 +280,7 @@
 
 <div style="--color:{color}; --backgroundColor:{backgroundColor};">
   {#if highlightParts}
-    <span class="highlight-display" title={text ?? ""}>
+    <span class="highlight-display" use:tooltip={spanTooltipParams}>
       {#each highlightParts as part}
         {#if part.h}<mark>{part.t}</mark>{:else}{part.t}{/if}
       {/each}
@@ -433,6 +438,9 @@
   input[readonly] {
     background-color: var(--backgroundColor);
     color: var(--color);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   button {
     height: calc(100% - 0.5rem);
