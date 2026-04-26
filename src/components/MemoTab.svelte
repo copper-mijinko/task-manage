@@ -318,8 +318,15 @@
     padding: 0.35rem 0.5rem;
     gap: 0.35rem;
     overflow-x: auto;
+    overflow-y: hidden;
     flex: 1;
+    min-width: 0;
     box-sizing: border-box;
+    scrollbar-width: none;
+  }
+
+  .memotab::-webkit-scrollbar {
+    display: none;
   }
 
   .memotab-control {
@@ -328,12 +335,18 @@
     align-items: center;
     flex-shrink: 0;
     margin-left: auto;
-    padding-right: 0.25rem;
+    gap: 0.1rem;
+    padding: 0 0.35rem;
     border-left: 1px solid var(--theme-color-Shadow-main);
   }
 
+  .memotab-control :global(button.IconButton) {
+    margin: 0.35rem 0.2rem;
+  }
+
   .tab-rename {
-    border: none;
+    box-sizing: border-box;
+    border: 1px solid transparent;
     padding: 0.15rem 0.25rem;
     margin: 0;
     width: 100%;
@@ -346,7 +359,9 @@
   }
 
   .tab-rename:focus {
-    outline: 2px solid var(--theme-color-Accent-main);
+    outline: none;
+    border-color: color-mix(in srgb, var(--theme-color-Primary-main) 70%, transparent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--theme-color-Primary-main) 18%, transparent);
   }
 
   .memotab-item {
@@ -400,10 +415,10 @@
   }
 
   .selected {
-    border-color: color-mix(in srgb, var(--theme-color-Accent-main) 55%, transparent);
+    border-color: color-mix(in srgb, var(--theme-color-Primary-main) 55%, transparent);
     background-color: var(--theme-color-Main-light);
     color: var(--theme-color-Sub-light);
-    box-shadow: inset 0 -0.2rem 0 var(--theme-color-Accent-main);
+    box-shadow: inset 0 -0.16rem 0 var(--theme-color-Primary-main);
   }
 
   .memotab-content {

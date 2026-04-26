@@ -716,29 +716,45 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0.25rem 0.5rem;
+    padding: 0.3rem 0.5rem;
     background-color: var(--theme-color-Main-dark);
     flex-shrink: 0;
     gap: 0.5rem;
+    min-width: 0;
   }
 
   .toolbar {
     display: flex;
     align-items: center;
-    gap: 0.1rem;
+    gap: 0.15rem;
     flex-wrap: nowrap;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 0.1rem;
+    scrollbar-width: none;
+  }
+
+  .toolbar::-webkit-scrollbar {
+    display: none;
   }
 
   .tool-btn {
-    padding: 0.15rem 0.35rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    height: 1.65rem;
+    padding: 0 0.35rem;
     font-size: 0.75rem;
     background: none;
     border: 1px solid transparent;
-    border-radius: 3px;
+    border-radius: 4px;
     color: var(--theme-color-Sub-main);
     cursor: pointer;
-    line-height: 1.4;
-    min-width: 1.6rem;
+    line-height: 1;
+    min-width: 1.65rem;
     text-align: center;
   }
 
@@ -772,16 +788,21 @@
   .edit-bar-end {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.35rem;
     flex-shrink: 0;
+    margin-left: auto;
   }
 
   .save-status {
-    min-width: 4rem;
+    min-width: 3rem;
     text-align: right;
     color: var(--theme-color-Sub-main);
     font-size: 0.75rem;
     white-space: nowrap;
+  }
+
+  .save-status:empty {
+    display: none;
   }
 
   .mode-switch {
@@ -799,8 +820,8 @@
     border-radius: 3px;
     background-color: transparent;
     color: var(--theme-color-Sub-main);
-    padding: 0.2rem 0.55rem;
-    min-width: 3.25rem;
+    padding: 0.2rem 0.45rem;
+    min-width: 2.85rem;
     font-size: 0.78rem;
     cursor: pointer;
   }
@@ -867,6 +888,22 @@
 
     .live-preview {
       display: none;
+    }
+  }
+
+  @media (max-width: 760px) {
+    .edit-bar {
+      flex-wrap: wrap;
+      row-gap: 0.25rem;
+    }
+
+    .edit-bar-end {
+      order: 1;
+    }
+
+    .toolbar {
+      order: 2;
+      flex-basis: 100%;
     }
   }
 

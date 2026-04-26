@@ -231,10 +231,17 @@
     left: 2px;
     width: 1px;
     height: 100%;
-    background-color: rgba(128, 128, 128, 0.5);
+    background-color: color-mix(in srgb, var(--theme-color-Sub-dark) 28%, transparent);
+    opacity: 0.7;
   }
   .SplitPaneRoot :global(.HandlingResizer),
   .SplitPaneRoot :global(.Resizer:hover) {
-    background-color: var(--theme-color-Accent-light);
+    background-color: transparent;
+  }
+  .SplitPaneRoot :global(.HandlingResizer::before),
+  .SplitPaneRoot :global(.Resizer:hover::before) {
+    width: 2px;
+    background-color: var(--theme-color-Accent-main);
+    opacity: 0.9;
   }
 </style>

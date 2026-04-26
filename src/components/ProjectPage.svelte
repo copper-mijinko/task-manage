@@ -98,7 +98,7 @@
     <SplitPanes defaultRatio={[3, 2]}>
       <Pane style={"padding: 1rem; min-width: 10rem;"}>
         <Card style={"height: 100%; width: 100%; padding: 1rem;"}>
-          <div style="display: flex; flex-direction: row">
+          <div class="TaskListToolbar">
             <div class:TableButtons={true}>
               <IconButton
                 tooltipContent="Add a task under the selected one."
@@ -211,17 +211,34 @@
   .TableButtons {
     display: flex;
     flex-direction: row;
-    height: 3rem;
-    margin: 0.5rem;
+    align-items: center;
+    height: 2.75rem;
+    margin: 0;
     box-sizing: border-box;
+    flex: 0 0 auto;
   }
   .SearchBox {
     display: flex;
     flex-direction: row;
-    height: 3rem;
-    margin: 0.5rem;
+    align-items: center;
+    height: 2.75rem;
+    margin: 0;
     box-sizing: border-box;
     margin-left: auto;
+    flex: 1 1 9rem;
+    min-width: 8rem;
+    max-width: 20rem;
+  }
+  .TaskListToolbar {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    min-width: 0;
+    padding: 0.25rem 0.5rem 0.75rem;
+    box-sizing: border-box;
+    flex-wrap: wrap;
   }
   .TreeTable {
     height: calc(100% - 4rem);
@@ -246,5 +263,12 @@
     width: calc(100% - 2rem);
     box-sizing: border-box;
     margin: 1rem;
+  }
+
+  @media (max-width: 760px) {
+    .SearchBox {
+      margin-left: 0;
+      max-width: none;
+    }
   }
 </style>
