@@ -65,13 +65,13 @@ describe("TaskDetail", () => {
     expect(screen.getByText("No data.")).toBeInTheDocument();
   });
 
-  test("shows a guided empty state when the selected task has no notes", () => {
+  test("shows the legacy memo tab placeholder when the selected task has no notes", () => {
     table_selected_id.set("task-1");
     render(TaskDetail);
 
-    expect(screen.getByTestId("memo-empty-state")).toBeInTheDocument();
-    expect(screen.getByText("No notes yet")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Create first note" })).toBeInTheDocument();
+    expect(screen.getByText("Tabs here")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("No page")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add a memo" })).toBeInTheDocument();
   });
 
   test("adds a memo tab to the selected task", async () => {
@@ -82,9 +82,9 @@ describe("TaskDetail", () => {
     await fireEvent.click(buttons[0]);
     await tick();
 
-    expect(screen.getByDisplayValue("Note")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Select memo memo" })).toHaveClass("selected");
     expect(get(tree_data).data.children[0].data.memo).toEqual([
-      expect.objectContaining({ title: "Note", content: "" }),
+      expect.objectContaining({ title: "memo", content: "" }),
     ]);
   });
 
@@ -97,26 +97,27 @@ describe("TaskDetail", () => {
     const { container } = render(TaskDetail);
 
     const buttons = container.querySelectorAll(".memotab-control button");
-    await fireEvent.click(buttons[2]);
-    expect(screen.getByText('Delete "draft"?')).toBeInTheDocument();
+    await fireEvent.click(buttons[1]);
+    expect(screen.getByText('Do you really delete "draft"?')).toBeInTheDocument();
 
     await fireEvent.click(screen.getByRole("button", { name: "ok" }));
     await tick();
 
     expect(get(tree_data).data.children[0].data.memo).toEqual([]);
-    expect(screen.getByText("No notes yet")).toBeInTheDocument();
+    expect(screen.getByText("Tabs here")).toBeInTheDocument();
   });
 
-  test("creates the first note from the empty state action", async () => {
+  test("creates the first memo from the tab add action", async () => {
     table_selected_id.set("task-1");
-    render(TaskDetail);
+    const { container } = render(TaskDetail);
 
-    await fireEvent.click(screen.getByRole("button", { name: "Create first note" }));
+    const addButton = container.querySelectorAll(".memotab-control button")[0];
+    await fireEvent.click(addButton);
     await tick();
 
-    expect(screen.getByDisplayValue("Note")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Select memo memo" })).toHaveClass("selected");
     expect(get(tree_data).data.children[0].data.memo).toEqual([
-      expect.objectContaining({ title: "Note", content: "" }),
+      expect.objectContaining({ title: "memo", content: "" }),
     ]);
   });
 
@@ -155,8 +156,8 @@ describe("TaskDetail", () => {
     await fireEvent.click(addButton);
     await tick();
 
-    // Now on the new empty memo (index 1) - verify "Note" tab is selected
-    expect(screen.getByDisplayValue("Note").closest("button")).toHaveClass("selected");
+    // Now on the new empty memo (index 1) - verify "memo" tab is selected
+    expect(screen.getByRole("button", { name: "Select memo memo" })).toHaveClass("selected");
 
     // Switch to existing memo (index 0)
     await fireEvent.click(screen.getByRole("button", { name: "Select memo existing" }));
@@ -164,10 +165,10 @@ describe("TaskDetail", () => {
     expect(screen.getByRole("button", { name: "Select memo existing" })).toHaveClass("selected");
 
     // Switch back to the empty memo (index 1)
-    await fireEvent.click(screen.getByRole("button", { name: "Select memo Note" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Select memo memo" }));
     await tick();
 
-    expect(screen.getByRole("button", { name: "Select memo Note" })).toHaveClass("selected");
+    expect(screen.getByRole("button", { name: "Select memo memo" })).toHaveClass("selected");
     // content should be empty string for the new empty memo
     expect(screen.getByTestId("memo-stub").textContent.trim()).toBe("");
   });
