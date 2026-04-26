@@ -107,7 +107,15 @@ function readMemos(taskDir, reservedFiles = ["_index.md"]) {
     const { data, body } = parseFrontmatter(raw);
     const id = data.id || crypto.randomUUID();
     const headingMatch = body.match(/^#\s+(.+)/m);
-    const title = headingMatch ? headingMatch[1].trim() : file.replace(/\.md$/, "");
+    const fileTitle = file.replace(/\.md$/, "");
+    let title = data.title;
+    if (!title) {
+      if (headingMatch) {
+        title = headingMatch[1].trim();
+      } else {
+        title = data.id === fileTitle ? "memo" : fileTitle;
+      }
+    }
     memos.push({ id, title, content: body.trim() });
   }
   return memos;
@@ -185,7 +193,10 @@ function writeMemoFiles(taskDir, indexFileName, memos) {
   for (const f of existing) fs.unlinkSync(path.join(taskDir, f));
   for (const memo of memos || []) {
     const id = memo.id || crypto.randomUUID();
-    fs.writeFileSync(path.join(taskDir, `${id}.md`), stringifyFrontmatter({ id }, memo.content));
+    fs.writeFileSync(
+      path.join(taskDir, `${id}.md`),
+      stringifyFrontmatter({ id, title: memo.title }, memo.content)
+    );
   }
 }
 

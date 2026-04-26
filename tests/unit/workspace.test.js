@@ -289,6 +289,54 @@ describe("file system operations", () => {
     expect(loaded.memos[0].title).toBe("Notes");
   });
 
+  it("preserves memo tab titles for empty workspace memos", () => {
+    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
+    const taskDirs = new Map([["root-id", "_project"]]);
+    const task = {
+      id: "task-empty-memo",
+      name: "Task With Empty Memo",
+      status: "Open",
+      parents: ["root-id"],
+      memos: [{ id: "memo-uuid-empty", title: "Scratch", content: "" }],
+      createdAt: "2026-04-24",
+    };
+
+    writeTask(projectDir, task, taskDirs);
+
+    const memoFile = fs.readFileSync(
+      path.join(projectDir, "task-empty-memo", "memo-uuid-empty.md"),
+      "utf8"
+    );
+    expect(memoFile).toContain("title: Scratch");
+
+    const { tasks } = readProject(projectDir);
+    const loaded = tasks.get("task-empty-memo");
+    expect(loaded.memos[0].id).toBe("memo-uuid-empty");
+    expect(loaded.memos[0].title).toBe("Scratch");
+  });
+
+  it("does not expose ids as tab titles for old empty workspace memos", () => {
+    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
+    const taskDirs = new Map([["root-id", "_project"]]);
+    const task = {
+      id: "task-old-empty-memo",
+      name: "Task With Old Empty Memo",
+      status: "Open",
+      parents: ["root-id"],
+      memos: [],
+      createdAt: "2026-04-24",
+    };
+    writeTask(projectDir, task, taskDirs);
+
+    const taskDir = path.join(projectDir, "task-old-empty-memo");
+    fs.writeFileSync(path.join(taskDir, "memo-uuid-old.md"), "---\nid: memo-uuid-old\n---\n");
+
+    const { tasks } = readProject(projectDir);
+    const loaded = tasks.get("task-old-empty-memo");
+    expect(loaded.memos[0].id).toBe("memo-uuid-old");
+    expect(loaded.memos[0].title).toBe("memo");
+  });
+
   it("readMemos assigns a generated id to legacy memo files without frontmatter", () => {
     const { projectDir } = createProject(tmpDir, "Proj", "root-id");
     const taskDirs = new Map([["root-id", "_project"]]);
