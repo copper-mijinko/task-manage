@@ -166,6 +166,9 @@
     !isEditing && $pageSearchQuery ? splitHighlight(text, $pageSearchQuery) : null;
 
   const dispatchCommitIfChanged = () => {
+    if (!draftText.trim()) {
+      return;
+    }
     const currentText = text ?? "";
     if (draftText === currentText || draftText === lastSubmittedText) {
       return;
@@ -191,6 +194,10 @@
 
   const flushCommit = () => {
     debouncedCommit.cancel();
+    if (!draftText.trim()) {
+      draftText = text ?? "";
+      return;
+    }
     dispatchCommitIfChanged();
   };
 
