@@ -36,6 +36,7 @@
 
   $: rows = $filtered_data ? flattenVisibleTree($filtered_data, $closed_node_ids) : [];
   $: isDark = $theme == "dark";
+  $: hasNoTasks = !$tree_data?.data?.children?.length;
   let scrollTop = 0;
 
   // Compute visible headers from tree_data.headers filtered/ordered by column_settings
@@ -584,6 +585,23 @@
         on:deleteTask={requestDelete}
       />
     {/each}
+  {:else}
+    <div class="EmptyState">
+      {#if hasNoTasks}
+        <svg class="EmptyIcon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2M12 12v4M10 14h4" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <p class="EmptyTitle">タスクがありません</p>
+        <p class="EmptyHint">ヘッダーの + ボタンか、右クリックメニューからタスクを追加できます</p>
+      {:else}
+        <svg class="EmptyIcon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="11" cy="11" r="8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M21 21l-4.35-4.35" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <p class="EmptyTitle">一致するタスクがありません</p>
+        <p class="EmptyHint">フィルターの条件を変更してください</p>
+      {/if}
+    </div>
   {/if}
 </div>
 
@@ -656,5 +674,33 @@
   .TableRoot :global(.HandlingResizer),
   .TableRoot :global(.Resizer:hover) {
     background-color: var(--theme-color-Accent-light);
+  }
+  .EmptyState {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 4rem 2rem;
+    color: var(--theme-color-Sub-dark);
+    user-select: none;
+  }
+  .EmptyIcon {
+    width: 3rem;
+    height: 3rem;
+    opacity: 0.35;
+    stroke: var(--theme-color-Sub-dark);
+  }
+  .EmptyTitle {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    opacity: 0.6;
+  }
+  .EmptyHint {
+    margin: 0;
+    font-size: 0.8rem;
+    opacity: 0.45;
+    text-align: center;
   }
 </style>

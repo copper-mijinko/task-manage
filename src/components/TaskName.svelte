@@ -432,7 +432,7 @@
     width: 100%;
     position: relative;
   }
-  input:focus {
+  input:focus-visible {
     outline: auto;
   }
   input[readonly] {
