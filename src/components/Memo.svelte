@@ -27,6 +27,8 @@
   let currentContent = toMarkdown(content);
   let renderedHtml = "";
   let renderSequence = 0;
+  let previewEl: HTMLElement | null = null;
+  let livePreviewEl: HTMLElement | null = null;
 
   const EXTERNAL_LINK_PATTERN = /^(https?:\/\/|mailto:|file:\/\/)/i;
 
@@ -353,6 +355,32 @@
     return template.innerHTML;
   }
 
+  function injectCopyButtons(root: HTMLElement | null) {
+    if (!root) return;
+    root.querySelectorAll("pre").forEach((pre) => {
+      if (pre.querySelector(".copy-btn")) return;
+      const code = pre.querySelector("code");
+      if (!code) return;
+      const btn = document.createElement("button");
+      btn.className = "copy-btn";
+      btn.textContent = "Copy";
+      btn.setAttribute("aria-label", "Copy code");
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const text = code.innerText ?? code.textContent ?? "";
+        void navigator.clipboard.writeText(text).then(() => {
+          btn.textContent = "Copied!";
+          btn.classList.add("copied");
+          setTimeout(() => {
+            btn.textContent = "Copy";
+            btn.classList.remove("copied");
+          }, 1800);
+        });
+      });
+      pre.appendChild(btn);
+    });
+  }
+
   async function updateRenderedHtml(markdownText: string) {
     const sequence = ++renderSequence;
     const baseHtml = marked.parse(preprocessWikiLinks(markdownText), {
@@ -360,10 +388,16 @@
       breaks: true,
     }) as string;
     renderedHtml = baseHtml;
+    await tick();
+    injectCopyButtons(previewEl);
+    injectCopyButtons(livePreviewEl);
 
     const nextHtml = await resolveImageSources(baseHtml);
     if (sequence === renderSequence) {
       renderedHtml = nextHtml;
+      await tick();
+      injectCopyButtons(previewEl);
+      injectCopyButtons(livePreviewEl);
     }
   }
 
@@ -592,10 +626,10 @@
             on:click={formatItalic}>I</button
           >
           <button
-            class="tool-btn tool-mono"
+            class="tool-btn tool-mono tool-code-inline"
             title="Inline code"
             on:mousedown|preventDefault
-            on:click={formatInlineCode}>`</button
+            on:click={formatInlineCode}>`…`</button
           >
           <span class="tool-sep"></span>
           <button
@@ -639,7 +673,7 @@
             >&gt;</button
           >
           <button
-            class="tool-btn tool-mono"
+            class="tool-btn tool-mono tool-code-block"
             title="Code block"
             on:mousedown|preventDefault
             on:click={formatCodeBlock}>```</button
@@ -662,7 +696,7 @@
         <div class="live-preview" aria-label="Markdown preview">
           {#if currentContent.trim()}
             <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-            <div class="preview">{@html renderedHtml}</div>
+            <div class="preview" bind:this={livePreviewEl}>{@html renderedHtml}</div>
           {:else}
             <div class="placeholder">Preview</div>
           {/if}
@@ -687,7 +721,7 @@
       {/if}
       {#if currentContent.trim()}
         <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-        <div class="preview">{@html renderedHtml}</div>
+        <div class="preview" bind:this={previewEl}>{@html renderedHtml}</div>
       {:else if !readOnly}
         <div class="placeholder">No content</div>
       {/if}
@@ -748,10 +782,10 @@
     padding: 0 0.35rem;
     margin: 0;
     font-size: 0.75rem;
-    background: none;
-    border: 1px solid transparent;
+    background-color: color-mix(in srgb, var(--theme-color-Sub-dark) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--theme-color-Sub-dark) 35%, transparent);
     border-radius: 4px;
-    color: var(--theme-color-Sub-main);
+    color: var(--theme-color-Sub-light);
     cursor: pointer;
     line-height: 1;
     min-width: 1.65rem;
@@ -759,9 +793,14 @@
   }
 
   .tool-btn:hover {
-    background-color: color-mix(in srgb, var(--theme-color-Sub-dark) 30%, transparent);
-    border-color: var(--theme-color-Sub-dark);
+    background-color: color-mix(in srgb, var(--theme-color-Sub-dark) 25%, transparent);
+    border-color: var(--theme-color-Sub-light);
     color: var(--theme-color-Sub-light);
+  }
+
+  .tool-btn:active {
+    background-color: color-mix(in srgb, var(--theme-color-Sub-dark) 40%, transparent);
+    transform: translateY(1px);
   }
 
   .tool-bold {
@@ -773,8 +812,14 @@
   }
 
   .tool-mono {
-    font-family: monospace;
-    font-size: 0.7rem;
+    font-family: ui-monospace, "Cascadia Code", "Fira Code", monospace;
+    font-size: 0.72rem;
+    letter-spacing: -0.03em;
+  }
+
+  .tool-code-inline,
+  .tool-code-block {
+    border-left: 2px solid color-mix(in srgb, var(--theme-color-Accent-main) 55%, transparent);
   }
 
   .tool-sep {
@@ -990,8 +1035,9 @@
     font-family: monospace;
     font-size: 0.85em;
     background-color: var(--theme-color-Main-dark);
-    padding: 0.1em 0.3em;
+    padding: 0.1em 0.35em;
     border-radius: 3px;
+    border: 1px solid color-mix(in srgb, var(--theme-color-Sub-dark) 20%, transparent);
   }
 
   .preview :global(pre) {
@@ -1000,12 +1046,49 @@
     border-radius: 4px;
     overflow-x: auto;
     margin: 0.5em 0;
+    border: 1px solid color-mix(in srgb, var(--theme-color-Sub-dark) 25%, transparent);
+    position: relative;
   }
 
   .preview :global(pre code) {
     background: none;
     padding: 0;
+    border: none;
     font-size: 0.85rem;
+  }
+
+  .preview :global(pre .copy-btn) {
+    position: absolute;
+    top: 0.4rem;
+    right: 0.4rem;
+    padding: 0.15rem 0.45rem;
+    font-size: 0.7rem;
+    font-family: inherit;
+    background-color: color-mix(in srgb, var(--theme-color-Sub-dark) 15%, transparent);
+    border: 1px solid color-mix(in srgb, var(--theme-color-Sub-dark) 40%, transparent);
+    border-radius: 3px;
+    color: var(--theme-color-Sub-main);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s ease, background-color 0.1s ease;
+    line-height: 1.4;
+    user-select: none;
+  }
+
+  .preview :global(pre:hover .copy-btn) {
+    opacity: 1;
+  }
+
+  .preview :global(pre .copy-btn:hover) {
+    background-color: color-mix(in srgb, var(--theme-color-Sub-dark) 30%, transparent);
+    color: var(--theme-color-Sub-light);
+    border-color: var(--theme-color-Sub-main);
+  }
+
+  .preview :global(pre .copy-btn.copied) {
+    color: var(--theme-color-Success-main);
+    border-color: var(--theme-color-Success-dark);
+    opacity: 1;
   }
 
   .preview :global(blockquote) {
