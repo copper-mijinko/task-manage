@@ -732,7 +732,6 @@
     min-width: 0;
     overflow-x: auto;
     overflow-y: hidden;
-    padding-bottom: 0.1rem;
     scrollbar-width: none;
   }
 
@@ -747,6 +746,7 @@
     flex: 0 0 auto;
     height: 1.65rem;
     padding: 0 0.35rem;
+    margin: 0;
     font-size: 0.75rem;
     background: none;
     border: 1px solid transparent;
@@ -821,6 +821,7 @@
     background-color: transparent;
     color: var(--theme-color-Sub-main);
     padding: 0.2rem 0.45rem;
+    margin: 0;
     min-width: 2.85rem;
     font-size: 0.78rem;
     cursor: pointer;
