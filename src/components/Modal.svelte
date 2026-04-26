@@ -36,15 +36,13 @@
   }
 
   function handleKeydown(e) {
-    if (e.key === "Escape") {
+    if (show && e.key === "Escape") {
       toggle();
     }
   }
 </script>
 
-{#if show}
-  <svelte:window on:keydown={handleKeydown} />
-{/if}
+<svelte:window on:keydown={handleKeydown} />
 {#if show}
   <div class="Mask"></div>
 {/if}
