@@ -203,7 +203,7 @@
     position: absolute;
     top: 0;
     right: 0;
-    height: 100%;
+    height: 4rem;
     width: 2rem;
     flex-shrink: 0;
     display: flex;
