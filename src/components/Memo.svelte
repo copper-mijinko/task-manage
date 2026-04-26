@@ -1070,7 +1070,9 @@
     color: var(--theme-color-Sub-main);
     cursor: pointer;
     opacity: 0;
-    transition: opacity 0.15s ease, background-color 0.1s ease;
+    transition:
+      opacity 0.15s ease,
+      background-color 0.1s ease;
     line-height: 1.4;
     user-select: none;
   }
