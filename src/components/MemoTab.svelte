@@ -143,7 +143,9 @@
             class="memotab-item"
             class:selected={i == selectedMemoIndex}
             class:drop-left={dragOverIndex === i && draggingIndex !== i && dragOverSide === "left"}
-            class:drop-right={dragOverIndex === i && draggingIndex !== i && dragOverSide === "right"}
+            class:drop-right={dragOverIndex === i &&
+              draggingIndex !== i &&
+              dragOverSide === "right"}
             aria-label={`Select memo ${memo.title}`}
             draggable="true"
             on:click={() => {
