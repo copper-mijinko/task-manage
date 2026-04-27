@@ -189,6 +189,7 @@
   }
   .TableHeader:last-of-type {
     border-right: 0px;
+    padding-right: 2rem;
   }
   .TableHeader:first-of-type {
     border-left: 0px;
@@ -202,8 +203,8 @@
   .ColumnSettingsBtn {
     position: absolute;
     top: 0;
+    bottom: 0;
     right: 0;
-    height: 4rem;
     width: 2rem;
     flex-shrink: 0;
     display: flex;
