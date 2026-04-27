@@ -238,7 +238,7 @@ app.on("ready", () => {
   });
 
   // 繧ｿ繧ｹ繧ｯ隧ｳ邏ｰ繧ｦ繧｣繝ｳ繝峨え縺ｮ螟画焚
-  let taskDetailWindow = null;
+  const taskDetailWindows = new Map(); // taskId -> BrowserWindow
 
   function bindFindInPageEvents(targetWebContents) {
     targetWebContents.on("found-in-page", (event, result) => {
@@ -365,11 +365,13 @@ app.on("ready", () => {
         taskName: detailData?.taskName ? String(detailData.taskName) : "Task Detail",
       };
 
-      if (taskDetailWindow && !taskDetailWindow.isDestroyed()) {
-        taskDetailWindow.close();
+      const existing = taskDetailWindows.get(safeDetailData.taskId);
+      if (existing && !existing.isDestroyed()) {
+        existing.focus();
+        return existing;
       }
 
-      taskDetailWindow = new BrowserWindow({
+      const win = new BrowserWindow({
         width: 960,
         height: 720,
         modal: false,
@@ -388,9 +390,9 @@ app.on("ready", () => {
 
       if (process.env.VITE_DEV === "true") {
         const params = new URLSearchParams(safeDetailData);
-        taskDetailWindow.loadURL(`http://localhost:5173/?${params.toString()}#task-detail-window`);
+        win.loadURL(`http://localhost:5173/?${params.toString()}#task-detail-window`);
       } else {
-        taskDetailWindow.loadFile(path.join(__dirname, "../renderer/index.html"), {
+        win.loadFile(path.join(__dirname, "../renderer/index.html"), {
           hash: "#task-detail-window",
           query: {
             projectId: safeDetailData.projectId,
@@ -400,36 +402,23 @@ app.on("ready", () => {
         });
       }
 
-      bindFindInPageEvents(taskDetailWindow.webContents);
+      bindFindInPageEvents(win.webContents);
+      taskDetailWindows.set(safeDetailData.taskId, win);
 
-      global.currentTaskDetailWindowData = safeDetailData;
-
-      taskDetailWindow.on("closed", () => {
-        taskDetailWindow = null;
-        global.currentTaskDetailWindowData = null;
+      win.on("closed", () => {
+        taskDetailWindows.delete(safeDetailData.taskId);
       });
 
       log.info(`Task detail window created for task: ${safeDetailData.taskId}`);
-      return taskDetailWindow;
+      return win;
     } catch (error) {
       log.error("Failed to create task detail window:", error);
       return null;
     }
   }
 
-  ipcMain.handle("get-task-detail-window-data", async () => {
-    return (
-      global.currentTaskDetailWindowData || {
-        projectId: "",
-        taskId: "",
-        taskName: "Task Detail",
-      }
-    );
-  });
-
   ipcMain.on("open-task-detail-window", async (_event, detailData) => {
     try {
-      global.currentTaskDetailWindowData = detailData;
       const window = createTaskDetailWindow(detailData);
 
       await new Promise((resolve) => setTimeout(resolve, 500));
@@ -454,9 +443,10 @@ app.on("ready", () => {
   }
   mainWindow.on("closed", () => {
     mainWindow = null;
-    if (taskDetailWindow && !taskDetailWindow.isDestroyed()) {
-      taskDetailWindow.destroy();
+    for (const win of taskDetailWindows.values()) {
+      if (!win.isDestroyed()) win.destroy();
     }
+    taskDetailWindows.clear();
   });
 
   ipcMain.handle("get-current-theme", async () => {

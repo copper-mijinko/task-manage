@@ -42,24 +42,17 @@
 
   async function initTaskDetailWindow() {
     try {
-      const detailData = await window.electronAPI?.getTaskDetailWindowData?.();
-      if (!detailData?.projectId || !detailData?.taskId) {
-        return;
-      }
+      if (!detailWindowProjectId || !detailWindowTaskId) return;
 
-      detailWindowProjectId = detailData.projectId;
-      detailWindowTaskId = detailData.taskId;
-      detailWindowTaskName = detailData.taskName || detailWindowTaskName;
       document.title = `${detailWindowTaskName} | Task Detail`;
+      setTaskDetailWindowTarget(detailWindowProjectId, detailWindowTaskId);
 
-      setTaskDetailWindowTarget(detailData.projectId, detailData.taskId);
-
-      const result = await window.electronAPI.getTreeData(detailData.projectId);
+      const result = await window.electronAPI.getTreeData(detailWindowProjectId);
       if (result) {
         tree_data.set(result);
         selected_type.set("Projects");
-        selected_id.set(detailData.projectId);
-        table_selected_id.set(detailData.taskId);
+        selected_id.set(detailWindowProjectId);
+        table_selected_id.set(detailWindowTaskId);
       }
     } catch {
       // ignore initialization error
