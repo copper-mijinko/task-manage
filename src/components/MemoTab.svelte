@@ -89,6 +89,7 @@
 
   let draggingIndex = -1;
   let dragOverIndex = -1;
+  let dragOverSide = null; // "left" | "right"
 
   const handleDragStart = (e, i) => {
     draggingIndex = i;
@@ -98,26 +99,35 @@
   const handleDragOver = (e, i) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
+    const rect = e.currentTarget.getBoundingClientRect();
+    dragOverSide = e.clientX <= rect.left + rect.width / 2 ? "left" : "right";
     dragOverIndex = i;
   };
 
   const handleDragLeave = () => {
     dragOverIndex = -1;
+    dragOverSide = null;
   };
 
   const handleDrop = (e, i) => {
     e.preventDefault();
     if (draggingIndex !== -1 && draggingIndex !== i) {
-      reorderMemo(draggingIndex, i);
-      selectedMemoIndex = i;
+      const rect = e.currentTarget.getBoundingClientRect();
+      const side = e.clientX <= rect.left + rect.width / 2 ? "left" : "right";
+      let insertAt = side === "left" ? i : i + 1;
+      if (draggingIndex < i) insertAt -= 1;
+      reorderMemo(draggingIndex, insertAt);
+      selectedMemoIndex = insertAt;
     }
     draggingIndex = -1;
     dragOverIndex = -1;
+    dragOverSide = null;
   };
 
   const handleDragEnd = () => {
     draggingIndex = -1;
     dragOverIndex = -1;
+    dragOverSide = null;
   };
 </script>
 
@@ -132,7 +142,8 @@
             use:ripple={{ duration: 350, color: "var(--theme-color-Sub-main)" }}
             class="memotab-item"
             class:selected={i == selectedMemoIndex}
-            class:drop-target={dragOverIndex === i && draggingIndex !== i}
+            class:drop-left={dragOverIndex === i && draggingIndex !== i && dragOverSide === "left"}
+            class:drop-right={dragOverIndex === i && draggingIndex !== i && dragOverSide === "right"}
             aria-label={`Select memo ${memo.title}`}
             draggable="true"
             on:click={() => {
@@ -359,8 +370,12 @@
     border-bottom: 0.2rem solid var(--theme-color-Accent-main);
   }
 
-  .drop-target {
+  .drop-left {
     border-left: 0.15rem solid var(--theme-color-Accent-main);
+  }
+
+  .drop-right {
+    border-right: 0.15rem solid var(--theme-color-Accent-main);
   }
 
   .memotab-content {
