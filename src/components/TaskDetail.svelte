@@ -70,6 +70,12 @@
       return true;
     }
   };
+  const reorderMemo = (fromIndex, toIndex) => {
+    const updatedMemo = [...node.data["memo"]];
+    const [moved] = updatedMemo.splice(fromIndex, 1);
+    updatedMemo.splice(toIndex, 0, moved);
+    changeData(node, "memo", updatedMemo);
+  };
 </script>
 
 <div class="container">
@@ -81,6 +87,7 @@
         {addMemo}
         {deleteMemo}
         {renameMemo}
+        {reorderMemo}
         {workspaceProjectDir}
         taskId={$table_selected_id ?? null}
       />

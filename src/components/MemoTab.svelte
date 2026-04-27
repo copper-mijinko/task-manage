@@ -12,6 +12,7 @@
   export let addMemo;
   export let deleteMemo;
   export let renameMemo;
+  export let reorderMemo;
   export let disabled = false;
   export let workspaceProjectDir = null;
   export let taskId = null;
@@ -85,6 +86,39 @@
 
   $: editedContent = memo.length > selectedMemoIndex ? memo[selectedMemoIndex].content : "";
   $: selectedMemo = memo[selectedMemoIndex];
+
+  let draggingIndex = -1;
+  let dragOverIndex = -1;
+
+  const handleDragStart = (e, i) => {
+    draggingIndex = i;
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragOver = (e, i) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    dragOverIndex = i;
+  };
+
+  const handleDragLeave = () => {
+    dragOverIndex = -1;
+  };
+
+  const handleDrop = (e, i) => {
+    e.preventDefault();
+    if (draggingIndex !== -1 && draggingIndex !== i) {
+      reorderMemo(draggingIndex, i);
+      selectedMemoIndex = i;
+    }
+    draggingIndex = -1;
+    dragOverIndex = -1;
+  };
+
+  const handleDragEnd = () => {
+    draggingIndex = -1;
+    dragOverIndex = -1;
+  };
 </script>
 
 <div class="container">
@@ -98,10 +132,17 @@
             use:ripple={{ duration: 350, color: "var(--theme-color-Sub-main)" }}
             class="memotab-item"
             class:selected={i == selectedMemoIndex}
+            class:drop-target={dragOverIndex === i && draggingIndex !== i}
             aria-label={`Select memo ${memo.title}`}
+            draggable="true"
             on:click={() => {
               selectedMemoIndex = i;
             }}
+            on:dragstart={(e) => handleDragStart(e, i)}
+            on:dragover={(e) => handleDragOver(e, i)}
+            on:dragleave={handleDragLeave}
+            on:drop={(e) => handleDrop(e, i)}
+            on:dragend={handleDragEnd}
           >
             <input
               type="text"
@@ -316,6 +357,10 @@
 
   .selected {
     border-bottom: 0.2rem solid var(--theme-color-Accent-main);
+  }
+
+  .drop-target {
+    border-left: 0.15rem solid var(--theme-color-Accent-main);
   }
 
   .memotab-content {
