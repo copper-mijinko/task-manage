@@ -36,6 +36,8 @@ export interface ClosedNodeIdsStore extends Writable<Set<string>> {
   add: (nodeId: string) => void;
   delete: (nodeId: string) => void;
   cleanupNodeMetadata: (nodeId: string) => void;
+  expandAll: () => void;
+  collapseAll: () => void;
 }
 
 function collectNodeAndDescendantIds(node: TreeData | undefined): string[] {
@@ -167,6 +169,25 @@ function createClosedNodeIds(initialValue: Set<string>): ClosedNodeIdsStore {
           }
         }
       });
+    },
+    expandAll: () => {
+      const projectId = get(selected_id);
+      if (!projectId) return;
+      const newState = new Set<string>();
+      projectExpandedStates.set(projectId, newState);
+      saveState(projectId, newState);
+      set(newState);
+    },
+    collapseAll: () => {
+      const projectId = get(selected_id);
+      if (!projectId) return;
+      const currentTreeData = get(tree_data);
+      if (!currentTreeData?.data) return;
+      const allIds = collectNodeAndDescendantIds(currentTreeData.data);
+      const newState = new Set<string>(allIds);
+      projectExpandedStates.set(projectId, newState);
+      saveState(projectId, newState);
+      set(newState);
     },
     cleanupNodeMetadata: (nodeId: string) => {
       const projectId = get(selected_id);
