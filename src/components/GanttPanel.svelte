@@ -191,11 +191,12 @@
         isDue: false,
       };
     } else if (dateState.effectiveDueTs) {
-      const left = pxFromDate(dateState.effectiveDueTs) - 2;
+      const markerInset = 3;
+      const left = pxFromDate(dateState.effectiveDueTs) + markerInset;
       return {
         ...dateState,
         left,
-        width: 4,
+        width: Math.max(10, pixelsPerDay - markerInset * 2),
         color,
         opacity: dateState.isInherited ? 0.35 : 1,
         isDue: true,
@@ -668,9 +669,9 @@
   }
 
   .Bar.DueMarker {
-    top: 15%;
-    height: 70%;
-    border-radius: 1px;
+    top: 22%;
+    height: 56%;
+    border-radius: 999px;
   }
 
   .BarHandle {
