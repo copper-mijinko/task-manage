@@ -388,6 +388,7 @@
     display: flex;
     flex-direction: column;
     height: 100%;
+    min-height: 0;
     overflow: hidden;
     border-left: 1px solid var(--theme-color-Shadow-main);
     background: var(--theme-color-Main-main);
@@ -469,12 +470,14 @@
 
   .GanttBody {
     flex: 1;
+    min-height: 0;
     overflow-x: auto;
     overflow-y: hidden;
   }
 
   .GanttBodyInner {
     position: relative;
+    min-height: 100%;
   }
 
   .TodayLineFull {
