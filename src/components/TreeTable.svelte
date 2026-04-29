@@ -169,6 +169,25 @@
     mutation_observer.observe(table_root, { subtree: true, childList: true });
   });
 
+  const syncResizerBounds = (targetResizers = resizers) => {
+    if (!table_root) {
+      return;
+    }
+
+    const tableRows = Array.from(table_root.querySelectorAll(".TableRow"));
+    const contentHeight = tableRows.reduce(
+      (height, row) => height + row.getBoundingClientRect().height,
+      0
+    );
+    const top = table_root.scrollTop;
+    const height = Math.max(0, Math.min(table_root.clientHeight, contentHeight - top));
+
+    targetResizers.forEach((resizer) => {
+      resizer.style.top = `${top}px`;
+      resizer.style.height = `${height}px`;
+    });
+  };
+
   const createResizers = (
     currentHeaders,
     existingResizers = [],
@@ -211,8 +230,6 @@
         }
         const resizer = document.createElement("div");
         resizer.classList.add("Resizer");
-        resizer.style.top = `${table_root.scrollTop}px`;
-        resizer.style.height = `${table_root.clientHeight}px`;
         resizer.style.left = `${left - 3}px`;
         table_root.insertBefore(resizer, tableRows[0]);
         existingResizers.push(resizer);
@@ -225,6 +242,7 @@
         });
       });
     }
+    syncResizerBounds(existingResizers);
 
     // For table_root resizing
     if (existingResizeObserver) {
@@ -232,10 +250,7 @@
     }
     const newResizeObserver = new ResizeObserver((entries) => {
       // Height setting
-      for (let resizer of existingResizers) {
-        resizer.style.top = `${table_root.scrollTop}px`;
-        resizer.style.height = `${entries[0].contentRect.height}px`;
-      }
+      syncResizerBounds(existingResizers);
       // Width setting
       let table_width = 0;
       domHeaders.forEach((header, index) => {
@@ -389,9 +404,7 @@
   function handleScroll(event) {
     scrollTop = event.currentTarget.scrollTop;
     $ganttScrollTop = scrollTop;
-    resizers.forEach((resizer) => {
-      resizer.style.top = `${scrollTop}px`;
-    });
+    syncResizerBounds(resizers);
   }
 
   function handleToggleRow(event) {
