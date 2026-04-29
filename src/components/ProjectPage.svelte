@@ -198,18 +198,22 @@
           </div>
           <Card style={"flex: 1; overflow: hidden; padding: 0;"}>
             <div class="TreeAndGantt">
-              <SplitPanes defaultRatio={$ganttVisible ? [3, 2] : [1]}>
-                <Pane style={"height: 100%; min-width: 6rem;"}>
-                  <div class:TreeTable={true}>
-                    <TreeTable />
-                  </div>
-                </Pane>
-                {#if $ganttVisible}
+              {#if $ganttVisible}
+                <SplitPanes defaultRatio={[3, 2]}>
+                  <Pane style={"height: 100%; min-width: 6rem;"}>
+                    <div class="TreeTable">
+                      <TreeTable />
+                    </div>
+                  </Pane>
                   <Pane style={"height: 100%; min-width: 120px;"}>
                     <GanttPanel />
                   </Pane>
-                {/if}
-              </SplitPanes>
+                </SplitPanes>
+              {:else}
+                <div class="TreeTable">
+                  <TreeTable />
+                </div>
+              {/if}
             </div>
           </Card>
         </Card>

@@ -39,7 +39,7 @@
 
   const createResizers = (resizers = [], is_default = true, resize_observer = null) => {
     // Get elms
-    let panes = split_pane_root.querySelectorAll(".Pane");
+    let panes = split_pane_root.querySelectorAll(":scope > .Pane");
     // Default
     if (is_default) {
       // Set width
