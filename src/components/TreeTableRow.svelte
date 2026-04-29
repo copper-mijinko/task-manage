@@ -19,6 +19,7 @@
   export let canMoveDown = false;
   export let canIndent = false;
   export let canOutdent = false;
+  export let inheritedDueDate = "";
 
   const dispatch = createEventDispatcher();
   let taskName;
@@ -45,7 +46,7 @@
     return null;
   }
 
-  $: dueDateUrgency = getDueDateUrgency(data["due date"], data["status"]);
+  $: dueDateUrgency = getDueDateUrgency(data["due date"] || inheritedDueDate, data["status"]);
 
   function select(e) {
     e.stopPropagation();
@@ -257,12 +258,23 @@
             commitData("status", e.target.value);
           }}
         />
+      {:else if header.name == "start date"}
+        <DateInput
+          is_dark={isDark}
+          id="start-date"
+          backgroundColor={"var(--backgroundColor)"}
+          value={data[header.name]}
+          on:change={(e) => {
+            commitData("start date", e.target.value);
+          }}
+        />
       {:else if header.name == "due date"}
         <DateInput
           is_dark={isDark}
           id="due-date"
           backgroundColor={"var(--backgroundColor)"}
           value={data[header.name]}
+          inheritedDate={inheritedDueDate}
           on:change={(e) => {
             commitData("due date", e.target.value);
           }}

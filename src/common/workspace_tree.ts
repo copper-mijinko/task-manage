@@ -4,6 +4,7 @@ import type { ProjectData, TreeData } from "./tree_control";
 const DEFAULT_HEADERS = [
   { name: "name", default_ratio: 10 },
   { name: "status", default_ratio: 4 },
+  { name: "start date", default_ratio: 4 },
   { name: "due date", default_ratio: 4 },
   { name: "memo", default_ratio: 2 },
 ];
@@ -36,6 +37,7 @@ export function workspaceToProjectData(
       data: {
         name: task.name,
         status: task.status,
+        "start date": task.startDate as `${string}-${string}-${string}` | undefined,
         "due date": task.dueDate as `${string}-${string}-${string}` | undefined,
         memo: task.memos.map((m) => ({ id: m.id, title: m.title, content: m.content })),
       },
@@ -48,7 +50,13 @@ export function workspaceToProjectData(
       headers: DEFAULT_HEADERS,
       data: {
         id: rootId,
-        data: { name: "unknown", status: "Open", "due date": undefined, memo: [] },
+        data: {
+          name: "unknown",
+          status: "Open",
+          "start date": undefined,
+          "due date": undefined,
+          memo: [],
+        },
         children: [],
       },
     };
@@ -74,6 +82,7 @@ export function projectDataToWorkspaceTasks(
       id: node.id,
       name: node.data.name,
       status: (node.data.status as WorkspaceTaskStatus) || "Open",
+      startDate: node.data["start date"] || undefined,
       dueDate: node.data["due date"] || undefined,
       parents: parentIds,
       memos: (node.data.memo || []).map((m) => ({
