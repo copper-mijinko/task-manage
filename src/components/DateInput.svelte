@@ -38,7 +38,7 @@
     {id}
     type="date"
     {disabled}
-    {value}
+    value={displayDate}
     title={inputTitle}
     on:change
     on:click={(e) => {

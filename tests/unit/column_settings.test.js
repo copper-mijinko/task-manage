@@ -25,6 +25,7 @@ describe("column_settings store", () => {
     const settings = get(column_settings);
     expect(settings.find((s) => s.id === "name").visible).toBe(true);
     expect(settings.find((s) => s.id === "status").visible).toBe(true);
+    expect(settings.find((s) => s.id === "start date").visible).toBe(true);
     expect(settings.find((s) => s.id === "due date").visible).toBe(true);
     expect(settings.find((s) => s.id === "memo").visible).toBe(false);
   });
@@ -108,6 +109,7 @@ describe("column_settings store", () => {
 
     const settings = get(column_settings);
     expect(settings.find((s) => s.id === "status").visible).toBe(false);
+    expect(settings.find((s) => s.id === "start date").visible).toBe(true);
     expect(settings.find((s) => s.id === "memo").visible).toBe(true);
   });
 
