@@ -174,7 +174,8 @@
 
     if (!dateState.startTs && !dateState.effectiveDueTs) return null;
 
-    const color = barColor(
+    const color = barColor(status);
+    const dueColor = dueMarkerColor(
       status,
       dateState.effectiveDueTs ? formatDate(dateState.effectiveDueTs) : undefined
     );
@@ -182,11 +183,13 @@
     if (dateState.startTs && dateState.effectiveDueTs) {
       const left = pxFromDate(dateState.startTs);
       const width = Math.max(6, pxFromDate(dateState.effectiveDueTs + DAY_MS) - left);
+      const overdue = getOverdueSegment(status, dateState.effectiveDueTs);
       return {
         ...dateState,
         left,
         width,
         color,
+        overdue,
         opacity: dateState.isInherited ? 0.35 : 1,
         isDue: false,
       };
@@ -197,7 +200,7 @@
         ...dateState,
         left,
         width: Math.max(10, pixelsPerDay - markerInset * 2),
-        color,
+        color: dueColor,
         opacity: dateState.isInherited ? 0.35 : 1,
         isDue: true,
       };
@@ -219,16 +222,43 @@
 
   const DAY_MS_5 = 5 * DAY_MS;
 
-  function barColor(status, dueDate) {
+  function barColor(status) {
     if (status === "Completed") return "var(--theme-color-Success-main)";
     if (status === "Canceled") return "var(--theme-color-Sub-light)";
-    if (dueDate && status !== "Completed" && status !== "Canceled") {
+    if (status === "In Progress") return "var(--theme-color-Accent-main)";
+    return "var(--theme-color-Sub-light)";
+  }
+
+  function shouldShowDueAlert(status) {
+    return status !== "Completed" && status !== "Canceled";
+  }
+
+  function dueMarkerColor(status, dueDate) {
+    if (!shouldShowDueAlert(status)) return barColor(status);
+    if (dueDate) {
       const diff = new Date(dueDate).getTime() - Date.now() + DAY_MS - 1;
       if (diff < 0) return "var(--theme-color-Error-main)";
       if (diff < DAY_MS_5) return "var(--theme-color-Warning-main)";
     }
-    if (status === "In Progress") return "var(--theme-color-Accent-main)";
-    return "var(--theme-color-Sub-light)";
+    return barColor(status);
+  }
+
+  function getOverdueSegment(status, dueTs) {
+    if (!shouldShowDueAlert(status) || !dueTs || dueTs >= todayTs) {
+      return null;
+    }
+
+    const left = pxFromDate(dueTs + DAY_MS);
+    const width = Math.max(0, pxFromDate(todayTs + DAY_MS) - left);
+    if (width <= 0) {
+      return null;
+    }
+
+    return {
+      left,
+      width,
+      color: "var(--theme-color-Error-main)",
+    };
   }
 
   function commitTaskDates(id, patch) {
@@ -473,6 +503,14 @@
               disabled={bar.isInherited}
               on:pointerdown={(event) => startDrag(event, row, "move", bar)}
             ></button>
+            {#if bar.overdue}
+              <div
+                class="OverdueSegment"
+                style="left:{bar.overdue.left}px; width:{bar.overdue.width}px; background:{bar
+                  .overdue.color}; opacity:{bar.opacity};"
+                aria-hidden="true"
+              ></div>
+            {/if}
             {#if !bar.isDue && !bar.isInherited}
               <button
                 class="BarHandle StartHandle"
@@ -662,6 +700,15 @@
 
   .Bar:not(.Inherited):active {
     cursor: grabbing;
+  }
+
+  .OverdueSegment {
+    position: absolute;
+    top: 25%;
+    height: 50%;
+    border-radius: 3px;
+    pointer-events: none;
+    z-index: 3;
   }
 
   .Bar.Inherited {
