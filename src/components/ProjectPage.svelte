@@ -295,10 +295,22 @@
   .TreeAndGantt {
     height: 100%;
     width: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .TreeAndGantt :global(.SplitPaneRoot),
+  .TreeAndGantt :global(.Pane) {
+    min-height: 0;
+  }
+  .TreeAndGantt :global(.Pane) {
+    align-items: stretch;
+    justify-content: stretch;
+    overflow: hidden;
   }
   .TreeTable {
     height: 100%;
     width: 100%;
+    min-height: 0;
     box-sizing: border-box;
     flex: 1;
   }
