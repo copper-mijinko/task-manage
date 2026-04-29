@@ -2,13 +2,14 @@
   import Pane from "./Pane.svelte";
   import SplitPanes from "./SplitPanes.svelte";
   import TreeTable from "./TreeTable.svelte";
+  import GanttPanel from "./GanttPanel.svelte";
   import TaskDetail from "./TaskDetail.svelte";
   import IconButton from "./IconButton.svelte";
   import Card from "./Card.svelte";
   import Dialog from "./Dialog.svelte";
   import SearchBox from "./SearchBox.svelte";
   import { tick } from "svelte";
-  import { table_selected_id, tree_data, closed_node_ids } from "../stores.ts";
+  import { table_selected_id, tree_data, closed_node_ids, ganttVisible } from "../stores.ts";
   import { getNode, addNode, rmNode, getParent } from "../common/tree_control.ts";
   import { getDefaultNode } from "../common/tree_control.ts";
 
@@ -158,10 +159,57 @@
             <div class:SearchBox={true}>
               <SearchBox />
             </div>
+            <IconButton
+              tooltipContent={$ganttVisible ? "ガントチャートを閉じる" : "ガントチャートを表示"}
+              ariaLabel="ガントチャートの表示切替"
+              activeColor={"var(--theme-color-Accent-dark)"}
+              normalColor={$ganttVisible
+                ? "var(--theme-color-Accent-main)"
+                : "var(--theme-color-Sub-main)"}
+              on:click={() => ($ganttVisible = !$ganttVisible)}
+            >
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect
+                  x="3"
+                  y="4"
+                  width="4"
+                  height="3"
+                  rx="0.5"
+                  fill="var(--theme-color-Main-main)"
+                />
+                <rect
+                  x="3"
+                  y="10.5"
+                  width="7"
+                  height="3"
+                  rx="0.5"
+                  fill="var(--theme-color-Main-main)"
+                />
+                <rect
+                  x="3"
+                  y="17"
+                  width="5"
+                  height="3"
+                  rx="0.5"
+                  fill="var(--theme-color-Main-main)"
+                />
+              </svg>
+            </IconButton>
           </div>
-          <Card>
-            <div class:TreeTable={true}>
-              <TreeTable />
+          <Card style={"flex: 1; overflow: hidden; padding: 0;"}>
+            <div class="TreeAndGantt">
+              <SplitPanes defaultRatio={$ganttVisible ? [3, 2] : [1]}>
+                <Pane style={"height: 100%; min-width: 6rem;"}>
+                  <div class:TreeTable={true}>
+                    <TreeTable />
+                  </div>
+                </Pane>
+                {#if $ganttVisible}
+                  <Pane style={"height: 100%; min-width: 120px;"}>
+                    <GanttPanel />
+                  </Pane>
+                {/if}
+              </SplitPanes>
             </div>
           </Card>
         </Card>
@@ -240,8 +288,12 @@
     box-sizing: border-box;
     flex-wrap: wrap;
   }
+  .TreeAndGantt {
+    height: 100%;
+    width: 100%;
+  }
   .TreeTable {
-    height: calc(100% - 4rem);
+    height: 100%;
     width: 100%;
     box-sizing: border-box;
     flex: 1;

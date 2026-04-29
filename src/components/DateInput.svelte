@@ -6,6 +6,8 @@
   export let value = "";
   export let id = "";
   export let style = "";
+  export let inheritedDate = "";
+
   const return_color = (value, default_value) => {
     const days = 5;
     const v = new Date(value);
@@ -18,22 +20,26 @@
     }
     return default_value;
   };
+
+  $: displayDate = value || inheritedDate || "";
+  $: isInherited = !value && !!inheritedDate;
+  $: borderColor = return_color(displayDate, backgroundColor);
+  $: inputTitle = isInherited ? `親タスクの期限: ${inheritedDate}` : undefined;
 </script>
 
 <div
   class="Container"
-  style="--dark:{is_dark ? 'dark' : ''}; --borderColor: {return_color(
-    value,
-    backgroundColor
-  )}; --color-datetime: {color};"
+  style="--dark:{is_dark ? 'dark' : ''}; --borderColor: {borderColor}; --color-datetime: {color};"
 >
   <input
     {style}
     class="Date"
+    class:Inherited={isInherited}
     {id}
     type="date"
     {disabled}
     {value}
+    title={inputTitle}
     on:change
     on:click={(e) => {
       e.stopPropagation();
@@ -60,6 +66,10 @@
     margin: 0;
     padding: 0;
     box-sizing: border-box;
+  }
+  .Date.Inherited {
+    opacity: 0.55;
+    border-style: dashed;
   }
   .Date::-webkit-calendar-picker-indicator {
     background-color: var(--backgroundColor);

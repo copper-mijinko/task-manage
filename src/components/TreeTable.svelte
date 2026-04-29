@@ -10,9 +10,11 @@
     table_selected_id,
     theme,
     column_settings,
+    ganttScrollTop,
   } from "../stores.ts";
   import {
     flattenVisibleTree,
+    buildInheritedDueDateMap,
     updateNodeDataById,
     isChild,
     reorderTree,
@@ -35,6 +37,7 @@
     resize_observer;
 
   $: rows = $filtered_data ? flattenVisibleTree($filtered_data, $closed_node_ids) : [];
+  $: inheritedDueDateMap = buildInheritedDueDateMap(rows);
   $: isDark = $theme == "dark";
   $: hasNoTasks = !$tree_data?.data?.children?.length;
   let scrollTop = 0;
@@ -360,6 +363,7 @@
 
   function handleScroll(event) {
     scrollTop = event.currentTarget.scrollTop;
+    $ganttScrollTop = scrollTop;
   }
 
   function handleToggleRow(event) {
@@ -572,6 +576,7 @@
         canMoveDown={row.canMoveDown}
         canIndent={row.canIndent}
         canOutdent={row.canOutdent}
+        inheritedDueDate={inheritedDueDateMap.get(row.id) ?? ""}
         on:select={handleSelectRow}
         on:toggle={handleToggleRow}
         on:commit={handleCommit}

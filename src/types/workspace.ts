@@ -10,6 +10,7 @@ export interface WorkspaceTask {
   id: string;
   name: string;
   status: WorkspaceTaskStatus;
+  startDate?: string; // YYYY-MM-DD
   dueDate?: string; // YYYY-MM-DD
   /** Empty array means this is the root task (project itself). */
   parents: string[];

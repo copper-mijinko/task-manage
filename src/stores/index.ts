@@ -1,5 +1,6 @@
 export * from "./theme";
 export * from "./tree";
+export * from "./gantt";
 export * from "./project";
 export * from "./search";
 export * from "./ui";

@@ -11,6 +11,7 @@ export interface MemoEntry {
 export interface TreeNodeData {
   name: string;
   status: TaskStatus;
+  "start date": `${string}-${string}-${string}` | undefined;
   "due date": `${string}-${string}-${string}` | undefined;
   memo: MemoEntry[];
   [key: string]: unknown;
@@ -127,6 +128,7 @@ export function getDefaultNode(): TreeData {
     data: {
       name: "new_task",
       status: "Open",
+      "start date": undefined,
       "due date": undefined,
       memo: [],
     },
@@ -146,6 +148,10 @@ export function getDefaultProject(): ProjectData {
         default_ratio: 4,
       },
       {
+        name: "start date",
+        default_ratio: 4,
+      },
+      {
         name: "due date",
         default_ratio: 4,
       },
@@ -159,6 +165,7 @@ export function getDefaultProject(): ProjectData {
       data: {
         name: "new_project",
         status: "Open",
+        "start date": undefined,
         "due date": undefined,
         memo: [],
       },
@@ -279,6 +286,24 @@ export function flattenVisibleTree(
   visit(tree_data, 0, undefined, 0, 1);
 
   return rows;
+}
+
+export function buildInheritedDueDateMap(rows: VisibleTreeRow[]): Map<string, string> {
+  const rowMap = new Map(rows.map((r) => [r.id, r]));
+  const result = new Map<string, string>();
+  for (const row of rows) {
+    if (row.node.data["due date"]) continue;
+    let cur = row.parentId ? rowMap.get(row.parentId) : undefined;
+    while (cur) {
+      const d = cur.node.data["due date"];
+      if (d) {
+        result.set(row.id, d);
+        break;
+      }
+      cur = cur.parentId ? rowMap.get(cur.parentId) : undefined;
+    }
+  }
+  return result;
 }
 
 export function getParent(base: string, tree_data: TreeData | undefined): TreeData | undefined {
