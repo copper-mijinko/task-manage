@@ -106,8 +106,10 @@ app.on("ready", () => {
 
       // 繝・・繝槭′螟画峩縺輔ｌ縺溷ｴ蜷医∽ｻ悶・繧ｦ繧｣繝ｳ繝峨え縺ｫ繧る夂衍
       if (key === "theme") {
-        if (taskDetailWindow && !taskDetailWindow.isDestroyed()) {
-          taskDetailWindow.webContents.send("theme-changed", value);
+        for (const win of taskDetailWindows.values()) {
+          if (!win.isDestroyed()) {
+            win.webContents.send("theme-changed", value);
+          }
         }
       }
     } catch (err) {

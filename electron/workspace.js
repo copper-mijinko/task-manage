@@ -129,6 +129,7 @@ function readRootTask(projectDir) {
     id: data.id,
     name: data.name || "",
     status: data.status || "Open",
+    startDate: data.start || undefined,
     dueDate: data.due || undefined,
     parents: [],
     memos: readMemos(projectDir, ["_project.md"]),
@@ -145,6 +146,7 @@ function readTaskDir(taskDir) {
     id: data.id,
     name: data.name || "",
     status: data.status || "Open",
+    startDate: data.start || undefined,
     dueDate: data.due || undefined,
     parents,
     memos: readMemos(taskDir),
@@ -204,6 +206,7 @@ function writeMemoFiles(taskDir, indexFileName, memos) {
 function writeRootTask(projectDir, task) {
   fs.mkdirSync(projectDir, { recursive: true });
   const data = { id: task.id, name: task.name, status: task.status };
+  if (task.startDate) data.start = task.startDate;
   if (task.dueDate) data.due = task.dueDate;
   data.created = task.createdAt || new Date().toISOString().slice(0, 10);
   fs.writeFileSync(path.join(projectDir, "_project.md"), stringifyFrontmatter(data));
@@ -230,6 +233,7 @@ function writeTask(projectDir, task, taskDirs) {
   fs.mkdirSync(taskDir, { recursive: true });
 
   const data = { id: task.id, name: task.name, status: task.status };
+  if (task.startDate) data.start = task.startDate;
   if (task.dueDate) data.due = task.dueDate;
   if (task.parents.length > 0) data.parents = task.parents;
   data.created = task.createdAt || new Date().toISOString().slice(0, 10);
@@ -425,6 +429,7 @@ function migrateProjectData(workspacePath, projectData) {
       id: node.id,
       name: node.data.name || "",
       status: node.data.status || "Open",
+      startDate: node.data["start date"] || undefined,
       dueDate: node.data["due date"] || undefined,
       parents: [...parentIds],
       memos,

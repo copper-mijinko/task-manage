@@ -265,6 +265,7 @@ describe("file system operations", () => {
       id: "task-1",
       name: "First Task",
       status: "In Progress",
+      startDate: "2026-05-20",
       dueDate: "2026-06-01",
       parents: ["root-id"],
       memos: [{ id: "memo-uuid-1", title: "Notes", content: "# Notes\n\nSome content" }],
@@ -282,6 +283,7 @@ describe("file system operations", () => {
     expect(loaded).toBeDefined();
     expect(loaded.name).toBe("First Task");
     expect(loaded.status).toBe("In Progress");
+    expect(loaded.startDate).toBe("2026-05-20");
     expect(loaded.dueDate).toBe("2026-06-01");
     expect(loaded.parents).toEqual(["root-id"]);
     expect(loaded.memos).toHaveLength(1);
@@ -483,7 +485,13 @@ describe("migrateProjectData", () => {
         children: [
           {
             id: "child-a",
-            data: { name: "Child A", status: "In Progress", "due date": "2026-05-01", memo: [] },
+            data: {
+              name: "Child A",
+              status: "In Progress",
+              "start date": "2026-04-20",
+              "due date": "2026-05-01",
+              memo: [],
+            },
             children: [],
           },
           {
@@ -512,6 +520,7 @@ describe("migrateProjectData", () => {
     expect(tasks.get("child-a").parents).toEqual(["root-2"]);
     expect(tasks.get("child-b").parents).toEqual(["root-2"]);
     expect(tasks.get("grandchild").parents).toEqual(["child-b"]);
+    expect(tasks.get("child-a").startDate).toBe("2026-04-20");
     expect(tasks.get("child-a").dueDate).toBe("2026-05-01");
     expect(tasks.get("child-b").status).toBe("Completed");
   });

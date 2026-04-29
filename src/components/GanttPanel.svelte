@@ -1,9 +1,21 @@
 <script>
-  import { onMount, afterUpdate } from "svelte";
-  import { filtered_data, closed_node_ids, ganttScrollTop, ganttScale } from "../stores.ts";
-  import { flattenVisibleTree, buildInheritedDueDateMap } from "../common/tree_control.ts";
+  import { onDestroy } from "svelte";
+  import {
+    filtered_data,
+    closed_node_ids,
+    ganttScrollTop,
+    ganttScale,
+    tree_data,
+  } from "../stores.ts";
+  import {
+    flattenVisibleTree,
+    buildInheritedDueDateMap,
+    updateNodeDataById,
+  } from "../common/tree_control.ts";
 
   let bodyEl;
+  let headerScrollLeft = 0;
+  let dragState;
 
   $: rows = $filtered_data ? flattenVisibleTree($filtered_data, $closed_node_ids) : [];
   $: inheritedMap = buildInheritedDueDateMap(rows);
@@ -17,6 +29,14 @@
 
   function parseDate(s) {
     return s ? new Date(s).getTime() : null;
+  }
+
+  function formatDate(ts) {
+    const date = new Date(ts);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
   }
 
   $: {
@@ -94,36 +114,72 @@
 
   // ── Bar helpers ──────────────────────────────────────────────────
 
+  function getRowDateState(row) {
+    const startTs = parseDate(row.node.data["start date"]);
+    const dueTs = parseDate(row.node.data["due date"]);
+    const inheritedDueTs = parseDate(inheritedMap.get(row.id));
+    const effectiveDueTs = dueTs || inheritedDueTs;
+
+    return {
+      startTs,
+      dueTs,
+      inheritedDueTs,
+      effectiveDueTs,
+      isInherited: !dueTs && !!inheritedDueTs,
+    };
+  }
+
   function getBarStyle(row) {
-    const sd = row.node.data["start date"];
-    const dd = row.node.data["due date"];
-    const idd = inheritedMap.get(row.id);
+    const dateState = getRowDateState(row);
     const status = row.node.data["status"];
 
-    if (!sd && !dd && !idd) return null;
+    if (!dateState.startTs && !dateState.effectiveDueTs) return null;
 
-    const effectiveDue = dd || idd;
-    const isInherited = !dd && !!idd;
-    const color = barColor(status, effectiveDue, isInherited);
+    const color = barColor(
+      status,
+      dateState.effectiveDueTs ? formatDate(dateState.effectiveDueTs) : undefined
+    );
 
-    if (sd && effectiveDue) {
-      const left = pxFromDate(sd);
-      const width = Math.max(2, pxFromDate(effectiveDue) - left);
-      return { left, width, color, opacity: isInherited ? 0.35 : 1, isDue: false };
-    } else if (effectiveDue) {
-      const left = pxFromDate(effectiveDue) - 1;
-      return { left, width: 2, color, opacity: isInherited ? 0.35 : 1, isDue: true };
-    } else if (sd) {
-      const left = pxFromDate(sd);
+    if (dateState.startTs && dateState.effectiveDueTs) {
+      const left = pxFromDate(dateState.startTs);
+      const width = Math.max(6, pxFromDate(dateState.effectiveDueTs + DAY_MS) - left);
+      return {
+        ...dateState,
+        left,
+        width,
+        color,
+        opacity: dateState.isInherited ? 0.35 : 1,
+        isDue: false,
+      };
+    } else if (dateState.effectiveDueTs) {
+      const left = pxFromDate(dateState.effectiveDueTs) - 2;
+      return {
+        ...dateState,
+        left,
+        width: 4,
+        color,
+        opacity: dateState.isInherited ? 0.35 : 1,
+        isDue: true,
+      };
+    } else if (dateState.startTs) {
+      const left = pxFromDate(dateState.startTs);
       const width = Math.max(2, todayPx - left);
-      return { left, width, color, opacity: 1, isDue: false };
+      return {
+        ...dateState,
+        effectiveDueTs: Date.now(),
+        left,
+        width,
+        color,
+        opacity: 1,
+        isDue: false,
+      };
     }
     return null;
   }
 
   const DAY_MS_5 = 5 * DAY_MS;
 
-  function barColor(status, dueDate, isInherited) {
+  function barColor(status, dueDate) {
     if (status === "Completed") return "var(--theme-color-Success-main)";
     if (status === "Canceled") return "var(--theme-color-Sub-light)";
     if (dueDate && status !== "Completed" && status !== "Canceled") {
@@ -134,6 +190,117 @@
     if (status === "In Progress") return "var(--theme-color-Accent-main)";
     return "var(--theme-color-Sub-light)";
   }
+
+  function commitTaskDates(id, patch) {
+    if (!$tree_data?.data) {
+      return;
+    }
+
+    const data = updateNodeDataById($tree_data.data, id, patch);
+    if (data !== $tree_data.data) {
+      $tree_data = { ...$tree_data, data };
+    }
+  }
+
+  function dateFromPointer(event) {
+    const rect = bodyEl.getBoundingClientRect();
+    const x = Math.max(0, event.clientX - rect.left + bodyEl.scrollLeft);
+    const day = Math.round(x / Math.max(pixelsPerDay, 1));
+    return timelineStart.getTime() + day * DAY_MS;
+  }
+
+  function createRange(event, row, bar) {
+    if (bar && !bar.isInherited) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const startTs = dateFromPointer(event);
+    const dueTs =
+      bar?.effectiveDueTs && bar.effectiveDueTs >= startTs
+        ? bar.effectiveDueTs
+        : startTs + 2 * DAY_MS;
+    commitTaskDates(row.id, {
+      "start date": formatDate(startTs),
+      "due date": formatDate(dueTs),
+    });
+  }
+
+  function startDrag(event, row, mode, bar) {
+    if (!bar || bar.isInherited) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    dragState = {
+      id: row.id,
+      mode,
+      startX: event.clientX,
+      startTs: bar.startTs,
+      dueTs: bar.dueTs,
+      effectiveDueTs: bar.effectiveDueTs,
+      lastDelta: undefined,
+    };
+
+    document.addEventListener("pointermove", handlePointerMove);
+    document.addEventListener("pointerup", stopDrag);
+  }
+
+  function handlePointerMove(event) {
+    if (!dragState) {
+      return;
+    }
+
+    const delta = Math.round((event.clientX - dragState.startX) / Math.max(pixelsPerDay, 1));
+    if (delta === dragState.lastDelta) {
+      return;
+    }
+
+    dragState.lastDelta = delta;
+    const deltaMs = delta * DAY_MS;
+
+    if (dragState.mode === "move") {
+      const patch = {};
+      if (dragState.startTs) {
+        patch["start date"] = formatDate(dragState.startTs + deltaMs);
+      }
+      if (dragState.dueTs || !dragState.startTs) {
+        patch["due date"] = formatDate((dragState.dueTs || dragState.effectiveDueTs) + deltaMs);
+      }
+      commitTaskDates(dragState.id, patch);
+      return;
+    }
+
+    if (dragState.mode === "start") {
+      const dueTs = dragState.dueTs || dragState.effectiveDueTs || dragState.startTs || Date.now();
+      const nextStartTs = Math.min((dragState.startTs || dueTs) + deltaMs, dueTs);
+      commitTaskDates(dragState.id, { "start date": formatDate(nextStartTs) });
+      return;
+    }
+
+    const startTs = dragState.startTs || dragState.dueTs || dragState.effectiveDueTs || Date.now();
+    const baseDueTs = dragState.dueTs || dragState.effectiveDueTs || startTs;
+    const nextDueTs = Math.max(baseDueTs + deltaMs, startTs);
+    commitTaskDates(dragState.id, { "due date": formatDate(nextDueTs) });
+  }
+
+  function stopDrag() {
+    dragState = undefined;
+    document.removeEventListener("pointermove", handlePointerMove);
+    document.removeEventListener("pointerup", stopDrag);
+  }
+
+  function handleBodyScroll(event) {
+    headerScrollLeft = event.currentTarget.scrollLeft;
+  }
+
+  onDestroy(() => {
+    stopDrag();
+  });
 </script>
 
 <div class="GanttRoot">
@@ -149,21 +316,26 @@
         >月</button
       >
     </div>
-    <div class="TimelineHeader" style="width:{totalWidth}px; position:relative;">
-      {#each headerCells as cell}
-        <div class="HeaderCell" style="left:{cell.leftPx}px; width:{cell.widthPx}px;">
-          {cell.label}
-        </div>
-      {/each}
-      <!-- Today line in header -->
-      {#if todayPx >= 0 && todayPx <= totalWidth}
-        <div class="TodayLine" style="left:{todayPx}px;"></div>
-      {/if}
+    <div class="TimelineHeaderViewport">
+      <div
+        class="TimelineHeader"
+        style="width:{totalWidth}px; transform: translateX(-{headerScrollLeft}px);"
+      >
+        {#each headerCells as cell}
+          <div class="HeaderCell" style="left:{cell.leftPx}px; width:{cell.widthPx}px;">
+            {cell.label}
+          </div>
+        {/each}
+        <!-- Today line in header -->
+        {#if todayPx >= 0 && todayPx <= totalWidth}
+          <div class="TodayLine" style="left:{todayPx}px;"></div>
+        {/if}
+      </div>
     </div>
   </div>
 
   <!-- Body: rows synced with TreeTable -->
-  <div class="GanttBody" bind:this={bodyEl}>
+  <div class="GanttBody" bind:this={bodyEl} on:scroll={handleBodyScroll}>
     <div class="GanttBodyInner" style="width:{totalWidth}px;">
       <!-- Today line in body -->
       {#if todayPx >= 0 && todayPx <= totalWidth}
@@ -171,13 +343,39 @@
       {/if}
       {#each rows as row (row.id)}
         {@const bar = getBarStyle(row)}
-        <div class="GanttRow">
+        <div
+          class="GanttRow"
+          role="presentation"
+          on:dblclick={(event) => createRange(event, row, bar)}
+        >
           {#if bar}
-            <div
+            <button
+              type="button"
               class="Bar"
               class:DueMarker={bar.isDue}
+              class:Inherited={bar.isInherited}
               style="left:{bar.left}px; width:{bar.width}px; background:{bar.color}; opacity:{bar.opacity};"
-            ></div>
+              aria-label={bar.isDue ? "期限日を変更" : "期間を移動"}
+              title={bar.isDue ? "期限日を変更" : "期間を移動"}
+              disabled={bar.isInherited}
+              on:pointerdown={(event) => startDrag(event, row, "move", bar)}
+            ></button>
+            {#if !bar.isDue && !bar.isInherited}
+              <button
+                class="BarHandle StartHandle"
+                aria-label="開始日を変更"
+                title="開始日を変更"
+                style="left:{bar.left}px;"
+                on:pointerdown={(event) => startDrag(event, row, "start", bar)}
+              ></button>
+              <button
+                class="BarHandle EndHandle"
+                aria-label="期限日を変更"
+                title="期限日を変更"
+                style="left:{bar.left + bar.width}px;"
+                on:pointerdown={(event) => startDrag(event, row, "end", bar)}
+              ></button>
+            {/if}
           {/if}
         </div>
       {/each}
@@ -232,10 +430,16 @@
     border-color: var(--theme-color-Accent-main);
   }
 
-  .TimelineHeader {
+  .TimelineHeaderViewport {
     flex: 1;
     overflow: hidden;
     position: relative;
+  }
+
+  .TimelineHeader {
+    height: 100%;
+    position: relative;
+    will-change: transform;
   }
 
   .HeaderCell {
@@ -294,13 +498,46 @@
     position: absolute;
     top: 25%;
     height: 50%;
+    border: none;
     border-radius: 3px;
     min-width: 2px;
+    cursor: grab;
+    z-index: 2;
+    padding: 0;
+  }
+
+  .Bar:not(.Inherited):active {
+    cursor: grabbing;
+  }
+
+  .Bar.Inherited {
+    pointer-events: none;
   }
 
   .Bar.DueMarker {
     top: 15%;
     height: 70%;
     border-radius: 1px;
+  }
+
+  .BarHandle {
+    position: absolute;
+    top: 20%;
+    width: 0.5rem;
+    height: 60%;
+    border: none;
+    border-radius: 2px;
+    background: color-mix(in srgb, var(--theme-color-Main-main) 70%, transparent);
+    cursor: ew-resize;
+    padding: 0;
+    z-index: 3;
+  }
+
+  .StartHandle {
+    transform: translateX(-50%);
+  }
+
+  .EndHandle {
+    transform: translateX(-50%);
   }
 </style>

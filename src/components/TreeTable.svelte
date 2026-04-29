@@ -36,6 +36,14 @@
     handlers,
     resize_observer;
 
+  const BUILT_IN_HEADERS = [
+    { name: "name", default_ratio: 10 },
+    { name: "status", default_ratio: 4 },
+    { name: "start date", default_ratio: 4 },
+    { name: "due date", default_ratio: 4 },
+    { name: "memo", default_ratio: 2 },
+  ];
+
   $: rows = $filtered_data ? flattenVisibleTree($filtered_data, $closed_node_ids) : [];
   $: inheritedDueDateMap = buildInheritedDueDateMap(rows);
   $: isDark = $theme == "dark";
@@ -43,21 +51,29 @@
   let scrollTop = 0;
 
   // Compute visible headers from tree_data.headers filtered/ordered by column_settings
+  function mergeBuiltInHeaders(treeHeaders = []) {
+    const byName = new Map(BUILT_IN_HEADERS.map((header) => [header.name, header]));
+    for (const header of treeHeaders ?? []) {
+      byName.set(header.name, header);
+    }
+    return Array.from(byName.values());
+  }
+
   function computeVisibleHeaders(treeHeaders, settings) {
-    if (!treeHeaders) return [];
-    if (!settings) return treeHeaders;
+    const availableHeaders = mergeBuiltInHeaders(treeHeaders);
+    if (!settings) return availableHeaders;
 
     const result = [];
     for (const setting of settings) {
       if (setting.id === "name" || setting.visible) {
-        const header = treeHeaders.find((h) => h.name === setting.id);
+        const header = availableHeaders.find((h) => h.name === setting.id);
         if (header) result.push(header);
       }
     }
 
     // Include any headers not covered by settings
     const settingIds = new Set(settings.map((s) => s.id));
-    for (const header of treeHeaders) {
+    for (const header of availableHeaders) {
       if (!settingIds.has(header.name)) result.push(header);
     }
 
@@ -65,6 +81,7 @@
   }
 
   $: visibleHeaders = computeVisibleHeaders($tree_data?.headers, $column_settings);
+  $: allHeaders = mergeBuiltInHeaders($tree_data?.headers);
   $: minWidth = visibleHeaders.length ? `${4 * visibleHeaders.length}rem` : "auto";
 
   const getRowHeightPx = () => {
@@ -128,9 +145,9 @@
 
       if (columnCountChanged && currentDomHeaderCount > 0) {
         // Column was added or removed — full reinit
+        unsetResizerEvents(resizers, handlers);
         resizers.forEach((r) => r.parentNode?.removeChild(r));
         resizers = [];
-        unsetResizerEvents(resizers, handlers);
         [resizers, newDomHeaders, newDataRows, resize_observer] = createResizers(
           visibleHeaders,
           [],
@@ -186,16 +203,20 @@
       });
 
       // Create resizer elements
+      let left = 0;
       domHeaders.forEach((header, index) => {
-        if (index == 0) {
+        if (index === 0) {
+          left += default_data_widths[index];
           return;
         }
         const resizer = document.createElement("div");
         resizer.classList.add("Resizer");
-        resizer.style.height = `${table_root.offsetHeight}px`;
-        resizer.style.left = `calc(${default_data_widths.reduce((partialSum, width) => partialSum + width, 0) - 3}px)`;
-        header.parentNode.insertBefore(resizer, header);
+        resizer.style.top = `${table_root.scrollTop}px`;
+        resizer.style.height = `${table_root.clientHeight}px`;
+        resizer.style.left = `${left - 3}px`;
+        table_root.insertBefore(resizer, tableRows[0]);
         existingResizers.push(resizer);
+        left += default_data_widths[index];
       });
     } else {
       domHeaders.forEach((header, index) => {
@@ -212,6 +233,7 @@
     const newResizeObserver = new ResizeObserver((entries) => {
       // Height setting
       for (let resizer of existingResizers) {
+        resizer.style.top = `${table_root.scrollTop}px`;
         resizer.style.height = `${entries[0].contentRect.height}px`;
       }
       // Width setting
@@ -352,6 +374,9 @@
   };
 
   const unsetResizerEvents = (resizers, handlers) => {
+    if (!handlers) {
+      return;
+    }
     resizers.forEach((resizer, index) => {
       resizer.removeEventListener("mousedown", handlers[index]);
     });
@@ -364,6 +389,9 @@
   function handleScroll(event) {
     scrollTop = event.currentTarget.scrollTop;
     $ganttScrollTop = scrollTop;
+    resizers.forEach((resizer) => {
+      resizer.style.top = `${scrollTop}px`;
+    });
   }
 
   function handleToggleRow(event) {
@@ -546,7 +574,7 @@
   aria-label="Task tree"
   on:scroll={handleScroll}
 >
-  <TreeTableHeader headers={visibleHeaders} allHeaders={$tree_data?.headers ?? []} />
+  <TreeTableHeader headers={visibleHeaders} {allHeaders} />
   {#if stickyTrail.length > 0}
     <div class="StickyTrail" aria-hidden="true">
       <div class="StickyTrailContent">
@@ -691,7 +719,7 @@
     width: 5px;
     cursor: col-resize;
     user-select: none;
-    z-index: 999;
+    z-index: 10000;
   }
   .TableRoot :global(.HandlingResizer),
   .TableRoot :global(.Resizer:hover) {

@@ -39,7 +39,7 @@
 
   const createResizers = (resizers = [], is_default = true, resize_observer = null) => {
     // Get elms
-    let panes = split_pane_root.querySelectorAll(".Pane");
+    let panes = split_pane_root.querySelectorAll(":scope > .Pane");
     // Default
     if (is_default) {
       // Set width
@@ -197,6 +197,9 @@
     return handlers;
   };
   const unsetResizerEvents = (resizers, handlers) => {
+    if (!handlers) {
+      return;
+    }
     resizers.forEach((resizer, index) => {
       resizer.removeEventListener("mousedown", handlers[index]);
     });

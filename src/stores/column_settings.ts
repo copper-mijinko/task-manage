@@ -18,6 +18,7 @@ const META_KEY = "column_settings";
 export const DEFAULT_COLUMN_SETTINGS: ColumnSetting[] = [
   { id: "name", label: "タスク名", visible: true },
   { id: "status", label: "ステータス", visible: true },
+  { id: "start date", label: "開始日", visible: true },
   { id: "due date", label: "期限日", visible: true },
   { id: "memo", label: "メモ数", visible: false },
 ];
