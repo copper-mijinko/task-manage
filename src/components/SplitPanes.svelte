@@ -219,7 +219,7 @@
     min-width: var(--minWidth);
     position: relative;
   }
-  .SplitPaneRoot :global(.Resizer) {
+  .SplitPaneRoot > :global(.Resizer) {
     position: absolute;
     top: 0;
     width: 5px;
@@ -227,7 +227,7 @@
     user-select: none;
     z-index: 999;
   }
-  .SplitPaneRoot :global(.Resizer::before) {
+  .SplitPaneRoot > :global(.Resizer::before) {
     content: "";
     position: absolute;
     top: 0;
@@ -237,12 +237,12 @@
     background-color: color-mix(in srgb, var(--theme-color-Sub-dark) 28%, transparent);
     opacity: 0.7;
   }
-  .SplitPaneRoot :global(.HandlingResizer),
-  .SplitPaneRoot :global(.Resizer:hover) {
+  .SplitPaneRoot > :global(.HandlingResizer),
+  .SplitPaneRoot > :global(.Resizer:hover) {
     background-color: transparent;
   }
-  .SplitPaneRoot :global(.HandlingResizer::before),
-  .SplitPaneRoot :global(.Resizer:hover::before) {
+  .SplitPaneRoot > :global(.HandlingResizer::before),
+  .SplitPaneRoot > :global(.Resizer:hover::before) {
     width: 2px;
     background-color: var(--theme-color-Accent-main);
     opacity: 0.9;
