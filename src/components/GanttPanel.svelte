@@ -1,5 +1,5 @@
 <script>
-  import { onDestroy } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import {
     filtered_data,
     closed_node_ids,
@@ -16,6 +16,7 @@
   let bodyEl;
   let headerScrollLeft = 0;
   let dragState;
+  let rootFontSizePx = 16;
   let locale =
     typeof navigator !== "undefined" && navigator.language ? navigator.language : undefined;
 
@@ -23,7 +24,7 @@
   $: inheritedMap = buildInheritedDueDateMap(rows);
 
   // Sync scroll position from TreeTable
-  $: if (bodyEl) bodyEl.scrollTop = $ganttScrollTop;
+  $: if (bodyEl && !dragState) bodyEl.scrollTop = $ganttScrollTop;
 
   // ── Timeline range ──────────────────────────────────────────────
 
@@ -61,6 +62,11 @@
     return new Intl.DateTimeFormat(locale, options).format(date);
   }
 
+  let timelineStart = new Date();
+  let timelineEnd = new Date();
+  let timelineRangeProjectId;
+  let timelineRangeReady = false;
+
   $: {
     let minTs = null;
     let maxTs = null;
@@ -72,36 +78,71 @@
     }
     const today = startOfDay();
     const pad = 14 * DAY_MS;
-    timelineStart = new Date(startOfDay((minTs ?? today) - pad));
-    timelineEnd = new Date(startOfDay((maxTs ?? today) + pad * 4) + DAY_MS);
-  }
+    const nextStart = new Date(startOfDay((minTs ?? today) - pad));
+    const nextEnd = new Date(startOfDay((maxTs ?? today) + pad * 4) + DAY_MS);
+    const projectId = $tree_data?.data?.id;
 
-  let timelineStart = new Date();
-  let timelineEnd = new Date();
+    if (!dragState) {
+      if (!timelineRangeReady || projectId !== timelineRangeProjectId) {
+        timelineStart = nextStart;
+        timelineEnd = nextEnd;
+        timelineRangeProjectId = projectId;
+        timelineRangeReady = true;
+      } else {
+        const dataStartTs = minTs ?? today;
+        const dataEndTs = (maxTs ?? today) + DAY_MS;
+
+        if (dataStartTs < timelineStart.getTime()) {
+          timelineStart = nextStart;
+        }
+        if (dataEndTs > timelineEnd.getTime()) {
+          timelineEnd = nextEnd;
+        }
+      }
+    }
+  }
 
   // ── Scale helpers ────────────────────────────────────────────────
 
-  const CELL_PX = { day: 46, week: 96, month: 110 };
+  const CELL_REM = { day: 1.667, week: 6, month: 7.667 };
+  const MIN_BAR_WIDTH_REM = 0.5;
+  const MIN_DUE_MARKER_WIDTH_REM = 0.833;
+  const DUE_MARKER_INSET_REM = 0.25;
+  const EDGE_SCROLL_ZONE_PX = 56;
+  const EDGE_SCROLL_MAX_PX = 6;
+  let autoScrollFrame;
+
+  function readRootFontSizePx() {
+    if (typeof window === "undefined") {
+      return rootFontSizePx;
+    }
+
+    return parseFloat(window.getComputedStyle(document.documentElement).fontSize) || 16;
+  }
+
+  function updateRootFontSizePx() {
+    rootFontSizePx = readRootFontSizePx();
+  }
 
   function dayOffset(date) {
     return Math.floor((new Date(date).getTime() - timelineStart.getTime()) / DAY_MS);
   }
 
-  function pxFromDate(date) {
-    return dayOffset(date) * pixelsPerDay;
+  function remFromDate(date) {
+    return dayOffset(date) * remPerDay;
   }
 
-  $: pixelsPerDay =
+  $: remPerDay =
     $ganttScale === "day"
-      ? CELL_PX.day
+      ? CELL_REM.day
       : $ganttScale === "week"
-        ? CELL_PX.week / 7
-        : CELL_PX.month / 30;
+        ? CELL_REM.week / 7
+        : CELL_REM.month / 30;
 
   $: totalDays = Math.ceil((timelineEnd.getTime() - timelineStart.getTime()) / DAY_MS);
-  $: totalWidth = totalDays * pixelsPerDay;
+  $: totalWidthRem = totalDays * remPerDay;
   $: todayTs = startOfDay();
-  $: todayPx = pxFromDate(todayTs);
+  $: todayRem = remFromDate(todayTs);
 
   // ── Header cells ─────────────────────────────────────────────────
 
@@ -133,14 +174,14 @@
         label = formatLocalDate(cur, { year: "numeric", month: "short" });
         next = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
       }
-      const widthPx = ((next.getTime() - cellStart.getTime()) / DAY_MS) * pixelsPerDay;
-      const leftPx = pxFromDate(cellStart);
+      const widthRem = ((next.getTime() - cellStart.getTime()) / DAY_MS) * remPerDay;
+      const leftRem = remFromDate(cellStart);
       const startTs = cellStart.getTime();
       const endTs = next.getTime();
       cells.push({
         label,
-        leftPx,
-        widthPx,
+        leftRem,
+        widthRem,
         tone: getPeriodTone(startTs, endTs),
         weekend: scale === "day" && (cellStart.getDay() === 0 || cellStart.getDay() === 6),
       });
@@ -168,8 +209,97 @@
     };
   }
 
-  function getBarStyle(row) {
-    const dateState = getRowDateState(row);
+  function getDraggedDateState(baseDateState, activeDragState = dragState) {
+    if (!activeDragState || activeDragState.mode === "create") {
+      return baseDateState;
+    }
+
+    const deltaMs = (activeDragState.currentDelta ?? 0) * DAY_MS;
+
+    if (activeDragState.mode === "move") {
+      const nextStartTs = activeDragState.startTs ? activeDragState.startTs + deltaMs : null;
+      const nextDueTs =
+        activeDragState.dueTs || !activeDragState.startTs
+          ? (activeDragState.dueTs || activeDragState.effectiveDueTs) + deltaMs
+          : activeDragState.dueTs;
+
+      return {
+        ...baseDateState,
+        startTs: nextStartTs,
+        dueTs: nextDueTs,
+        effectiveDueTs: nextDueTs || activeDragState.effectiveDueTs,
+        isInherited: false,
+      };
+    }
+
+    if (activeDragState.mode === "start") {
+      const dueTs =
+        activeDragState.dueTs ||
+        activeDragState.effectiveDueTs ||
+        activeDragState.startTs ||
+        Date.now();
+      const nextStartTs = Math.min((activeDragState.startTs || dueTs) + deltaMs, dueTs);
+      return {
+        ...baseDateState,
+        startTs: nextStartTs,
+        effectiveDueTs: dueTs,
+        isInherited: false,
+      };
+    }
+
+    const startTs =
+      activeDragState.startTs ||
+      activeDragState.dueTs ||
+      activeDragState.effectiveDueTs ||
+      Date.now();
+    const baseDueTs = activeDragState.dueTs || activeDragState.effectiveDueTs || startTs;
+    const nextDueTs = Math.max(baseDueTs + deltaMs, startTs);
+
+    return {
+      ...baseDateState,
+      startTs: activeDragState.startTs,
+      dueTs: nextDueTs,
+      effectiveDueTs: nextDueTs,
+      isInherited: false,
+    };
+  }
+
+  function getDragPatch() {
+    if (!dragState || dragState.mode === "create") {
+      return {};
+    }
+
+    const deltaMs = (dragState.currentDelta ?? 0) * DAY_MS;
+
+    if (dragState.mode === "move") {
+      const patch = {};
+      if (dragState.startTs) {
+        patch["start date"] = formatDate(dragState.startTs + deltaMs);
+      }
+      if (dragState.dueTs || !dragState.startTs) {
+        patch["due date"] = formatDate((dragState.dueTs || dragState.effectiveDueTs) + deltaMs);
+      }
+      return patch;
+    }
+
+    if (dragState.mode === "start") {
+      const dueTs = dragState.dueTs || dragState.effectiveDueTs || dragState.startTs || Date.now();
+      const nextStartTs = Math.min((dragState.startTs || dueTs) + deltaMs, dueTs);
+      return { "start date": formatDate(nextStartTs) };
+    }
+
+    const startTs = dragState.startTs || dragState.dueTs || dragState.effectiveDueTs || Date.now();
+    const baseDueTs = dragState.dueTs || dragState.effectiveDueTs || startTs;
+    const nextDueTs = Math.max(baseDueTs + deltaMs, startTs);
+    return { "due date": formatDate(nextDueTs) };
+  }
+
+  function getBarStyle(row, activeDragState = dragState) {
+    const baseDateState = getRowDateState(row);
+    const dateState =
+      activeDragState?.id === row.id && activeDragState.mode !== "create"
+        ? getDraggedDateState(baseDateState, activeDragState)
+        : baseDateState;
     const status = row.node.data["status"];
 
     if (!dateState.startTs && !dateState.effectiveDueTs) return null;
@@ -181,37 +311,39 @@
     );
 
     if (dateState.startTs && dateState.effectiveDueTs) {
-      const left = pxFromDate(dateState.startTs);
-      const width = Math.max(6, pxFromDate(dateState.effectiveDueTs + DAY_MS) - left);
+      const leftRem = remFromDate(dateState.startTs);
+      const widthRem = Math.max(
+        MIN_BAR_WIDTH_REM,
+        remFromDate(dateState.effectiveDueTs + DAY_MS) - leftRem
+      );
       const overdue = getOverdueSegment(status, dateState.effectiveDueTs);
       return {
         ...dateState,
-        left,
-        width,
+        leftRem,
+        widthRem,
         color,
         overdue,
         opacity: dateState.isInherited ? 0.35 : 1,
         isDue: false,
       };
     } else if (dateState.effectiveDueTs) {
-      const markerInset = 3;
-      const left = pxFromDate(dateState.effectiveDueTs) + markerInset;
+      const leftRem = remFromDate(dateState.effectiveDueTs) + DUE_MARKER_INSET_REM;
       return {
         ...dateState,
-        left,
-        width: Math.max(10, pixelsPerDay - markerInset * 2),
+        leftRem,
+        widthRem: Math.max(MIN_DUE_MARKER_WIDTH_REM, remPerDay - DUE_MARKER_INSET_REM * 2),
         color: dueColor,
         opacity: dateState.isInherited ? 0.35 : 1,
         isDue: true,
       };
     } else if (dateState.startTs) {
-      const left = pxFromDate(dateState.startTs);
-      const width = Math.max(2, todayPx - left);
+      const leftRem = remFromDate(dateState.startTs);
+      const widthRem = Math.max(0.167, todayRem - leftRem);
       return {
         ...dateState,
         effectiveDueTs: todayTs,
-        left,
-        width,
+        leftRem,
+        widthRem,
         color,
         opacity: 1,
         isDue: false,
@@ -248,15 +380,15 @@
       return null;
     }
 
-    const left = pxFromDate(dueTs + DAY_MS);
-    const width = Math.max(0, pxFromDate(todayTs + DAY_MS) - left);
-    if (width <= 0) {
+    const leftRem = remFromDate(dueTs + DAY_MS);
+    const widthRem = Math.max(0, remFromDate(todayTs + DAY_MS) - leftRem);
+    if (widthRem <= 0) {
       return null;
     }
 
     return {
-      left,
-      width,
+      leftRem,
+      widthRem,
       color: "var(--theme-color-Error-main)",
     };
   }
@@ -272,26 +404,30 @@
     }
   }
 
-  function dateFromPointer(event) {
+  function dateFromClientX(clientX) {
     const rect = bodyEl.getBoundingClientRect();
-    const x = Math.max(0, event.clientX - rect.left + bodyEl.scrollLeft);
-    const day = Math.max(0, Math.min(totalDays - 1, Math.floor(x / Math.max(pixelsPerDay, 1))));
+    const xRem = Math.max(0, clientX - rect.left + bodyEl.scrollLeft) / rootFontSizePx;
+    const day = Math.max(0, Math.min(totalDays - 1, Math.floor(xRem / Math.max(remPerDay, 0.01))));
     return timelineStart.getTime() + day * DAY_MS;
+  }
+
+  function dateFromPointer(event) {
+    return dateFromClientX(event.clientX);
   }
 
   function getRangeGeometry(startTs, endTs) {
     const start = Math.min(startTs, endTs);
     const end = Math.max(startTs, endTs);
-    const left = pxFromDate(start);
-    const width = Math.max(6, pxFromDate(end + DAY_MS) - left);
-    return { start, end, left, width };
+    const leftRem = remFromDate(start);
+    const widthRem = Math.max(MIN_BAR_WIDTH_REM, remFromDate(end + DAY_MS) - leftRem);
+    return { start, end, leftRem, widthRem };
   }
 
-  function getCreatePreview(row) {
-    if (dragState?.mode !== "create" || dragState.id !== row.id) {
+  function getCreatePreview(row, activeDragState = dragState) {
+    if (activeDragState?.mode !== "create" || activeDragState.id !== row.id) {
       return null;
     }
-    return getRangeGeometry(dragState.anchorTs, dragState.currentTs);
+    return getRangeGeometry(activeDragState.anchorTs, activeDragState.currentTs);
   }
 
   function createRange(event, row, bar) {
@@ -313,6 +449,135 @@
     });
   }
 
+  function getLockedScroll() {
+    return {
+      scrollLeft: bodyEl?.scrollLeft ?? 0,
+      scrollTop: bodyEl?.scrollTop ?? 0,
+    };
+  }
+
+  function restoreLockedScroll(scrollLeft, scrollTop) {
+    if (!bodyEl) {
+      return;
+    }
+
+    bodyEl.scrollLeft = scrollLeft;
+    bodyEl.scrollTop = scrollTop;
+    headerScrollLeft = scrollLeft;
+  }
+
+  function updateDragFromPointer() {
+    if (!dragState || dragState.lastClientX === undefined) {
+      return;
+    }
+
+    if (dragState.mode === "create") {
+      const currentTs = dateFromClientX(dragState.lastClientX);
+      if (currentTs !== dragState.currentTs) {
+        dragState = {
+          ...dragState,
+          currentTs,
+          scrollLeft: bodyEl?.scrollLeft ?? dragState.scrollLeft,
+        };
+      }
+      return;
+    }
+
+    const scrollDelta =
+      (bodyEl?.scrollLeft ?? dragState.startScrollLeft) - dragState.startScrollLeft;
+    const delta = Math.round(
+      (dragState.lastClientX - dragState.startX + scrollDelta) /
+        Math.max(remPerDay * rootFontSizePx, 1)
+    );
+    if (delta === dragState.lastDelta) {
+      return;
+    }
+
+    dragState = {
+      ...dragState,
+      currentDelta: delta,
+      lastDelta: delta,
+      scrollLeft: bodyEl?.scrollLeft ?? dragState.scrollLeft,
+    };
+  }
+
+  function getEdgeScrollDelta() {
+    if (!dragState || dragState.lastClientX === undefined || !bodyEl) {
+      return 0;
+    }
+
+    const rect = bodyEl.getBoundingClientRect();
+    const x = dragState.lastClientX;
+
+    if (x < rect.left + EDGE_SCROLL_ZONE_PX) {
+      const ratio = (rect.left + EDGE_SCROLL_ZONE_PX - x) / EDGE_SCROLL_ZONE_PX;
+      return -Math.ceil(ratio * EDGE_SCROLL_MAX_PX);
+    }
+
+    if (x > rect.right - EDGE_SCROLL_ZONE_PX) {
+      const ratio = (x - (rect.right - EDGE_SCROLL_ZONE_PX)) / EDGE_SCROLL_ZONE_PX;
+      return Math.ceil(ratio * EDGE_SCROLL_MAX_PX);
+    }
+
+    return 0;
+  }
+
+  function runAutoScroll() {
+    if (!dragState || !bodyEl) {
+      autoScrollFrame = undefined;
+      return;
+    }
+
+    const delta = getEdgeScrollDelta();
+    if (delta !== 0) {
+      const before = bodyEl.scrollLeft;
+      bodyEl.scrollLeft = Math.max(0, before + delta);
+
+      if (bodyEl.scrollLeft !== before) {
+        headerScrollLeft = bodyEl.scrollLeft;
+        dragState = {
+          ...dragState,
+          scrollLeft: bodyEl.scrollLeft,
+        };
+        updateDragFromPointer();
+      }
+    }
+
+    autoScrollFrame = requestAnimationFrame(runAutoScroll);
+  }
+
+  function startAutoScroll() {
+    if (!autoScrollFrame) {
+      autoScrollFrame = requestAnimationFrame(runAutoScroll);
+    }
+  }
+
+  function stopAutoScroll() {
+    if (autoScrollFrame) {
+      cancelAnimationFrame(autoScrollFrame);
+      autoScrollFrame = undefined;
+    }
+  }
+
+  function handleDocumentWheel(event) {
+    if (dragState) {
+      event.preventDefault();
+    }
+  }
+
+  function addDragListeners() {
+    document.addEventListener("pointermove", handlePointerMove);
+    document.addEventListener("pointerup", stopDrag);
+    document.addEventListener("wheel", handleDocumentWheel, { passive: false });
+  }
+
+  function removeDragListeners() {
+    document.removeEventListener("pointermove", handlePointerMove);
+    document.removeEventListener("pointerup", stopDrag);
+    document.removeEventListener("wheel", handleDocumentWheel);
+    stopAutoScroll();
+  }
+
   function startCreateDrag(event, row) {
     if (event.button !== 0) {
       return;
@@ -322,15 +587,19 @@
     event.stopPropagation();
 
     const ts = dateFromPointer(event);
+    const lockedScroll = getLockedScroll();
     dragState = {
       id: row.id,
       mode: "create",
       anchorTs: ts,
       currentTs: ts,
+      lastClientX: event.clientX,
+      startScrollLeft: lockedScroll.scrollLeft,
+      ...lockedScroll,
     };
 
-    document.addEventListener("pointermove", handlePointerMove);
-    document.addEventListener("pointerup", stopDrag);
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    addDragListeners();
   }
 
   function startDrag(event, row, mode, bar) {
@@ -341,6 +610,7 @@
     event.preventDefault();
     event.stopPropagation();
 
+    const lockedScroll = getLockedScroll();
     dragState = {
       id: row.id,
       mode,
@@ -349,10 +619,14 @@
       dueTs: bar.dueTs,
       effectiveDueTs: bar.effectiveDueTs,
       lastDelta: undefined,
+      currentDelta: 0,
+      lastClientX: event.clientX,
+      startScrollLeft: lockedScroll.scrollLeft,
+      ...lockedScroll,
     };
 
-    document.addEventListener("pointermove", handlePointerMove);
-    document.addEventListener("pointerup", stopDrag);
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    addDragListeners();
   }
 
   function handlePointerMove(event) {
@@ -360,68 +634,74 @@
       return;
     }
 
-    if (dragState.mode === "create") {
-      dragState.currentTs = dateFromPointer(event);
-      return;
-    }
-
-    const delta = Math.round((event.clientX - dragState.startX) / Math.max(pixelsPerDay, 1));
-    if (delta === dragState.lastDelta) {
-      return;
-    }
-
-    dragState.lastDelta = delta;
-    const deltaMs = delta * DAY_MS;
-
-    if (dragState.mode === "move") {
-      const patch = {};
-      if (dragState.startTs) {
-        patch["start date"] = formatDate(dragState.startTs + deltaMs);
-      }
-      if (dragState.dueTs || !dragState.startTs) {
-        patch["due date"] = formatDate((dragState.dueTs || dragState.effectiveDueTs) + deltaMs);
-      }
-      commitTaskDates(dragState.id, patch);
-      return;
-    }
-
-    if (dragState.mode === "start") {
-      const dueTs = dragState.dueTs || dragState.effectiveDueTs || dragState.startTs || Date.now();
-      const nextStartTs = Math.min((dragState.startTs || dueTs) + deltaMs, dueTs);
-      commitTaskDates(dragState.id, { "start date": formatDate(nextStartTs) });
-      return;
-    }
-
-    const startTs = dragState.startTs || dragState.dueTs || dragState.effectiveDueTs || Date.now();
-    const baseDueTs = dragState.dueTs || dragState.effectiveDueTs || startTs;
-    const nextDueTs = Math.max(baseDueTs + deltaMs, startTs);
-    commitTaskDates(dragState.id, { "due date": formatDate(nextDueTs) });
+    event.preventDefault();
+    dragState = {
+      ...dragState,
+      lastClientX: event.clientX,
+    };
+    updateDragFromPointer();
+    startAutoScroll();
   }
 
-  function stopDrag() {
+  function stopDrag(event) {
+    event?.preventDefault();
+
+    const scrollLeft = bodyEl?.scrollLeft ?? dragState?.scrollLeft ?? 0;
+    const scrollTop = bodyEl?.scrollTop ?? dragState?.scrollTop ?? 0;
+
     if (dragState?.mode === "create") {
       const range = getRangeGeometry(dragState.anchorTs, dragState.currentTs);
       commitTaskDates(dragState.id, {
         "start date": formatDate(range.start),
         "due date": formatDate(range.end),
       });
+    } else if (dragState) {
+      commitTaskDates(dragState.id, getDragPatch());
     }
 
     dragState = undefined;
-    document.removeEventListener("pointermove", handlePointerMove);
-    document.removeEventListener("pointerup", stopDrag);
+    removeDragListeners();
+    restoreLockedScroll(scrollLeft, scrollTop);
+    requestAnimationFrame(() => restoreLockedScroll(scrollLeft, scrollTop));
   }
 
   function handleBodyScroll(event) {
+    if (dragState) {
+      headerScrollLeft = event.currentTarget.scrollLeft;
+      dragState = {
+        ...dragState,
+        scrollLeft: event.currentTarget.scrollLeft,
+        scrollTop: event.currentTarget.scrollTop,
+      };
+      updateDragFromPointer();
+      return;
+    }
+
     headerScrollLeft = event.currentTarget.scrollLeft;
   }
 
+  function handleBodyWheel(event) {
+    if (dragState) {
+      event.preventDefault();
+    }
+  }
+
+  onMount(() => {
+    updateRootFontSizePx();
+    window.addEventListener("resize", updateRootFontSizePx);
+
+    return () => {
+      window.removeEventListener("resize", updateRootFontSizePx);
+    };
+  });
+
   onDestroy(() => {
+    removeDragListeners();
     stopDrag();
   });
 </script>
 
-<div class="GanttRoot">
+<div class="GanttRoot" class:DraggingTimeline={!!dragState}>
   <!-- Scale toggle + header -->
   <div class="GanttHeader">
     <div class="ScaleButtons">
@@ -437,7 +717,7 @@
     <div class="TimelineHeaderViewport">
       <div
         class="TimelineHeader"
-        style="width:{totalWidth}px; transform: translateX(-{headerScrollLeft}px);"
+        style="width:{totalWidthRem}rem; transform: translateX(-{headerScrollLeft}px);"
       >
         {#each headerCells as cell}
           <div
@@ -446,22 +726,27 @@
             class:TodayCell={cell.tone === "today"}
             class:FutureCell={cell.tone === "future"}
             class:WeekendCell={cell.weekend}
-            style="left:{cell.leftPx}px; width:{cell.widthPx}px;"
+            style="left:{cell.leftRem}rem; width:{cell.widthRem}rem;"
           >
             {cell.label}
           </div>
         {/each}
         <!-- Today line in header -->
-        {#if todayPx >= 0 && todayPx <= totalWidth}
-          <div class="TodayLine" style="left:{todayPx}px;"></div>
+        {#if todayRem >= 0 && todayRem <= totalWidthRem}
+          <div class="TodayLine" style="left:{todayRem}rem;"></div>
         {/if}
       </div>
     </div>
   </div>
 
   <!-- Body: rows synced with TreeTable -->
-  <div class="GanttBody" bind:this={bodyEl} on:scroll={handleBodyScroll}>
-    <div class="GanttBodyInner" style="width:{totalWidth}px; height:{rows.length * 2}rem;">
+  <div
+    class="GanttBody"
+    bind:this={bodyEl}
+    on:scroll={handleBodyScroll}
+    on:wheel|nonpassive={handleBodyWheel}
+  >
+    <div class="GanttBodyInner" style="width:{totalWidthRem}rem; height:{rows.length * 2}rem;">
       {#each headerCells as cell}
         <div
           class="GridCell"
@@ -469,18 +754,19 @@
           class:TodayCell={cell.tone === "today"}
           class:FutureCell={cell.tone === "future"}
           class:WeekendCell={cell.weekend}
-          style="left:{cell.leftPx}px; width:{cell.widthPx}px;"
+          style="left:{cell.leftRem}rem; width:{cell.widthRem}rem;"
         ></div>
       {/each}
       <!-- Today line in body -->
-      {#if todayPx >= 0 && todayPx <= totalWidth}
-        <div class="TodayLineFull" style="left:{todayPx}px;"></div>
+      {#if todayRem >= 0 && todayRem <= totalWidthRem}
+        <div class="TodayLineFull" style="left:{todayRem}rem;"></div>
       {/if}
       {#each rows as row (row.id)}
-        {@const bar = getBarStyle(row)}
-        {@const preview = getCreatePreview(row)}
+        {@const bar = getBarStyle(row, dragState)}
+        {@const preview = getCreatePreview(row, dragState)}
         <div
           class="GanttRow"
+          data-row-id={row.id}
           role="presentation"
           on:pointerdown={(event) => startCreateDrag(event, row)}
           on:dblclick={(event) => createRange(event, row, bar)}
@@ -488,8 +774,12 @@
           {#if preview}
             <div
               class="CreatePreview"
-              style="left:{preview.left}px; width:{preview.width}px;"
-            ></div>
+              style="left:{preview.leftRem}rem; width:{preview.widthRem}rem;"
+              aria-hidden="true"
+            >
+              <span class="PreviewEdge StartEdge"></span>
+              <span class="PreviewEdge EndEdge"></span>
+            </div>
           {/if}
           {#if bar}
             <button
@@ -497,7 +787,8 @@
               class="Bar"
               class:DueMarker={bar.isDue}
               class:Inherited={bar.isInherited}
-              style="left:{bar.left}px; width:{bar.width}px; background:{bar.color}; opacity:{bar.opacity};"
+              class:DraggingBar={dragState?.id === row.id && dragState.mode !== "create"}
+              style="left:{bar.leftRem}rem; width:{bar.widthRem}rem; background:{bar.color}; opacity:{bar.opacity};"
               aria-label={bar.isDue ? "期限日を変更" : "期間を移動"}
               title={bar.isDue ? "期限日を変更" : "期間を移動"}
               disabled={bar.isInherited}
@@ -506,8 +797,8 @@
             {#if bar.overdue}
               <div
                 class="OverdueSegment"
-                style="left:{bar.overdue.left}px; width:{bar.overdue.width}px; background:{bar
-                  .overdue.color}; opacity:{bar.opacity};"
+                style="left:{bar.overdue.leftRem}rem; width:{bar.overdue
+                  .widthRem}rem; background:{bar.overdue.color}; opacity:{bar.opacity};"
                 aria-hidden="true"
               ></div>
             {/if}
@@ -516,14 +807,14 @@
                 class="BarHandle StartHandle"
                 aria-label="開始日を変更"
                 title="開始日を変更"
-                style="left:{bar.left}px;"
+                style="left:{bar.leftRem}rem;"
                 on:pointerdown={(event) => startDrag(event, row, "start", bar)}
               ></button>
               <button
                 class="BarHandle EndHandle"
                 aria-label="期限日を変更"
                 title="期限日を変更"
-                style="left:{bar.left + bar.width}px;"
+                style="left:{bar.leftRem + bar.widthRem}rem;"
                 on:pointerdown={(event) => startDrag(event, row, "end", bar)}
               ></button>
             {/if}
@@ -536,14 +827,23 @@
 
 <style>
   .GanttRoot {
+    --gantt-grid-line: color-mix(in srgb, var(--theme-color-Sub-dark) 16%, transparent);
+    --gantt-grid-line-strong: color-mix(in srgb, var(--theme-color-Sub-dark) 26%, transparent);
+    --gantt-row-hover: color-mix(in srgb, var(--theme-color-Accent-main) 8%, transparent);
+
     display: flex;
     flex-direction: column;
     height: 100%;
     min-height: 0;
     overflow: hidden;
-    border-left: 1px solid var(--theme-color-Shadow-main);
+    border-left: 1px solid var(--gantt-grid-line-strong);
     background: var(--theme-color-Main-main);
     min-width: 120px;
+  }
+
+  .GanttRoot.DraggingTimeline,
+  .GanttRoot.DraggingTimeline :global(*) {
+    user-select: none;
   }
 
   .GanttHeader {
@@ -551,7 +851,7 @@
     flex-direction: column;
     flex-shrink: 0;
     height: 4rem;
-    border-bottom: 1px solid var(--theme-color-Shadow-main);
+    border-bottom: 1px solid var(--gantt-grid-line-strong);
     background: var(--theme-color-Main-main);
     position: sticky;
     top: 0;
@@ -569,7 +869,7 @@
   .ScaleButtons button {
     font-size: 0.7rem;
     padding: 1px 6px;
-    border: 1px solid var(--theme-color-Shadow-main);
+    border: 1px solid var(--gantt-grid-line-strong);
     border-radius: 3px;
     background: transparent;
     color: var(--theme-color-Sub-main);
@@ -603,7 +903,7 @@
     padding: 0 2px;
     font-size: 0.65rem;
     color: var(--theme-color-Sub-main);
-    border-right: 1px solid var(--theme-color-Shadow-main);
+    border-right: 1px solid var(--gantt-grid-line-strong);
     white-space: nowrap;
     overflow: hidden;
     box-sizing: border-box;
@@ -650,7 +950,7 @@
     position: absolute;
     top: 0;
     bottom: 0;
-    border-right: 1px solid color-mix(in srgb, var(--theme-color-Shadow-main) 72%, transparent);
+    border-right: 1px solid var(--gantt-grid-line-strong);
     box-sizing: border-box;
     pointer-events: none;
     z-index: 0;
@@ -670,20 +970,47 @@
   .GanttRow {
     height: 2rem;
     position: relative;
-    border-bottom: 1px solid color-mix(in srgb, var(--theme-color-Shadow-main) 50%, transparent);
+    border-bottom: 1px solid var(--gantt-grid-line-strong);
+    box-shadow: inset 0 1px 0 var(--gantt-grid-line);
     cursor: crosshair;
+    touch-action: none;
     z-index: 1;
+  }
+
+  .GanttRow:hover {
+    background-color: var(--gantt-row-hover);
   }
 
   .CreatePreview {
     position: absolute;
     top: 20%;
     height: 60%;
+    min-width: 0.5rem;
     border: 1px solid var(--theme-color-Accent-main);
     border-radius: 3px;
-    background-color: color-mix(in srgb, var(--theme-color-Accent-main) 42%, transparent);
+    background-color: color-mix(in srgb, var(--theme-color-Accent-main) 44%, transparent);
     pointer-events: none;
-    z-index: 2;
+    z-index: 6;
+    box-shadow:
+      0 0 0 2px color-mix(in srgb, var(--theme-color-Main-main) 72%, transparent),
+      0 0.2rem 0.45rem rgba(0, 0, 0, 0.22);
+  }
+
+  .PreviewEdge {
+    position: absolute;
+    top: -0.25rem;
+    bottom: -0.25rem;
+    width: 2px;
+    background-color: var(--theme-color-Accent-main);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--theme-color-Main-main) 65%, transparent);
+  }
+
+  .StartEdge {
+    left: 0;
+  }
+
+  .EndEdge {
+    right: 0;
   }
 
   .Bar {
@@ -696,10 +1023,18 @@
     cursor: grab;
     z-index: 3;
     padding: 0;
+    touch-action: none;
   }
 
   .Bar:not(.Inherited):active {
     cursor: grabbing;
+  }
+
+  .Bar.DraggingBar {
+    box-shadow:
+      0 0 0 2px color-mix(in srgb, var(--theme-color-Main-main) 72%, transparent),
+      0 0.2rem 0.45rem rgba(0, 0, 0, 0.25);
+    z-index: 5;
   }
 
   .OverdueSegment {
@@ -731,6 +1066,7 @@
     background: color-mix(in srgb, var(--theme-color-Main-main) 70%, transparent);
     cursor: ew-resize;
     padding: 0;
+    touch-action: none;
     z-index: 4;
   }
 
