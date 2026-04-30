@@ -4,4 +4,4 @@ export type GanttScale = "day" | "week" | "month";
 
 export const ganttVisible = writable(false);
 export const ganttScrollTop = writable(0);
-export const ganttScale = writable<GanttScale>("week");
+export const ganttScale = writable<GanttScale>("day");
