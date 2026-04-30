@@ -9,19 +9,19 @@ describe("SearchBox", () => {
     filter.set({});
   });
 
-  test("updates the name filter as the user types", async () => {
+  test("updates the full-text filter as the user types", async () => {
     render(SearchBox);
 
     const input = screen.getByPlaceholderText("filter tasks...");
     await fireEvent.input(input, { target: { value: "release" } });
 
     expect(get(filter)).toEqual({
-      name: ["release"],
+      full_text: ["release"],
     });
   });
 
   test("clears the filter on Escape and keeps focus in the input", async () => {
-    filter.set({ name: ["release"] });
+    filter.set({ full_text: ["release"] });
     render(SearchBox);
 
     const input = screen.getByPlaceholderText("filter tasks...");
@@ -30,7 +30,7 @@ describe("SearchBox", () => {
     await fireEvent.keyDown(input, { key: "Escape" });
 
     expect(get(filter)).toEqual({
-      name: null,
+      full_text: null,
     });
     expect(input).toHaveValue("");
     expect(input).toHaveFocus();
@@ -39,7 +39,7 @@ describe("SearchBox", () => {
   test("reflects store updates when the input is not focused", async () => {
     render(SearchBox);
 
-    filter.set({ name: ["backlog"] });
+    filter.set({ full_text: ["backlog"] });
     await tick();
 
     expect(screen.getByPlaceholderText("filter tasks...")).toHaveValue("backlog");

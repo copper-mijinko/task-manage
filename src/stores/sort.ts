@@ -20,8 +20,8 @@ function createSort(): SortStore {
     cycle: (column: string) => {
       if (!SORTABLE_COLUMNS.has(column)) return;
       update((current) => {
-        if (!current || current.column !== column) return { column, direction: "asc" };
-        if (current.direction === "asc") return { column, direction: "desc" };
+        if (!current || current.column !== column) return { column, direction: "desc" };
+        if (current.direction === "desc") return { column, direction: "asc" };
         return null;
       });
     },

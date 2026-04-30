@@ -1,5 +1,5 @@
 import { uuidV4 } from "./uuid";
-import { searchMemoEntries } from "./memo_utils";
+import { memoContentForSearch } from "./memo_utils";
 import type { SortState } from "../types/app";
 
 export type TaskStatus = "Open" | "Pending" | "In Progress" | "Completed" | "Canceled";
@@ -51,6 +51,33 @@ export interface VisibleTreeRow {
   canOutdent: boolean;
 }
 
+const FILTER_FLAG_KEYS = new Set(["search_memo"]);
+
+function valueForFullText(value: unknown): string {
+  if (value == null) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return JSON.stringify(value);
+}
+
+function fullTextMatches(data: TreeNodeData, keywords: string[], includeMemo: boolean): boolean {
+  const fieldText = Object.entries(data)
+    .filter(([key]) => key !== "memo")
+    .map(([, value]) => valueForFullText(value))
+    .join(" ");
+  const memoText = includeMemo
+    ? (data.memo ?? [])
+        .map((entry) =>
+          [entry.title, memoContentForSearch(entry.content), (entry.tags ?? []).join(" ")]
+            .filter(Boolean)
+            .join(" ")
+        )
+        .join(" ")
+    : "";
+  const text = `${fieldText} ${memoText}`.toLowerCase();
+  return keywords.some((keyword) => text.includes(keyword.toLowerCase()));
+}
+
 export function filterTree(
   tree: TreeData | null | undefined,
   filter: Record<string, string[]> | null | undefined
@@ -60,30 +87,31 @@ export function filterTree(
   // Check match against all filters
   let allFiltersMatch = true;
   let nameFilterMatch = false;
+  let fullTextFilterMatch = false;
 
   // Check if filter is empty
-  const hasFilters = Object.keys(filter).some((key) => filter[key] && filter[key].length > 0);
+  const hasFilters = Object.keys(filter).some(
+    (key) => !FILTER_FLAG_KEYS.has(key) && filter[key] && filter[key].length > 0
+  );
   if (!hasFilters) return tree; // Return tree as is if no filters
 
   // Evaluate each filter
   for (const key in filter) {
-    if (key === "search_memo") continue; // flag key, not a data field
+    if (FILTER_FLAG_KEYS.has(key)) continue; // flag key, not a data field
 
     const keywords = filter[key];
     if (!keywords || keywords.length === 0) continue;
 
     let keyMatch = false;
-    if (key === "name") {
+    if (key === "full_text") {
+      keyMatch = fullTextMatches(tree.data, keywords, (filter["search_memo"]?.length ?? 0) > 0);
+      fullTextFilterMatch = keyMatch;
+    } else if (key === "name") {
       // In case of name filter
-      const nameMatch = keywords.some(
+      keyMatch = keywords.some(
         (keyword) => tree.data.name && tree.data.name.toLowerCase().includes(keyword.toLowerCase())
       );
-      const memoMatch =
-        !nameMatch &&
-        (filter["search_memo"]?.length ?? 0) > 0 &&
-        searchMemoEntries(tree.data.memo ?? [], keywords);
-      keyMatch = nameMatch || memoMatch;
-      nameFilterMatch = keyMatch; // Record if name/memo filter matched
+      nameFilterMatch = keyMatch; // Record if name filter matched
     } else if (key === "tags") {
       const tag = keywords[0].toLowerCase();
       keyMatch = (tree.data.memo ?? []).some((entry) =>
@@ -117,8 +145,8 @@ export function filterTree(
   // Process child nodes
   const matchedChildren: TreeData[] = [];
   for (const child of tree.children || []) {
-    if (nameFilterMatch && allFiltersMatch) {
-      // If name filter matches and all filters match,
+    if ((nameFilterMatch || fullTextFilterMatch) && allFiltersMatch) {
+      // If name/full-text filter matches and all filters match,
       // include all child nodes (no filtering)
       matchedChildren.push(cloneTreeWithAllChildren(child));
     } else {

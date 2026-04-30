@@ -1,29 +1,92 @@
 <script>
+  import { createEventDispatcher } from "svelte";
   import IconButton from "./IconButton.svelte";
-  import { clickOutside, ripple } from "../common/common.js";
+  import { ripple } from "../common/common.js";
+
   export let list = ["first", "second", "third"];
   export let selected = [];
   export let placeholder = "Not selected.";
+  export let summary = "";
+
   let checked = Array.from(list).fill(false);
   let expanded = false;
-  $: selected = list.filter((elm, i) => checked[i]);
+  let containerElement;
+  let listElement;
+  let anchorRect = null;
+  let selectedKey = "";
+
+  const dispatch = createEventDispatcher();
+
+  function keyOf(values) {
+    return (values ?? []).join("\u001f");
+  }
+
+  $: {
+    const nextKey = keyOf(selected);
+    if (nextKey !== selectedKey) {
+      checked = list.map((elm) => selected.includes(elm));
+      selectedKey = nextKey;
+    }
+  }
+
+  $: selectionLabel =
+    summary ||
+    (selected.length == 0
+      ? placeholder
+      : selected.length == 1
+        ? selected[0]
+        : `${selected.length} selected.`);
+
+  $: listStyle = anchorRect
+    ? `top: ${anchorRect.bottom + 2}px; left: ${anchorRect.left}px; min-width: max(${anchorRect.width}px, 14rem);`
+    : "";
+
+  function updateSelected() {
+    const next = list.filter((elm, i) => checked[i]);
+    selected = next;
+    selectedKey = keyOf(next);
+    dispatch("change", { selected: next });
+  }
+
+  function toggleExpanded(event) {
+    event.stopPropagation();
+    anchorRect = event.currentTarget.getBoundingClientRect();
+    expanded = !expanded;
+  }
+
+  function handleWindowClick(event) {
+    if (
+      expanded &&
+      containerElement &&
+      listElement &&
+      !containerElement.contains(event.target) &&
+      !listElement.contains(event.target)
+    ) {
+      expanded = false;
+    }
+  }
+
+  function handleWindowKeydown(event) {
+    if (expanded && event.key === "Escape") {
+      expanded = false;
+    }
+  }
+
+  function portal(node) {
+    document.body.appendChild(node);
+    return {
+      destroy() {
+        if (node.parentNode) node.parentNode.removeChild(node);
+      },
+    };
+  }
 </script>
 
-<div
-  class="container"
-  use:clickOutside
-  on:outclick={() => {
-    expanded = false;
-  }}
->
+<svelte:window on:click={handleWindowClick} on:keydown={handleWindowKeydown} />
+
+<div class="container" bind:this={containerElement}>
   <div class="selectContainer">
-    <button
-      on:click={(e) => {
-        expanded = !expanded;
-        e.stopPropagation();
-      }}
-      use:ripple
-    >
+    <button on:click={toggleExpanded} use:ripple>
       <div class="svgContainer">
         <svg
           class:emphasized={selected.length > 0}
@@ -37,11 +100,7 @@
         >
       </div>
       <div class="selection" class:expanded>
-        {selected.length == 0
-          ? placeholder
-          : selected.length == 1
-            ? selected[0]
-            : `${selected.length} selected.`}
+        {selectionLabel}
       </div>
       {#if selected.length > 0}
         <IconButton
@@ -49,7 +108,8 @@
           ariaLabel="Clear filter selection"
           on:click={(e) => {
             expanded = false;
-            checked = checked.fill(false);
+            checked = list.map(() => false);
+            updateSelected();
             e.stopPropagation();
           }}
           activeColor={"transparent"}
@@ -68,12 +128,17 @@
     </button>
   </div>
   {#if expanded}
-    <div class="listContainer">
+    <div bind:this={listElement} class="listContainer" style={listStyle} use:portal>
       {#each list as elm, i}
-        <div class="elmContainer">
-          <input style="margin: auto 0.25rem;" id={elm} type="checkbox" bind:checked={checked[i]} />
-          <label style="margin: auto 0.25rem;" for={elm}>{elm}</label>
-        </div>
+        <label class="elmContainer" for={`multi-select-${i}`}>
+          <input
+            id={`multi-select-${i}`}
+            type="checkbox"
+            bind:checked={checked[i]}
+            on:change={updateSelected}
+          />
+          <span>{elm}</span>
+        </label>
       {/each}
     </div>
   {/if}
@@ -134,20 +199,37 @@
     flex: 1;
   }
   .listContainer {
-    padding: 1rem;
     position: fixed;
+    z-index: 99999999;
     display: flex;
     flex-direction: column;
-    justify-content: center;
-    z-index: 999999999999;
-    background-color: var(--theme-color-Sub-light);
-    color: var(--theme-color-Main-light);
+    background: var(--theme-color-Main-main);
+    border-radius: 0.5rem;
+    box-shadow: 0 0.2rem 0.5rem rgba(0, 0, 0, 0.25);
+    padding: 4px 0;
+    color: var(--theme-color-Sub-light);
+    box-sizing: border-box;
   }
   .elmContainer {
     display: flex;
-    flex-direction: row;
     align-items: center;
-    margin: 0.25rem;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0.45rem 0.75rem;
+    color: var(--theme-color-Sub-light);
+    font-size: 0.85rem;
+    cursor: pointer;
+    user-select: none;
+  }
+  .elmContainer:hover {
+    background-color: var(--theme-color-Accent-dark);
+  }
+  .elmContainer input[type="checkbox"] {
+    width: 0.9rem;
+    height: 0.9rem;
+    margin: 0;
+    flex-shrink: 0;
+    accent-color: var(--theme-color-Accent-dark);
   }
   .selection {
     padding: 0 0.25rem;
