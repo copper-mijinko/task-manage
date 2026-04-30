@@ -3,6 +3,7 @@
   import SplitPanes from "./SplitPanes.svelte";
   import TreeTable from "./TreeTable.svelte";
   import GanttPanel from "./GanttPanel.svelte";
+  import IssueView from "./IssueView.svelte";
   import TaskDetail from "./TaskDetail.svelte";
   import IconButton from "./IconButton.svelte";
   import Card from "./Card.svelte";
@@ -10,6 +11,13 @@
   import SearchBox from "./SearchBox.svelte";
   import { tick } from "svelte";
   import { table_selected_id, tree_data, closed_node_ids, ganttVisible } from "../stores.ts";
+
+  let viewMode = "tree";
+
+  function setViewMode(mode) {
+    viewMode = mode;
+    if (mode === "issue") $ganttVisible = false;
+  }
   import { getNode, addNode, rmNode, getParent } from "../common/tree_control.ts";
   import { getDefaultNode } from "../common/tree_control.ts";
 
@@ -160,12 +168,85 @@
               <SearchBox />
             </div>
             <IconButton
+              tooltipContent="タスクツリーを表示"
+              ariaLabel="タスクツリービュー"
+              activeColor={"var(--theme-color-Accent-dark)"}
+              normalColor={viewMode === "tree"
+                ? "var(--theme-color-Accent-main)"
+                : "var(--theme-color-Sub-main)"}
+              on:click={() => setViewMode("tree")}
+            >
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path
+                  d="M3 6H21"
+                  stroke="var(--theme-color-Main-main)"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                />
+                <path
+                  d="M7 10H21"
+                  stroke="var(--theme-color-Main-main)"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                />
+                <path
+                  d="M7 14H21"
+                  stroke="var(--theme-color-Main-main)"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                />
+                <path
+                  d="M11 18H21"
+                  stroke="var(--theme-color-Main-main)"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                />
+                <circle cx="4" cy="10" r="1" fill="var(--theme-color-Main-main)" />
+                <circle cx="4" cy="14" r="1" fill="var(--theme-color-Main-main)" />
+                <circle cx="8" cy="18" r="1" fill="var(--theme-color-Main-main)" />
+              </svg>
+            </IconButton>
+            <IconButton
+              tooltipContent="イシューリストを表示"
+              ariaLabel="イシュービュー"
+              activeColor={"var(--theme-color-Accent-dark)"}
+              normalColor={viewMode === "issue"
+                ? "var(--theme-color-Accent-main)"
+                : "var(--theme-color-Sub-main)"}
+              on:click={() => setViewMode("issue")}
+            >
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle
+                  cx="12"
+                  cy="12"
+                  r="9"
+                  stroke="var(--theme-color-Main-main)"
+                  stroke-width="2"
+                />
+                <path
+                  d="M12 8V12"
+                  stroke="var(--theme-color-Main-main)"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                />
+                <circle
+                  cx="12"
+                  cy="16"
+                  r="0.5"
+                  fill="var(--theme-color-Main-main)"
+                  stroke="var(--theme-color-Main-main)"
+                  stroke-width="1.5"
+                />
+              </svg>
+            </IconButton>
+            <IconButton
               tooltipContent={$ganttVisible ? "ガントチャートを閉じる" : "ガントチャートを表示"}
               ariaLabel="ガントチャートの表示切替"
               activeColor={"var(--theme-color-Accent-dark)"}
               normalColor={$ganttVisible
                 ? "var(--theme-color-Accent-main)"
                 : "var(--theme-color-Sub-main)"}
+              disabled={viewMode === "issue"}
               on:click={() => ($ganttVisible = !$ganttVisible)}
             >
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -198,7 +279,9 @@
           </div>
           <Card style={"flex: 1; overflow: hidden; padding: 0;"}>
             <div class="TreeAndGantt">
-              {#if $ganttVisible}
+              {#if viewMode === "issue"}
+                <IssueView />
+              {:else if $ganttVisible}
                 <SplitPanes defaultRatio={[3, 2]}>
                   <Pane style={"height: 100%; min-width: 6rem;"}>
                     <div class="TreeTable">
