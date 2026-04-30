@@ -68,7 +68,9 @@ function createFilter(initialValue: FilterState): FilterStore {
   );
 
   const hasActiveFilters = (current: FilterState) =>
-    Object.keys(current || {}).some((key) => current[key] && current[key].length > 0);
+    Object.keys(current || {}).some(
+      (key) => key !== "search_memo" && current[key] && current[key].length > 0
+    );
 
   return {
     subscribe,

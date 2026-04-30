@@ -1,16 +1,15 @@
 <script lang="ts">
   import { createEventDispatcher } from "svelte";
 
-  export let column: string;
-  export let from: string = "";
-  export let to: string = "";
+  export let value: string = "";
   export let anchorRect: DOMRect | null = null;
 
   const dispatch = createEventDispatcher<{
-    change: { from: string; to: string };
+    change: { name: string };
     close: void;
   }>();
   let panelElement: HTMLElement;
+  let inputElement: HTMLInputElement;
 
   $: panelStyle = anchorRect ? `top: ${anchorRect.bottom + 2}px; left: ${anchorRect.left}px;` : "";
 
@@ -28,17 +27,18 @@
   }
 
   function handleChange() {
-    dispatch("change", { from, to });
+    dispatch("change", { name: value });
   }
 
   function handleClear() {
-    from = "";
-    to = "";
-    dispatch("change", { from: "", to: "" });
+    value = "";
+    dispatch("change", { name: "" });
+    inputElement?.focus();
   }
 
   function portal(node: HTMLElement) {
     document.body.appendChild(node);
+    inputElement?.focus();
     return {
       destroy() {
         if (node.parentNode) node.parentNode.removeChild(node);
@@ -51,41 +51,34 @@
 
 <div
   bind:this={panelElement}
-  class="DateRangePanel"
+  class="NameFilterPanel"
   style={panelStyle}
   role="dialog"
   tabindex="-1"
-  aria-label="{column} 日付フィルター"
+  aria-label="Name フィルター"
   on:click|stopPropagation
   on:keydown={handleKeydown}
   use:portal
 >
-  <div class="PanelTitle">{column} フィルター</div>
-  <div class="DateRow">
-    <label for="dr-from-{column.replace(' ', '-')}">From</label>
+  <div class="PanelTitle">Name フィルター</div>
+  <label class="TextRow" for="name-filter-input">
+    <span>Name</span>
     <input
-      id="dr-from-{column.replace(' ', '-')}"
-      type="date"
-      bind:value={from}
-      on:change={handleChange}
+      bind:this={inputElement}
+      id="name-filter-input"
+      type="text"
+      bind:value
+      placeholder="filter tasks..."
+      on:input={handleChange}
     />
-  </div>
-  <div class="DateRow">
-    <label for="dr-to-{column.replace(' ', '-')}">To</label>
-    <input
-      id="dr-to-{column.replace(' ', '-')}"
-      type="date"
-      bind:value={to}
-      on:change={handleChange}
-    />
-  </div>
-  {#if from || to}
+  </label>
+  {#if value}
     <button class="ClearBtn" on:click={handleClear}>クリア</button>
   {/if}
 </div>
 
 <style>
-  .DateRangePanel {
+  .NameFilterPanel {
     position: fixed;
     z-index: 99999999;
     background: var(--theme-color-Main-main);
@@ -102,7 +95,7 @@
     padding: 0.45rem 0.75rem 0.35rem;
     opacity: 0.75;
   }
-  .DateRow {
+  .TextRow {
     display: flex;
     align-items: center;
     padding: 0.45rem 0.75rem;
@@ -110,12 +103,12 @@
     color: var(--theme-color-Sub-light);
     font-size: 0.85rem;
   }
-  .DateRow label {
+  .TextRow span {
     width: 2.5rem;
     flex-shrink: 0;
     user-select: none;
   }
-  .DateRow input[type="date"] {
+  .TextRow input[type="text"] {
     flex: 1;
     background: var(--theme-color-Main-dark);
     color: var(--theme-color-Sub-light);
@@ -123,7 +116,6 @@
     border-radius: 0.25rem;
     padding: 0.2rem 0.3rem;
     font-size: 0.8rem;
-    color-scheme: dark;
     box-sizing: border-box;
     min-width: 0;
   }

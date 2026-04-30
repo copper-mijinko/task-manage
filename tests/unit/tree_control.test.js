@@ -84,6 +84,35 @@ describe("tree_control", () => {
     expect(filtered.children[0].data.status).toBe("Pending");
   });
 
+  test("filterTree keeps name filter scoped to the name column", () => {
+    const tree = createTree();
+    tree.children[0].data.memo = [{ id: "m1", title: "Note", content: "ship", tags: [] }];
+
+    const filtered = filterTree(tree, { name: ["ship"] });
+
+    expect(filtered.children).toHaveLength(1);
+    expect(filtered.children[0].id).toBe("task-2");
+  });
+
+  test("filterTree supports full-text search separately from column filters", () => {
+    const filtered = filterTree(createTree(), { full_text: ["progress"] });
+
+    expect(filtered.children).toHaveLength(1);
+    expect(filtered.children[0].id).toBe("task-1");
+  });
+
+  test("filterTree can include memo content in full-text search", () => {
+    const tree = createTree();
+    tree.children[0].data.memo = [{ id: "m1", title: "Note", content: "launch notes", tags: [] }];
+
+    expect(filterTree(tree, { full_text: ["launch"] })).toBeNull();
+
+    const filtered = filterTree(tree, { full_text: ["launch"], search_memo: ["1"] });
+
+    expect(filtered.children).toHaveLength(1);
+    expect(filtered.children[0].id).toBe("task-1");
+  });
+
   test("filterTree with tags filter keeps only tasks whose memos contain the tag", () => {
     const tree = {
       id: "root",

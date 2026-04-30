@@ -11,7 +11,7 @@
     search_text = value;
     $filter = {
       ...$filter,
-      name: search_text !== "" ? [search_text] : null,
+      full_text: search_text !== "" ? [search_text] : null,
     };
   };
 
@@ -23,8 +23,8 @@
     };
   };
 
-  $: if (($filter?.name?.[0] ?? "") !== search_text && document.activeElement !== search_box) {
-    search_text = $filter?.name?.[0] ?? "";
+  $: if (($filter?.full_text?.[0] ?? "") !== search_text && document.activeElement !== search_box) {
+    search_text = $filter?.full_text?.[0] ?? "";
   }
 
   $: memoSearchEnabled = ($filter?.search_memo?.length ?? 0) > 0;
