@@ -130,6 +130,14 @@ function cloneTreeWithAllChildren(tree: TreeData): TreeData {
   return { ...tree, children };
 }
 
+export function cloneWithNewIds(node: TreeData): TreeData {
+  return {
+    id: `${uuidV4()}`,
+    data: { ...node.data, memo: [...node.data.memo] },
+    children: node.children.map((child) => cloneWithNewIds(child)),
+  };
+}
+
 export function getDefaultNode(): TreeData {
   return {
     id: `${uuidV4()}`,

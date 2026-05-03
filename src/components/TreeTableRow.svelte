@@ -244,6 +244,12 @@
           on:deleteTask={() => {
             dispatch("deleteTask", { id });
           }}
+          on:copyTask={() => {
+            dispatch("copyTask", { id });
+          }}
+          on:pasteTask={() => {
+            dispatch("pasteTask", { id });
+          }}
           on:menuVisibilityChange={({ detail }) => {
             isMenuOpen = detail.open;
           }}
