@@ -8,6 +8,7 @@
   import { history, defaultKeymap, historyKeymap } from "@codemirror/commands";
   import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
   import { marked } from "marked";
+  import { toMarkdown } from "../common/memo_utils";
 
   export let saveMemo: (content: string) => void;
   export let content: unknown = "";
@@ -31,38 +32,6 @@
   let livePreviewEl: HTMLElement | null = null;
 
   const EXTERNAL_LINK_PATTERN = /^(https?:\/\/|mailto:|file:\/\/)/i;
-
-  function isQuillDelta(value: unknown): value is { ops: Array<{ insert?: unknown }> } {
-    return (
-      typeof value === "object" && value !== null && Array.isArray((value as { ops?: unknown }).ops)
-    );
-  }
-
-  function quillDeltaToMarkdown(delta: { ops: Array<{ insert?: unknown }> }): string {
-    return delta.ops
-      .map((op) => {
-        if (typeof op.insert === "string") {
-          return op.insert;
-        }
-        if (
-          typeof op.insert === "object" &&
-          op.insert !== null &&
-          typeof (op.insert as { image?: unknown }).image === "string"
-        ) {
-          return `![](${(op.insert as { image: string }).image})`;
-        }
-        return "";
-      })
-      .join("")
-      .replace(/\s+$/, "");
-  }
-
-  function toMarkdown(val: unknown): string {
-    if (!val) return "";
-    if (typeof val === "string") return val;
-    if (isQuillDelta(val)) return quillDeltaToMarkdown(val);
-    return JSON.stringify(val, null, 2);
-  }
 
   function normalizeMemoTitle(title: string): string {
     return title.trim().toLocaleLowerCase();

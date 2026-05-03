@@ -49,7 +49,7 @@ function createFilter(initialValue: FilterState): FilterStore {
     }
 
     filtered_data.set(filtered);
-  }, 300);
+  }, 500);
 
   const hasActiveFilters = (current: FilterState) =>
     Object.keys(current || {}).some((key) => current[key] && current[key].length > 0);
