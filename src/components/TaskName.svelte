@@ -4,6 +4,7 @@
   import { ripple, tooltip } from "../common/common.js";
   import TaskMenu from "./TaskMenu.svelte";
   import { pageSearchQuery } from "../stores/search";
+  import { copied_task } from "../stores/ui";
 
   export let text;
   export let color = "var(--theme-color-Sub-main)";
@@ -50,6 +51,27 @@
       icon: {
         viewBox: "0 0 24 24",
         path: "M5 5V14H15M11 10L15 14L11 18M19 5V9M17 7H21",
+      },
+    },
+    ...(!isRoot
+      ? [
+          {
+            title: "copy",
+            action: "copyTask",
+            icon: {
+              viewBox: "0 0 24 24",
+              path: "M8 4v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7.242a2 2 0 0 0-.602-1.43L16.083 2.57A2 2 0 0 0 14.685 2H10a2 2 0 0 0-2 2ZM4 8H2v12a2 2 0 0 0 2 2h8v-2H4Z",
+            },
+          },
+        ]
+      : []),
+    {
+      title: "paste as child",
+      action: "pasteTask",
+      disabled: $copied_task === null,
+      icon: {
+        viewBox: "0 0 24 24",
+        path: "M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2",
       },
     },
     ...(hasChildren

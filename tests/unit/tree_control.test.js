@@ -4,6 +4,7 @@ import {
   canMoveNodeDown,
   canMoveNodeUp,
   canOutdentNode,
+  cloneWithNewIds,
   filterTree,
   flattenVisibleTree,
   getNode,
@@ -229,5 +230,50 @@ describe("tree_control", () => {
 
   test("getNode returns undefined when the target does not exist", () => {
     expect(getNode("missing", createTree())).toBeUndefined();
+  });
+});
+
+describe("cloneWithNewIds", () => {
+  test("cloned root node has a different id", () => {
+    const tree = createTree();
+    const cloned = cloneWithNewIds(tree);
+    expect(cloned.id).not.toBe(tree.id);
+  });
+
+  test("cloned node preserves name, status, and memo", () => {
+    const tree = createTree();
+    const cloned = cloneWithNewIds(tree);
+    expect(cloned.data.name).toBe(tree.data.name);
+    expect(cloned.data.status).toBe(tree.data.status);
+    expect(cloned.data.memo).toEqual(tree.data.memo);
+  });
+
+  test("cloned children all get new ids", () => {
+    const tree = createTree();
+    const cloned = cloneWithNewIds(tree);
+    expect(cloned.children.length).toBe(tree.children.length);
+    cloned.children.forEach((child, i) => {
+      expect(child.id).not.toBe(tree.children[i].id);
+    });
+  });
+
+  test("cloned grandchildren also get new ids", () => {
+    const tree = createTree();
+    const cloned = cloneWithNewIds(tree);
+    const originalGrandchild = tree.children[1].children[0];
+    const clonedGrandchild = cloned.children[1].children[0];
+    expect(clonedGrandchild.id).not.toBe(originalGrandchild.id);
+    expect(clonedGrandchild.data.name).toBe(originalGrandchild.data.name);
+  });
+
+  test("modifying cloned memo does not affect original", () => {
+    const node = {
+      id: "a",
+      data: { name: "task", status: "Open", memo: [{ text: "hello" }] },
+      children: [],
+    };
+    const cloned = cloneWithNewIds(node);
+    cloned.data.memo.push({ text: "world" });
+    expect(node.data.memo.length).toBe(1);
   });
 });

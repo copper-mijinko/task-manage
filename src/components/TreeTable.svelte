@@ -27,7 +27,9 @@
     moveNodeDown,
     indentNode,
     outdentNode,
+    cloneWithNewIds,
   } from "../common/tree_control.ts";
+  import { copied_task } from "../stores/ui.ts";
 
   let table_root; // Bind
 
@@ -548,6 +550,39 @@
     handleAddRelative(event.detail.id, "append");
   }
 
+  function handleCopyTask(event) {
+    const { id } = event.detail;
+    if (!id || !$tree_data?.data) return;
+    const node = getNode(id, $tree_data.data);
+    if (node) $copied_task = node;
+  }
+
+  function handlePasteTask(event) {
+    const { id } = event.detail;
+    if (!id || !$tree_data?.data || !$copied_task) return;
+    const cloned = cloneWithNewIds($copied_task);
+    const data = addNode(cloned, id, $tree_data.data, "append");
+    $tree_data = { ...$tree_data, data };
+    if ($closed_node_ids.has(id)) closed_node_ids.delete(id);
+    focusNewNode(cloned.id);
+  }
+
+  function isEditingText() {
+    const el = document.activeElement;
+    return el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
+  }
+
+  function handleGlobalKeydown(e) {
+    if (!$table_selected_id || isEditingText()) return;
+    if ((e.ctrlKey || e.metaKey) && e.key === "c") {
+      e.preventDefault();
+      handleCopyTask({ detail: { id: $table_selected_id } });
+    } else if ((e.ctrlKey || e.metaKey) && e.key === "v") {
+      e.preventDefault();
+      handlePasteTask({ detail: { id: $table_selected_id } });
+    }
+  }
+
   function requestDelete(event) {
     const { id } = event.detail;
     const node = getNode(id, $tree_data.data);
@@ -578,6 +613,8 @@
     deleteTargetName = "";
   }
 </script>
+
+<svelte:window on:keydown={handleGlobalKeydown} />
 
 <div
   bind:this={table_root}
@@ -629,6 +666,8 @@
         on:addBelow={handleAddBelow}
         on:addChild={handleAddChild}
         on:deleteTask={requestDelete}
+        on:copyTask={handleCopyTask}
+        on:pasteTask={handlePasteTask}
       />
     {/each}
   {:else}
