@@ -1,4 +1,5 @@
 import { uuidV4 } from "./uuid";
+import { searchMemoEntries } from "./memo_utils";
 
 export type TaskStatus = "Open" | "Pending" | "In Progress" | "Completed" | "Canceled";
 
@@ -64,16 +65,23 @@ export function filterTree(
 
   // Evaluate each filter
   for (const key in filter) {
+    if (key === "search_memo") continue; // flag key, not a data field
+
     const keywords = filter[key];
     if (!keywords || keywords.length === 0) continue;
 
     let keyMatch = false;
     if (key === "name") {
       // In case of name filter
-      keyMatch = keywords.some(
+      const nameMatch = keywords.some(
         (keyword) => tree.data.name && tree.data.name.toLowerCase().includes(keyword.toLowerCase())
       );
-      nameFilterMatch = keyMatch; // Record if name filter matched
+      const memoMatch =
+        !nameMatch &&
+        (filter["search_memo"]?.length ?? 0) > 0 &&
+        searchMemoEntries(tree.data.memo ?? [], keywords);
+      keyMatch = nameMatch || memoMatch;
+      nameFilterMatch = keyMatch; // Record if name/memo filter matched
     } else {
       // For other filters
       keyMatch = keywords.some(
