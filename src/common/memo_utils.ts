@@ -1,8 +1,6 @@
 export function isQuillDelta(value: unknown): value is { ops: Array<{ insert?: unknown }> } {
   return (
-    typeof value === "object" &&
-    value !== null &&
-    Array.isArray((value as { ops?: unknown }).ops)
+    typeof value === "object" && value !== null && Array.isArray((value as { ops?: unknown }).ops)
   );
 }
 
@@ -38,10 +36,7 @@ export function memoContentForSearch(val: unknown): string {
 }
 
 // 将来 elasticlunr 等のインデックス型エンジンに差し替え可能な検索ポイント
-export function searchMemoEntries(
-  memos: Array<{ content: unknown }>,
-  keywords: string[]
-): boolean {
+export function searchMemoEntries(memos: Array<{ content: unknown }>, keywords: string[]): boolean {
   return memos.some((entry) =>
     keywords.some((keyword) =>
       memoContentForSearch(entry.content).toLowerCase().includes(keyword.toLowerCase())
