@@ -230,7 +230,7 @@
 
   const getMenuPosition = (x, y) => {
     const viewportWidth = window.innerWidth;
-    const menuWidth = 180;
+    const menuWidth = 224; // 14rem at 16px base font, matches actual CSS min-width
 
     if (x + menuWidth > viewportWidth) {
       return {
@@ -270,7 +270,7 @@
     window.addEventListener("task-menu-opened", handleTaskMenuOpened);
   });
 
-  export function openMenuAt(position) {
+  export async function openMenuAt(position) {
     window.dispatchEvent(
       new CustomEvent("task-menu-opened", {
         detail: { ownerId: menuOwnerId },
@@ -278,6 +278,18 @@
     );
     menuPosition = getMenuPosition(position.x, position.y);
     setMenuVisibility(true);
+
+    await tick();
+
+    const menuEl = document.getElementById("task-menu");
+    if (menuEl) {
+      const rect = menuEl.getBoundingClientRect();
+      const viewportHeight = window.innerHeight;
+      if (rect.bottom > viewportHeight) {
+        const adjustedY = Math.max(0, menuPosition.y - (rect.bottom - viewportHeight));
+        menuPosition = { ...menuPosition, y: adjustedY };
+      }
+    }
   }
 
   onDestroy(() => {
