@@ -13,6 +13,8 @@
   export let deleteMemo;
   export let renameMemo;
   export let reorderMemo;
+  export let saveMemoTags = null;
+  export let allTags = [];
   export let disabled = false;
   export let workspaceProjectDir = null;
   export let taskId = null;
@@ -86,6 +88,31 @@
 
   $: editedContent = memo.length > selectedMemoIndex ? memo[selectedMemoIndex].content : "";
   $: selectedMemo = memo[selectedMemoIndex];
+  $: currentTags = selectedMemo?.tags ?? [];
+
+  let tagInput = "";
+
+  function handleTagInput(e) {
+    if (e.key === "Enter" && tagInput.trim()) {
+      e.preventDefault();
+      const newTag = tagInput.trim().toLowerCase();
+      if (!currentTags.includes(newTag) && saveMemoTags) {
+        saveMemoTags(selectedMemoIndex, [...currentTags, newTag]);
+      }
+      tagInput = "";
+    } else if (e.key === "Backspace" && tagInput === "" && currentTags.length > 0 && saveMemoTags) {
+      saveMemoTags(selectedMemoIndex, currentTags.slice(0, -1));
+    }
+  }
+
+  function removeTag(tag) {
+    if (saveMemoTags) {
+      saveMemoTags(
+        selectedMemoIndex,
+        currentTags.filter((t) => t !== tag)
+      );
+    }
+  }
 
   let draggingIndex = -1;
   let dragOverIndex = -1;
@@ -242,6 +269,30 @@
     </div>
   </div>
 
+  {#if selectedMemo}
+    <div class="tag-bar">
+      {#each currentTags as tag (tag)}
+        <span class="tag-chip">
+          {tag}
+          <button class="tag-remove" on:click={() => removeTag(tag)} aria-label="Remove tag {tag}"
+            >×</button
+          >
+        </span>
+      {/each}
+      <input
+        class="tag-input"
+        type="text"
+        list="memo-tag-suggestions"
+        bind:value={tagInput}
+        on:keydown={handleTagInput}
+        placeholder={currentTags.length === 0 ? "タグを追加..." : ""}
+      />
+      <datalist id="memo-tag-suggestions">
+        {#each allTags as t}<option value={t}></option>{/each}
+      </datalist>
+    </div>
+  {/if}
+
   <div class="memotab-content">
     {#if selectedMemo}
       {#key `${$table_selected_id ?? "none"}:${selectedMemoIndex}`}
@@ -380,10 +431,62 @@
     border-right: 0.15rem solid var(--theme-color-Accent-main);
   }
 
+  .tag-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    min-height: 2rem;
+    border-bottom: 1px solid var(--theme-color-Sub-dark);
+    flex-shrink: 0;
+  }
+
+  .tag-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 0.75rem;
+    background-color: var(--theme-color-Accent-dark);
+    color: var(--theme-color-Main-main);
+    font-size: 0.75rem;
+    white-space: nowrap;
+  }
+
+  .tag-remove {
+    background: none;
+    border: none;
+    color: var(--theme-color-Main-main);
+    cursor: pointer;
+    padding: 0;
+    font-size: 0.75rem;
+    line-height: 1;
+    opacity: 0.7;
+  }
+
+  .tag-remove:hover {
+    opacity: 1;
+  }
+
+  .tag-input {
+    background: transparent;
+    border: none;
+    color: var(--theme-color-Sub-main);
+    font-size: 0.8rem;
+    min-width: 6rem;
+    flex: 1;
+    outline: none;
+    padding: 0;
+  }
+
+  .tag-input::placeholder {
+    color: var(--theme-color-Sub-dark);
+  }
+
   .memotab-content {
     display: flex;
     box-sizing: border-box;
-    height: calc(100% - 5.5rem);
     flex: 1;
     overflow: hidden;
   }

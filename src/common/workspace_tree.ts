@@ -39,7 +39,12 @@ export function workspaceToProjectData(
         status: task.status,
         "start date": task.startDate as `${string}-${string}-${string}` | undefined,
         "due date": task.dueDate as `${string}-${string}-${string}` | undefined,
-        memo: task.memos.map((m) => ({ id: m.id, title: m.title, content: m.content })),
+        memo: task.memos.map((m) => ({
+          id: m.id,
+          title: m.title,
+          content: m.content,
+          tags: m.tags,
+        })),
       },
       children: childIds.map((cid) => buildNode(cid)),
     };
@@ -89,6 +94,7 @@ export function projectDataToWorkspaceTasks(
         id: m.id || "",
         title: m.title || "",
         content: typeof m.content === "string" ? m.content : "",
+        tags: Array.isArray(m.tags) ? m.tags : [],
       })),
       createdAt: existing?.createdAt || today,
     });
