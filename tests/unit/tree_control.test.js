@@ -84,6 +84,90 @@ describe("tree_control", () => {
     expect(filtered.children[0].data.status).toBe("Pending");
   });
 
+  test("filterTree with tags filter keeps only tasks whose memos contain the tag", () => {
+    const tree = {
+      id: "root",
+      data: { name: "Root", status: "Open", memo: [] },
+      children: [
+        {
+          id: "task-a",
+          data: {
+            name: "Task A",
+            status: "Open",
+            memo: [{ id: "m1", title: "Note", content: "text", tags: ["design"] }],
+          },
+          children: [],
+        },
+        {
+          id: "task-b",
+          data: {
+            name: "Task B",
+            status: "Open",
+            memo: [{ id: "m2", title: "Note", content: "text", tags: ["backend"] }],
+          },
+          children: [],
+        },
+      ],
+    };
+
+    const filtered = filterTree(tree, { tags: ["design"] });
+
+    expect(filtered.children).toHaveLength(1);
+    expect(filtered.children[0].id).toBe("task-a");
+  });
+
+  test("filterTree with tags filter does not expand children of matching parent", () => {
+    const tree = {
+      id: "root",
+      data: { name: "Root", status: "Open", memo: [] },
+      children: [
+        {
+          id: "task-parent",
+          data: {
+            name: "Parent",
+            status: "Open",
+            memo: [{ id: "m1", title: "Note", content: "text", tags: ["design"] }],
+          },
+          children: [
+            {
+              id: "task-child",
+              data: { name: "Child", status: "Open", memo: [] },
+              children: [],
+            },
+          ],
+        },
+      ],
+    };
+
+    const filtered = filterTree(tree, { tags: ["design"] });
+
+    // Parent matches, but child has no tag — child should not be included
+    expect(filtered.children[0].id).toBe("task-parent");
+    expect(filtered.children[0].children).toHaveLength(0);
+  });
+
+  test("filterTree with tags filter returns null when no task matches", () => {
+    const tree = {
+      id: "root",
+      data: { name: "Root", status: "Open", memo: [] },
+      children: [
+        {
+          id: "task-a",
+          data: {
+            name: "Task A",
+            status: "Open",
+            memo: [{ id: "m1", title: "Note", content: "text", tags: ["frontend"] }],
+          },
+          children: [],
+        },
+      ],
+    };
+
+    const filtered = filterTree(tree, { tags: ["design"] });
+
+    expect(filtered).toBeNull();
+  });
+
   test("updateNodeDataById patches a nested node without mutating siblings", () => {
     const tree = createTree();
     const originalSibling = tree.children[0];
