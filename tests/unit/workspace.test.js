@@ -291,6 +291,54 @@ describe("file system operations", () => {
     expect(loaded.memos[0].title).toBe("Notes");
   });
 
+  it("writeTask + readProject round-trips memo tags", () => {
+    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
+    const taskDirs = new Map([["root-id", "_project"]]);
+    const task = {
+      id: "task-tags",
+      name: "Tagged Task",
+      status: "Open",
+      parents: ["root-id"],
+      memos: [
+        {
+          id: "memo-tagged",
+          title: "Notes",
+          content: "Some content",
+          tags: ["design", "frontend"],
+        },
+      ],
+      createdAt: "2026-04-24",
+    };
+    writeTask(projectDir, task, taskDirs);
+
+    const memoFile = fs.readFileSync(path.join(projectDir, "task-tags", "memo-tagged.md"), "utf8");
+    expect(memoFile).toContain("tags:");
+    expect(memoFile).toContain("- design");
+    expect(memoFile).toContain("- frontend");
+
+    const { tasks } = readProject(projectDir);
+    const loaded = tasks.get("task-tags");
+    expect(loaded.memos[0].tags).toEqual(["design", "frontend"]);
+  });
+
+  it("memo tags default to empty array when absent from frontmatter", () => {
+    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
+    const taskDirs = new Map([["root-id", "_project"]]);
+    const task = {
+      id: "task-no-tags",
+      name: "Untagged Task",
+      status: "Open",
+      parents: ["root-id"],
+      memos: [{ id: "memo-no-tags", title: "Notes", content: "Content" }],
+      createdAt: "2026-04-24",
+    };
+    writeTask(projectDir, task, taskDirs);
+
+    const { tasks } = readProject(projectDir);
+    const loaded = tasks.get("task-no-tags");
+    expect(loaded.memos[0].tags).toEqual([]);
+  });
+
   it("preserves memo tab titles for empty workspace memos", () => {
     const { projectDir } = createProject(tmpDir, "Proj", "root-id");
     const taskDirs = new Map([["root-id", "_project"]]);
