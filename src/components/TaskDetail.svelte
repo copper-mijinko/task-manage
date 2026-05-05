@@ -7,6 +7,7 @@
     cancelPendingOperations,
     selected_type,
     workspace_store,
+    tag_index,
   } from "../stores.ts";
   import { debounce } from "lodash";
   import { onDestroy } from "svelte";
@@ -37,9 +38,11 @@
   onDestroy(() => {
     unsubscribeCancelPending();
   });
+  $: allTags = [...$tag_index.keys()].sort();
+
   const addMemo = (newMemoTitle) => {
     if (newMemoTitle) {
-      let newMemo = { id: uuidV4(), title: newMemoTitle, content: "" };
+      let newMemo = { id: uuidV4(), title: newMemoTitle, content: "", tags: [] };
       changeData(node, "memo", [...node.data.memo, newMemo]);
       return true;
     }
@@ -76,6 +79,12 @@
     updatedMemo.splice(toIndex, 0, moved);
     changeData(node, "memo", updatedMemo);
   };
+  const saveMemoTags = (selectedMemoIndex, tags) => {
+    const updatedMemo = [...node.data["memo"]];
+    updatedMemo[selectedMemoIndex] = { ...updatedMemo[selectedMemoIndex], tags };
+    node.data["memo"] = updatedMemo;
+    changeDataDebounce(node, "memo", updatedMemo);
+  };
 </script>
 
 <div class="container">
@@ -88,6 +97,8 @@
         {deleteMemo}
         {renameMemo}
         {reorderMemo}
+        {saveMemoTags}
+        {allTags}
         {workspaceProjectDir}
         taskId={$table_selected_id ?? null}
       />

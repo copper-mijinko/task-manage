@@ -4,6 +4,7 @@ export interface WorkspaceMemo {
   id: string;
   title: string;
   content: string; // Markdown
+  tags: string[];
 }
 
 export interface WorkspaceTask {

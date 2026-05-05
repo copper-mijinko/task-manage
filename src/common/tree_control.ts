@@ -7,6 +7,7 @@ export interface MemoEntry {
   id: string;
   title: string;
   content: unknown;
+  tags: string[];
 }
 
 export interface TreeNodeData {
@@ -82,6 +83,11 @@ export function filterTree(
         searchMemoEntries(tree.data.memo ?? [], keywords);
       keyMatch = nameMatch || memoMatch;
       nameFilterMatch = keyMatch; // Record if name/memo filter matched
+    } else if (key === "tags") {
+      const tag = keywords[0].toLowerCase();
+      keyMatch = (tree.data.memo ?? []).some((entry) =>
+        ((entry.tags as string[]) ?? []).some((t) => t.toLowerCase() === tag)
+      );
     } else {
       // For other filters
       keyMatch = keywords.some(

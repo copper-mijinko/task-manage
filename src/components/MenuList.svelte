@@ -9,7 +9,14 @@
   import Dialog from "./Dialog.svelte";
   import WorkspaceSetup from "./WorkspaceSetup.svelte";
   import { ripple, tooltip } from "../common/common.js";
-  import { project_ids, info_ids, selected_type, selected_id } from "../stores.ts";
+  import {
+    project_ids,
+    info_ids,
+    selected_type,
+    selected_id,
+    tag_index,
+    active_tag,
+  } from "../stores.ts";
   import { workspace_store } from "../stores/workspace";
   import { getDefaultProject } from "../common/tree_control";
 
@@ -31,6 +38,7 @@
   }
 
   let show_workspace_setup = false;
+  let tagsExpanded = true;
 
   // Dialog
   let show_confirm = false;
@@ -439,6 +447,61 @@
   {:else}
     <p style="color: white;">loading...</p>
   {/if}
+
+  <!-- Tag browser -->
+  {#if $tag_index.size > 0}
+    <br />
+    <div class="Section">
+      <span class="TagLogo">#</span>
+      <span class="TextOverFlow">Tags</span>
+      <div class="AddButtonContainer">
+        <IconButton
+          ariaLabel="Toggle tags section"
+          normalColor="rgba(255,255,255,0.1)"
+          activeColor="rgba(255,255,255,0.2)"
+          on:click={() => (tagsExpanded = !tagsExpanded)}
+        >
+          {#if tagsExpanded}
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path
+                d="M18 15L12 9L6 15"
+                stroke="white"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          {:else}
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path
+                d="M6 9L12 15L18 9"
+                stroke="white"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          {/if}
+        </IconButton>
+      </div>
+    </div>
+    {#if tagsExpanded}
+      <div class="TagContents" transition:slide={{ duration: 100 }}>
+        {#each [...$tag_index.entries()].sort( ([a], [b]) => a.localeCompare(b) ) as [tag, nodes] (tag)}
+          <button
+            class="MenuRow"
+            class:Selected={$active_tag === tag}
+            use:ripple
+            on:click={() => ($active_tag = $active_tag === tag ? null : tag)}
+          >
+            <div class="TreeLine" style="flex-shrink: 0"></div>
+            <span class="TextOverFlow">{tag}</span>
+            <span class="TagBadge">{nodes.size}</span>
+          </button>
+        {/each}
+      </div>
+    {/if}
+  {/if}
 </div>
 <Dialog
   show={show_confirm}
@@ -611,5 +674,31 @@
   }
   .NoWorkspace:hover {
     text-decoration: underline;
+  }
+  .TagLogo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    margin-right: 1rem;
+    color: white;
+    font-weight: bold;
+    font-size: 1.1rem;
+    flex-shrink: 0;
+  }
+  .TagContents {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-height: 30%;
+    overflow-y: auto;
+  }
+  .TagBadge {
+    margin-left: auto;
+    margin-right: 0.5rem;
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.6);
+    flex-shrink: 0;
   }
 </style>
