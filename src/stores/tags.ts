@@ -17,7 +17,7 @@ tree_data.subscribe((projectData) => {
         for (const tag of (memo.tags as string[]) ?? []) {
           const normalized = tag.toLowerCase();
           if (!index.has(normalized)) index.set(normalized, new Set());
-          index.get(normalized)!.add(node.data.id);
+          index.get(normalized)!.add(node.id);
         }
       }
       walk(node.children ?? []);
