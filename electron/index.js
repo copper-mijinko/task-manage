@@ -129,7 +129,7 @@ app.on("ready", () => {
   db_meta.write();
 
   const dbWriter = createAsyncWriter(db, file, "db");
-  const dbMetaWriter = createAsyncWriter(db_meta, file_meta, "meta");
+  const dbMetaWriter = createAsyncWriter(db_meta, file_meta, "meta", 100);
 
   app.on("before-quit", () => {
     dbWriter.flush();
