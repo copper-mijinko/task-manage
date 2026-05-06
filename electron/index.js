@@ -34,28 +34,48 @@ function showSaveError(context, err) {
   });
 }
 
-function createDebouncedWriter(db, context, delay = 400) {
-  let timer = null;
+function createAsyncWriter(db, filePath, context, debounceDelay = 300) {
+  let debounceTimer = null;
+  let writing = false;
+  let hasPending = false;
 
-  function doWrite() {
+  async function doWrite() {
+    if (writing) {
+      hasPending = true;
+      return;
+    }
+    writing = true;
+    hasPending = false;
     try {
-      db.write();
+      const json = JSON.stringify(db.data, null, 2);
+      await fs.promises.writeFile(filePath, json);
     } catch (err) {
       showSaveError(context, err);
+    } finally {
+      writing = false;
+      if (hasPending) {
+        doWrite();
+      }
     }
-    timer = null;
   }
 
   return {
     write() {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(doWrite, delay);
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        debounceTimer = null;
+        doWrite();
+      }, debounceDelay);
     },
     flush() {
-      if (timer) {
-        clearTimeout(timer);
-        timer = null;
-        doWrite();
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+        debounceTimer = null;
+      }
+      try {
+        db.write();
+      } catch (err) {
+        showSaveError(context, err);
       }
     },
   };
@@ -108,8 +128,8 @@ app.on("ready", () => {
   db_meta.data ||= defaultDataMeta; // initialize
   db_meta.write();
 
-  const dbWriter = createDebouncedWriter(db, "db");
-  const dbMetaWriter = createDebouncedWriter(db_meta, "meta");
+  const dbWriter = createAsyncWriter(db, file, "db");
+  const dbMetaWriter = createAsyncWriter(db_meta, file_meta, "meta");
 
   app.on("before-quit", () => {
     dbWriter.flush();
