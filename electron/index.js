@@ -34,6 +34,33 @@ function showSaveError(context, err) {
   });
 }
 
+function createDebouncedWriter(db, context, delay = 400) {
+  let timer = null;
+
+  function doWrite() {
+    try {
+      db.write();
+    } catch (err) {
+      showSaveError(context, err);
+    }
+    timer = null;
+  }
+
+  return {
+    write() {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(doWrite, delay);
+    },
+    flush() {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+        doWrite();
+      }
+    },
+  };
+}
+
 function shouldOpenDevTools() {
   const testLikeEnvironment =
     process.env.NODE_ENV === "test" ||
@@ -81,6 +108,14 @@ app.on("ready", () => {
   db_meta.data ||= defaultDataMeta; // initialize
   db_meta.write();
 
+  const dbWriter = createDebouncedWriter(db, "db");
+  const dbMetaWriter = createDebouncedWriter(db_meta, "meta");
+
+  app.on("before-quit", () => {
+    dbWriter.flush();
+    dbMetaWriter.flush();
+  });
+
   ////////////// IPC //////////////
   // on get-initial-tree-data.
   // return data to renderer.
@@ -101,19 +136,14 @@ app.on("ready", () => {
   // return data to renderer.
   ipcMain.on("set-meta-data", (event, key, value) => {
     db_meta.data[key] = value;
-    try {
-      db_meta.write();
-
-      // 繝・・繝槭′螟画峩縺輔ｌ縺溷ｴ蜷医∽ｻ悶・繧ｦ繧｣繝ｳ繝峨え縺ｫ繧る夂衍
-      if (key === "theme") {
-        for (const win of taskDetailWindows.values()) {
-          if (!win.isDestroyed()) {
-            win.webContents.send("theme-changed", value);
-          }
+    dbMetaWriter.write();
+    // 繝・・繝槭′螟画峩縺輔ｌ縺溷ｴ蜷医∽ｻ悶・繧ｦ繧｣繝ｳ繝峨え縺ｫ繧る夂衍
+    if (key === "theme") {
+      for (const win of taskDetailWindows.values()) {
+        if (!win.isDestroyed()) {
+          win.webContents.send("theme-changed", value);
         }
       }
-    } catch (err) {
-      showSaveError("set-meta-data", err);
     }
   });
   // on delete-meta-data.
@@ -121,12 +151,8 @@ app.on("ready", () => {
   ipcMain.on("delete-meta-data", (_event, key) => {
     if (key && Object.prototype.hasOwnProperty.call(db_meta.data, key)) {
       delete db_meta.data[key];
-      try {
-        db_meta.write();
-        log.info(`Metadata key deleted: ${key}`);
-      } catch (err) {
-        showSaveError("delete-meta-data", err);
-      }
+      dbMetaWriter.write();
+      log.info(`Metadata key deleted: ${key}`);
     }
   });
   // on set-tree-data.
@@ -142,11 +168,7 @@ app.on("ready", () => {
           }
         })
         .value();
-      try {
-        db.write();
-      } catch (err) {
-        showSaveError("set-tree-data", err);
-      }
+      dbWriter.write();
 
       BrowserWindow.getAllWindows().forEach((window) => {
         if (!window.isDestroyed() && window.webContents !== event.sender) {
@@ -168,22 +190,14 @@ app.on("ready", () => {
   ipcMain.on("add-project", (event, arg) => {
     if (arg) {
       db.data.push(arg);
-      try {
-        db.write();
-      } catch (err) {
-        showSaveError("add-project", err);
-      }
+      dbWriter.write();
     }
   });
   // on delete-project.
   ipcMain.on("delete-project", (event, arg) => {
     if (arg) {
       db.data = db.data.filter((node) => node.data.id !== arg);
-      try {
-        db.write();
-      } catch (err) {
-        showSaveError("delete-project", err);
-      }
+      dbWriter.write();
 
       BrowserWindow.getAllWindows().forEach((window) => {
         if (!window.isDestroyed() && window.webContents !== event.sender) {
@@ -218,11 +232,7 @@ app.on("ready", () => {
 
       if (hasChanges) {
         db.data = newOrder;
-        try {
-          db.write();
-        } catch (err) {
-          showSaveError("set-project-order", err);
-        }
+        dbWriter.write();
       }
     }
   });
