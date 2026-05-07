@@ -1,4 +1,5 @@
 import { writable, type Writable } from "svelte/store";
+import * as platform from "../lib/platform";
 
 export interface ColumnSetting {
   id: string;
@@ -42,7 +43,7 @@ function createColumnSettings(): ColumnSettingsStore {
 
   const save = (settings: ColumnSetting[]) => {
     try {
-      window.electronAPI.setMetaData(META_KEY, settings);
+      platform.setMetaData(META_KEY, settings);
     } catch {
       // ignore
     }
@@ -53,7 +54,7 @@ function createColumnSettings(): ColumnSettingsStore {
     set,
     update,
     init: () => {
-      window.electronAPI
+      platform
         .getMetaData(META_KEY)
         .then((saved) => {
           if (!isColumnSettingsArray(saved)) return;

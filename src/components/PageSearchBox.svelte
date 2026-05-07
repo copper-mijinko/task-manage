@@ -2,6 +2,7 @@
   import { onMount, onDestroy, createEventDispatcher, tick } from "svelte";
   import IconButton from "./IconButton.svelte";
   import { pageSearchQuery } from "../stores/search";
+  import * as platform from "../lib/platform";
 
   export let show = false;
 
@@ -37,7 +38,7 @@
     searchText = ""; // search box内をクリア
     lastSearchText = ""; // ステータスをクリア
     pageSearchQuery.set("");
-    window.electronAPI.stopFindInPage(); // matchCount, activeMatchOrdinalはMainから0が通知される
+    platform.stopFindInPage(); // matchCount, activeMatchOrdinalはMainから0が通知される
   }
 
   $: pageSearchQuery.set(show && searchText.trim() ? searchText.trim() : "");
@@ -47,13 +48,13 @@
     // empty, clear
     if (!searchText || !searchText.trim()) {
       lastSearchText = ""; // ステータスをクリア
-      window.electronAPI.stopFindInPage(); // matchCount, activeMatchOrdinalはMainから0が通知される
+      platform.stopFindInPage(); // matchCount, activeMatchOrdinalはMainから0が通知される
       return;
     }
 
     try {
       // 検索キック
-      await window.electronAPI.findInPage(searchText.trim(), {});
+      await platform.findInPage(searchText.trim(), {});
       // 検索文字列を保存（検索文字列変更を判定するため）
       lastSearchText = searchText;
     } catch {
@@ -74,7 +75,7 @@
     if (searchText != lastSearchText) {
       checkAndExecuteSearch();
     }
-    window.electronAPI.findInPageNext(searchText.trim());
+    platform.findInPageNext(searchText.trim());
   }
 
   // on click prev
@@ -84,7 +85,7 @@
     if (searchText != lastSearchText) {
       checkAndExecuteSearch();
     }
-    window.electronAPI.findInPagePrevious(searchText.trim());
+    platform.findInPagePrevious(searchText.trim());
   }
 
   // キー入力ハンドラ
@@ -102,14 +103,14 @@
 
   // 検索ボックスを閉じる
   function closeSearch() {
-    window.electronAPI.stopFindInPage();
+    platform.stopFindInPage();
     show = false;
     dispatch("close");
   }
 
   // 検索結果をクリア - シンプル版
   function clearSearch() {
-    window.electronAPI.stopFindInPage();
+    platform.stopFindInPage();
     searchText = "";
     matchCount = 0;
     activeMatchOrdinal = 0;
@@ -120,7 +121,7 @@
   // コンポーネントが表示された時
   onMount(() => {
     // メインプロセスからの検索結果更新メッセージを受け取るリスナーを設定
-    window.electronAPI.onSearchResultUpdated((result) => {
+    platform.onSearchResultUpdated((result) => {
       // 検索結果の件数と現在位置を設定
       matchCount = result.matches || 0;
       activeMatchOrdinal = result.activeMatchOrdinal || 0;
@@ -129,7 +130,7 @@
 
   // コンポーネントが破棄される時
   onDestroy(() => {
-    window.electronAPI.stopFindInPage();
+    platform.stopFindInPage();
   });
 </script>
 

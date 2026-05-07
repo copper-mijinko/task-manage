@@ -9,6 +9,7 @@
   import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
   import { marked } from "marked";
   import { toMarkdown } from "../common/memo_utils";
+  import * as platform from "../lib/platform";
 
   export let saveMemo: (content: string) => void;
   export let content: unknown = "";
@@ -93,7 +94,7 @@
 
   function canSavePastedImages(): boolean {
     return Boolean(
-      (workspaceProjectDir && taskId && window.electronAPI?.wsSaveMemoImage) || !workspaceProjectDir
+      (workspaceProjectDir && taskId && platform.isPlatformAvailable()) || !workspaceProjectDir
     );
   }
 
@@ -107,12 +108,12 @@
   }
 
   async function persistPastedImage(file: File): Promise<string | null> {
-    if (!workspaceProjectDir || !taskId || !window.electronAPI?.wsSaveMemoImage) {
+    if (!workspaceProjectDir || !taskId) {
       return readFileAsDataUrl(file);
     }
 
     const bytes = new Uint8Array(await file.arrayBuffer());
-    const result = await window.electronAPI.wsSaveMemoImage(
+    const result = await platform.wsSaveMemoImage(
       workspaceProjectDir,
       taskId,
       bytes,
@@ -292,7 +293,7 @@
   }
 
   async function resolveImageSources(html: string): Promise<string> {
-    if (!workspaceProjectDir || !taskId || !window.electronAPI?.wsResolveMemoAsset) {
+    if (!workspaceProjectDir || !taskId || !platform.isPlatformAvailable()) {
       return html;
     }
 
@@ -307,11 +308,7 @@
           return;
         }
 
-        const result = await window.electronAPI.wsResolveMemoAsset(
-          workspaceProjectDir,
-          taskId,
-          src
-        );
+        const result = await platform.wsResolveMemoAsset(workspaceProjectDir, taskId, src);
 
         if (result.success && result.url) {
           image.setAttribute("src", result.url);
@@ -554,7 +551,7 @@
     }
     if (link?.href) {
       e.preventDefault();
-      window.electronAPI?.openExternalLink(link.href);
+      platform.openExternalLink(link.href);
       return;
     }
   }

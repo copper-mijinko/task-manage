@@ -2,6 +2,7 @@ import { get, writable, type Writable } from "svelte/store";
 import { getDefaultProject } from "../common/tree_control";
 import type { ProjectListItem } from "../types/app";
 import { filtered_data } from "./search";
+import * as platform from "../lib/platform";
 import {
   selected_type,
   selected_id,
@@ -31,10 +32,10 @@ function createProjectIds(initialValue: ProjectListItem[] | undefined): ProjectI
     set,
     update,
     init: () => {
-      if (!projectDeleteListenerRegistered && window.electronAPI?.onProjectDeleted) {
+      if (!projectDeleteListenerRegistered) {
         projectDeleteListenerRegistered = true;
-        window.electronAPI.onProjectDeleted((deletedProjectId) => {
-          window.electronAPI.getProjectIDs().then((result) => {
+        platform.onProjectDeleted((deletedProjectId) => {
+          platform.getProjectIDs().then((result) => {
             set(result);
           });
 
@@ -54,7 +55,7 @@ function createProjectIds(initialValue: ProjectListItem[] | undefined): ProjectI
 
       subscribe((current) => {
         if (current === undefined) {
-          window.electronAPI.getProjectIDs().then((result) => {
+          platform.getProjectIDs().then((result) => {
             set(result);
           });
         }
@@ -68,19 +69,19 @@ function createProjectIds(initialValue: ProjectListItem[] | undefined): ProjectI
     },
     addProject: () => {
       const newProject = getDefaultProject();
-      window.electronAPI.addProject(newProject);
-      window.electronAPI.getProjectIDs().then((result) => {
+      platform.addProject(newProject);
+      platform.getProjectIDs().then((result) => {
         set(result);
       });
     },
     deleteProject: (projectId: string) => {
-      window.electronAPI.deleteProject(projectId);
-      window.electronAPI.getProjectIDs().then((result) => {
+      platform.deleteProject(projectId);
+      platform.getProjectIDs().then((result) => {
         set(result);
       });
 
       const metaKey = `closed_nodes_${projectId}`;
-      window.electronAPI.deleteMetaData(metaKey);
+      platform.deleteMetaData(metaKey);
 
       if (projectId === get(selected_id)) {
         selected_type.set(undefined);
@@ -88,7 +89,7 @@ function createProjectIds(initialValue: ProjectListItem[] | undefined): ProjectI
       }
     },
     setProjectOrder: (projects: ProjectListItem[]) => {
-      window.electronAPI.setProjectOrder(projects);
+      platform.setProjectOrder(projects);
     },
   };
 }

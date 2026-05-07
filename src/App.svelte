@@ -13,6 +13,7 @@
     saveStatus,
   } from "./stores.ts";
   import { onMount, onDestroy } from "svelte";
+  import * as platform from "./lib/platform";
   import ProjectPage from "./components/ProjectPage.svelte";
   import Header from "./components/Header.svelte";
   import InfoPage from "./components/InfoPage.svelte";
@@ -47,7 +48,7 @@
       document.title = `${detailWindowTaskName} | Task Detail`;
       setTaskDetailWindowTarget(detailWindowProjectId, detailWindowTaskId);
 
-      const result = await window.electronAPI.getTreeData(detailWindowProjectId);
+      const result = await platform.getTreeData(detailWindowProjectId);
       if (result) {
         tree_data.set(result);
         selected_type.set("Projects");
@@ -64,13 +65,9 @@
   // 検索ウィンドウでのテーマ初期化処理
   async function initSearchWindowTheme() {
     try {
-      if (window.electronAPI && window.electronAPI.getCurrentTheme) {
-        // メインウィンドウから現在のテーマを取得
-        const currentTheme = await window.electronAPI.getCurrentTheme();
-        if (currentTheme) {
-          // テーマを設定
-          theme.set(currentTheme);
-        }
+      const currentTheme = await platform.getCurrentTheme();
+      if (currentTheme) {
+        theme.set(currentTheme);
       }
     } catch {
       // ignore theme initialization error
@@ -106,6 +103,15 @@
   }
 
   onMount(async () => {
+    try {
+      performance.mark("app-mounted");
+      performance.measure("renderer-to-mount", "renderer-start", "app-mounted");
+      const [entry] = performance.getEntriesByName("renderer-to-mount");
+      if (entry) console.log(`[perf] renderer-to-mount: ${entry.duration.toFixed(1)}ms`);
+    } catch {
+      // renderer-start not set (e.g. test environment)
+    }
+
     if (isTaskDetailWindow) {
       await initTaskDetailWindow();
     } else {
@@ -116,20 +122,16 @@
     await initSearchWindowTheme();
 
     // テーマ変更通知のリスナー登録
-    if (window.electronAPI && window.electronAPI.onThemeChanged) {
-      window.electronAPI.onThemeChanged((newTheme) => {
-        theme.set(newTheme);
-      });
-    }
+    platform.onThemeChanged((newTheme) => {
+      theme.set(newTheme);
+    });
 
     window.addEventListener("keydown", handleKeyDown, true);
 
-    if (window.electronAPI?.onSaveError) {
-      window.electronAPI.onSaveError((message) => {
-        saveErrorMessage = message;
-        saveStatus.set("error");
-      });
-    }
+    platform.onSaveError((message) => {
+      saveErrorMessage = message;
+      saveStatus.set("error");
+    });
   });
 
   onDestroy(() => {

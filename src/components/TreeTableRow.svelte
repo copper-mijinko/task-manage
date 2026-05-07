@@ -6,6 +6,7 @@
   import { createEventDispatcher } from "svelte";
   import { selected_id } from "../stores.ts";
   import { ripple } from "../common/common.js";
+  import * as platform from "../lib/platform";
   import TaskName from "./TaskName.svelte";
   import StatusSelect from "./StatusSelect.svelte";
   import DateInput from "./DateInput.svelte";
@@ -68,17 +69,11 @@
   }
 
   function openTaskDetailInWindow(taskText) {
-    try {
-      if (window.electronAPI && window.electronAPI.openTaskDetailWindow) {
-        window.electronAPI.openTaskDetailWindow({
-          projectId: $selected_id,
-          taskId: id,
-          taskName: taskText,
-        });
-      }
-    } catch {
-      // ignore error opening task detail window
-    }
+    platform.openTaskDetailWindow({
+      projectId: $selected_id,
+      taskId: id,
+      taskName: taskText,
+    });
   }
 
   function dragStart(e) {

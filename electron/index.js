@@ -1,4 +1,3 @@
-const _ = require("lodash");
 const { app, BrowserWindow, ipcMain, shell, dialog } = require("electron");
 const fs = require("fs");
 const path = require("path");
@@ -91,6 +90,8 @@ function shouldOpenDevTools() {
 }
 
 app.on("ready", () => {
+  const t0 = Date.now();
+
   let mainWindow = new BrowserWindow({
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -100,19 +101,16 @@ app.on("ready", () => {
     minWidth: 700,
     minHeight: 700,
   });
+  log.info(`[perf] BrowserWindow created: ${Date.now() - t0}ms`);
 
   ////////////// Low //////////////
-  // Extend Low class with a new `chain` field
-  class LowSyncWithLodash extends LowSync {
-    chain = _.chain(this).get("data");
-  }
   // init low db. read after.
   // data
   const file = resolveAppDataPath("db.json");
   log.info(file);
   const defaultData = [];
   const adapter = new JSONFileSync(file);
-  const db = new LowSyncWithLodash(adapter);
+  const db = new LowSync(adapter);
   db.read();
   db.data ||= defaultData; // initialize
   db.write();
@@ -123,10 +121,11 @@ app.on("ready", () => {
     theme: "dark",
   };
   const adapter_meta = new JSONFileSync(file_meta);
-  const db_meta = new LowSyncWithLodash(adapter_meta);
+  const db_meta = new LowSync(adapter_meta);
   db_meta.read();
   db_meta.data ||= defaultDataMeta; // initialize
   db_meta.write();
+  log.info(`[perf] DB init done: ${Date.now() - t0}ms`);
 
   const dbWriter = createAsyncWriter(db, file, "db");
   const dbMetaWriter = createAsyncWriter(db_meta, file_meta, "meta", 100);
@@ -145,7 +144,7 @@ app.on("ready", () => {
   // on get-tree-data.
   // return data to renderer.
   ipcMain.handle("get-tree-data", async (event, arg) => {
-    return db.chain.find({ data: { id: arg } }).value();
+    return db.data.find((o) => o?.data?.id === arg);
   });
   // on get-meta-data.
   // return data to renderer.
@@ -179,15 +178,13 @@ app.on("ready", () => {
   // return data to renderer.
   ipcMain.on("set-tree-data", (event, arg) => {
     if (arg) {
-      db.data = db.chain
-        .map((o) => {
-          if (o.data.id === arg.data.id) {
-            return arg;
-          } else {
-            return o;
-          }
-        })
-        .value();
+      db.data = db.data.map((o) => {
+        if (o.data.id === arg.data.id) {
+          return arg;
+        } else {
+          return o;
+        }
+      });
       dbWriter.write();
 
       BrowserWindow.getAllWindows().forEach((window) => {
@@ -200,11 +197,9 @@ app.on("ready", () => {
   // on get-project-ids.
   // return data to renderer.
   ipcMain.handle("get-project-ids", async () => {
-    return db.chain
-      .map((o) => {
-        return { name: o.data.data.name, id: o.data.id };
-      })
-      .value();
+    return db.data.map((o) => {
+      return { name: o.data.data.name, id: o.data.id };
+    });
   });
   // on add-project.
   ipcMain.on("add-project", (event, arg) => {
@@ -465,11 +460,14 @@ app.on("ready", () => {
     }
   });
 
+  log.info(`[perf] IPC handlers registered: ${Date.now() - t0}ms`);
+
   if (process.env.VITE_DEV === "true") {
     mainWindow.loadURL("http://localhost:5173");
   } else {
     mainWindow.loadFile(path.join(__dirname, "../renderer/index.html"));
   }
+  log.info(`[perf] loadURL called: ${Date.now() - t0}ms`);
   if (shouldOpenDevTools()) {
     mainWindow.webContents.openDevTools();
   }

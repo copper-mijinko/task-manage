@@ -1,6 +1,7 @@
 import { throttle } from "lodash";
 import _ from "lodash";
 import { get, writable, type Writable } from "svelte/store";
+import * as platform from "../lib/platform";
 import { getNode, type ProjectData, type TreeData } from "../common/tree_control";
 import { projectDataToWorkspaceTasks } from "../common/workspace_tree";
 import { filter } from "./search";
@@ -85,7 +86,7 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
       previousData = _.cloneDeep(current);
       filter.set(get(filter));
       if (!isWorkspace) {
-        window.electronAPI.getProjectIDs().then((result) => {
+        platform.getProjectIDs().then((result) => {
           project_ids.set(result);
         });
       }
@@ -111,7 +112,7 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
 
             const metaKey = `closed_nodes_${projectId}`;
             const idsArray = Array.from(newState);
-            window.electronAPI.setMetaData(metaKey, idsArray);
+            platform.setMetaData(metaKey, idsArray);
 
             return newState;
           });
@@ -128,19 +129,19 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
       const cachedTasks = get(workspace_tasks_cache);
       const tasks = projectDataToWorkspaceTasks(current, cachedTasks);
       try {
-        await window.electronAPI.wsWriteProject?.(activeProjectDir, tasks);
+        await platform.wsWriteProject(activeProjectDir, tasks);
         saveStatus.set("saved");
       } catch {
         saveStatus.set("error");
       }
     } else {
       try {
-        await window.electronAPI.setTreeData(current);
+        await platform.setTreeData(current);
         saveStatus.set("saved");
       } catch {
         saveStatus.set("error");
       }
-      window.electronAPI.getProjectIDs().then((result) => {
+      platform.getProjectIDs().then((result) => {
         project_ids.set(result);
       });
     }
@@ -151,9 +152,9 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
     set,
     update,
     init: () => {
-      if (!syncListenerRegistered && window.electronAPI?.onTreeDataUpdated) {
+      if (!syncListenerRegistered) {
         syncListenerRegistered = true;
-        window.electronAPI.onTreeDataUpdated((nextTreeData) => {
+        platform.onTreeDataUpdated((nextTreeData) => {
           if (!nextTreeData) {
             return;
           }
@@ -192,7 +193,7 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
               table_selected_id.set(pendingTaskDetailSelection.taskId);
             }
           } else {
-            window.electronAPI.getInitialTreeData().then((result) => {
+            platform.getInitialTreeData().then((result) => {
               selected_type.set("Projects");
               if (result !== undefined) {
                 selected_id.set(result.data.id);

@@ -1,5 +1,6 @@
 import { writable, get, type Writable } from "svelte/store";
 import type { WorkspaceInfo, WorkspaceProjectListItem, WorkspaceTask } from "../types/workspace";
+import * as platform from "../lib/platform";
 
 /** Last loaded workspace tasks, keyed by task id. Used during save to preserve metadata. */
 export const workspace_tasks_cache = writable<Record<string, WorkspaceTask>>({});
@@ -34,7 +35,7 @@ function createWorkspaceStore(): WorkspaceStore {
   });
 
   function persist(workspaces: WorkspaceInfo[], activeWorkspacePath: string | null) {
-    window.electronAPI?.wsSetWorkspaces?.({
+    platform.wsSetWorkspaces({
       workspaces,
       activeWorkspace: activeWorkspacePath ?? undefined,
     });
@@ -42,7 +43,7 @@ function createWorkspaceStore(): WorkspaceStore {
 
   async function loadProjects(workspacePath: string): Promise<WorkspaceProjectListItem[]> {
     try {
-      return (await window.electronAPI?.wsListProjects?.(workspacePath)) ?? [];
+      return await platform.wsListProjects(workspacePath);
     } catch {
       return [];
     }
@@ -55,8 +56,7 @@ function createWorkspaceStore(): WorkspaceStore {
 
     init() {
       (async () => {
-        if (!window.electronAPI?.wsGetWorkspaces) return;
-        const { workspaces, activeWorkspace } = await window.electronAPI.wsGetWorkspaces();
+        const { workspaces, activeWorkspace } = await platform.wsGetWorkspaces();
         const projects = activeWorkspace ? await loadProjects(activeWorkspace) : [];
         set({
           workspaces: workspaces ?? [],
@@ -68,7 +68,7 @@ function createWorkspaceStore(): WorkspaceStore {
     },
 
     selectDirectory(): Promise<string | null> {
-      return window.electronAPI?.wsSelectDirectory?.() ?? Promise.resolve(null);
+      return platform.wsSelectDirectory();
     },
 
     addWorkspace(path: string, label: string) {
@@ -119,7 +119,7 @@ function createWorkspaceStore(): WorkspaceStore {
         return { success: false, error: "No active workspace" };
       }
 
-      const result = await window.electronAPI?.wsCreateProject?.(activeWorkspacePath, name, id);
+      const result = await platform.wsCreateProject(activeWorkspacePath, name, id);
       if (!result?.success || !result.projectDir) {
         return { success: false, error: result?.error ?? "Failed to create workspace project" };
       }

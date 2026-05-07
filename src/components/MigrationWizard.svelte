@@ -1,6 +1,7 @@
 <script lang="ts">
   import Modal from "./Modal.svelte";
   import { workspace_store } from "../stores/workspace";
+  import * as platform from "../lib/platform";
 
   export let show = false;
   export let toggle: () => void;
@@ -29,7 +30,7 @@
     phase = "loading";
     loadError = "";
     try {
-      legacyProjects = (await window.electronAPI?.wsGetLegacyProjects?.()) ?? [];
+      legacyProjects = await platform.wsGetLegacyProjects();
       phase = legacyProjects.length === 0 ? "idle" : "ready";
       if (legacyProjects.length === 0) loadError = "移行対象のプロジェクトがありません。";
     } catch (e) {
@@ -50,7 +51,7 @@
     if (!targetPath) return;
     phase = "running";
     try {
-      result = (await window.electronAPI?.wsMigrateProjects?.(targetPath)) ?? null;
+      result = await platform.wsMigrateProjects(targetPath);
       if (result) {
         await workspace_store.refreshProjects();
       }

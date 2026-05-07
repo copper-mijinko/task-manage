@@ -1,6 +1,7 @@
 import { writable, type Writable } from "svelte/store";
 import { THEME_DARK, THEME_LIGHT } from "../common/theme";
 import type { ThemeName } from "../types/app";
+import * as platform from "../lib/platform";
 
 type ThemePalette = {
   [key: string]: string | ThemePalette;
@@ -36,7 +37,7 @@ function createTheme(initialValue: ThemeName | undefined): ThemeStore {
     init: () => {
       subscribe((current) => {
         if (current === undefined) {
-          window.electronAPI.getMetaData("theme").then((result) => {
+          platform.getMetaData("theme").then((result) => {
             if (isThemeName(result)) {
               set(result);
             }
@@ -45,10 +46,10 @@ function createTheme(initialValue: ThemeName | undefined): ThemeStore {
 
         if (current === "dark") {
           traverse(THEME_DARK as ThemePalette, "--theme");
-          window.electronAPI.setMetaData("theme", current);
+          platform.setMetaData("theme", current);
         } else if (current === "light") {
           traverse(THEME_LIGHT as ThemePalette, "--theme");
-          window.electronAPI.setMetaData("theme", current);
+          platform.setMetaData("theme", current);
         }
       });
     },
