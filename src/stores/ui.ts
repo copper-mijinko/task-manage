@@ -4,6 +4,7 @@ import { workspaceToProjectData } from "../common/workspace_tree";
 import type { PendingTaskDetailSelection, SelectedType } from "../types/app";
 import { clearHistory, tree_data } from "./tree";
 import { workspace_store, workspace_tasks_cache } from "./workspace";
+import * as platform from "../lib/platform";
 
 const currentHash = typeof window !== "undefined" ? window.location.hash : "";
 const currentSearch =
@@ -65,7 +66,7 @@ function createSelectedID(initialValue: string | undefined): SelectedIdStore {
         const currentSelectedType = get(selected_type);
         if (currentSelectedType === "Projects" && current) {
           clearHistory();
-          window.electronAPI.getTreeData(current).then((result) => {
+          platform.getTreeData(current).then((result) => {
             tree_data.set(result);
 
             if (
@@ -86,7 +87,7 @@ function createSelectedID(initialValue: string | undefined): SelectedIdStore {
           clearHistory();
           const { activeProjectDir } = get(workspace_store);
           if (!activeProjectDir) return;
-          window.electronAPI.wsReadProject?.(activeProjectDir).then((result) => {
+          platform.wsReadProject(activeProjectDir).then((result) => {
             if (!result) return;
             workspace_tasks_cache.set(result.tasks);
             const converted = workspaceToProjectData(result.tasks, current);
@@ -108,7 +109,7 @@ function createClosedNodeIds(initialValue: Set<string>): ClosedNodeIdsStore {
 
     try {
       const metaKey = `closed_nodes_${projectId}`;
-      const result = await window.electronAPI.getMetaData(metaKey);
+      const result = await platform.getMetaData(metaKey);
 
       const newState = isStringArray(result) ? new Set(result) : new Set<string>();
       projectExpandedStates.set(projectId, newState);
@@ -125,7 +126,7 @@ function createClosedNodeIds(initialValue: Set<string>): ClosedNodeIdsStore {
     try {
       const metaKey = `closed_nodes_${projectId}`;
       const idsArray = Array.from(state);
-      window.electronAPI.setMetaData(metaKey, idsArray);
+      platform.setMetaData(metaKey, idsArray);
     } catch {
       // ignore save error
     }
@@ -209,7 +210,7 @@ function createClosedNodeIds(initialValue: Set<string>): ClosedNodeIdsStore {
 
         const metaKey = `closed_nodes_${projectId}`;
         const idsArray = Array.from(newState);
-        window.electronAPI.setMetaData(metaKey, idsArray);
+        platform.setMetaData(metaKey, idsArray);
 
         return newState;
       });
