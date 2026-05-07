@@ -106,8 +106,6 @@
     try {
       performance.mark("app-mounted");
       performance.measure("renderer-to-mount", "renderer-start", "app-mounted");
-      const [entry] = performance.getEntriesByName("renderer-to-mount");
-      if (entry) console.log(`[perf] renderer-to-mount: ${entry.duration.toFixed(1)}ms`);
     } catch {
       // renderer-start not set (e.g. test environment)
     }
