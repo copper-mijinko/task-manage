@@ -30,7 +30,6 @@
   }
 </script>
 
-<!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
 <div
   class="DateRangePanel"
   style={panelStyle}
