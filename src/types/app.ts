@@ -9,6 +9,11 @@ import type {
 export type ThemeName = "dark" | "light";
 export type SelectedType = "Projects" | "Info" | "WorkspaceProject" | undefined;
 export type FilterState = Record<string, string[]>;
+export type SortDirection = "asc" | "desc";
+export interface SortState {
+  column: string;
+  direction: SortDirection;
+}
 
 export interface ProjectListItem {
   id: string;

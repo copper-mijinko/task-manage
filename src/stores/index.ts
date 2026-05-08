@@ -7,6 +7,7 @@ export * from "./ui";
 export * from "./column_settings";
 export * from "./workspace";
 export * from "./tags";
+export * from "./sort";
 
 import { tree_data } from "./tree";
 import { project_ids } from "./project";
@@ -16,11 +17,13 @@ import { theme } from "./theme";
 import { column_settings } from "./column_settings";
 import { workspace_store } from "./workspace";
 import { active_tag } from "./tags";
+import { sort_state } from "./sort";
 
 export function init_store() {
   tree_data.init();
   project_ids.init();
   selected_id.init();
+  sort_state.init();
   filter.init();
   theme.init();
   closed_node_ids.init();

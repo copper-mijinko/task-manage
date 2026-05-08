@@ -2,7 +2,9 @@
   import { filter } from "../stores.ts";
   import { column_settings } from "../stores/column_settings.ts";
   import { closed_node_ids } from "../stores/ui.ts";
+  import { sort_state, SORTABLE_COLUMNS } from "../stores/sort.ts";
   import MultiSelect from "./MultiSelect.svelte";
+  import DateRangePanel from "./DateRangePanel.svelte";
 
   export let headers;
   export let allHeaders = [];
@@ -17,7 +19,14 @@
   let panelElement;
   let panelStyle = "";
 
+  let openDatePanel = null;
+  let datePanelAnchorRect = null;
+  let datePanelElement = null;
+
   $: availableIds = new Set(allHeaders.map((h) => h.name));
+
+  $: startDateFilter = $filter["start date"] ?? ["", ""];
+  $: dueDateFilter = $filter["due date"] ?? ["", ""];
 
   function openPanel(e) {
     e.stopPropagation();
@@ -26,9 +35,40 @@
     showPanel = !showPanel;
   }
 
+  function handleSortClick(e, headerName) {
+    if (!SORTABLE_COLUMNS.has(headerName)) return;
+    sort_state.cycle(headerName);
+  }
+
+  function toggleDatePanel(e, headerName) {
+    e.stopPropagation();
+    if (openDatePanel === headerName) {
+      openDatePanel = null;
+    } else {
+      datePanelAnchorRect = e.currentTarget.getBoundingClientRect();
+      openDatePanel = headerName;
+    }
+  }
+
+  function handleDateRangeChange(headerName, detail) {
+    const { from, to } = detail;
+    filter.update((f) => {
+      const next = { ...f };
+      if (!from && !to) {
+        delete next[headerName];
+      } else {
+        next[headerName] = [from, to];
+      }
+      return next;
+    });
+  }
+
   function handleWindowClick(e) {
     if (showPanel && panelElement && !panelElement.contains(e.target)) {
       showPanel = false;
+    }
+    if (openDatePanel && datePanelElement && !datePanelElement.contains(e.target)) {
+      openDatePanel = null;
     }
   }
 
@@ -47,10 +87,50 @@
 <div class:TableRow={true} role="row">
   {#each headers as header}
     <div class:TableHeader={true} role="columnheader">
+      <!-- Label row: clickable for sort on sortable columns -->
+      <!-- svelte-ignore a11y-no-static-element-interactions -->
       <div
-        style="display: flex; flex: 1; width:100%; height:100%; justify-content: center; align-items: center;"
+        class="HeaderLabelRow"
+        class:sortable={SORTABLE_COLUMNS.has(header.name)}
+        class:sortActive={$sort_state?.column === header.name}
+        on:click={(e) => handleSortClick(e, header.name)}
+        on:keydown={(e) => {
+          if (e.key === "Enter" || e.key === " ") handleSortClick(e, header.name);
+        }}
       >
         <span class:TextOverFlow={true}>{header.name}</span>
+        {#if $sort_state?.column === header.name}
+          <span class="SortIndicator">
+            {$sort_state.direction === "asc" ? "▲" : "▼"}
+          </span>
+        {/if}
+        {#if header.name === "start date" || header.name === "due date"}
+          <button
+            class="DateFilterBtn"
+            class:active={!!$filter[header.name]}
+            on:click|stopPropagation={(e) => toggleDatePanel(e, header.name)}
+            aria-label="{header.name} 日付フィルター"
+            aria-expanded={openDatePanel === header.name}
+            title="日付フィルター"
+          >
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect
+                x="3"
+                y="4"
+                width="18"
+                height="18"
+                rx="2"
+                ry="2"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <line x1="16" y1="2" x2="16" y2="6" stroke-width="2" stroke-linecap="round" />
+              <line x1="8" y1="2" x2="8" y2="6" stroke-width="2" stroke-linecap="round" />
+              <line x1="3" y1="10" x2="21" y2="10" stroke-width="2" stroke-linecap="round" />
+            </svg>
+          </button>
+        {/if}
       </div>
       {#if header.name == "status"}
         <div
@@ -230,6 +310,28 @@
   </div>
 {/if}
 
+{#if openDatePanel === "start date"}
+  <DateRangePanel
+    bind:this={datePanelElement}
+    column="start date"
+    from={startDateFilter[0]}
+    to={startDateFilter[1]}
+    anchorRect={datePanelAnchorRect}
+    on:change={(e) => handleDateRangeChange("start date", e.detail)}
+  />
+{/if}
+
+{#if openDatePanel === "due date"}
+  <DateRangePanel
+    bind:this={datePanelElement}
+    column="due date"
+    from={dueDateFilter[0]}
+    to={dueDateFilter[1]}
+    anchorRect={datePanelAnchorRect}
+    on:change={(e) => handleDateRangeChange("due date", e.detail)}
+  />
+{/if}
+
 <style>
   .TableRow {
     position: sticky;
@@ -269,6 +371,60 @@
     text-overflow: ellipsis;
     overflow: hidden;
     white-space: nowrap;
+  }
+
+  .HeaderLabelRow {
+    display: flex;
+    flex: 1;
+    width: 100%;
+    height: 100%;
+    justify-content: center;
+    align-items: center;
+    gap: 0.2rem;
+    padding: 0 0.3rem;
+    overflow: hidden;
+    box-sizing: border-box;
+  }
+  .HeaderLabelRow.sortable {
+    cursor: pointer;
+    user-select: none;
+  }
+  .HeaderLabelRow.sortable:hover {
+    background-color: var(--theme-color-Accent-dark);
+  }
+  .HeaderLabelRow.sortActive {
+    color: var(--theme-color-Accent-main);
+  }
+  .SortIndicator {
+    font-size: 0.7rem;
+    flex-shrink: 0;
+    color: var(--theme-color-Accent-main);
+  }
+
+  .DateFilterBtn {
+    width: 1.4rem;
+    height: 1.4rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    border-radius: 0.25rem;
+    padding: 0.2rem;
+    opacity: 0.5;
+    flex-shrink: 0;
+  }
+  .DateFilterBtn:hover,
+  .DateFilterBtn.active,
+  .DateFilterBtn[aria-expanded="true"] {
+    background-color: var(--theme-color-Accent-dark);
+    opacity: 1;
+  }
+  .DateFilterBtn svg {
+    width: 100%;
+    height: 100%;
+    stroke: var(--theme-color-Main-light);
   }
 
   .ExpandCollapseButtons {
