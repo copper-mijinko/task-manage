@@ -1,5 +1,6 @@
 import { uuidV4 } from "./uuid";
 import { searchMemoEntries } from "./memo_utils";
+import type { SortState } from "../types/app";
 
 export type TaskStatus = "Open" | "Pending" | "In Progress" | "Completed" | "Canceled";
 
@@ -88,6 +89,15 @@ export function filterTree(
       keyMatch = (tree.data.memo ?? []).some((entry) =>
         ((entry.tags as string[]) ?? []).some((t) => t.toLowerCase() === tag)
       );
+    } else if (key === "start date" || key === "due date") {
+      const from = keywords[0] ?? "";
+      const to = keywords[1] ?? "";
+      const nodeDate = (tree.data[key] as string | undefined) ?? "";
+      if (!nodeDate) {
+        keyMatch = !from && !to;
+      } else {
+        keyMatch = (!from || nodeDate >= from) && (!to || nodeDate <= to);
+      }
     } else {
       // For other filters
       keyMatch = keywords.some(
@@ -523,6 +533,49 @@ export function indentNode(target: string, tree_data: TreeData): TreeData {
   newParent.children.push(node);
 
   return tree_data;
+}
+
+const STATUS_ORDER: Record<TaskStatus, number> = {
+  Open: 0,
+  "In Progress": 1,
+  Pending: 2,
+  Completed: 3,
+  Canceled: 4,
+};
+
+export function sortTree(
+  tree: TreeData | null | undefined,
+  sort: SortState | null | undefined
+): TreeData | null | undefined {
+  if (!tree || !sort) return tree;
+
+  const compare = (a: TreeData, b: TreeData): number => {
+    const { column, direction } = sort;
+    let result = 0;
+
+    if (column === "status") {
+      const aOrder = STATUS_ORDER[a.data.status] ?? 99;
+      const bOrder = STATUS_ORDER[b.data.status] ?? 99;
+      result = aOrder - bOrder;
+    } else if (column === "name") {
+      result = (a.data.name ?? "").localeCompare(b.data.name ?? "");
+    } else if (column === "start date" || column === "due date") {
+      const aVal = (a.data[column] as string | undefined) ?? "";
+      const bVal = (b.data[column] as string | undefined) ?? "";
+      if (!aVal && !bVal) result = 0;
+      else if (!aVal) result = 1;
+      else if (!bVal) result = -1;
+      else result = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+    }
+
+    return direction === "desc" ? -result : result;
+  };
+
+  const sortedChildren = [...tree.children]
+    .map((child) => sortTree(child, sort) as TreeData)
+    .sort(compare);
+
+  return { ...tree, children: sortedChildren };
 }
 
 export function outdentNode(target: string, tree_data: TreeData): TreeData {

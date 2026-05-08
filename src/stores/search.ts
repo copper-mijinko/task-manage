@@ -1,9 +1,16 @@
 import { debounce } from "lodash";
 import { get, writable, type Writable } from "svelte/store";
-import { filterTree, getNode, type ProjectData, type TreeData } from "../common/tree_control";
-import type { FilterState } from "../types/app";
+import {
+  filterTree,
+  getNode,
+  sortTree,
+  type ProjectData,
+  type TreeData,
+} from "../common/tree_control";
+import type { FilterState, SortState } from "../types/app";
 import { tree_data } from "./tree";
 import { table_selected_id } from "./ui";
+import { sort_state } from "./sort";
 
 export interface FilterStore extends Writable<FilterState> {
   init: () => void;
@@ -12,7 +19,11 @@ export interface FilterStore extends Writable<FilterState> {
 function createFilter(initialValue: FilterState): FilterStore {
   const { subscribe, set, update } = writable<FilterState>(initialValue);
 
-  const syncFilteredData = (current: FilterState, currentTreeData: ProjectData | undefined) => {
+  const syncFilteredData = (
+    current: FilterState,
+    currentTreeData: ProjectData | undefined,
+    currentSort: SortState | null
+  ) => {
     if (!currentTreeData) {
       applyFilteredData.cancel();
       filtered_data.set(undefined);
@@ -22,7 +33,8 @@ function createFilter(initialValue: FilterState): FilterStore {
 
     if (!hasActiveFilters(current)) {
       applyFilteredData.cancel();
-      const nextTree = currentTreeData.data;
+      const nextTree = (sortTree(currentTreeData.data, currentSort) ??
+        currentTreeData.data) as TreeData;
       if (
         !get(table_selected_id) ||
         !nextTree ||
@@ -35,21 +47,25 @@ function createFilter(initialValue: FilterState): FilterStore {
       return;
     }
 
-    applyFilteredData(current, currentTreeData);
+    applyFilteredData(current, currentTreeData, currentSort);
   };
 
-  const applyFilteredData = debounce((current: FilterState, currentTreeData: ProjectData) => {
-    const filtered = filterTree(currentTreeData.data, current);
-    if (
-      !get(table_selected_id) ||
-      !filtered ||
-      !getNode(get(table_selected_id) as string, filtered)
-    ) {
-      table_selected_id.set(undefined);
-    }
+  const applyFilteredData = debounce(
+    (current: FilterState, currentTreeData: ProjectData, currentSort: SortState | null) => {
+      const filtered = filterTree(currentTreeData.data, current);
+      const sorted = (sortTree(filtered, currentSort) ?? filtered) as TreeData | null | undefined;
+      if (
+        !get(table_selected_id) ||
+        !sorted ||
+        !getNode(get(table_selected_id) as string, sorted)
+      ) {
+        table_selected_id.set(undefined);
+      }
 
-    filtered_data.set(filtered);
-  }, 500);
+      filtered_data.set(sorted);
+    },
+    500
+  );
 
   const hasActiveFilters = (current: FilterState) =>
     Object.keys(current || {}).some((key) => current[key] && current[key].length > 0);
@@ -60,11 +76,19 @@ function createFilter(initialValue: FilterState): FilterStore {
     update,
     init: () => {
       subscribe((current) => {
-        syncFilteredData(current, get(tree_data));
+        syncFilteredData(current, get(tree_data), get(sort_state));
       });
 
       tree_data.subscribe((currentTreeData) => {
-        syncFilteredData(get({ subscribe } as Writable<FilterState>), currentTreeData);
+        syncFilteredData(
+          get({ subscribe } as Writable<FilterState>),
+          currentTreeData,
+          get(sort_state)
+        );
+      });
+
+      sort_state.subscribe((currentSort) => {
+        syncFilteredData(get({ subscribe } as Writable<FilterState>), get(tree_data), currentSort);
       });
     },
   };
