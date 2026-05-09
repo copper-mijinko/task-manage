@@ -1,4 +1,4 @@
-import { render } from "@testing-library/svelte";
+import { fireEvent, render } from "@testing-library/svelte";
 import { get } from "svelte/store";
 import { tick } from "svelte";
 
@@ -8,6 +8,7 @@ import {
   filtered_data,
   ganttScale,
   ganttScrollTop,
+  theme,
   tree_data,
 } from "../../src/stores.ts";
 
@@ -92,6 +93,7 @@ describe("GanttPanel", () => {
     closed_node_ids.set(new Set());
     ganttScale.set("day");
     ganttScrollTop.set(0);
+    theme.set("light");
   });
 
   afterEach(() => {
@@ -127,6 +129,30 @@ describe("GanttPanel", () => {
 
     expect(headerCell.children[0]).toHaveClass("HeaderCellDate");
     expect(headerCell.children[1]).toHaveClass("HeaderCellWeekday");
+  });
+
+  test("renders a left aligned gantt title row with scale buttons", async () => {
+    const { container, getByRole } = render(GanttPanel);
+    await tick();
+
+    const title = container.querySelector(".GanttTitle");
+
+    expect(title).toHaveTextContent("gantt");
+    expect(title).toHaveClass("GanttTitle");
+    expect(container.querySelector(".GanttTitleRow .ScaleButtons")).toBeInTheDocument();
+    expect(container.querySelector(".TimelineHeaderViewport .HeaderCell")).toBeInTheDocument();
+
+    await fireEvent.click(getByRole("button", { name: "月表示" }));
+    expect(get(ganttScale)).toBe("month");
+  });
+
+  test("uses the dark theme header color variant when the app is dark", async () => {
+    theme.set("dark");
+
+    const { container } = render(GanttPanel);
+    await tick();
+
+    expect(container.querySelector(".GanttRoot")).toHaveClass("DarkTheme");
   });
 
   test("rescales task bar width when switching between day week and month views", async () => {
