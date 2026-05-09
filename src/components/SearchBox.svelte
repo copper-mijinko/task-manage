@@ -68,9 +68,9 @@
     ariaLabel="Search tasks"
     variant="text"
     use_ripple={true}
-    normalColor="var(--theme-color-Sub-main)"
-    activeColor="var(--theme-color-Sub-main)"
-    style={"box-shadow: none; width: 2.2rem; height: 2.2rem;"}
+    normalColor="var(--theme-color-Primary-main)"
+    activeColor="var(--theme-color-Primary-main)"
+    style={"box-shadow: none; width: 2.2rem; height: 2.2rem; --backgroundColor: var(--theme-color-Shadow-sub);"}
   >
     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
       ><path
@@ -89,11 +89,13 @@
     variant="text"
     use_ripple={true}
     normalColor={memoSearchEnabled
-      ? "var(--theme-color-Theme-light)"
-      : "var(--theme-color-Sub-main)"}
-    activeColor="var(--theme-color-Sub-main)"
+      ? "var(--theme-color-Accent-main)"
+      : "var(--theme-color-Primary-main)"}
+    activeColor={memoSearchEnabled
+      ? "var(--theme-color-Accent-main)"
+      : "var(--theme-color-Primary-main)"}
     tooltipContent={memoSearchEnabled ? "メモを検索対象から除外" : "メモも検索対象に含める"}
-    style={"box-shadow: none; width: 2.2rem; height: 2.2rem;"}
+    style={"box-shadow: none; width: 2.2rem; height: 2.2rem; --backgroundColor: var(--theme-color-Shadow-sub);"}
   >
     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
       ><path
