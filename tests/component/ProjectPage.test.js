@@ -18,8 +18,19 @@ vi.mock("../../src/components/TaskDetail.svelte", async () => {
   return { default: mod.default };
 });
 
+vi.mock("../../src/components/GanttPanel.svelte", async () => {
+  const mod = await import("../mocks/GanttPanelStub.svelte");
+  return { default: mod.default };
+});
+
 import ProjectPage from "../../src/components/ProjectPage.svelte";
-import { closed_node_ids, selected_id, table_selected_id, tree_data } from "../../src/stores.ts";
+import {
+  closed_node_ids,
+  ganttVisible,
+  selected_id,
+  table_selected_id,
+  tree_data,
+} from "../../src/stores.ts";
 
 function createProjectData() {
   return {
@@ -66,6 +77,7 @@ describe("ProjectPage", () => {
     selected_id.set("project-1");
     table_selected_id.set("task-1");
     closed_node_ids.set(new Set());
+    ganttVisible.set(false);
   });
 
   afterEach(() => {
@@ -163,5 +175,32 @@ describe("ProjectPage", () => {
 
     expect(get(tree_data).data.children).toHaveLength(0);
     expect(get(table_selected_id)).toBeUndefined();
+  });
+
+  test("toggles the right detail pane", async () => {
+    render(ProjectPage);
+
+    expect(screen.getByTestId("task-detail-stub")).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Hide detail pane" }));
+
+    expect(screen.queryByTestId("task-detail-stub")).not.toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Show detail pane" }));
+
+    expect(screen.getByTestId("task-detail-stub")).toBeInTheDocument();
+  });
+
+  test("closes the right detail pane while the gantt panel remains visible", async () => {
+    ganttVisible.set(true);
+
+    render(ProjectPage);
+
+    expect(screen.getByTestId("gantt-panel-stub")).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Hide detail pane" }));
+
+    expect(screen.queryByTestId("task-detail-stub")).not.toBeInTheDocument();
+    expect(screen.getByTestId("gantt-panel-stub")).toBeInTheDocument();
   });
 });

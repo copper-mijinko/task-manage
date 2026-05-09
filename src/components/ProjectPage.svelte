@@ -31,6 +31,8 @@
     show_alert = !show_alert;
   };
 
+  let detailPaneVisible = true;
+
   // Add
   export async function handleAdd(e, action) {
     e.stopPropagation();
@@ -96,7 +98,7 @@
 
 {#if $tree_data}
   <div class:Content={true}>
-    <SplitPanes defaultRatio={[3, 2]}>
+    <SplitPanes defaultRatio={detailPaneVisible ? [3, 2] : [1]}>
       <Pane style={"padding: 1rem; min-width: 10rem;"}>
         <Card style={"height: 100%; width: 100%; padding: 1rem;"}>
           <div class="TaskListToolbar">
@@ -178,6 +180,47 @@
                 <rect x="3" y="17" width="5" height="3" rx="0.5" fill="currentColor" />
               </svg>
             </IconButton>
+            <IconButton
+              tooltipContent={detailPaneVisible ? "Hide detail pane" : "Show detail pane"}
+              ariaLabel={detailPaneVisible ? "Hide detail pane" : "Show detail pane"}
+              variant="text"
+              normalColor={detailPaneVisible
+                ? "var(--theme-color-Sub-main)"
+                : "var(--theme-color-Accent-main)"}
+              activeColor={"var(--theme-color-Accent-main)"}
+              style="--backgroundColor: var(--theme-color-Shadow-sub);"
+              on:click={() => (detailPaneVisible = !detailPaneVisible)}
+            >
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect
+                  x="3"
+                  y="4"
+                  width="18"
+                  height="16"
+                  rx="2"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                />
+                <path d="M15 4V20" stroke="currentColor" stroke-width="1.8" />
+                {#if detailPaneVisible}
+                  <path
+                    d="M18.5 9L16 12L18.5 15"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                {:else}
+                  <path
+                    d="M16.5 9L19 12L16.5 15"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                {/if}
+              </svg>
+            </IconButton>
           </div>
           <Card style={"flex: 1; overflow: hidden; padding: 0;"}>
             <div class="TreeAndGantt">
@@ -201,13 +244,15 @@
           </Card>
         </Card>
       </Pane>
-      <Pane style={"padding: 1rem; min-width: 10rem;"}>
-        <Card style={"height: 100%; width: 100%;"}>
-          <div class:TaskDetail={true}>
-            <TaskDetail />
-          </div>
-        </Card>
-      </Pane>
+      {#if detailPaneVisible}
+        <Pane style={"padding: 1rem; min-width: 10rem;"}>
+          <Card style={"height: 100%; width: 100%;"}>
+            <div class:TaskDetail={true}>
+              <TaskDetail />
+            </div>
+          </Card>
+        </Pane>
+      {/if}
     </SplitPanes>
   </div>
   <Dialog
