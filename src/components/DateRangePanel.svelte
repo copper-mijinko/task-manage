@@ -123,7 +123,7 @@
     border-radius: 0.25rem;
     padding: 0.2rem 0.3rem;
     font-size: 0.8rem;
-    color-scheme: dark;
+    color-scheme: var(--color-scheme, dark);
     box-sizing: border-box;
     min-width: 0;
   }

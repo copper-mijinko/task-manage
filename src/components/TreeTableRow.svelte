@@ -401,6 +401,10 @@
     padding: 0 0.5rem;
     align-items: center;
     color: var(--theme-color-Sub-light);
+    border-right: 2px solid var(--theme-color-Main-dark);
+  }
+  .TableData:last-child {
+    border-right: none;
   }
   .TableData span {
     flex: 1;
@@ -415,7 +419,7 @@
     height: 100%;
     width: 0.6rem;
     margin-left: 0.3rem;
-    border-left: 1px solid gray;
+    border-left: 1px solid color-mix(in srgb, var(--theme-color-Sub-light) 30%, transparent);
   }
   .ExpandButton:focus-visible {
     outline: auto;
