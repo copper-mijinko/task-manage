@@ -83,6 +83,11 @@ function getTimelineWidthRem(container) {
   return Number.parseFloat(inner.style.width);
 }
 
+function getTodayLineLeftRem(container) {
+  const line = container.querySelector(".TodayLineFull");
+  return Number.parseFloat(line.style.left);
+}
+
 describe("GanttPanel", () => {
   beforeEach(() => {
     const projectData = createProjectData();
@@ -155,6 +160,24 @@ describe("GanttPanel", () => {
     expect(monthWidth).toBeCloseTo((7 * 7.667) / 30, 3);
     expect(dayWidth).toBeGreaterThan(weekWidth);
     expect(weekWidth).toBeGreaterThan(monthWidth);
+  });
+
+  test("rescales today line position when switching from day to month view", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2030, 0, 1, 9));
+
+    const { container } = render(GanttPanel);
+    await tick();
+
+    const dayLeft = getTodayLineLeftRem(container);
+
+    ganttScale.set("month");
+    await tick();
+    const monthLeft = getTodayLineLeftRem(container);
+
+    expect(dayLeft).toBeCloseTo(30 * 1.667, 3);
+    expect(monthLeft).toBeCloseTo(7.667, 3);
+    expect(dayLeft).toBeGreaterThan(monthLeft);
   });
 
   test("builds timeline range from today and visible task start and due dates", async () => {

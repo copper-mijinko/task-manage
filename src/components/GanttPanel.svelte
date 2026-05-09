@@ -136,7 +136,7 @@
   $: totalDays = Math.ceil((timelineEnd.getTime() - timelineStart.getTime()) / DAY_MS);
   $: totalWidthRem = totalDays * remPerDay;
   $: todayTs = startOfDay();
-  $: todayRem = remFromDate(todayTs);
+  $: todayRem = remFromDate(todayTs, remPerDay, timelineStart);
 
   // ── Header cells ─────────────────────────────────────────────────
 
