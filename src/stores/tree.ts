@@ -93,19 +93,6 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
 
       const isWorkspace = context.selectedType === "WorkspaceProject";
 
-      if (skipPersistOnce) {
-        skipPersistOnce = false;
-        previousData = _.cloneDeep(current);
-        filter.set(get(filter));
-        if (!isWorkspace) {
-          platform.getProjectIDs().then((result) => {
-            project_ids.set(result);
-          });
-        }
-        saveStatus.set("idle");
-        return;
-      }
-
       if (previousData) {
         if (!pendingSkipSnapshot) {
           captureSnapshot(previousData);
@@ -221,6 +208,23 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
               }
             });
           }
+        }
+
+        if (skipPersistOnce) {
+          skipPersistOnce = false;
+          previousData = current ? _.cloneDeep(current) : null;
+          if (skipSnapshot) {
+            pendingSkipSnapshot = true;
+            skipSnapshot = false;
+          }
+          filter.set(get(filter));
+          if (get(selected_type) !== "WorkspaceProject") {
+            platform.getProjectIDs().then((result) => {
+              project_ids.set(result);
+            });
+          }
+          saveStatus.set("idle");
+          return;
         }
 
         if (skipSnapshot) {
