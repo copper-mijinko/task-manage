@@ -165,8 +165,9 @@
               variant="text"
               normalColor={$ganttVisible
                 ? "var(--theme-color-Theme-light)"
-                : "var(--theme-color-Sub-main)"}
-              activeColor="var(--theme-color-Sub-main)"
+                : "var(--theme-color-Primary-main)"}
+              activeColor="var(--theme-color-Primary-main)"
+              style="--backgroundColor: color-mix(in srgb, var(--theme-color-Primary-main) 10%, transparent);"
               on:click={() => ($ganttVisible = !$ganttVisible)}
             >
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">

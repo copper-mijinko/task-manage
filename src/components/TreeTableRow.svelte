@@ -297,6 +297,9 @@
     border-radius: 0;
     background-color: transparent;
   }
+  button:active {
+    background-color: transparent;
+  }
   :global(.NameTag) {
     position: absolute;
     top: -1000rem;

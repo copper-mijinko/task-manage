@@ -241,14 +241,7 @@
                 />
               {:else}
                 <path
-                  d="M6 11l6-5 6 5"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-                <path
-                  d="M6 13l6 5 6-5"
+                  d="M6 9l6 6 6-6"
                   stroke="currentColor"
                   stroke-width="2"
                   stroke-linecap="round"
