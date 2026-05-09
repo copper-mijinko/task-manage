@@ -124,12 +124,12 @@
     rootFontSizePx = readRootFontSizePx();
   }
 
-  function dayOffset(date) {
-    return Math.floor((new Date(date).getTime() - timelineStart.getTime()) / DAY_MS);
+  function dayOffset(date, rangeStart = timelineStart) {
+    return Math.floor((new Date(date).getTime() - rangeStart.getTime()) / DAY_MS);
   }
 
-  function remFromDate(date) {
-    return dayOffset(date) * remPerDay;
+  function remFromDate(date, scaleRemPerDay = remPerDay, rangeStart = timelineStart) {
+    return dayOffset(date, rangeStart) * scaleRemPerDay;
   }
 
   $: remPerDay =
@@ -294,7 +294,14 @@
     return { "due date": formatDate(nextDueTs) };
   }
 
-  function getBarStyle(row, activeDragState = dragState) {
+  function getBarStyle(
+    row,
+    activeDragState = dragState,
+    scaleRemPerDay = remPerDay,
+    scaleTodayRem = todayRem,
+    scaleTodayTs = todayTs,
+    rangeStart = timelineStart
+  ) {
     const baseDateState = getRowDateState(row);
     const dateState =
       activeDragState?.id === row.id && activeDragState.mode !== "create"
@@ -311,12 +318,18 @@
     );
 
     if (dateState.startTs && dateState.effectiveDueTs) {
-      const leftRem = remFromDate(dateState.startTs);
+      const leftRem = remFromDate(dateState.startTs, scaleRemPerDay, rangeStart);
       const widthRem = Math.max(
         MIN_BAR_WIDTH_REM,
-        remFromDate(dateState.effectiveDueTs + DAY_MS) - leftRem
+        remFromDate(dateState.effectiveDueTs + DAY_MS, scaleRemPerDay, rangeStart) - leftRem
       );
-      const overdue = getOverdueSegment(status, dateState.effectiveDueTs);
+      const overdue = getOverdueSegment(
+        status,
+        dateState.effectiveDueTs,
+        scaleRemPerDay,
+        scaleTodayTs,
+        rangeStart
+      );
       return {
         ...dateState,
         leftRem,
@@ -327,21 +340,23 @@
         isDue: false,
       };
     } else if (dateState.effectiveDueTs) {
-      const leftRem = remFromDate(dateState.effectiveDueTs) + DUE_MARKER_INSET_REM;
+      const leftRem =
+        remFromDate(dateState.effectiveDueTs, scaleRemPerDay, rangeStart) +
+        DUE_MARKER_INSET_REM;
       return {
         ...dateState,
         leftRem,
-        widthRem: Math.max(MIN_DUE_MARKER_WIDTH_REM, remPerDay - DUE_MARKER_INSET_REM * 2),
+        widthRem: Math.max(MIN_DUE_MARKER_WIDTH_REM, scaleRemPerDay - DUE_MARKER_INSET_REM * 2),
         color: dueColor,
         opacity: dateState.isInherited ? 0.35 : 1,
         isDue: true,
       };
     } else if (dateState.startTs) {
-      const leftRem = remFromDate(dateState.startTs);
-      const widthRem = Math.max(0.167, todayRem - leftRem);
+      const leftRem = remFromDate(dateState.startTs, scaleRemPerDay, rangeStart);
+      const widthRem = Math.max(0.167, scaleTodayRem - leftRem);
       return {
         ...dateState,
-        effectiveDueTs: todayTs,
+        effectiveDueTs: scaleTodayTs,
         leftRem,
         widthRem,
         color,
@@ -375,13 +390,22 @@
     return barColor(status);
   }
 
-  function getOverdueSegment(status, dueTs) {
-    if (!shouldShowDueAlert(status) || !dueTs || dueTs >= todayTs) {
+  function getOverdueSegment(
+    status,
+    dueTs,
+    scaleRemPerDay = remPerDay,
+    scaleTodayTs = todayTs,
+    rangeStart = timelineStart
+  ) {
+    if (!shouldShowDueAlert(status) || !dueTs || dueTs >= scaleTodayTs) {
       return null;
     }
 
-    const leftRem = remFromDate(dueTs + DAY_MS);
-    const widthRem = Math.max(0, remFromDate(todayTs + DAY_MS) - leftRem);
+    const leftRem = remFromDate(dueTs + DAY_MS, scaleRemPerDay, rangeStart);
+    const widthRem = Math.max(
+      0,
+      remFromDate(scaleTodayTs + DAY_MS, scaleRemPerDay, rangeStart) - leftRem
+    );
     if (widthRem <= 0) {
       return null;
     }
@@ -415,19 +439,32 @@
     return dateFromClientX(event.clientX);
   }
 
-  function getRangeGeometry(startTs, endTs) {
+  function getRangeGeometry(startTs, endTs, scaleRemPerDay = remPerDay, rangeStart = timelineStart) {
     const start = Math.min(startTs, endTs);
     const end = Math.max(startTs, endTs);
-    const leftRem = remFromDate(start);
-    const widthRem = Math.max(MIN_BAR_WIDTH_REM, remFromDate(end + DAY_MS) - leftRem);
+    const leftRem = remFromDate(start, scaleRemPerDay, rangeStart);
+    const widthRem = Math.max(
+      MIN_BAR_WIDTH_REM,
+      remFromDate(end + DAY_MS, scaleRemPerDay, rangeStart) - leftRem
+    );
     return { start, end, leftRem, widthRem };
   }
 
-  function getCreatePreview(row, activeDragState = dragState) {
+  function getCreatePreview(
+    row,
+    activeDragState = dragState,
+    scaleRemPerDay = remPerDay,
+    rangeStart = timelineStart
+  ) {
     if (activeDragState?.mode !== "create" || activeDragState.id !== row.id) {
       return null;
     }
-    return getRangeGeometry(activeDragState.anchorTs, activeDragState.currentTs);
+    return getRangeGeometry(
+      activeDragState.anchorTs,
+      activeDragState.currentTs,
+      scaleRemPerDay,
+      rangeStart
+    );
   }
 
   function createRange(event, row, bar) {
@@ -762,8 +799,8 @@
         <div class="TodayLineFull" style="left:{todayRem}rem;"></div>
       {/if}
       {#each rows as row (row.id)}
-        {@const bar = getBarStyle(row, dragState)}
-        {@const preview = getCreatePreview(row, dragState)}
+        {@const bar = getBarStyle(row, dragState, remPerDay, todayRem, todayTs, timelineStart)}
+        {@const preview = getCreatePreview(row, dragState, remPerDay, timelineStart)}
         <div
           class="GanttRow"
           data-row-id={row.id}
