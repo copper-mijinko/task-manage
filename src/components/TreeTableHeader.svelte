@@ -208,100 +208,87 @@
       <div class="HeaderLabelRow" class:sortActive={$sort_state?.column === header.name}>
         <span class="HeaderLabelText TextOverFlow">{header.name}</span>
         {#if SORTABLE_COLUMNS.has(header.name)}
-          <button
-            class="SortButton"
-            class:active={$sort_state?.column === header.name}
-            aria-label={getSortButtonLabel(header.name)}
-            title={getSortButtonLabel(header.name)}
-            on:click|stopPropagation={(e) => handleSortClick(e, header.name)}
+          <IconButton
+            variant="text"
+            normalColor={$sort_state?.column === header.name
+              ? "var(--theme-color-Theme-light)"
+              : "var(--theme-color-Sub-main)"}
+            activeColor="var(--theme-color-Sub-main)"
+            ariaLabel={getSortButtonLabel(header.name)}
+            tooltipContent={getSortButtonLabel(header.name)}
+            on:click={(e) => { e.stopPropagation(); handleSortClick(e, header.name); }}
+            style="margin: 0; width: var(--header-icon-size); height: var(--header-icon-size); box-shadow: none;"
           >
             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               {#if getSortDirection(header.name) === "asc"}
                 <path
                   d="M6 15l6-6 6 6"
+                  stroke="currentColor"
+                  stroke-width="2.4"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              {:else if getSortDirection(header.name) === "desc"}
+                <path
+                  d="M6 9l6 6 6-6"
+                  stroke="currentColor"
                   stroke-width="2.4"
                   stroke-linecap="round"
                   stroke-linejoin="round"
                 />
               {:else}
                 <path
-                  d="M6 9l6 6 6-6"
-                  stroke-width="2.4"
+                  d="M6 11l6-5 6 5"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <path
+                  d="M6 13l6 5 6-5"
+                  stroke="currentColor"
+                  stroke-width="2"
                   stroke-linecap="round"
                   stroke-linejoin="round"
                 />
               {/if}
             </svg>
-          </button>
+          </IconButton>
         {/if}
         {#if header.name == "name"}
           <div class="HeaderUtilityButtons">
-            <button
-              class="ExpandCollapseBtn"
-              aria-label="すべて展開"
-              title="すべて展開"
+            <IconButton
+              variant="text"
+              normalColor="var(--theme-color-Sub-main)"
+              activeColor="var(--theme-color-Sub-main)"
+              ariaLabel="すべて展開"
+              tooltipContent="すべて展開"
               on:click={() => closed_node_ids.expandAll()}
+              style="margin: 0; width: var(--header-icon-size); height: var(--header-icon-size); box-shadow: none;"
             >
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path
-                  d="M8 3H5a2 2 0 0 0-2 2v3"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-                <path
-                  d="M21 8V5a2 2 0 0 0-2-2h-3"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-                <path
-                  d="M3 16v3a2 2 0 0 0 2 2h3"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-                <path
-                  d="M16 21h3a2 2 0 0 0 2-2v-3"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
+                <path d="M8 3H5a2 2 0 0 0-2 2v3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                <path d="M21 8V5a2 2 0 0 0-2-2h-3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                <path d="M3 16v3a2 2 0 0 0 2 2h3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                <path d="M16 21h3a2 2 0 0 0 2-2v-3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
               </svg>
-            </button>
-            <button
-              class="ExpandCollapseBtn"
-              aria-label="すべて折り畳み"
-              title="すべて折り畳み"
+            </IconButton>
+            <IconButton
+              variant="text"
+              normalColor="var(--theme-color-Sub-main)"
+              activeColor="var(--theme-color-Sub-main)"
+              ariaLabel="すべて折り畳み"
+              tooltipContent="すべて折り畳み"
               on:click={() => closed_node_ids.collapseAll()}
+              style="margin: 0; width: var(--header-icon-size); height: var(--header-icon-size); box-shadow: none;"
             >
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path
-                  d="M8 3v3a2 2 0 0 1-2 2H3"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-                <path
-                  d="M21 8h-3a2 2 0 0 1-2-2V3"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-                <path
-                  d="M3 16h3a2 2 0 0 1 2 2v3"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-                <path
-                  d="M16 21v-3a2 2 0 0 1 2-2h3"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
+                <path d="M8 3v3a2 2 0 0 1-2 2H3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                <path d="M21 8h-3a2 2 0 0 1-2-2V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                <path d="M3 16h3a2 2 0 0 1 2 2v3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                <path d="M16 21v-3a2 2 0 0 1 2-2h3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
               </svg>
-            </button>
+            </IconButton>
           </div>
         {/if}
       </div>
@@ -432,27 +419,32 @@
     </div>
   {/each}
 
-  <button
-    class="ColumnSettingsBtn"
-    aria-label="Column settings"
-    aria-expanded={showPanel}
+  <IconButton
+    variant="text"
+    normalColor={showPanel ? "var(--theme-color-Theme-light)" : "var(--theme-color-Sub-main)"}
+    activeColor="var(--theme-color-Sub-main)"
+    ariaLabel="Column settings"
+    tooltipContent="カラム設定"
     on:click={openPanel}
+    style="margin: 0; width: var(--header-icon-size); height: var(--header-icon-size); box-shadow: none; position: absolute; top: 50%; right: 0; transform: translateY(-50%); z-index: 1;"
   >
     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path
         d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"
+        stroke="currentColor"
         stroke-width="2"
         stroke-linecap="round"
         stroke-linejoin="round"
       />
       <path
         d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"
+        stroke="currentColor"
         stroke-width="2"
         stroke-linecap="round"
         stroke-linejoin="round"
       />
     </svg>
-  </button>
+  </IconButton>
 </div>
 
 {#if showPanel}
@@ -636,53 +628,6 @@
     flex-shrink: 0;
   }
 
-  .SortButton,
-  .ExpandCollapseBtn,
-  .ColumnSettingsBtn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--header-fg);
-    background: transparent;
-    border: 1px solid transparent;
-    border-radius: 0.25rem;
-    cursor: pointer;
-    opacity: 0.68;
-    padding: 0;
-    box-sizing: border-box;
-    flex-shrink: 0;
-    transition:
-      background-color 0.12s ease,
-      border-color 0.12s ease,
-      opacity 0.12s ease;
-  }
-
-  .SortButton:hover,
-  .ExpandCollapseBtn:hover,
-  .ColumnSettingsBtn:hover,
-  .ColumnSettingsBtn[aria-expanded="true"] {
-    background-color: var(--header-hover);
-    border-color: var(--header-button-border);
-    opacity: 1;
-  }
-
-  .SortButton.active {
-    color: var(--header-active);
-    opacity: 1;
-  }
-
-  .SortButton svg,
-  .ExpandCollapseBtn svg,
-  .ColumnSettingsBtn svg {
-    width: var(--header-action-icon-size);
-    height: var(--header-action-icon-size);
-    stroke: currentColor;
-  }
-
-  .SortButton {
-    width: var(--header-icon-size);
-    height: var(--header-icon-size);
-  }
 
   .HeaderControlRow {
     display: flex;
@@ -696,27 +641,12 @@
     box-sizing: border-box;
     overflow: hidden;
   }
-  .ExpandCollapseBtn {
-    width: var(--header-icon-size);
-    height: var(--header-icon-size);
-  }
-
   .HeaderFilterGroup {
     display: flex;
     align-items: center;
     width: 100%;
     min-width: 0;
     height: 2rem;
-  }
-
-  .ColumnSettingsBtn {
-    position: absolute;
-    top: 50%;
-    right: 0;
-    width: var(--header-icon-size);
-    height: var(--header-icon-size);
-    z-index: 1;
-    transform: translateY(-50%);
   }
 
   .HeaderFilterControl {
