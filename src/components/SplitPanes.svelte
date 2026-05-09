@@ -1,92 +1,125 @@
 <script>
-  import { onMount } from "svelte";
+  import { onDestroy, onMount } from "svelte";
 
   export let defaultRatio = [];
 
   let split_pane_root; // Bind
 
   // Resize
-  let resizers, handlers, resize_observer;
+  let resizers = [];
+  let handlers = [];
+  let resize_observer;
+  let mutation_observer;
+  let paneCount = 0;
 
   // Min width
   let minWidth;
 
   onMount(() => {
-    let panes;
-    // Create resizres
-    [resizers, panes, resize_observer] = createResizers();
+    refreshLayout();
 
-    // Event listners
-    handlers = setResizersEvents(resizers, panes);
-
-    // Min width
-    minWidth = `${4 * panes.length}rem`; // magic number 4rem.
-
-    // Observe slot change
-    let mutation_observer = new MutationObserver(() => {
-      let panes;
-      // Create resizres
-      [resizers, panes] = createResizers(resizers, false, resize_observer);
-      // Event listners
-      unsetResizerEvents(resizers, handlers);
-      handlers = setResizersEvents(resizers, panes);
+    mutation_observer = new MutationObserver((mutations) => {
+      const paneChanged = mutations.some((mutation) =>
+        [...mutation.addedNodes, ...mutation.removedNodes].some(
+          (node) => node.nodeType === Node.ELEMENT_NODE && node.classList?.contains("Pane")
+        )
+      );
+      if (paneChanged) {
+        refreshLayout(true);
+      }
     });
     mutation_observer.observe(split_pane_root, {
-      subtree: true,
       childList: true,
     });
   });
 
-  const createResizers = (resizers = [], is_default = true, resize_observer = null) => {
-    // Get elms
-    let panes = split_pane_root.querySelectorAll(":scope > .Pane");
-    // Default
-    if (is_default) {
-      // Set width
-      if (panes.length > defaultRatio.length) {
-        defaultRatio = defaultRatio.concat(new Array(panes.length - defaultRatio.length).fill(1));
-      } else if (panes.length < defaultRatio.length) {
-        defaultRatio = defaultRatio.slice(0, panes.length);
+  onDestroy(() => {
+    mutation_observer?.disconnect();
+    resize_observer?.disconnect();
+    unsetResizerEvents(resizers, handlers);
+  });
+
+  const refreshLayout = (preserveWidths = false) => {
+    unsetResizerEvents(resizers, handlers);
+    handlers = [];
+    resizers.forEach((resizer) => resizer.remove());
+    resizers = [];
+
+    const panes = [...split_pane_root.querySelectorAll(":scope > .Pane")];
+    const canPreserveWidths = preserveWidths && panes.length === paneCount;
+    paneCount = panes.length;
+    minWidth = `${4 * panes.length}rem`; // magic number 4rem.
+
+    if (!panes.length) {
+      resize_observer?.disconnect();
+      resize_observer = undefined;
+      return;
+    }
+
+    const rootWidth = split_pane_root.getBoundingClientRect().width;
+    const widths = getPaneWidths(panes, rootWidth, canPreserveWidths);
+
+    panes.forEach((pane, index) => {
+      pane.style.width = `${widths[index]}px`;
+    });
+
+    resizers = createResizers(panes, widths);
+    handlers = setResizersEvents(resizers, panes);
+    observeRootResize(panes);
+  };
+
+  const getPaneWidths = (panes, rootWidth, preserveWidths) => {
+    if (preserveWidths) {
+      const currentWidths = panes.map((pane) => pane.getBoundingClientRect().width);
+      const currentTotal = currentWidths.reduce((partialSum, width) => partialSum + width, 0);
+      if (currentTotal > 0) {
+        return currentWidths.map((width) => (width * rootWidth) / currentTotal);
       }
-      const defaultRatio_sum = defaultRatio.reduce((partialSum, a) => partialSum + a, 0);
-      const default_root_width = split_pane_root.getBoundingClientRect().width;
-      const default_pane_widths = defaultRatio.map(
-        (ratio) => (default_root_width * ratio) / defaultRatio_sum
-      );
-      panes.forEach((pane, index) => {
-        pane.style.width = `calc(${default_pane_widths[index]}px)`;
-      });
-      // Create resizer
-      let left = 0;
-      panes.forEach((pane, index) => {
-        if (index == 0) {
-          return;
-        }
-        // Create resizer
-        const resizer = document.createElement("div");
-        resizer.classList.add("Resizer");
-        // Postions of resizer
-        resizer.style.left = `${left + default_pane_widths[index - 1] - 3}px`;
-        left += default_pane_widths[index - 1];
-        // Add resizer into Dom
-        pane.parentNode.insertBefore(resizer, pane);
-        // Keep resizer
-        resizers.push(resizer);
-      });
     }
-    // For split_pane_root resizing
-    if (resize_observer) {
-      resize_observer.disconnect(split_pane_root);
+
+    let ratios = defaultRatio;
+    if (panes.length > ratios.length) {
+      ratios = ratios.concat(new Array(panes.length - ratios.length).fill(1));
+    } else if (panes.length < ratios.length) {
+      ratios = ratios.slice(0, panes.length);
     }
+    const ratioSum = ratios.reduce((partialSum, ratio) => partialSum + ratio, 0) || panes.length;
+    return ratios.map((ratio) => (rootWidth * ratio) / ratioSum);
+  };
+
+  const createResizers = (panes, paneWidths) => {
+    const nextResizers = [];
+    let left = 0;
+
+    panes.forEach((pane, index) => {
+      if (index == 0) {
+        return;
+      }
+      const resizer = document.createElement("div");
+      resizer.classList.add("Resizer");
+      resizer.style.left = `${left + paneWidths[index - 1] - 3}px`;
+      left += paneWidths[index - 1];
+      pane.parentNode.insertBefore(resizer, pane);
+      nextResizers.push(resizer);
+    });
+
+    return nextResizers;
+  };
+
+  const observeRootResize = (panes) => {
+    resize_observer?.disconnect();
     resize_observer = new ResizeObserver((entries) => {
       // Width setting
       let root_width = 0;
-      panes.forEach((pane, index) => {
+      panes.forEach((pane) => {
         root_width += pane.getBoundingClientRect().width;
       });
+      if (root_width === 0) {
+        return;
+      }
       let new_root_width = entries[0].contentRect.width;
       let new_pane_widths = [];
-      panes.forEach((pane, index) => {
+      panes.forEach((pane) => {
         new_pane_widths.push((pane.getBoundingClientRect().width * new_root_width) / root_width);
       });
       panes.forEach((pane, index) => {
@@ -99,8 +132,6 @@
       });
     });
     resize_observer.observe(split_pane_root);
-    // Return
-    return [resizers, panes, resize_observer];
   };
 
   const setResizersEvents = (resizers, panes) => {
