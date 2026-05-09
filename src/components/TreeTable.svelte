@@ -773,9 +773,16 @@
     user-select: none;
     z-index: 10000;
   }
-  .TableRoot :global(.HandlingResizer),
-  .TableRoot :global(.Resizer:hover) {
-    background-color: var(--theme-color-Accent-light);
+  .TableRoot :global(.HandlingResizer::before),
+  .TableRoot :global(.Resizer:hover::before) {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 2px;
+    width: 2px;
+    height: 100%;
+    background-color: var(--theme-color-Accent-main);
+    opacity: 0.9;
   }
   .EmptyState {
     display: flex;

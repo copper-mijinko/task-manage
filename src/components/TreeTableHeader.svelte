@@ -3,6 +3,7 @@
   import { column_settings } from "../stores/column_settings.ts";
   import { closed_node_ids } from "../stores/ui.ts";
   import { sort_state, SORTABLE_COLUMNS } from "../stores/sort.ts";
+  import { ripple } from "../common/common.js";
   import IconButton from "./IconButton.svelte";
   import MultiSelect from "./MultiSelect.svelte";
   import DateRangePanel from "./DateRangePanel.svelte";
@@ -322,6 +323,7 @@
               aria-label="{header.name} フィルター"
               aria-expanded={openNamePanel}
               title="Name フィルター"
+              use:ripple
             >
               <span class="FilterIcon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -360,6 +362,7 @@
               aria-label="{header.name} 日付フィルター"
               aria-expanded={openDatePanel === header.name}
               title="日付フィルター"
+              use:ripple
             >
               <span class="FilterIcon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -558,12 +561,12 @@
   .TableRow {
     --header-bg: var(--theme-color-Sub-light);
     --header-fg: var(--theme-color-Main-light);
-    --header-border: color-mix(in srgb, var(--theme-color-Sub-dark) 42%, transparent);
+    --header-border: var(--theme-color-Main-dark);
     --header-hover: color-mix(in srgb, var(--theme-color-Accent-dark) 78%, transparent);
     --header-active: var(--theme-color-Accent-main);
     --header-button-border: color-mix(in srgb, var(--theme-color-Main-light) 24%, transparent);
-    --header-icon-size: 2rem;
-    --header-action-icon-size: 1.5rem;
+    --header-icon-size: 1.5rem;
+    --header-action-icon-size: 1.1rem;
 
     position: sticky;
     top: 0;
@@ -582,8 +585,8 @@
     min-width: 4rem;
     display: flex;
     flex-direction: column;
-    border-right: 1px solid var(--header-border);
-    border-bottom: 1px solid var(--header-border);
+    border-right: 2px solid var(--header-border);
+    border-bottom: 2px solid var(--header-border);
     background-color: var(--header-bg);
     color: var(--header-fg);
     align-items: center;
@@ -737,6 +740,9 @@
   }
   .HeaderFilterControl:focus-visible {
     outline: auto;
+  }
+  .HeaderFilterControl:active {
+    background-color: transparent;
   }
   .HeaderFilterSummary {
     cursor: default;
