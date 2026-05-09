@@ -61,15 +61,6 @@ jobs:
           node-version: 22
           cache: npm
 
-      - run: npm ci
-
-      - run: |
-          sudo apt update
-          sudo apt install -y wine64
-          sudo dpkg --add-architecture i386
-          sudo apt-get update
-          sudo apt-get install -y wine32:i386
-
       - id: extract_tag
         run: |
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
@@ -78,10 +69,17 @@ jobs:
             echo "version=0.0.0-dev" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Set package version from tag
+        run: npm version "${{ steps.extract_tag.outputs.version }}" --no-git-tag-version --allow-same-version
+
+      - run: npm ci
+
       - run: |
-          VERSION=${{ steps.extract_tag.outputs.version }}
-          jq --arg v "$VERSION" '.version = $v' package.json > tmp.json
-          mv tmp.json package.json
+          sudo apt update
+          sudo apt install -y wine64
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y wine32:i386
 
       - run: |
           npm run dist
