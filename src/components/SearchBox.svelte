@@ -70,7 +70,7 @@
     use_ripple={true}
     normalColor="var(--theme-color-Sub-main)"
     activeColor="var(--theme-color-Sub-main)"
-    style={"box-shadow: none; width: 2rem; height: 2rem;"}
+    style={"box-shadow: none; width: 2.2rem; height: 2.2rem;"}
   >
     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
       ><path
@@ -93,7 +93,7 @@
       : "var(--theme-color-Sub-main)"}
     activeColor="var(--theme-color-Sub-main)"
     tooltipContent={memoSearchEnabled ? "メモを検索対象から除外" : "メモも検索対象に含める"}
-    style={"box-shadow: none; width: 2rem; height: 2rem;"}
+    style={"box-shadow: none; width: 2.2rem; height: 2.2rem;"}
   >
     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
       ><path
@@ -111,7 +111,7 @@
   .SearchBoxRoot {
     width: clamp(9rem, 100%, 20rem);
     max-width: 100%;
-    height: 2rem;
+    height: 2.2rem;
     margin: 0;
     display: flex;
     flex-direction: row;
@@ -123,7 +123,7 @@
     box-sizing: border-box;
     margin: 0;
     padding: 0 1rem;
-    height: 100%;
+    height: 2.2rem;
     flex: 1 1 auto;
     width: auto;
     min-width: 0;
