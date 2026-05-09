@@ -115,7 +115,9 @@
           {/if}
         </div>
 
-        <p class="warn-note">This exports Markdown files only. The source db.json is not changed.</p>
+        <p class="warn-note">
+          This exports Markdown files only. The source db.json is not changed.
+        </p>
         {#if phase === "running"}
           <p class="note">Exporting...</p>
         {/if}

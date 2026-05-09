@@ -1,6 +1,6 @@
 import { get } from "svelte/store";
 import { vi } from "vitest";
-import { saveStatus } from "../../src/stores/ui.ts";
+import { saveStatus, selected_id, selected_type } from "../../src/stores/ui.ts";
 import { tree_data } from "../../src/stores/tree.ts";
 
 function makeElectronAPI(overrides = {}) {
@@ -34,6 +34,8 @@ describe("saveStatus store", () => {
       configurable: true,
       value: makeElectronAPI(),
     });
+    selected_type.set("Projects");
+    selected_id.set("project-1");
     saveStatus.set("idle");
     tree_data.init();
   });
@@ -41,23 +43,22 @@ describe("saveStatus store", () => {
   afterEach(() => {
     vi.runAllTimers();
     vi.useRealTimers();
-    // electronAPI を削除する前にタイマーを全部消化してから undefine
     Object.defineProperty(window, "electronAPI", {
       configurable: true,
       value: makeElectronAPI(),
     });
   });
 
-  test("初期値は idle", () => {
+  test("initial value is idle", () => {
     expect(get(saveStatus)).toBe("idle");
   });
 
-  test("tree_data に値をセットすると saving になる", () => {
+  test("setting tree_data changes status to saving", () => {
     tree_data.set(createProjectData());
     expect(get(saveStatus)).toBe("saving");
   });
 
-  test("tree_data に undefined をセットすると idle になる", () => {
+  test("setting tree_data to undefined changes status to idle", () => {
     tree_data.set(createProjectData());
     expect(get(saveStatus)).toBe("saving");
 
@@ -65,7 +66,7 @@ describe("saveStatus store", () => {
     expect(get(saveStatus)).toBe("idle");
   });
 
-  test("setTreeData 成功後に saved になる", async () => {
+  test("successful setTreeData changes status to saved", async () => {
     tree_data.set(createProjectData());
     expect(get(saveStatus)).toBe("saving");
 
@@ -75,7 +76,19 @@ describe("saveStatus store", () => {
     expect(window.electronAPI.setTreeData).toHaveBeenCalled();
   });
 
-  test("setTreeData が失敗すると error になる", async () => {
+  test("persists edits made immediately after source data is loaded", async () => {
+    tree_data.setFromSource(createProjectData());
+
+    const edited = createProjectData();
+    edited.data.data.name = "Edited Project";
+    tree_data.set(edited);
+
+    await vi.runAllTimersAsync();
+
+    expect(window.electronAPI.setTreeData).toHaveBeenCalledWith(edited);
+  });
+
+  test("failed setTreeData changes status to error", async () => {
     Object.defineProperty(window, "electronAPI", {
       configurable: true,
       value: makeElectronAPI({
@@ -91,18 +104,18 @@ describe("saveStatus store", () => {
     expect(get(saveStatus)).toBe("error");
   });
 
-  test("saveStatus を直接 error にセットできる", () => {
+  test("saveStatus can be set to error directly", () => {
     saveStatus.set("error");
     expect(get(saveStatus)).toBe("error");
   });
 
-  test("saveStatus を直接 idle にリセットできる", () => {
+  test("saveStatus can be reset to idle directly", () => {
     saveStatus.set("saved");
     saveStatus.set("idle");
     expect(get(saveStatus)).toBe("idle");
   });
 
-  test("saving → error → idle の順に遷移できる", async () => {
+  test("saving to error to idle transitions are allowed", async () => {
     tree_data.set(createProjectData());
     expect(get(saveStatus)).toBe("saving");
 

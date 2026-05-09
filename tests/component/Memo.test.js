@@ -359,4 +359,3 @@ describe("Markdown Memo - link handling in preview", () => {
     expect(document.querySelector(".cm-editor")).not.toBeInTheDocument();
   });
 });
-
