@@ -216,7 +216,10 @@
             activeColor="var(--theme-color-Main-light)"
             ariaLabel={getSortButtonLabel(header.name)}
             tooltipContent={getSortButtonLabel(header.name)}
-            on:click={(e) => { e.stopPropagation(); handleSortClick(e, header.name); }}
+            on:click={(e) => {
+              e.stopPropagation();
+              handleSortClick(e, header.name);
+            }}
             style="margin: 0; width: var(--header-icon-size); height: var(--header-icon-size); box-shadow: none;"
           >
             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -267,10 +270,34 @@
               style="margin: 0; width: var(--header-icon-size); height: var(--header-icon-size); box-shadow: none;"
             >
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M8 3H5a2 2 0 0 0-2 2v3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                <path d="M21 8V5a2 2 0 0 0-2-2h-3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                <path d="M3 16v3a2 2 0 0 0 2 2h3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                <path d="M16 21h3a2 2 0 0 0 2-2v-3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                <path
+                  d="M8 3H5a2 2 0 0 0-2 2v3"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <path
+                  d="M21 8V5a2 2 0 0 0-2-2h-3"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <path
+                  d="M3 16v3a2 2 0 0 0 2 2h3"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <path
+                  d="M16 21h3a2 2 0 0 0 2-2v-3"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
               </svg>
             </IconButton>
             <IconButton
@@ -283,10 +310,34 @@
               style="margin: 0; width: var(--header-icon-size); height: var(--header-icon-size); box-shadow: none;"
             >
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M8 3v3a2 2 0 0 1-2 2H3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                <path d="M21 8h-3a2 2 0 0 1-2-2V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                <path d="M3 16h3a2 2 0 0 1 2 2v3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                <path d="M16 21v-3a2 2 0 0 1 2-2h3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                <path
+                  d="M8 3v3a2 2 0 0 1-2 2H3"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <path
+                  d="M21 8h-3a2 2 0 0 1-2-2V3"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <path
+                  d="M3 16h3a2 2 0 0 1 2 2v3"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <path
+                  d="M16 21v-3a2 2 0 0 1 2-2h3"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
               </svg>
             </IconButton>
           </div>
@@ -627,7 +678,6 @@
     gap: 0.1rem;
     flex-shrink: 0;
   }
-
 
   .HeaderControlRow {
     display: flex;
