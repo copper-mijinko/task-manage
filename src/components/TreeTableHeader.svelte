@@ -212,8 +212,8 @@
             variant="text"
             normalColor={$sort_state?.column === header.name
               ? "var(--theme-color-Theme-light)"
-              : "var(--theme-color-Sub-main)"}
-            activeColor="var(--theme-color-Sub-main)"
+              : "var(--theme-color-Main-light)"}
+            activeColor="var(--theme-color-Main-light)"
             ariaLabel={getSortButtonLabel(header.name)}
             tooltipContent={getSortButtonLabel(header.name)}
             on:click={(e) => { e.stopPropagation(); handleSortClick(e, header.name); }}
@@ -259,8 +259,8 @@
           <div class="HeaderUtilityButtons">
             <IconButton
               variant="text"
-              normalColor="var(--theme-color-Sub-main)"
-              activeColor="var(--theme-color-Sub-main)"
+              normalColor="var(--theme-color-Main-light)"
+              activeColor="var(--theme-color-Main-light)"
               ariaLabel="すべて展開"
               tooltipContent="すべて展開"
               on:click={() => closed_node_ids.expandAll()}
@@ -275,8 +275,8 @@
             </IconButton>
             <IconButton
               variant="text"
-              normalColor="var(--theme-color-Sub-main)"
-              activeColor="var(--theme-color-Sub-main)"
+              normalColor="var(--theme-color-Main-light)"
+              activeColor="var(--theme-color-Main-light)"
               ariaLabel="すべて折り畳み"
               tooltipContent="すべて折り畳み"
               on:click={() => closed_node_ids.collapseAll()}
@@ -421,8 +421,8 @@
 
   <IconButton
     variant="text"
-    normalColor={showPanel ? "var(--theme-color-Theme-light)" : "var(--theme-color-Sub-main)"}
-    activeColor="var(--theme-color-Sub-main)"
+    normalColor={showPanel ? "var(--theme-color-Theme-light)" : "var(--theme-color-Main-light)"}
+    activeColor="var(--theme-color-Main-light)"
     ariaLabel="Column settings"
     tooltipContent="カラム設定"
     on:click={openPanel}
@@ -557,8 +557,8 @@
     --header-hover: color-mix(in srgb, var(--theme-color-Accent-dark) 78%, transparent);
     --header-active: var(--theme-color-Accent-main);
     --header-button-border: color-mix(in srgb, var(--theme-color-Main-light) 24%, transparent);
-    --header-icon-size: 1.5rem;
-    --header-action-icon-size: 1.1rem;
+    --header-icon-size: 1.8rem;
+    --header-action-icon-size: 1.3rem;
 
     position: sticky;
     top: 0;
