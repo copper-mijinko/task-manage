@@ -65,7 +65,6 @@
         // Create resizer
         const resizer = document.createElement("div");
         resizer.classList.add("Resizer");
-        resizer.style.height = `${split_pane_root.offsetHeight}px`;
         // Postions of resizer
         resizer.style.left = `${left + default_pane_widths[index - 1] - 3}px`;
         left += default_pane_widths[index - 1];
@@ -80,10 +79,6 @@
       resize_observer.disconnect(split_pane_root);
     }
     resize_observer = new ResizeObserver((entries) => {
-      // Height setting
-      for (let resizer of resizers) {
-        resizer.style.height = `${entries[0].contentRect.height}px`;
-      }
       // Width setting
       let root_width = 0;
       panes.forEach((pane, index) => {
@@ -222,6 +217,8 @@
   .SplitPaneRoot > :global(.Resizer) {
     position: absolute;
     top: 0;
+    bottom: 0;
+    height: 100%;
     width: 5px;
     cursor: col-resize;
     user-select: none;

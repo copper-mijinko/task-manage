@@ -1,10 +1,12 @@
 <script>
   import { onDestroy, onMount } from "svelte";
+  import Button from "./Button.svelte";
   import {
     filtered_data,
     closed_node_ids,
     ganttScrollTop,
     ganttScale,
+    theme,
     tree_data,
   } from "../stores.ts";
   import {
@@ -738,18 +740,52 @@
   });
 </script>
 
-<div class="GanttRoot" class:DraggingTimeline={!!dragState}>
+<div class="GanttRoot" class:DraggingTimeline={!!dragState} class:DarkTheme={$theme === "dark"}>
   <!-- Scale toggle + header -->
   <div class="GanttHeader">
-    <div class="ScaleButtons">
-      <button class:active={$ganttScale === "day"} on:click={() => ($ganttScale = "day")}>日</button
-      >
-      <button class:active={$ganttScale === "week"} on:click={() => ($ganttScale = "week")}
-        >週</button
-      >
-      <button class:active={$ganttScale === "month"} on:click={() => ($ganttScale = "month")}
-        >月</button
-      >
+    <div class="GanttTitleRow">
+      <span class="GanttTitle">gantt</span>
+      <div class="ScaleButtons">
+        <Button
+          content="日"
+          variant="text"
+          normalColor={$ganttScale === "day"
+            ? "var(--gantt-header-active)"
+            : "var(--gantt-header-fg)"}
+          activeColor="var(--gantt-header-active)"
+          rippleColor="var(--gantt-header-fg)"
+          ariaLabel="日表示"
+          tooltipContent="日表示"
+          style="margin: 0; width: 1.6rem; min-width: 1.6rem; height: 1.5rem; min-height: 1.5rem; padding: 0; box-shadow: none;"
+          on:click={() => ($ganttScale = "day")}
+        />
+        <Button
+          content="週"
+          variant="text"
+          normalColor={$ganttScale === "week"
+            ? "var(--gantt-header-active)"
+            : "var(--gantt-header-fg)"}
+          activeColor="var(--gantt-header-active)"
+          rippleColor="var(--gantt-header-fg)"
+          ariaLabel="週表示"
+          tooltipContent="週表示"
+          style="margin: 0; width: 1.6rem; min-width: 1.6rem; height: 1.5rem; min-height: 1.5rem; padding: 0; box-shadow: none;"
+          on:click={() => ($ganttScale = "week")}
+        />
+        <Button
+          content="月"
+          variant="text"
+          normalColor={$ganttScale === "month"
+            ? "var(--gantt-header-active)"
+            : "var(--gantt-header-fg)"}
+          activeColor="var(--gantt-header-active)"
+          rippleColor="var(--gantt-header-fg)"
+          ariaLabel="月表示"
+          tooltipContent="月表示"
+          style="margin: 0; width: 1.6rem; min-width: 1.6rem; height: 1.5rem; min-height: 1.5rem; padding: 0; box-shadow: none;"
+          on:click={() => ($ganttScale = "month")}
+        />
+      </div>
     </div>
     <div class="TimelineHeaderViewport">
       <div
@@ -867,6 +903,10 @@
 
 <style>
   .GanttRoot {
+    --gantt-header-bg: var(--theme-color-Primary-dark);
+    --gantt-header-fg: var(--theme-color-Main-light);
+    --gantt-header-border: color-mix(in srgb, var(--theme-color-Primary-dark) 82%, black);
+    --gantt-header-active: var(--theme-color-Accent-main);
     --gantt-grid-line: color-mix(in srgb, var(--theme-color-Sub-dark) 16%, transparent);
     --gantt-grid-line-strong: color-mix(in srgb, var(--theme-color-Sub-dark) 26%, transparent);
     --gantt-row-hover: color-mix(in srgb, var(--theme-color-Accent-main) 8%, transparent);
@@ -881,6 +921,11 @@
     min-width: 120px;
   }
 
+  .GanttRoot.DarkTheme {
+    --gantt-header-bg: var(--theme-color-Primary-light);
+    --gantt-header-border: color-mix(in srgb, var(--theme-color-Primary-light) 82%, black);
+  }
+
   .GanttRoot.DraggingTimeline,
   .GanttRoot.DraggingTimeline :global(*) {
     user-select: none;
@@ -891,41 +936,54 @@
     flex-direction: column;
     flex-shrink: 0;
     height: 4rem;
-    border-bottom: 1px solid var(--gantt-grid-line-strong);
-    background: var(--theme-color-Main-main);
+    border-bottom: 2px solid var(--gantt-header-border);
+    background: var(--gantt-header-bg);
+    color: var(--gantt-header-fg);
     position: sticky;
     top: 0;
     z-index: 10;
     overflow: hidden;
   }
 
+  .GanttTitleRow {
+    display: flex;
+    flex: 0 0 2rem;
+    height: 2rem;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0 0.35rem;
+    box-sizing: border-box;
+    border-bottom: 2px solid var(--gantt-header-border);
+    background: var(--gantt-header-bg);
+    color: var(--gantt-header-fg);
+  }
+
+  .GanttTitle {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.9rem;
+    font-weight: bold;
+    text-align: left;
+  }
+
   .ScaleButtons {
     display: flex;
-    gap: 2px;
-    padding: 2px 4px;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.2rem;
     flex-shrink: 0;
   }
 
-  .ScaleButtons button {
-    font-size: 0.7rem;
-    padding: 1px 6px;
-    border: 1px solid var(--gantt-grid-line-strong);
-    border-radius: 3px;
-    background: transparent;
-    color: var(--theme-color-Sub-main);
-    cursor: pointer;
-  }
-
-  .ScaleButtons button.active {
-    background: var(--theme-color-Accent-main);
-    color: var(--theme-color-Main-main);
-    border-color: var(--theme-color-Accent-main);
-  }
-
   .TimelineHeaderViewport {
-    flex: 1;
+    flex: 0 0 2rem;
+    height: 2rem;
     overflow: hidden;
     position: relative;
+    background: var(--gantt-header-bg);
   }
 
   .TimelineHeader {
@@ -945,9 +1003,11 @@
     gap: 1px;
     padding: 0 1px;
     font-size: 0.65rem;
+    font-weight: normal;
     line-height: 1.05;
-    color: var(--theme-color-Sub-main);
-    border-right: 1px solid var(--gantt-grid-line-strong);
+    color: var(--gantt-header-fg);
+    border-right: 2px solid var(--gantt-header-border);
+    background: var(--gantt-header-bg);
     white-space: nowrap;
     overflow: hidden;
     box-sizing: border-box;
@@ -961,19 +1021,27 @@
     overflow: hidden;
     text-overflow: clip;
   }
-  .HeaderCell.PastCell,
+  .HeaderCell.PastCell {
+    background-color: color-mix(in srgb, var(--gantt-header-fg) 12%, var(--gantt-header-bg));
+  }
   .GridCell.PastCell {
     background-color: color-mix(in srgb, var(--theme-color-Sub-main) 7%, transparent);
   }
-  .HeaderCell.FutureCell,
+  .HeaderCell.FutureCell {
+    background-color: var(--gantt-header-bg);
+  }
   .GridCell.FutureCell {
     background-color: color-mix(in srgb, var(--theme-color-Main-main) 80%, transparent);
   }
-  .HeaderCell.WeekendCell,
+  .HeaderCell.WeekendCell {
+    background-color: color-mix(in srgb, var(--gantt-header-border) 18%, var(--gantt-header-bg));
+  }
   .GridCell.WeekendCell {
     background-color: color-mix(in srgb, var(--theme-color-Sub-main) 12%, transparent);
   }
-  .HeaderCell.TodayCell,
+  .HeaderCell.TodayCell {
+    background-color: color-mix(in srgb, var(--gantt-header-active) 32%, var(--gantt-header-bg));
+  }
   .GridCell.TodayCell {
     background-color: color-mix(in srgb, var(--theme-color-Accent-main) 18%, transparent);
   }
