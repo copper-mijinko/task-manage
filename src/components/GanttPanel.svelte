@@ -341,8 +341,7 @@
       };
     } else if (dateState.effectiveDueTs) {
       const leftRem =
-        remFromDate(dateState.effectiveDueTs, scaleRemPerDay, rangeStart) +
-        DUE_MARKER_INSET_REM;
+        remFromDate(dateState.effectiveDueTs, scaleRemPerDay, rangeStart) + DUE_MARKER_INSET_REM;
       return {
         ...dateState,
         leftRem,
@@ -439,7 +438,12 @@
     return dateFromClientX(event.clientX);
   }
 
-  function getRangeGeometry(startTs, endTs, scaleRemPerDay = remPerDay, rangeStart = timelineStart) {
+  function getRangeGeometry(
+    startTs,
+    endTs,
+    scaleRemPerDay = remPerDay,
+    rangeStart = timelineStart
+  ) {
     const start = Math.min(startTs, endTs);
     const end = Math.max(startTs, endTs);
     const leftRem = remFromDate(start, scaleRemPerDay, rangeStart);
