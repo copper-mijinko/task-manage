@@ -7,6 +7,7 @@
   import IconButton from "./IconButton.svelte";
   import MultiSelect from "./MultiSelect.svelte";
   import DateRangePanel from "./DateRangePanel.svelte";
+  import NumberRangePanel from "./NumberRangePanel.svelte";
   import NameFilterPanel from "./NameFilterPanel.svelte";
 
   export let headers;
@@ -28,11 +29,14 @@
   let datePanelAnchorRect = null;
   let openNamePanel = false;
   let namePanelAnchorRect = null;
+  let openMemoPanel = false;
+  let memoPanelAnchorRect = null;
 
   $: availableIds = new Set(allHeaders.map((h) => h.name));
 
   $: startDateFilter = $filter["start date"] ?? ["", ""];
   $: dueDateFilter = $filter["due date"] ?? ["", ""];
+  $: memoFilter = $filter["memo"] ?? ["", ""];
   $: nameFilterValue = $filter?.name?.[0] ?? "";
   $: statusSelected = $filter?.status?.filter(Boolean) ?? [];
   $: filterSummaries = Object.fromEntries(
@@ -52,10 +56,15 @@
     return headerName === "start date" || headerName === "due date";
   }
 
+  function isMemoColumn(headerName) {
+    return headerName === "memo";
+  }
+
   function openPanel(e) {
     e.stopPropagation();
     openDatePanel = null;
     openNamePanel = false;
+    openMemoPanel = false;
     const rect = e.currentTarget.getBoundingClientRect();
     panelStyle = `top: ${rect.bottom}px; right: calc(100vw - ${rect.right}px);`;
     showPanel = !showPanel;
@@ -104,6 +113,13 @@
     if (isDateColumn(headerName)) {
       return getDateFilterSummary(headerName, currentFilter);
     }
+    if (isMemoColumn(headerName)) {
+      const [min = "", max = ""] = currentFilter?.["memo"] ?? [];
+      if (min && max) return `${min}〜${max}件`;
+      if (min) return `${min}件以上`;
+      if (max) return `${max}件以下`;
+      return EMPTY_FILTER_LABEL;
+    }
     if (headerName === "status") {
       const statusValues = currentFilter?.status?.filter(Boolean) ?? [];
       if (statusValues.length === 1) return statusValues[0];
@@ -120,6 +136,7 @@
     e.stopPropagation();
     showPanel = false;
     openNamePanel = false;
+    openMemoPanel = false;
     if (openDatePanel === headerName) {
       openDatePanel = null;
     } else {
@@ -132,8 +149,31 @@
     e.stopPropagation();
     showPanel = false;
     openDatePanel = null;
+    openMemoPanel = false;
     namePanelAnchorRect = e.currentTarget.getBoundingClientRect();
     openNamePanel = !openNamePanel;
+  }
+
+  function toggleMemoPanel(e) {
+    e.stopPropagation();
+    showPanel = false;
+    openDatePanel = null;
+    openNamePanel = false;
+    memoPanelAnchorRect = e.currentTarget.getBoundingClientRect();
+    openMemoPanel = !openMemoPanel;
+  }
+
+  function handleMemoFilterChange(detail) {
+    const { min, max } = detail;
+    filter.update((f) => {
+      const next = { ...f };
+      if (!min && !max) {
+        delete next["memo"];
+      } else {
+        next["memo"] = [min, max];
+      }
+      return next;
+    });
   }
 
   function handleDateRangeChange(headerName, detail) {
@@ -181,6 +221,9 @@
     }
     if (headerName === "name") {
       openNamePanel = false;
+    }
+    if (headerName === "memo") {
+      openMemoPanel = false;
     }
 
     filter.update((f) => {
@@ -431,6 +474,45 @@
               </IconButton>
             {/if}
           </div>
+        {:else if isMemoColumn(header.name)}
+          <div class="HeaderFilterGroup">
+            <button
+              class="HeaderFilterControl"
+              class:active={filterActive[header.name]}
+              on:click|stopPropagation={toggleMemoPanel}
+              aria-label="メモ数フィルター"
+              aria-expanded={openMemoPanel}
+              title="メモ数フィルター"
+              use:ripple
+            >
+              <span class="FilterIcon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path d={FILTER_ICON_PATH} />
+                </svg>
+              </span>
+              <span class="FilterSelection">{filterSummaries[header.name]}</span>
+            </button>
+            {#if filterActive[header.name]}
+              <IconButton
+                style={"margin: 0rem; padding: 0.25rem; margin-left: auto; width: 1.5rem; height: 1.5rem; flex-shrink: 0;"}
+                ariaLabel="メモ数フィルターをクリア"
+                on:click={(e) => {
+                  clearColumnFilter(header.name);
+                  e.stopPropagation();
+                }}
+                activeColor={"transparent"}
+                normalColor={"transparent"}
+              >
+                <svg viewBox="4 4 16 16" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                  <path
+                    d={FILTER_CLEAR_ICON_PATH}
+                    fill="currentColor"
+                    transform="translate(6.629 6.8)"
+                  />
+                </svg>
+              </IconButton>
+            {/if}
+          </div>
         {:else}
           <div class="HeaderFilterGroup">
             <div
@@ -598,6 +680,17 @@
     anchorRect={namePanelAnchorRect}
     on:change={(e) => handleNameFilterChange(e.detail)}
     on:close={() => (openNamePanel = false)}
+  />
+{/if}
+
+{#if openMemoPanel}
+  <NumberRangePanel
+    column="メモ数"
+    min={memoFilter[0]}
+    max={memoFilter[1]}
+    anchorRect={memoPanelAnchorRect}
+    on:change={(e) => handleMemoFilterChange(e.detail)}
+    on:close={() => (openMemoPanel = false)}
   />
 {/if}
 

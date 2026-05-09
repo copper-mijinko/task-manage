@@ -126,6 +126,13 @@ export function filterTree(
       } else {
         keyMatch = (!from || nodeDate >= from) && (!to || nodeDate <= to);
       }
+    } else if (key === "memo") {
+      const minStr = keywords[0] ?? "";
+      const maxStr = keywords[1] ?? "";
+      const count = Array.isArray(tree.data.memo) ? tree.data.memo.length : 0;
+      const minNum = minStr !== "" ? parseInt(minStr, 10) : null;
+      const maxNum = maxStr !== "" ? parseInt(maxStr, 10) : null;
+      keyMatch = (minNum === null || count >= minNum) && (maxNum === null || count <= maxNum);
     } else {
       // For other filters
       keyMatch = keywords.some(
