@@ -211,7 +211,7 @@
           <IconButton
             variant="text"
             normalColor={$sort_state?.column === header.name
-              ? "var(--theme-color-Theme-light)"
+              ? "var(--theme-color-Accent-main)"
               : "var(--theme-color-Main-light)"}
             activeColor="var(--theme-color-Main-light)"
             ariaLabel={getSortButtonLabel(header.name)}
@@ -656,9 +656,6 @@
     transition:
       background-color 0.12s ease,
       color 0.12s ease;
-  }
-  .HeaderLabelRow.sortActive {
-    color: var(--header-active);
   }
   .HeaderLabelText {
     flex: 1 1 auto;
