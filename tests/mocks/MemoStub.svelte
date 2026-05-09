@@ -11,3 +11,4 @@
 >
   {typeof content === "string" ? content : "memo-content"}
 </div>
+<button type="button" data-testid="memo-save" on:click={() => saveMemo?.("edited")}>Save</button>

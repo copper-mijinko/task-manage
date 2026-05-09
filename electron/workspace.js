@@ -2,6 +2,9 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const { pathToFileURL } = require("url");
+const { QuillDeltaToHtmlConverter } = require("quill-delta-to-html");
+const TurndownService = require("turndown");
+const { gfm } = require("turndown-plugin-gfm");
 
 /** Convert a human name to a filesystem-safe slug. */
 function slugify(name) {
@@ -43,6 +46,53 @@ function extensionFromMimeType(mimeType) {
     default:
       return "png";
   }
+}
+
+function isQuillDelta(value) {
+  return value && typeof value === "object" && Array.isArray(value.ops);
+}
+
+function createTurndownService() {
+  const turndownService = new TurndownService({
+    codeBlockStyle: "fenced",
+    headingStyle: "atx",
+    bulletListMarker: "-",
+  });
+
+  turndownService.use(gfm);
+  turndownService.keep(["span", "u"]);
+
+  return turndownService;
+}
+
+function quillDeltaToMarkdown(delta) {
+  const converter = new QuillDeltaToHtmlConverter(delta.ops, {
+    inlineStyles: true,
+    paragraphTag: "p",
+  });
+  const html = converter.convert();
+  const markdown = createTurndownService().turndown(html).trim();
+  return markdown;
+}
+
+function legacyMemoContentToMarkdown(content, title = "Memo") {
+  if (typeof content === "string") {
+    return content;
+  }
+
+  if (isQuillDelta(content)) {
+    try {
+      return quillDeltaToMarkdown(content);
+    } catch {
+      // Fall through to JSON block so export keeps the original content.
+    }
+  }
+
+  if (content !== null && content !== undefined) {
+    return `# ${title || "Memo"}\n\n\`\`\`json\n${JSON.stringify(content, null, 2)}\n\`\`\``;
+  }
+
+  return "";
 }
 
 /**
@@ -405,25 +455,24 @@ function bfsFromRoot(tasks, rootId) {
 }
 
 /**
- * Migrate a ProjectData (legacy db.json tree format) to workspace flat-file format.
+ * Export a ProjectData (legacy db.json tree format) to workspace flat-file format.
  * @param {string} workspacePath  Destination workspace directory.
  * @param {object} projectData    ProjectData: { headers, data: TreeData }
  * @returns {{ dirName: string, projectDir: string, count: number }}
  */
-function migrateProjectData(workspacePath, projectData) {
+function exportProjectData(workspacePath, projectData) {
   const tasks = [];
   const today = new Date().toISOString().slice(0, 10);
 
   function traverse(node, parentIds) {
     const memos = (node.data.memo || []).map((m) => {
-      let content = "";
-      if (typeof m.content === "string") {
-        content = m.content;
-      } else if (m.content !== null && m.content !== undefined) {
-        // Preserve legacy Quill Delta objects as JSON fenced blocks.
-        content = `# ${m.title || "Memo"}\n\n\`\`\`json\n${JSON.stringify(m.content, null, 2)}\n\`\`\``;
-      }
-      return { id: crypto.randomUUID(), title: String(m.title || "Memo"), content };
+      const title = String(m.title || "Memo");
+      return {
+        id: m.id || crypto.randomUUID(),
+        title,
+        content: legacyMemoContentToMarkdown(m.content, title),
+        tags: Array.isArray(m.tags) ? m.tags.map(String) : [],
+      };
     });
 
     tasks.push({
@@ -458,6 +507,10 @@ function migrateProjectData(workspacePath, projectData) {
   return { dirName, projectDir, count: tasks.length };
 }
 
+function migrateProjectData(workspacePath, projectData) {
+  return exportProjectData(workspacePath, projectData);
+}
+
 module.exports = {
   slugify,
   parseFrontmatter,
@@ -471,5 +524,7 @@ module.exports = {
   listProjects,
   wouldCreateCycle,
   bfsFromRoot,
+  exportProjectData,
   migrateProjectData,
+  legacyMemoContentToMarkdown,
 };

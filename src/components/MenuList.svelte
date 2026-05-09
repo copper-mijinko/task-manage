@@ -403,7 +403,7 @@
             <button
               transition:slide={{ duration: 100 }}
               class:MenuRow={true}
-              class:Selected={child.id == $selected_id}
+              class:Selected={child.id == $selected_id && menu.name == $selected_type}
               use:ripple
               data-id={child.id}
               data-section={menu.name}

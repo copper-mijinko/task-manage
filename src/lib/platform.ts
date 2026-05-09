@@ -242,6 +242,17 @@ export function wsGetLegacyProjects(): Promise<{ id: string; name: string; taskC
   return api()?.wsGetLegacyProjects?.() ?? Promise.resolve([]);
 }
 
+export function wsExportLegacyProjects(workspacePath: string): Promise<{
+  success: boolean;
+  migrated: { name: string; count: number }[];
+  errors: { name: string; error: string }[];
+}> {
+  return (
+    api()?.wsExportLegacyProjects?.(workspacePath) ??
+    Promise.resolve({ success: false, migrated: [], errors: [] })
+  );
+}
+
 export function wsMigrateProjects(workspacePath: string): Promise<{
   success: boolean;
   migrated: { name: string; count: number }[];

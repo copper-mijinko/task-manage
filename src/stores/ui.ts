@@ -62,39 +62,71 @@ function createSelectedID(initialValue: string | undefined): SelectedIdStore {
     set,
     update,
     init: () => {
-      subscribe((current) => {
-        const currentSelectedType = get(selected_type);
-        if (currentSelectedType === "Projects" && current) {
-          clearHistory();
-          platform.getTreeData(current).then((result) => {
-            tree_data.set(result);
+      let loadVersion = 0;
+      let loadQueued = false;
 
-            if (
-              pendingTaskDetailSelection?.projectId === current &&
-              pendingTaskDetailSelection.taskId
-            ) {
-              if (result?.data && getNode(pendingTaskDetailSelection.taskId, result.data)) {
-                table_selected_id.set(pendingTaskDetailSelection.taskId);
-              } else {
-                clearPendingTaskDetailSelection();
-                table_selected_id.set(undefined);
-              }
+      function queueLoadSelectedData() {
+        if (loadQueued) return;
+        loadQueued = true;
+        Promise.resolve().then(() => {
+          loadQueued = false;
+          const current = get({ subscribe } as SelectedIdStore);
+          const currentSelectedType = get(selected_type);
+          if (!current) return;
+
+          tree_data.flushPendingPersist();
+          table_selected_id.set(undefined);
+          const version = ++loadVersion;
+          if (currentSelectedType === "Projects") {
+            loadProjectsData(current, version);
+          } else if (currentSelectedType === "WorkspaceProject") {
+            loadWorkspaceData(current, version);
+          }
+        });
+      }
+
+      function loadProjectsData(current: string, version: number) {
+        clearHistory();
+        platform.getTreeData(current).then((result) => {
+          if (version !== loadVersion) return;
+          tree_data.setFromSource(result);
+
+          if (
+            pendingTaskDetailSelection?.projectId === current &&
+            pendingTaskDetailSelection.taskId
+          ) {
+            if (result?.data && getNode(pendingTaskDetailSelection.taskId, result.data)) {
+              table_selected_id.set(pendingTaskDetailSelection.taskId);
             } else {
+              clearPendingTaskDetailSelection();
               table_selected_id.set(undefined);
             }
-          });
-        } else if (currentSelectedType === "WorkspaceProject" && current) {
-          clearHistory();
-          const { activeProjectDir } = get(workspace_store);
-          if (!activeProjectDir) return;
-          platform.wsReadProject(activeProjectDir).then((result) => {
-            if (!result) return;
-            workspace_tasks_cache.set(result.tasks);
-            const converted = workspaceToProjectData(result.tasks, current);
-            tree_data.set(converted);
+          } else {
             table_selected_id.set(undefined);
-          });
-        }
+          }
+        });
+      }
+
+      function loadWorkspaceData(current: string, version: number) {
+        clearHistory();
+        const { activeProjectDir } = get(workspace_store);
+        if (!activeProjectDir) return;
+        platform.wsReadProject(activeProjectDir).then((result) => {
+          if (version !== loadVersion) return;
+          if (!result) return;
+          workspace_tasks_cache.set(result.tasks);
+          const converted = workspaceToProjectData(result.tasks, current);
+          tree_data.setFromSource(converted);
+          table_selected_id.set(undefined);
+        });
+      }
+
+      subscribe(() => {
+        queueLoadSelectedData();
+      });
+
+      selected_type.subscribe(() => {
+        queueLoadSelectedData();
       });
     },
   };

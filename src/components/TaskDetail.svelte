@@ -6,6 +6,7 @@
     table_selected_id,
     cancelPendingOperations,
     selected_type,
+    selected_id,
     workspace_store,
     tag_index,
   } from "../stores.ts";
@@ -18,9 +19,27 @@
     $table_selected_id && $tree_data ? getNode($table_selected_id, $tree_data.data) : undefined;
   $: name = node ? node.data["name"] : "Select Task";
   $: memo = node ? node.data["memo"] : [];
-  $: workspaceProjectDir =
-    $selected_type === "WorkspaceProject" ? $workspace_store.activeProjectDir : null;
-  const changeData = (node, key, value) => {
+  $: isWorkspaceProject = $selected_type === "WorkspaceProject";
+  $: workspaceProjectDir = isWorkspaceProject ? $workspace_store.activeProjectDir : null;
+
+  const getEditContext = () => ({
+    selectedType: $selected_type,
+    selectedId: $selected_id,
+    tableSelectedId: $table_selected_id,
+    activeProjectDir: $workspace_store.activeProjectDir,
+  });
+
+  const contextMatches = (context) =>
+    context &&
+    context.selectedType === $selected_type &&
+    context.selectedId === $selected_id &&
+    context.tableSelectedId === $table_selected_id &&
+    context.activeProjectDir === $workspace_store.activeProjectDir;
+
+  const changeData = (node, key, value, editContext = getEditContext()) => {
+    if (!contextMatches(editContext)) {
+      return;
+    }
     if (!node) {
       return;
     }
@@ -30,12 +49,26 @@
     }
   };
   const changeDataDebounce = debounce(changeData, 500);
+  let previousEditContextKey = "";
+
+  $: editContextKey = [
+    $selected_type ?? "",
+    $selected_id ?? "",
+    $table_selected_id ?? "",
+    $workspace_store.activeProjectDir ?? "",
+  ].join(":");
+
+  $: if (editContextKey !== previousEditContextKey) {
+    changeDataDebounce.cancel();
+    previousEditContextKey = editContextKey;
+  }
 
   const unsubscribeCancelPending = cancelPendingOperations.subscribe(() => {
     changeDataDebounce.cancel();
   });
 
   onDestroy(() => {
+    changeDataDebounce.cancel();
     unsubscribeCancelPending();
   });
   $: allTags = [...$tag_index.keys()].sort();
@@ -56,20 +89,22 @@
     return true;
   };
   const saveMemo = (editedContent, selectedMemoIndex) => {
+    const editContext = getEditContext();
     const updatedMemo = [...node.data["memo"]];
     updatedMemo[selectedMemoIndex] = {
       ...updatedMemo[selectedMemoIndex],
       content: editedContent,
     };
     node.data["memo"] = updatedMemo;
-    changeDataDebounce(node, "memo", updatedMemo);
+    changeData(node, "memo", updatedMemo, editContext);
     return true;
   };
   const renameMemo = (newMemoTitle, selectedMemoIndex) => {
     if (newMemoTitle) {
+      const editContext = getEditContext();
       memo = [...node.data["memo"]];
       memo[selectedMemoIndex].title = newMemoTitle;
-      changeDataDebounce(node, "memo", memo);
+      changeDataDebounce(node, "memo", memo, editContext);
       return true;
     }
   };
@@ -80,10 +115,11 @@
     changeData(node, "memo", updatedMemo);
   };
   const saveMemoTags = (selectedMemoIndex, tags) => {
+    const editContext = getEditContext();
     const updatedMemo = [...node.data["memo"]];
     updatedMemo[selectedMemoIndex] = { ...updatedMemo[selectedMemoIndex], tags };
     node.data["memo"] = updatedMemo;
-    changeDataDebounce(node, "memo", updatedMemo);
+    changeDataDebounce(node, "memo", updatedMemo, editContext);
   };
 </script>
 
@@ -99,6 +135,7 @@
         {reorderMemo}
         {saveMemoTags}
         {allTags}
+        {isWorkspaceProject}
         {workspaceProjectDir}
         taskId={$table_selected_id ?? null}
       />
