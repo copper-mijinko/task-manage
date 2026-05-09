@@ -11,6 +11,8 @@ import {
   tree_data,
 } from "../../src/stores.ts";
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 function createProjectData(taskData = {}) {
   return {
     headers: [
@@ -76,6 +78,11 @@ function getBarWidthRem(container) {
   return Number.parseFloat(bar.style.width);
 }
 
+function getTimelineWidthRem(container) {
+  const inner = container.querySelector(".GanttBodyInner");
+  return Number.parseFloat(inner.style.width);
+}
+
 describe("GanttPanel", () => {
   beforeEach(() => {
     const projectData = createProjectData();
@@ -85,6 +92,10 @@ describe("GanttPanel", () => {
     closed_node_ids.set(new Set());
     ganttScale.set("day");
     ganttScrollTop.set(0);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   test("shows a translucent create preview while dragging a new range", async () => {
@@ -106,6 +117,16 @@ describe("GanttPanel", () => {
     expect(container.querySelector(".CreatePreview")).not.toBeInTheDocument();
     expect(get(tree_data).data.children[0].data["start date"]).toBeDefined();
     expect(get(tree_data).data.children[0].data["due date"]).toBeDefined();
+  });
+
+  test("renders day header date and weekday on separate lines", async () => {
+    const { container } = render(GanttPanel);
+    await tick();
+
+    const headerCell = container.querySelector(".HeaderCell");
+
+    expect(headerCell.children[0]).toHaveClass("HeaderCellDate");
+    expect(headerCell.children[1]).toHaveClass("HeaderCellWeekday");
   });
 
   test("rescales task bar width when switching between day week and month views", async () => {
@@ -134,5 +155,26 @@ describe("GanttPanel", () => {
     expect(monthWidth).toBeCloseTo((7 * 7.667) / 30, 3);
     expect(dayWidth).toBeGreaterThan(weekWidth);
     expect(weekWidth).toBeGreaterThan(monthWidth);
+  });
+
+  test("builds timeline range from today and visible task start and due dates", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2030, 0, 1, 9));
+
+    const projectData = createProjectData({
+      startDate: "2029-12-20",
+      dueDate: "2030-08-01",
+    });
+    tree_data.set(projectData);
+    filtered_data.set(projectData.data);
+
+    const { container } = render(GanttPanel);
+    await tick();
+
+    const expectedStart = new Date(2029, 10, 20).getTime();
+    const expectedEnd = new Date(2030, 8, 1).getTime();
+    const expectedDays = (expectedEnd - expectedStart) / DAY_MS;
+
+    expect(getTimelineWidthRem(container)).toBeCloseTo(expectedDays * 1.667, 3);
   });
 });

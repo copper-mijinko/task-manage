@@ -29,6 +29,9 @@
   // ── Timeline range ──────────────────────────────────────────────
 
   const DAY_MS = 24 * 60 * 60 * 1000;
+  const TIMELINE_START_PADDING_DAYS = 30;
+  const TIMELINE_TODAY_FUTURE_DAYS = 180;
+  const TIMELINE_END_PADDING_DAYS = 30;
 
   function parseDate(s) {
     if (!s) return null;
@@ -64,8 +67,6 @@
 
   let timelineStart = new Date();
   let timelineEnd = new Date();
-  let timelineRangeProjectId;
-  let timelineRangeReady = false;
 
   $: {
     let minTs = null;
@@ -73,32 +74,25 @@
     for (const row of rows) {
       const sd = parseDate(row.node.data["start date"]);
       const dd = parseDate(row.node.data["due date"]) || parseDate(inheritedMap.get(row.id));
-      if (sd && (minTs === null || sd < minTs)) minTs = sd;
-      if (dd && (maxTs === null || dd > maxTs)) maxTs = dd;
+      for (const ts of [sd, dd]) {
+        if (!ts) continue;
+        if (minTs === null || ts < minTs) minTs = ts;
+        if (maxTs === null || ts > maxTs) maxTs = ts;
+      }
     }
     const today = startOfDay();
-    const pad = 14 * DAY_MS;
-    const nextStart = new Date(startOfDay((minTs ?? today) - pad));
-    const nextEnd = new Date(startOfDay((maxTs ?? today) + pad * 4) + DAY_MS);
-    const projectId = $tree_data?.data?.id;
+    const startBaseTs = minTs === null ? today : Math.min(today, minTs);
+    const endBaseTs = maxTs === null ? today : maxTs;
+    const nextStart = new Date(startOfDay(startBaseTs - TIMELINE_START_PADDING_DAYS * DAY_MS));
+    const nextEndTs = Math.max(
+      today + TIMELINE_TODAY_FUTURE_DAYS * DAY_MS,
+      endBaseTs + TIMELINE_END_PADDING_DAYS * DAY_MS
+    );
+    const nextEnd = new Date(startOfDay(nextEndTs) + DAY_MS);
 
     if (!dragState) {
-      if (!timelineRangeReady || projectId !== timelineRangeProjectId) {
-        timelineStart = nextStart;
-        timelineEnd = nextEnd;
-        timelineRangeProjectId = projectId;
-        timelineRangeReady = true;
-      } else {
-        const dataStartTs = minTs ?? today;
-        const dataEndTs = (maxTs ?? today) + DAY_MS;
-
-        if (dataStartTs < timelineStart.getTime()) {
-          timelineStart = nextStart;
-        }
-        if (dataEndTs > timelineEnd.getTime()) {
-          timelineEnd = nextEnd;
-        }
-      }
+      timelineStart = nextStart;
+      timelineEnd = nextEnd;
     }
   }
 
@@ -152,13 +146,14 @@
     while (cur < end) {
       const cellStart = new Date(cur);
       let label = "";
+      let weekdayLabel = "";
       let next;
       if (scale === "day") {
         label = formatLocalDate(cur, {
           month: "numeric",
           day: "numeric",
-          weekday: "short",
         });
+        weekdayLabel = formatLocalDate(cur, { weekday: "short" });
         next = new Date(cur.getTime() + DAY_MS);
       } else if (scale === "week") {
         const d = cur.getDay();
@@ -166,8 +161,8 @@
         label = formatLocalDate(monday, {
           month: "numeric",
           day: "numeric",
-          weekday: "short",
         });
+        weekdayLabel = formatLocalDate(monday, { weekday: "short" });
         next = new Date(monday.getTime() + 7 * DAY_MS);
         cur.setTime(monday.getTime());
       } else {
@@ -180,6 +175,7 @@
       const endTs = next.getTime();
       cells.push({
         label,
+        weekdayLabel,
         leftRem,
         widthRem,
         tone: getPeriodTone(startTs, endTs),
@@ -769,7 +765,10 @@
             class:WeekendCell={cell.weekend}
             style="left:{cell.leftRem}rem; width:{cell.widthRem}rem;"
           >
-            {cell.label}
+            <span class="HeaderCellDate">{cell.label}</span>
+            {#if cell.weekdayLabel}
+              <span class="HeaderCellWeekday">{cell.weekdayLabel}</span>
+            {/if}
           </div>
         {/each}
         <!-- Today line in header -->
@@ -940,14 +939,27 @@
     top: 0;
     bottom: 0;
     display: flex;
+    flex-direction: column;
     align-items: center;
-    padding: 0 2px;
+    justify-content: center;
+    gap: 1px;
+    padding: 0 1px;
     font-size: 0.65rem;
+    line-height: 1.05;
     color: var(--theme-color-Sub-main);
     border-right: 1px solid var(--gantt-grid-line-strong);
     white-space: nowrap;
     overflow: hidden;
     box-sizing: border-box;
+    text-align: center;
+  }
+
+  .HeaderCellDate,
+  .HeaderCellWeekday {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: clip;
   }
   .HeaderCell.PastCell,
   .GridCell.PastCell {
