@@ -1,10 +1,11 @@
 <script>
-  import { tick, createEventDispatcher, onDestroy, onMount } from "svelte";
+  import { tick, createEventDispatcher, onDestroy } from "svelte";
   import { debounce } from "lodash";
   import { ripple, tooltip } from "../common/common.js";
   import TaskMenu from "./TaskMenu.svelte";
   import { pageSearchQuery } from "../stores/search";
   import { copied_task } from "../stores/ui";
+  import { activePanelId } from "../stores/panel_coordinator";
 
   export let text;
   export let color = "var(--theme-color-Sub-main)";
@@ -260,22 +261,13 @@
     setMenuVisibility(false);
   };
 
-  const handleTaskMenuOpened = (event) => {
-    if (event.detail?.ownerId !== menuOwnerId) {
-      closeMenu();
-    }
-  };
-
-  onMount(() => {
-    window.addEventListener("task-menu-opened", handleTaskMenuOpened);
-  });
+  // Close this menu when another panel/menu becomes active
+  $: if ($activePanelId !== null && $activePanelId !== menuOwnerId && showMenu) {
+    closeMenu();
+  }
 
   export async function openMenuAt(position) {
-    window.dispatchEvent(
-      new CustomEvent("task-menu-opened", {
-        detail: { ownerId: menuOwnerId },
-      })
-    );
+    activePanelId.set(menuOwnerId);
     menuPosition = getMenuPosition(position.x, position.y);
     setMenuVisibility(true);
 
@@ -291,10 +283,6 @@
       }
     }
   }
-
-  onDestroy(() => {
-    window.removeEventListener("task-menu-opened", handleTaskMenuOpened);
-  });
 
   const openMenu = (e) => {
     e.stopPropagation();
