@@ -41,6 +41,12 @@
   $: filterActive = Object.fromEntries(
     (headers ?? []).map((header) => [header.name, isFilterActive(header.name, $filter)])
   );
+  $: sortDirections = Object.fromEntries(
+    (headers ?? []).map((h) => [
+      h.name,
+      $sort_state?.column === h.name ? $sort_state?.direction : null,
+    ])
+  );
 
   function isDateColumn(headerName) {
     return headerName === "start date" || headerName === "due date";
@@ -210,10 +216,12 @@
         {#if SORTABLE_COLUMNS.has(header.name)}
           <IconButton
             variant="text"
-            normalColor={$sort_state?.column === header.name
+            normalColor={sortDirections[header.name]
               ? "var(--theme-color-Accent-main)"
               : "var(--theme-color-Main-light)"}
-            activeColor="var(--theme-color-Main-light)"
+            activeColor={sortDirections[header.name]
+              ? "var(--theme-color-Accent-main)"
+              : "var(--theme-color-Main-light)"}
             ariaLabel={getSortButtonLabel(header.name)}
             tooltipContent={getSortButtonLabel(header.name)}
             on:click={(e) => {
@@ -223,7 +231,7 @@
             style="margin: 0; width: var(--header-icon-size); height: var(--header-icon-size); box-shadow: none;"
           >
             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              {#if getSortDirection(header.name) === "asc"}
+              {#if sortDirections[header.name] === "asc"}
                 <path
                   d="M6 15l6-6 6 6"
                   stroke="currentColor"
@@ -231,7 +239,7 @@
                   stroke-linecap="round"
                   stroke-linejoin="round"
                 />
-              {:else if getSortDirection(header.name) === "desc"}
+              {:else if sortDirections[header.name] === "desc"}
                 <path
                   d="M6 9l6 6 6-6"
                   stroke="currentColor"
@@ -465,8 +473,8 @@
 
   <IconButton
     variant="text"
-    normalColor={showPanel ? "var(--theme-color-Theme-light)" : "var(--theme-color-Main-light)"}
-    activeColor="var(--theme-color-Main-light)"
+    normalColor={showPanel ? "var(--theme-color-Accent-main)" : "var(--theme-color-Main-light)"}
+    activeColor={showPanel ? "var(--theme-color-Accent-main)" : "var(--theme-color-Main-light)"}
     ariaLabel="Column settings"
     tooltipContent="カラム設定"
     on:click={openPanel}
