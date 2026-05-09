@@ -674,32 +674,31 @@ app.on("ready", () => {
     }
   });
 
-  ipcMain.handle("ws:migrate-projects", async (event, { workspacePath }) => {
+  async function exportLegacyProjects(workspacePath) {
     const migrated = [];
     const errors = [];
-
-    // Back up db.json before migrating
-    const dbPath = resolveAppDataPath("db.json");
-    const bakPath = resolveAppDataPath("db.json.bak");
-    try {
-      if (fs.existsSync(dbPath)) fs.copyFileSync(dbPath, bakPath);
-    } catch (err) {
-      log.warn("db.json backup failed:", err.message);
-    }
 
     for (const projectData of db.data || []) {
       const name = projectData.data?.data?.name || "unknown";
       try {
-        const { count } = workspace.migrateProjectData(workspacePath, projectData);
+        const { count } = workspace.exportProjectData(workspacePath, projectData);
         migrated.push({ name, count });
-        log.info(`Migrated project "${name}" (${count} tasks)`);
+        log.info(`Exported legacy project "${name}" (${count} tasks)`);
       } catch (err) {
-        log.error(`Migration error for "${name}":`, err.message);
+        log.error(`Legacy export error for "${name}":`, err.message);
         errors.push({ name, error: err.message });
       }
     }
 
     return { success: errors.length === 0, migrated, errors };
+  }
+
+  ipcMain.handle("ws:export-legacy-projects", async (event, { workspacePath }) => {
+    return exportLegacyProjects(workspacePath);
+  });
+
+  ipcMain.handle("ws:migrate-projects", async (event, { workspacePath }) => {
+    return exportLegacyProjects(workspacePath);
   });
 
   ipcMain.handle("ws:get-legacy-projects", async () => {

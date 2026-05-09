@@ -16,6 +16,8 @@ import {
   resolveMemoAssetPath,
   deleteTaskDir,
   listProjects,
+  exportProjectData,
+  legacyMemoContentToMarkdown,
   migrateProjectData,
 } from "../../electron/workspace.js";
 
@@ -573,8 +575,20 @@ describe("migrateProjectData", () => {
     expect(tasks.get("child-b").status).toBe("Completed");
   });
 
-  it("serializes Quill Delta memo content as JSON block", () => {
-    const delta = { ops: [{ insert: "Hello" }] };
+  it("exports Quill Delta memo content to Markdown without mutating source data", () => {
+    const delta = {
+      ops: [
+        { insert: "Title" },
+        { insert: "\n", attributes: { header: 1 } },
+        { insert: "bold", attributes: { bold: true } },
+        { insert: " link", attributes: { link: "https://example.com" } },
+        { insert: "\n" },
+        { insert: "item" },
+        { insert: "\n", attributes: { list: "bullet" } },
+        { insert: { image: "data:image/png;base64,abc" } },
+        { insert: "\n" },
+      ],
+    };
     const projectData = {
       headers: [],
       data: {
@@ -583,15 +597,35 @@ describe("migrateProjectData", () => {
           name: "Project With Memo",
           status: "Open",
           "due date": undefined,
-          memo: [{ title: "Delta Memo", content: delta }],
+          memo: [{ id: "delta-memo", title: "Delta Memo", content: delta }],
         },
         children: [],
       },
     };
+    const before = JSON.stringify(projectData);
 
-    migrateProjectData(tmpDir, projectData);
-    // Root task memos are not written (root uses _project.md without memos)
-    // so we just check the function doesn't throw
+    exportProjectData(tmpDir, projectData);
+
+    expect(JSON.stringify(projectData)).toBe(before);
+
+    const entries = fs.readdirSync(tmpDir, { withFileTypes: true });
+    const projectDir = path.join(tmpDir, entries.find((e) => e.isDirectory()).name);
+    const memoFile = fs.readFileSync(path.join(projectDir, "delta-memo.md"), "utf8");
+
+    expect(memoFile).toContain("# Title");
+    expect(memoFile).toContain("**bold**");
+    expect(memoFile).toContain("[link](https://example.com)");
+    expect(memoFile).toMatch(/-\s+item/);
+    expect(memoFile).toContain("![](data:image/png;base64,abc)");
+    expect(memoFile).not.toContain('"ops"');
+  });
+
+  it("falls back to a JSON fenced block for unknown legacy memo objects", () => {
+    const markdown = legacyMemoContentToMarkdown({ custom: true }, "Custom");
+
+    expect(markdown).toContain("# Custom");
+    expect(markdown).toContain("```json");
+    expect(markdown).toContain('"custom": true');
   });
 
   it("throws on invalid projectData", () => {

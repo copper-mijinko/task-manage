@@ -16,9 +16,20 @@ import {
   saveStatus,
 } from "./ui";
 import { workspace_store, workspace_tasks_cache } from "./workspace";
+import type { SelectedType } from "../types/app";
+import type { WorkspaceTask } from "../types/workspace";
 
 export interface TreeDataStore extends Writable<ProjectData | undefined> {
   init: () => void;
+  setFromSource: (value: ProjectData | undefined) => void;
+  flushPendingPersist: () => void;
+}
+
+interface PersistContext {
+  selectedType: SelectedType;
+  selectedId: string | undefined;
+  activeProjectDir: string | null;
+  cachedWorkspaceTasks: Record<string, WorkspaceTask>;
 }
 
 const MAX_HISTORY = 50;
@@ -74,83 +85,93 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
     return oldIds.filter((id) => !newIdSet.has(id));
   };
 
-  const persistTreeData = throttle(async (current: ProjectData | undefined) => {
-    if (!current) {
-      return;
-    }
+  const persistTreeData = throttle(
+    async (current: ProjectData | undefined, context: PersistContext) => {
+      if (!current) {
+        return;
+      }
 
-    const isWorkspace = get(selected_type) === "WorkspaceProject";
+      const isWorkspace = context.selectedType === "WorkspaceProject";
 
-    if (skipPersistOnce) {
-      skipPersistOnce = false;
+      if (skipPersistOnce) {
+        skipPersistOnce = false;
+        previousData = _.cloneDeep(current);
+        filter.set(get(filter));
+        if (!isWorkspace) {
+          platform.getProjectIDs().then((result) => {
+            project_ids.set(result);
+          });
+        }
+        saveStatus.set("idle");
+        return;
+      }
+
+      if (previousData) {
+        if (!pendingSkipSnapshot) {
+          captureSnapshot(previousData);
+        }
+        pendingSkipSnapshot = false;
+
+        const removedIds = findRemovedNodeIds(previousData, current);
+        if (removedIds.length > 0) {
+          const projectId = context.selectedId;
+          if (projectId) {
+            closed_node_ids.update((currentState) => {
+              const newState = new Set(currentState);
+              removedIds.forEach((id) => {
+                newState.delete(id);
+              });
+
+              const metaKey = `closed_nodes_${projectId}`;
+              const idsArray = Array.from(newState);
+              platform.setMetaData(metaKey, idsArray);
+
+              return newState;
+            });
+          }
+        }
+      }
+
       previousData = _.cloneDeep(current);
       filter.set(get(filter));
-      if (!isWorkspace) {
+
+      if (isWorkspace) {
+        const activeProjectDir = context.activeProjectDir;
+        if (!activeProjectDir) return;
+        const cachedTasks = context.cachedWorkspaceTasks;
+        const tasks = projectDataToWorkspaceTasks(current, cachedTasks);
+        try {
+          await platform.wsWriteProject(activeProjectDir, tasks);
+          saveStatus.set("saved");
+        } catch {
+          saveStatus.set("error");
+        }
+      } else {
+        try {
+          await platform.setTreeData(current);
+          saveStatus.set("saved");
+        } catch {
+          saveStatus.set("error");
+        }
         platform.getProjectIDs().then((result) => {
           project_ids.set(result);
         });
       }
-      saveStatus.set("idle");
-      return;
-    }
-
-    if (previousData) {
-      if (!pendingSkipSnapshot) {
-        captureSnapshot(previousData);
-      }
-      pendingSkipSnapshot = false;
-
-      const removedIds = findRemovedNodeIds(previousData, current);
-      if (removedIds.length > 0) {
-        const projectId = get(selected_id);
-        if (projectId) {
-          closed_node_ids.update((currentState) => {
-            const newState = new Set(currentState);
-            removedIds.forEach((id) => {
-              newState.delete(id);
-            });
-
-            const metaKey = `closed_nodes_${projectId}`;
-            const idsArray = Array.from(newState);
-            platform.setMetaData(metaKey, idsArray);
-
-            return newState;
-          });
-        }
-      }
-    }
-
-    previousData = _.cloneDeep(current);
-    filter.set(get(filter));
-
-    if (isWorkspace) {
-      const { activeProjectDir } = get(workspace_store);
-      if (!activeProjectDir) return;
-      const cachedTasks = get(workspace_tasks_cache);
-      const tasks = projectDataToWorkspaceTasks(current, cachedTasks);
-      try {
-        await platform.wsWriteProject(activeProjectDir, tasks);
-        saveStatus.set("saved");
-      } catch {
-        saveStatus.set("error");
-      }
-    } else {
-      try {
-        await platform.setTreeData(current);
-        saveStatus.set("saved");
-      } catch {
-        saveStatus.set("error");
-      }
-      platform.getProjectIDs().then((result) => {
-        project_ids.set(result);
-      });
-    }
-  }, 1000);
+    },
+    1000
+  );
 
   return {
     subscribe,
     set,
     update,
+    setFromSource: (value) => {
+      skipPersistOnce = true;
+      set(value);
+    },
+    flushPendingPersist: () => {
+      persistTreeData.flush();
+    },
     init: () => {
       if (!syncListenerRegistered) {
         syncListenerRegistered = true;
@@ -214,7 +235,12 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
         } else {
           saveStatus.set("idle");
         }
-        persistTreeData(current);
+        persistTreeData(current, {
+          selectedType: get(selected_type),
+          selectedId: get(selected_id),
+          activeProjectDir: get(workspace_store).activeProjectDir,
+          cachedWorkspaceTasks: get(workspace_tasks_cache),
+        });
       });
     },
   };

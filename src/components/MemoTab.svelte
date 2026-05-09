@@ -16,6 +16,7 @@
   export let saveMemoTags = null;
   export let allTags = [];
   export let disabled = false;
+  export let isWorkspaceProject = false;
   export let workspaceProjectDir = null;
   export let taskId = null;
 
@@ -295,12 +296,13 @@
 
   <div class="memotab-content">
     {#if selectedMemo}
-      {#key `${$table_selected_id ?? "none"}:${selectedMemoIndex}`}
+      {#key `${isWorkspaceProject ? "workspace" : "projects"}:${$table_selected_id ?? "none"}:${selectedMemoIndex}`}
         <Memo
           saveMemo={(editedContent) => saveMemo(editedContent, selectedMemoIndex)}
           content={editedContent}
           memoTitles={memo.map((entry) => entry.title)}
           openMemoLink={selectMemoByTitle}
+          {isWorkspaceProject}
           {workspaceProjectDir}
           {taskId}
         />

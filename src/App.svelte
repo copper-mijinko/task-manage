@@ -50,7 +50,7 @@
 
       const result = await platform.getTreeData(detailWindowProjectId);
       if (result) {
-        tree_data.set(result);
+        tree_data.setFromSource(result);
         selected_type.set("Projects");
         selected_id.set(detailWindowProjectId);
         table_selected_id.set(detailWindowTaskId);

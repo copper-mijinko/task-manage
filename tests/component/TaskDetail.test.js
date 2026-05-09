@@ -9,7 +9,13 @@ vi.mock("../../src/components/Memo.svelte", async () => {
 });
 
 import TaskDetail from "../../src/components/TaskDetail.svelte";
-import { table_selected_id, tree_data } from "../../src/stores.ts";
+import {
+  selected_id,
+  selected_type,
+  table_selected_id,
+  tree_data,
+  workspace_store,
+} from "../../src/stores.ts";
 
 function createProjectData() {
   return {
@@ -55,6 +61,14 @@ function createProjectData() {
 
 describe("TaskDetail", () => {
   beforeEach(() => {
+    selected_type.set("Projects");
+    selected_id.set("project-1");
+    workspace_store.set({
+      workspaces: [],
+      activeWorkspacePath: null,
+      activeProjectDir: null,
+      projects: [],
+    });
     tree_data.set(createProjectData());
     table_selected_id.set(undefined);
   });
@@ -171,5 +185,42 @@ describe("TaskDetail", () => {
     expect(screen.getByRole("button", { name: "Select memo memo" })).toHaveClass("selected");
     // content should be empty string for the new empty memo
     expect(screen.getByTestId("memo-stub").textContent.trim()).toBe("");
+  });
+
+  test("does not apply a workspace memo save after switching to Projects with the same ids", async () => {
+    const workspaceProject = createProjectData();
+    workspaceProject.data.children[0].data.memo = [
+      { id: "memo-shared", title: "shared", content: "workspace old" },
+    ];
+
+    const projectsProject = createProjectData();
+    projectsProject.data.children[0].data.memo = [
+      { id: "memo-shared", title: "shared", content: "project old" },
+    ];
+
+    workspace_store.set({
+      workspaces: [],
+      activeWorkspacePath: "C:\\workspace",
+      activeProjectDir: "C:\\workspace\\project-1",
+      projects: [],
+    });
+    selected_type.set("WorkspaceProject");
+    selected_id.set("project-1");
+    tree_data.set(workspaceProject);
+    table_selected_id.set("task-1");
+
+    render(TaskDetail);
+
+    await fireEvent.click(screen.getByTestId("memo-save"));
+    expect(get(tree_data).data.children[0].data.memo[0].content).toBe("edited");
+
+    selected_type.set("Projects");
+    selected_id.set("project-1");
+    tree_data.set(projectsProject);
+    table_selected_id.set("task-1");
+
+    await new Promise((resolve) => setTimeout(resolve, 600));
+
+    expect(get(tree_data).data.children[0].data.memo[0].content).toBe("project old");
   });
 });
