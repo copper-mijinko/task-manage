@@ -166,7 +166,9 @@
               normalColor={$ganttVisible
                 ? "var(--theme-color-Accent-main)"
                 : "var(--theme-color-Sub-main)"}
-              activeColor="var(--theme-color-Sub-main)"
+              activeColor={$ganttVisible
+                ? "var(--theme-color-Accent-main)"
+                : "var(--theme-color-Sub-main)"}
               style="--backgroundColor: var(--theme-color-Shadow-sub);"
               on:click={() => ($ganttVisible = !$ganttVisible)}
             >
