@@ -2,6 +2,9 @@
   import { createEventDispatcher } from "svelte";
   import IconButton from "./IconButton.svelte";
   import { ripple } from "../common/common.js";
+  import { activePanelId, newPanelId } from "../stores/panel_coordinator";
+
+  const myPanelId = newPanelId();
 
   export let list = ["first", "second", "third"];
   export let selected = [];
@@ -48,9 +51,17 @@
     dispatch("change", { selected: next });
   }
 
+  // Close when another panel becomes active
+  $: if ($activePanelId !== null && $activePanelId !== myPanelId && expanded) {
+    expanded = false;
+  }
+
   function toggleExpanded(event) {
     event.stopPropagation();
     anchorRect = event.currentTarget.getBoundingClientRect();
+    if (!expanded) {
+      activePanelId.set(myPanelId);
+    }
     expanded = !expanded;
   }
 

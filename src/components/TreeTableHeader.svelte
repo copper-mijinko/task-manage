@@ -3,6 +3,13 @@
   import { column_settings } from "../stores/column_settings.ts";
   import { closed_node_ids } from "../stores/ui.ts";
   import { sort_state, SORTABLE_COLUMNS } from "../stores/sort.ts";
+  import { activePanelId, newPanelId } from "../stores/panel_coordinator";
+
+  const columnSettingsPanelId = newPanelId();
+  // Auto-close column settings when another panel opens
+  $: if ($activePanelId !== null && $activePanelId !== columnSettingsPanelId && showPanel) {
+    showPanel = false;
+  }
   import { ripple } from "../common/common.js";
   import IconButton from "./IconButton.svelte";
   import MultiSelect from "./MultiSelect.svelte";
@@ -67,6 +74,9 @@
     openMemoPanel = false;
     const rect = e.currentTarget.getBoundingClientRect();
     panelStyle = `top: ${rect.bottom}px; right: calc(100vw - ${rect.right}px);`;
+    if (!showPanel) {
+      activePanelId.set(columnSettingsPanelId);
+    }
     showPanel = !showPanel;
   }
 

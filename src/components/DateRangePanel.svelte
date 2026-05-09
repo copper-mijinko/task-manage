@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { createEventDispatcher } from "svelte";
+  import { createEventDispatcher, onMount, onDestroy } from "svelte";
+  import { activePanelId, newPanelId } from "../stores/panel_coordinator";
 
   export let column: string;
   export let from: string = "";
@@ -11,6 +12,16 @@
     close: void;
   }>();
   let panelElement: HTMLElement;
+  const myPanelId = newPanelId();
+  let unsubPanelCoord: (() => void) | undefined;
+
+  onMount(() => {
+    activePanelId.set(myPanelId);
+    unsubPanelCoord = activePanelId.subscribe((id) => {
+      if (id !== null && id !== myPanelId) dispatch("close");
+    });
+  });
+  onDestroy(() => unsubPanelCoord?.());
 
   $: panelStyle = anchorRect ? `top: ${anchorRect.bottom + 2}px; left: ${anchorRect.left}px;` : "";
 
