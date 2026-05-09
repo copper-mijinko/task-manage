@@ -162,37 +162,17 @@
             <IconButton
               tooltipContent={$ganttVisible ? "ガントチャートを閉じる" : "ガントチャートを表示"}
               ariaLabel="ガントチャートの表示切替"
-              activeColor={"var(--theme-color-Accent-dark)"}
+              variant="text"
               normalColor={$ganttVisible
-                ? "var(--theme-color-Accent-main)"
+                ? "var(--theme-color-Theme-light)"
                 : "var(--theme-color-Sub-main)"}
+              activeColor="var(--theme-color-Sub-main)"
               on:click={() => ($ganttVisible = !$ganttVisible)}
             >
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect
-                  x="3"
-                  y="4"
-                  width="4"
-                  height="3"
-                  rx="0.5"
-                  fill="var(--theme-color-Main-main)"
-                />
-                <rect
-                  x="3"
-                  y="10.5"
-                  width="7"
-                  height="3"
-                  rx="0.5"
-                  fill="var(--theme-color-Main-main)"
-                />
-                <rect
-                  x="3"
-                  y="17"
-                  width="5"
-                  height="3"
-                  rx="0.5"
-                  fill="var(--theme-color-Main-main)"
-                />
+                <rect x="3" y="4" width="4" height="3" rx="0.5" fill="currentColor" />
+                <rect x="3" y="10.5" width="7" height="3" rx="0.5" fill="currentColor" />
+                <rect x="3" y="17" width="5" height="3" rx="0.5" fill="currentColor" />
               </svg>
             </IconButton>
           </div>
