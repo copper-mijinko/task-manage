@@ -4,8 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version, for example 0.1.19 or v0.1.19"
-        required: true
+        description: "Release version, for example 0.1.19 or v0.1.19. Leave blank to increment the latest vX.Y.Z tag."
+        required: false
+        default: ""
         type: string
 
 permissions:
@@ -28,12 +29,36 @@ jobs:
       - id: version
         name: Normalize version
         shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
-          VERSION="${{ inputs.version }}"
+          git fetch --tags --force
+
+          VERSION="$INPUT_VERSION"
           VERSION="${VERSION#v}"
 
+          if [[ -z "$VERSION" ]]; then
+            LATEST_TAG="$(
+              git tag --list "v[0-9]*.[0-9]*.[0-9]*" --sort=-v:refname |
+                while read -r tag; do
+                  if [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                    echo "$tag"
+                    break
+                  fi
+                done
+            )"
+
+            if [[ -z "$LATEST_TAG" ]]; then
+              VERSION="0.1.0"
+            else
+              BASE_VERSION="${LATEST_TAG#v}"
+              IFS="." read -r MAJOR MINOR PATCH <<< "$BASE_VERSION"
+              VERSION="$MAJOR.$MINOR.$((PATCH + 1))"
+            fi
+          fi
+
           if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
-            echo "Invalid semver version: ${{ inputs.version }}" >&2
+            echo "Invalid semver version: ${INPUT_VERSION:-$VERSION}" >&2
             exit 1
           fi
 
