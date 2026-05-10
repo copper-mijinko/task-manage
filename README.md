@@ -52,3 +52,5 @@
   - 現在のアプリ構成、画面、データ構造の仕様
 - [docs/testing.md](docs/testing.md)
   - テスト基盤の考え方と実行方法
+- [docs/how-to-contribute.md](docs/how-to-contribute.md)
+  - 開発、CI、リリース workflow の運用手順と権限設計

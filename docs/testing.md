@@ -1,7 +1,8 @@
 # テストガイド
 
 関連ドキュメント:
-[specification.md](specification.md) / [../README.md](../README.md)
+[specification.md](specification.md) /
+[how-to-contribute.md](how-to-contribute.md) / [../README.md](../README.md)
 
 ## 1. テストの種類
 
@@ -244,4 +245,5 @@ Electron アプリ全体を起動して確認する。
 `tests/unit/saveStatus.test.js` は新しい `SaveStatus`（`queued` / `writing` / `retrying` / `saved` / `error` / `conflict`）に合わせて検証値を更新。
 
 関連ドキュメント:
-[specification.md](specification.md) / [../README.md](../README.md)
+[specification.md](specification.md) /
+[how-to-contribute.md](how-to-contribute.md) / [../README.md](../README.md)
