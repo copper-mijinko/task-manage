@@ -119,7 +119,7 @@
     const updatedMemo = [...node.data["memo"]];
     updatedMemo[selectedMemoIndex] = { ...updatedMemo[selectedMemoIndex], tags };
     node.data["memo"] = updatedMemo;
-    changeDataDebounce(node, "memo", updatedMemo, editContext);
+    changeData(node, "memo", updatedMemo, editContext);
   };
 </script>
 

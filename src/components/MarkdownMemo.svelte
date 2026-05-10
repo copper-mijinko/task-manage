@@ -8,6 +8,7 @@
   import { history, defaultKeymap, historyKeymap } from "@codemirror/commands";
   import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
   import { marked } from "marked";
+  import quillIcons from "quill/ui/icons.js";
   import { toMarkdown } from "../common/memo_utils";
   import * as platform from "../lib/platform";
 
@@ -33,6 +34,19 @@
   let livePreviewEl: HTMLElement | null = null;
 
   const EXTERNAL_LINK_PATTERN = /^(https?:\/\/|mailto:|file:\/\/)/i;
+  const toolbarIcons = {
+    bold: quillIcons.bold,
+    italic: quillIcons.italic,
+    inlineCode: quillIcons.code,
+    heading1: quillIcons.header["1"],
+    heading2: quillIcons.header["2"],
+    heading3: quillIcons.header["3"],
+    link: quillIcons.link,
+    bulletList: quillIcons.list.bullet,
+    checklist: quillIcons.list.check,
+    quote: quillIcons.blockquote,
+    codeBlock: quillIcons["code-block"],
+  };
 
   function normalizeMemoTitle(title: string): string {
     return title.trim().toLocaleLowerCase();
@@ -579,71 +593,120 @@
     <div class="edit-mode">
       <div class="edit-bar">
         <div class="toolbar">
+          <!-- eslint-disable svelte/no-at-html-tags -->
           <button
+            type="button"
             class="tool-btn tool-bold"
+            aria-label="Bold"
             title="Bold (Ctrl+B)"
             on:mousedown|preventDefault
-            on:click={formatBold}>B</button
+            on:click={formatBold}
           >
+            <span class="tool-icon" aria-hidden="true">{@html toolbarIcons.bold}</span>
+          </button>
           <button
+            type="button"
             class="tool-btn tool-italic"
+            aria-label="Italic"
             title="Italic (Ctrl+I)"
             on:mousedown|preventDefault
-            on:click={formatItalic}>I</button
+            on:click={formatItalic}
           >
+            <span class="tool-icon" aria-hidden="true">{@html toolbarIcons.italic}</span>
+          </button>
           <button
-            class="tool-btn tool-mono tool-code-inline"
+            type="button"
+            class="tool-btn tool-code-inline"
+            aria-label="Inline code"
             title="Inline code"
             on:mousedown|preventDefault
-            on:click={formatInlineCode}>`…`</button
+            on:click={formatInlineCode}
           >
+            <span class="tool-icon" aria-hidden="true">{@html toolbarIcons.inlineCode}</span>
+          </button>
           <span class="tool-sep"></span>
           <button
+            type="button"
             class="tool-btn"
+            aria-label="Heading 1"
             title="Heading 1"
             on:mousedown|preventDefault
-            on:click={() => formatHeading(1)}>H1</button
+            on:click={() => formatHeading(1)}
           >
+            <span class="tool-icon" aria-hidden="true">{@html toolbarIcons.heading1}</span>
+          </button>
           <button
+            type="button"
             class="tool-btn"
+            aria-label="Heading 2"
             title="Heading 2"
             on:mousedown|preventDefault
-            on:click={() => formatHeading(2)}>H2</button
+            on:click={() => formatHeading(2)}
           >
+            <span class="tool-icon" aria-hidden="true">{@html toolbarIcons.heading2}</span>
+          </button>
           <button
+            type="button"
             class="tool-btn"
+            aria-label="Heading 3"
             title="Heading 3"
             on:mousedown|preventDefault
-            on:click={() => formatHeading(3)}>H3</button
+            on:click={() => formatHeading(3)}
           >
+            <span class="tool-icon" aria-hidden="true">{@html toolbarIcons.heading3}</span>
+          </button>
           <span class="tool-sep"></span>
           <button
+            type="button"
             class="tool-btn"
+            aria-label="Link"
             title="Link (Ctrl+K)"
             on:mousedown|preventDefault
-            on:click={formatLink}>[]</button
+            on:click={formatLink}
           >
+            <span class="tool-icon" aria-hidden="true">{@html toolbarIcons.link}</span>
+          </button>
           <button
+            type="button"
             class="tool-btn"
+            aria-label="Bullet list"
             title="Bullet list"
             on:mousedown|preventDefault
-            on:click={formatBulletList}>-</button
+            on:click={formatBulletList}
           >
+            <span class="tool-icon" aria-hidden="true">{@html toolbarIcons.bulletList}</span>
+          </button>
           <button
+            type="button"
             class="tool-btn"
+            aria-label="Checklist"
             title="Checklist"
             on:mousedown|preventDefault
-            on:click={formatCheckbox}>[ ]</button
+            on:click={formatCheckbox}
           >
-          <button class="tool-btn" title="Quote" on:mousedown|preventDefault on:click={formatQuote}
-            >&gt;</button
-          >
+            <span class="tool-icon" aria-hidden="true">{@html toolbarIcons.checklist}</span>
+          </button>
           <button
-            class="tool-btn tool-mono tool-code-block"
+            type="button"
+            class="tool-btn"
+            aria-label="Quote"
+            title="Quote"
+            on:mousedown|preventDefault
+            on:click={formatQuote}
+          >
+            <span class="tool-icon" aria-hidden="true">{@html toolbarIcons.quote}</span>
+          </button>
+          <button
+            type="button"
+            class="tool-btn tool-code-block"
+            aria-label="Code block"
             title="Code block"
             on:mousedown|preventDefault
-            on:click={formatCodeBlock}>```</button
+            on:click={formatCodeBlock}
           >
+            <span class="tool-icon" aria-hidden="true">{@html toolbarIcons.codeBlock}</span>
+          </button>
+          <!-- eslint-enable svelte/no-at-html-tags -->
         </div>
         <div class="edit-bar-end">
           <span class="save-status" aria-live="polite">
@@ -697,6 +760,11 @@
 
 <style>
   .wrapper {
+    --memo-quill-button-color: var(--theme-color-Sub-light);
+    --memo-quill-button-active-color: #06c;
+    --memo-quill-button-height: 24px;
+    --memo-quill-button-width: 28px;
+
     display: flex;
     flex-direction: column;
     flex: 1;
@@ -716,7 +784,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0.3rem 0.5rem;
+    padding: 8px;
     background-color: var(--theme-color-Main-dark);
     flex-shrink: 0;
     gap: 0.5rem;
@@ -726,7 +794,7 @@
   .toolbar {
     display: flex;
     align-items: center;
-    gap: 0.15rem;
+    gap: 0;
     flex-wrap: nowrap;
     flex: 1 1 auto;
     min-width: 0;
@@ -744,29 +812,78 @@
     align-items: center;
     justify-content: center;
     flex: 0 0 auto;
-    height: 1.65rem;
-    padding: 0 0.35rem;
+    height: var(--memo-quill-button-height);
+    width: auto;
+    padding: 3px 5px;
     margin: 0;
-    font-size: 0.75rem;
-    background-color: color-mix(in srgb, var(--theme-color-Sub-dark) 10%, transparent);
-    border: 1px solid color-mix(in srgb, var(--theme-color-Sub-dark) 35%, transparent);
-    border-radius: 4px;
-    color: var(--theme-color-Sub-light);
+    font-size: 0.8rem;
+    background: none;
+    border: none;
+    border-radius: 0;
+    color: var(--memo-quill-button-color);
     cursor: pointer;
     line-height: 1;
-    min-width: 1.65rem;
+    min-width: var(--memo-quill-button-width);
     text-align: center;
+    transition: color 0.1s ease;
   }
 
-  .tool-btn:hover {
-    background-color: color-mix(in srgb, var(--theme-color-Sub-dark) 25%, transparent);
-    border-color: var(--theme-color-Sub-light);
-    color: var(--theme-color-Sub-light);
+  .tool-btn:hover,
+  .tool-btn:focus-visible {
+    background: none;
+    color: var(--memo-quill-button-active-color);
   }
 
   .tool-btn:active {
-    background-color: color-mix(in srgb, var(--theme-color-Sub-dark) 40%, transparent);
-    transform: translateY(1px);
+    background: none;
+  }
+
+  .tool-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    pointer-events: none;
+  }
+
+  .tool-icon :global(svg) {
+    display: block;
+    width: 18px;
+    height: 18px;
+  }
+
+  .tool-icon :global(.ql-stroke) {
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 2;
+  }
+
+  .tool-icon :global(.ql-stroke-miter) {
+    fill: none;
+    stroke: currentColor;
+    stroke-miterlimit: 10;
+    stroke-width: 2;
+  }
+
+  .tool-icon :global(.ql-fill),
+  .tool-icon :global(.ql-stroke.ql-fill) {
+    fill: currentColor;
+  }
+
+  .tool-icon :global(.ql-even) {
+    fill-rule: evenodd;
+  }
+
+  .tool-icon :global(.ql-thin),
+  .tool-icon :global(.ql-stroke.ql-thin) {
+    stroke-width: 1;
+  }
+
+  .tool-icon :global(.ql-transparent) {
+    opacity: 0.4;
   }
 
   .tool-bold {
@@ -777,22 +894,16 @@
     font-style: italic;
   }
 
-  .tool-mono {
-    font-family: ui-monospace, "Cascadia Code", "Fira Code", monospace;
-    font-size: 0.72rem;
-    letter-spacing: -0.03em;
-  }
-
   .tool-code-inline,
   .tool-code-block {
-    border-left: 2px solid color-mix(in srgb, var(--theme-color-Accent-main) 55%, transparent);
+    min-width: var(--memo-quill-button-width);
   }
 
   .tool-sep {
-    width: 1px;
-    height: 1rem;
-    background-color: var(--theme-color-Sub-dark);
-    margin: 0 0.15rem;
+    width: 0;
+    height: var(--memo-quill-button-height);
+    background-color: transparent;
+    margin: 0 0.55rem 0 0.35rem;
     flex-shrink: 0;
   }
 
