@@ -13,6 +13,7 @@ import {
   selected_id,
   selected_type,
   table_selected_id,
+  tag_index,
   tree_data,
   workspace_store,
 } from "../../src/stores.ts";
@@ -133,6 +134,20 @@ describe("TaskDetail", () => {
     expect(get(tree_data).data.children[0].data.memo).toEqual([
       expect.objectContaining({ title: "memo", content: "" }),
     ]);
+  });
+
+  test("saves memo tags immediately and updates the tag index", async () => {
+    table_selected_id.set("task-2");
+    render(TaskDetail);
+
+    const tagInput = document.querySelector(".tag-input");
+    await fireEvent.input(tagInput, { target: { value: "Design " } });
+    await fireEvent.keyDown(tagInput, { key: "Enter" });
+    await tick();
+
+    expect(get(tree_data).data.children[1].data.memo[0].tags).toEqual(["design"]);
+    expect(get(tag_index).get("design")).toEqual(new Set(["task-2"]));
+    expect(screen.getByLabelText("Remove tag design")).toBeInTheDocument();
   });
 
   test("resets the selected memo tab when the selected task changes", async () => {
