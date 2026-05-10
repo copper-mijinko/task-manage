@@ -10,16 +10,28 @@ on:
         type: string
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   tag:
     runs-on: ubuntu-latest
+    environment: release
+    concurrency:
+      group: release-tag
+      cancel-in-progress: false
     steps:
+      - id: release-token
+        name: Create release app token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
       - uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
+          token: ${{ steps.release-token.outputs.token }}
 
       - uses: actions/setup-node@v4
         with:
@@ -76,8 +88,8 @@ jobs:
 
       - name: Commit and tag version
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "task-manage-release[bot]"
+          git config user.email "task-manage-release[bot]@users.noreply.github.com"
 
           if ! git diff --quiet -- package.json package-lock.json; then
             git add package.json package-lock.json
