@@ -90,17 +90,28 @@
   $: editedContent = memo.length > selectedMemoIndex ? memo[selectedMemoIndex].content : "";
   $: selectedMemo = memo[selectedMemoIndex];
   $: currentTags = selectedMemo?.tags ?? [];
+  $: suggestedTags = allTags.filter((tag) => !currentTags.includes(tag));
 
   let tagInput = "";
+
+  function normalizeTagInput(value) {
+    return String(value || "")
+      .trim()
+      .toLowerCase();
+  }
+
+  function addTagFromInput() {
+    const newTag = normalizeTagInput(tagInput);
+    if (newTag && !currentTags.includes(newTag) && saveMemoTags) {
+      saveMemoTags(selectedMemoIndex, [...currentTags, newTag]);
+    }
+    tagInput = "";
+  }
 
   function handleTagInput(e) {
     if (e.key === "Enter" && tagInput.trim()) {
       e.preventDefault();
-      const newTag = tagInput.trim().toLowerCase();
-      if (!currentTags.includes(newTag) && saveMemoTags) {
-        saveMemoTags(selectedMemoIndex, [...currentTags, newTag]);
-      }
-      tagInput = "";
+      addTagFromInput();
     } else if (e.key === "Backspace" && tagInput === "" && currentTags.length > 0 && saveMemoTags) {
       saveMemoTags(selectedMemoIndex, currentTags.slice(0, -1));
     }
@@ -271,25 +282,48 @@
   </div>
 
   {#if selectedMemo}
-    <div class="tag-bar">
-      {#each currentTags as tag (tag)}
-        <span class="tag-chip">
-          {tag}
-          <button class="tag-remove" on:click={() => removeTag(tag)} aria-label="Remove tag {tag}"
-            >×</button
-          >
-        </span>
-      {/each}
-      <input
-        class="tag-input"
-        type="text"
-        list="memo-tag-suggestions"
-        bind:value={tagInput}
-        on:keydown={handleTagInput}
-        placeholder={currentTags.length === 0 ? "タグを追加..." : ""}
-      />
+    <div class="tag-bar" aria-label="Memo tags">
+      <div class="tag-label" aria-hidden="true">
+        <span class="tag-mark">#</span>
+        <span>Tags</span>
+      </div>
+      <div class="tag-field">
+        {#each currentTags as tag (tag)}
+          <span class="tag-chip">
+            {tag}
+            <button
+              class="tag-remove"
+              type="button"
+              on:click={() => removeTag(tag)}
+              aria-label="Remove tag {tag}"
+            >
+              x
+            </button>
+          </span>
+        {/each}
+        <input
+          class="tag-input"
+          type="text"
+          list="memo-tag-suggestions"
+          bind:value={tagInput}
+          on:keydown={handleTagInput}
+          placeholder="Tag"
+          aria-label="Memo tag"
+        />
+      </div>
+      <button
+        class="tag-add"
+        type="button"
+        aria-label="Add tag"
+        disabled={!tagInput.trim() || !saveMemoTags}
+        on:click={addTagFromInput}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 5V19M5 12H19" />
+        </svg>
+      </button>
       <datalist id="memo-tag-suggestions">
-        {#each allTags as t}<option value={t}></option>{/each}
+        {#each suggestedTags as t}<option value={t}></option>{/each}
       </datalist>
     </div>
   {/if}
@@ -435,21 +469,61 @@
 
   .tag-bar {
     display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0.6rem;
+    min-height: 2.5rem;
+    border-bottom: 1px solid var(--theme-color-Sub-dark);
+    background-color: var(--theme-color-Main-dark);
+    flex-shrink: 0;
+  }
+
+  .tag-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    flex: 0 0 auto;
+    color: var(--theme-color-Sub-main);
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+
+  .tag-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.25rem;
+    height: 1.25rem;
+    border-radius: 4px;
+    color: var(--theme-color-Main-main);
+    background-color: var(--theme-color-Accent-dark);
+  }
+
+  .tag-field {
+    display: flex;
+    flex: 1 1 auto;
     flex-wrap: wrap;
     align-items: center;
     gap: 0.25rem;
-    padding: 0.25rem 0.5rem;
-    min-height: 2rem;
-    border-bottom: 1px solid var(--theme-color-Sub-dark);
-    flex-shrink: 0;
+    min-width: 0;
+    min-height: 1.85rem;
+    padding: 0.2rem 0.35rem;
+    border: 1px solid color-mix(in srgb, var(--theme-color-Sub-dark) 65%, transparent);
+    border-radius: 4px;
+    background-color: color-mix(in srgb, var(--theme-color-Main-light) 88%, transparent);
+  }
+
+  .tag-field:focus-within {
+    border-color: var(--theme-color-Accent-main);
   }
 
   .tag-chip {
     display: inline-flex;
     align-items: center;
-    gap: 0.2rem;
-    padding: 0.1rem 0.4rem;
-    border-radius: 0.75rem;
+    gap: 0.25rem;
+    min-height: 1.35rem;
+    padding: 0 0.25rem 0 0.45rem;
+    border-radius: 999px;
     background-color: var(--theme-color-Accent-dark);
     color: var(--theme-color-Main-main);
     font-size: 0.75rem;
@@ -461,29 +535,76 @@
     border: none;
     color: var(--theme-color-Main-main);
     cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1rem;
+    height: 1rem;
     padding: 0;
     font-size: 0.75rem;
     line-height: 1;
     opacity: 0.7;
+    border-radius: 50%;
   }
 
   .tag-remove:hover {
     opacity: 1;
+    background-color: color-mix(in srgb, var(--theme-color-Main-main) 18%, transparent);
   }
 
   .tag-input {
     background: transparent;
     border: none;
-    color: var(--theme-color-Sub-main);
+    color: var(--theme-color-Sub-light);
     font-size: 0.8rem;
-    min-width: 6rem;
-    flex: 1;
+    min-width: 4.5rem;
+    flex: 1 1 6rem;
     outline: none;
     padding: 0;
+    text-align: left;
   }
 
   .tag-input::placeholder {
     color: var(--theme-color-Sub-dark);
+  }
+
+  .tag-add {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 2rem;
+    height: 2rem;
+    border: 1px solid color-mix(in srgb, var(--theme-color-Sub-dark) 65%, transparent);
+    border-radius: 4px;
+    color: var(--theme-color-Sub-main);
+    background-color: color-mix(in srgb, var(--theme-color-Main-light) 88%, transparent);
+    cursor: pointer;
+  }
+
+  .tag-add:hover:not(:disabled),
+  .tag-add:focus-visible {
+    color: var(--theme-color-Main-main);
+    border-color: var(--theme-color-Accent-main);
+    background-color: var(--theme-color-Accent-dark);
+  }
+
+  .tag-add:disabled {
+    cursor: default;
+    opacity: 0.45;
+  }
+
+  .tag-add svg {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .tag-add path {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
   }
 
   .memotab-content {
