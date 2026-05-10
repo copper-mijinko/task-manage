@@ -32,6 +32,12 @@
   let renderSequence = 0;
   let previewEl: HTMLElement | null = null;
   let livePreviewEl: HTMLElement | null = null;
+  let editBody: HTMLElement | null = null;
+  let markdownSplitPercent = 55;
+
+  const SPLIT_MIN_PERCENT = 30;
+  const SPLIT_MAX_PERCENT = 72;
+  const SPLIT_KEY_STEP = 5;
 
   const EXTERNAL_LINK_PATTERN = /^(https?:\/\/|mailto:|file:\/\/)/i;
   const toolbarIcons = {
@@ -381,6 +387,65 @@
     }
   }
 
+  function clampSplitPercent(value: number): number {
+    return Math.min(SPLIT_MAX_PERCENT, Math.max(SPLIT_MIN_PERCENT, value));
+  }
+
+  function applyMarkdownSplitPercent(value: number) {
+    markdownSplitPercent = clampSplitPercent(value);
+    view?.requestMeasure();
+  }
+
+  function resizeMarkdownSplitFromClientX(clientX: number) {
+    if (!editBody) return;
+    const rect = editBody.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    applyMarkdownSplitPercent(((clientX - rect.left) / rect.width) * 100);
+  }
+
+  function handleSplitPointerMove(event: PointerEvent) {
+    resizeMarkdownSplitFromClientX(event.clientX);
+  }
+
+  function stopSplitResize() {
+    window.removeEventListener("pointermove", handleSplitPointerMove);
+    window.removeEventListener("pointerup", stopSplitResize);
+    document.body.style.removeProperty("cursor");
+    document.body.style.removeProperty("user-select");
+  }
+
+  function startSplitResize(event: PointerEvent) {
+    if (!editBody) return;
+    event.preventDefault();
+    (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    resizeMarkdownSplitFromClientX(event.clientX);
+    window.addEventListener("pointermove", handleSplitPointerMove);
+    window.addEventListener("pointerup", stopSplitResize);
+  }
+
+  function handleSplitKeydown(event: KeyboardEvent) {
+    switch (event.key) {
+      case "ArrowLeft":
+        event.preventDefault();
+        applyMarkdownSplitPercent(markdownSplitPercent - SPLIT_KEY_STEP);
+        break;
+      case "ArrowRight":
+        event.preventDefault();
+        applyMarkdownSplitPercent(markdownSplitPercent + SPLIT_KEY_STEP);
+        break;
+      case "Home":
+        event.preventDefault();
+        applyMarkdownSplitPercent(SPLIT_MIN_PERCENT);
+        break;
+      case "End":
+        event.preventDefault();
+        applyMarkdownSplitPercent(SPLIT_MAX_PERCENT);
+        break;
+    }
+  }
+
   const editorTheme = EditorView.theme({
     "&": {
       height: "100%",
@@ -548,6 +613,7 @@
   }
 
   onDestroy(() => {
+    stopSplitResize();
     clearTimeout(savedTimer);
     if (view) {
       clearTimeout(saveTimer);
@@ -720,8 +786,28 @@
           </div>
         </div>
       </div>
-      <div class="edit-body">
-        <div class="editor" bind:this={container}></div>
+      <div
+        class="edit-body"
+        bind:this={editBody}
+        style={`--editor-pane-width: ${markdownSplitPercent}%`}
+      >
+        <div class="editor-pane">
+          <div class="editor" bind:this={container}></div>
+        </div>
+        <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+        <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+        <div
+          class="markdown-split-resizer"
+          role="separator"
+          aria-label="Resize editor and preview"
+          aria-orientation="vertical"
+          aria-valuemin={SPLIT_MIN_PERCENT}
+          aria-valuemax={SPLIT_MAX_PERCENT}
+          aria-valuenow={Math.round(markdownSplitPercent)}
+          tabindex="0"
+          on:pointerdown={startSplitResize}
+          on:keydown={handleSplitKeydown}
+        ></div>
         <div class="live-preview" aria-label="Markdown preview">
           {#if currentContent.trim()}
             <!-- eslint-disable-next-line svelte/no-at-html-tags -->
@@ -960,23 +1046,73 @@
     cursor: default;
   }
 
+  .edit-body {
+    --editor-pane-width: 55%;
+    display: flex;
+    min-height: 0;
+    flex: 1;
+  }
+
+  .editor-pane {
+    display: flex;
+    flex: 0 0 var(--editor-pane-width);
+    min-width: 0;
+    overflow: hidden;
+  }
+
   .editor {
     flex: 1;
     overflow: hidden;
     min-width: 0;
   }
 
-  .edit-body {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(16rem, 0.9fr);
-    min-height: 0;
-    flex: 1;
+  .markdown-split-resizer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 0.65rem;
+    min-width: 0.65rem;
+    padding: 0;
+    cursor: col-resize;
+    border-left: 1px solid color-mix(in srgb, var(--theme-color-Sub-dark) 50%, transparent);
+    border-right: 1px solid color-mix(in srgb, var(--theme-color-Sub-dark) 50%, transparent);
+    border-top: 0;
+    border-bottom: 0;
+    background-color: color-mix(in srgb, var(--theme-color-Main-dark) 78%, transparent);
+    touch-action: none;
+  }
+
+  .markdown-split-resizer::before {
+    content: "";
+    width: 0.16rem;
+    height: 3rem;
+    border-radius: 999px;
+    background-color: color-mix(in srgb, var(--theme-color-Sub-main) 55%, transparent);
+    box-shadow:
+      -0.22rem 0 0 color-mix(in srgb, var(--theme-color-Sub-main) 22%, transparent),
+      0.22rem 0 0 color-mix(in srgb, var(--theme-color-Sub-main) 22%, transparent);
+    transition:
+      background-color 0.12s ease,
+      box-shadow 0.12s ease;
+  }
+
+  .markdown-split-resizer:hover::before,
+  .markdown-split-resizer:focus-visible::before {
+    background-color: var(--theme-color-Accent-main);
+    box-shadow:
+      -0.22rem 0 0 color-mix(in srgb, var(--theme-color-Accent-main) 32%, transparent),
+      0.22rem 0 0 color-mix(in srgb, var(--theme-color-Accent-main) 32%, transparent);
+  }
+
+  .markdown-split-resizer:focus-visible {
+    outline: 2px solid var(--theme-color-Accent-main);
+    outline-offset: -2px;
   }
 
   .live-preview {
+    flex: 1 1 0;
     min-width: 0;
     overflow: auto;
-    border-left: 1px solid var(--theme-color-Sub-dark);
     background-color: color-mix(in srgb, var(--theme-color-Main-light) 92%, black);
   }
 
@@ -1005,10 +1141,11 @@
   }
 
   @media (max-width: 900px) {
-    .edit-body {
-      grid-template-columns: 1fr;
+    .editor-pane {
+      flex-basis: 100%;
     }
 
+    .markdown-split-resizer,
     .live-preview {
       display: none;
     }
