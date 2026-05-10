@@ -91,6 +91,8 @@
   $: selectedMemo = memo[selectedMemoIndex];
   $: currentTags = selectedMemo?.tags ?? [];
   $: suggestedTags = allTags.filter((tag) => !currentTags.includes(tag));
+  $: visibleSuggestedTags = suggestedTags.slice(0, 8);
+  $: tagScopeLabel = isWorkspaceProject ? "Markdown" : "Quill";
 
   let tagInput = "";
 
@@ -100,12 +102,16 @@
       .toLowerCase();
   }
 
-  function addTagFromInput() {
-    const newTag = normalizeTagInput(tagInput);
+  function addTag(value) {
+    const newTag = normalizeTagInput(value);
     if (newTag && !currentTags.includes(newTag) && saveMemoTags) {
       saveMemoTags(selectedMemoIndex, [...currentTags, newTag]);
     }
     tagInput = "";
+  }
+
+  function addTagFromInput() {
+    addTag(tagInput);
   }
 
   function handleTagInput(e) {
@@ -282,46 +288,70 @@
   </div>
 
   {#if selectedMemo}
-    <div class="tag-bar" aria-label="Memo tags">
-      <div class="tag-label" aria-hidden="true">
-        <span class="tag-mark">#</span>
-        <span>Tags</span>
+    <div class="tag-panel" aria-label="Memo tags">
+      <div class="tag-panel-header">
+        <div class="tag-title" aria-hidden="true">
+          <span class="tag-mark">#</span>
+          <span>Tags</span>
+        </div>
+        <span class="tag-scope">{tagScopeLabel}</span>
       </div>
-      <div class="tag-field">
-        {#each currentTags as tag (tag)}
-          <span class="tag-chip">
-            {tag}
+
+      <div class="tag-editor-row">
+        <div class="tag-field" class:is-empty={currentTags.length === 0}>
+          {#each currentTags as tag (tag)}
+            <span class="tag-chip">
+              <span>{tag}</span>
+              <button
+                class="tag-remove"
+                type="button"
+                on:click={() => removeTag(tag)}
+                aria-label="Remove tag {tag}"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M7 7L17 17M17 7L7 17" />
+                </svg>
+              </button>
+            </span>
+          {/each}
+          <input
+            class="tag-input"
+            type="text"
+            list="memo-tag-suggestions"
+            bind:value={tagInput}
+            on:keydown={handleTagInput}
+            placeholder="Add tag"
+            aria-label="Memo tag"
+          />
+        </div>
+        <button
+          class="tag-add"
+          type="button"
+          aria-label="Add tag"
+          disabled={!tagInput.trim() || !saveMemoTags}
+          on:click={addTagFromInput}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 5V19M5 12H19" />
+          </svg>
+        </button>
+      </div>
+
+      {#if visibleSuggestedTags.length > 0}
+        <div class="tag-suggestions" aria-label="Suggested tags">
+          {#each visibleSuggestedTags as tag (tag)}
             <button
-              class="tag-remove"
               type="button"
-              on:click={() => removeTag(tag)}
-              aria-label="Remove tag {tag}"
+              class="tag-suggestion"
+              disabled={!saveMemoTags}
+              on:click={() => addTag(tag)}
             >
-              x
+              #{tag}
             </button>
-          </span>
-        {/each}
-        <input
-          class="tag-input"
-          type="text"
-          list="memo-tag-suggestions"
-          bind:value={tagInput}
-          on:keydown={handleTagInput}
-          placeholder="Tag"
-          aria-label="Memo tag"
-        />
-      </div>
-      <button
-        class="tag-add"
-        type="button"
-        aria-label="Add tag"
-        disabled={!tagInput.trim() || !saveMemoTags}
-        on:click={addTagFromInput}
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M12 5V19M5 12H19" />
-        </svg>
-      </button>
+          {/each}
+        </div>
+      {/if}
+
       <datalist id="memo-tag-suggestions">
         {#each suggestedTags as t}<option value={t}></option>{/each}
       </datalist>
@@ -467,36 +497,67 @@
     border-right: 0.15rem solid var(--theme-color-Accent-main);
   }
 
-  .tag-bar {
+  .tag-panel {
     display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.35rem 0.6rem;
-    min-height: 2.5rem;
-    border-bottom: 1px solid var(--theme-color-Sub-dark);
+    flex-direction: column;
+    gap: 0.45rem;
+    padding: 0.55rem 0.75rem 0.65rem;
+    border-top: 1px solid color-mix(in srgb, var(--theme-color-Sub-dark) 35%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--theme-color-Sub-dark) 65%, transparent);
     background-color: var(--theme-color-Main-dark);
     flex-shrink: 0;
   }
 
-  .tag-label {
+  .tag-panel-header,
+  .tag-editor-row {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .tag-panel-header {
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .tag-editor-row {
+    gap: 0.5rem;
+  }
+
+  .tag-title {
     display: inline-flex;
     align-items: center;
-    gap: 0.25rem;
+    gap: 0.45rem;
     flex: 0 0 auto;
-    color: var(--theme-color-Sub-main);
-    font-size: 0.78rem;
-    font-weight: 600;
+    color: var(--theme-color-Sub-light);
+    font-size: 0.82rem;
+    font-weight: 700;
   }
 
   .tag-mark {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 1.25rem;
-    height: 1.25rem;
-    border-radius: 4px;
-    color: var(--theme-color-Main-main);
-    background-color: var(--theme-color-Accent-dark);
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 8px;
+    color: var(--theme-color-Accent-main);
+    background-color: color-mix(in srgb, var(--theme-color-Accent-main) 13%, transparent);
+  }
+
+  .tag-scope {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.45rem;
+    padding: 0 0.55rem;
+    border-radius: 999px;
+    color: var(--theme-color-Sub-main);
+    background-color: color-mix(in srgb, var(--theme-color-Sub-dark) 22%, transparent);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0;
+    white-space: nowrap;
   }
 
   .tag-field {
@@ -506,57 +567,85 @@
     align-items: center;
     gap: 0.25rem;
     min-width: 0;
-    min-height: 1.85rem;
-    padding: 0.2rem 0.35rem;
-    border: 1px solid color-mix(in srgb, var(--theme-color-Sub-dark) 65%, transparent);
-    border-radius: 4px;
-    background-color: color-mix(in srgb, var(--theme-color-Main-light) 88%, transparent);
+    min-height: 2.25rem;
+    padding: 0.25rem 0.45rem;
+    border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 40%, transparent);
+    border-radius: 8px;
+    background-color: color-mix(in srgb, var(--theme-color-Main-light) 90%, transparent);
+    box-shadow: inset 0 0 0 1px transparent;
+    transition:
+      border-color 0.12s ease,
+      box-shadow 0.12s ease,
+      background-color 0.12s ease;
   }
 
   .tag-field:focus-within {
     border-color: var(--theme-color-Accent-main);
+    box-shadow: inset 0 0 0 1px var(--theme-color-Accent-main);
+    background-color: var(--theme-color-Main-light);
+  }
+
+  .tag-field.is-empty {
+    padding-left: 0.7rem;
   }
 
   .tag-chip {
     display: inline-flex;
     align-items: center;
-    gap: 0.25rem;
-    min-height: 1.35rem;
-    padding: 0 0.25rem 0 0.45rem;
+    gap: 0.3rem;
+    min-height: 1.55rem;
+    max-width: 13rem;
+    padding: 0 0.2rem 0 0.6rem;
     border-radius: 999px;
-    background-color: var(--theme-color-Accent-dark);
-    color: var(--theme-color-Main-main);
-    font-size: 0.75rem;
+    border: 1px solid color-mix(in srgb, var(--theme-color-Accent-main) 35%, transparent);
+    background-color: color-mix(in srgb, var(--theme-color-Accent-main) 15%, transparent);
+    color: var(--theme-color-Sub-light);
+    font-size: 0.76rem;
+    font-weight: 600;
     white-space: nowrap;
+  }
+
+  .tag-chip span {
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .tag-remove {
     background: none;
     border: none;
-    color: var(--theme-color-Main-main);
+    color: var(--theme-color-Sub-main);
     cursor: pointer;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 1rem;
-    height: 1rem;
+    width: 1.25rem;
+    height: 1.25rem;
     padding: 0;
-    font-size: 0.75rem;
-    line-height: 1;
-    opacity: 0.7;
     border-radius: 50%;
   }
 
   .tag-remove:hover {
-    opacity: 1;
-    background-color: color-mix(in srgb, var(--theme-color-Main-main) 18%, transparent);
+    color: var(--theme-color-Sub-light);
+    background-color: color-mix(in srgb, var(--theme-color-Sub-main) 18%, transparent);
+  }
+
+  .tag-remove svg {
+    width: 0.85rem;
+    height: 0.85rem;
+  }
+
+  .tag-remove path {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
   }
 
   .tag-input {
     background: transparent;
     border: none;
     color: var(--theme-color-Sub-light);
-    font-size: 0.8rem;
+    font-size: 0.82rem;
     min-width: 4.5rem;
     flex: 1 1 6rem;
     outline: none;
@@ -573,25 +662,34 @@
     align-items: center;
     justify-content: center;
     flex: 0 0 auto;
-    width: 2rem;
-    height: 2rem;
-    border: 1px solid color-mix(in srgb, var(--theme-color-Sub-dark) 65%, transparent);
-    border-radius: 4px;
-    color: var(--theme-color-Sub-main);
-    background-color: color-mix(in srgb, var(--theme-color-Main-light) 88%, transparent);
+    width: 2.35rem;
+    height: 2.35rem;
+    border: 1px solid color-mix(in srgb, var(--theme-color-Accent-main) 35%, transparent);
+    border-radius: 8px;
+    color: var(--theme-color-Main-main);
+    background-color: var(--theme-color-Accent-dark);
     cursor: pointer;
+    box-shadow: 0 0.15rem 0.35rem rgba(0, 0, 0, 0.18);
+    transition:
+      background-color 0.12s ease,
+      box-shadow 0.12s ease,
+      opacity 0.12s ease;
   }
 
   .tag-add:hover:not(:disabled),
   .tag-add:focus-visible {
     color: var(--theme-color-Main-main);
-    border-color: var(--theme-color-Accent-main);
-    background-color: var(--theme-color-Accent-dark);
+    background-color: var(--theme-color-Accent-main);
+    box-shadow: 0 0.25rem 0.55rem rgba(0, 0, 0, 0.24);
   }
 
   .tag-add:disabled {
     cursor: default;
-    opacity: 0.45;
+    color: var(--theme-color-Sub-dark);
+    background-color: color-mix(in srgb, var(--theme-color-Sub-dark) 18%, transparent);
+    border-color: color-mix(in srgb, var(--theme-color-Sub-dark) 26%, transparent);
+    box-shadow: none;
+    opacity: 1;
   }
 
   .tag-add svg {
@@ -605,6 +703,54 @@
     stroke-width: 2;
     stroke-linecap: round;
     stroke-linejoin: round;
+  }
+
+  .tag-suggestions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .tag-suggestion {
+    display: inline-flex;
+    align-items: center;
+    max-width: 12rem;
+    min-height: 1.55rem;
+    padding: 0 0.6rem;
+    border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 24%, transparent);
+    border-radius: 999px;
+    color: var(--theme-color-Sub-main);
+    background-color: color-mix(in srgb, var(--theme-color-Main-light) 70%, transparent);
+    font-size: 0.72rem;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .tag-suggestion:hover:not(:disabled),
+  .tag-suggestion:focus-visible {
+    color: var(--theme-color-Sub-light);
+    border-color: var(--theme-color-Accent-main);
+    background-color: color-mix(in srgb, var(--theme-color-Accent-main) 12%, transparent);
+  }
+
+  .tag-suggestion:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+
+  @media (max-width: 760px) {
+    .tag-panel {
+      padding: 0.5rem;
+    }
+
+    .tag-panel-header {
+      align-items: flex-start;
+    }
   }
 
   .memotab-content {

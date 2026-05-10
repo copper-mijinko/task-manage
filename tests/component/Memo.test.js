@@ -202,6 +202,25 @@ describe("Markdown Memo - edit mode", () => {
     });
   });
 
+  test("lets the markdown editor and preview split be resized with the keyboard", async () => {
+    renderMarkdownMemo({ saveMemo, content: "hello" });
+    await fireEvent.click(document.querySelector(".edit-mode-btn"));
+    await waitFor(() => {
+      expect(document.querySelector(".markdown-split-resizer")).toBeInTheDocument();
+    });
+
+    const editBody = document.querySelector(".edit-body");
+    const resizer = document.querySelector(".markdown-split-resizer");
+
+    expect(editBody.getAttribute("style")).toContain("--editor-pane-width: 55%");
+
+    await fireEvent.keyDown(resizer, { key: "ArrowLeft" });
+    expect(editBody.getAttribute("style")).toContain("--editor-pane-width: 50%");
+
+    await fireEvent.keyDown(resizer, { key: "End" });
+    expect(editBody.getAttribute("style")).toContain("--editor-pane-width: 72%");
+  });
+
   test("clicking read mode switch returns to view mode", async () => {
     renderMarkdownMemo({ saveMemo, content: "hello" });
     await fireEvent.click(document.querySelector(".edit-mode-btn"));

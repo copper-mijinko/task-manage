@@ -44,6 +44,7 @@
   let show_confirm = false;
   let project_id_confirm;
   let project_name_confirm;
+  let tagQuery = "";
   const toggle_confirm = () => {
     show_confirm = !show_confirm;
   };
@@ -66,6 +67,17 @@
       children: $info_ids,
     },
   ];
+  $: tagEntries = [...$tag_index.entries()].sort(([a], [b]) => a.localeCompare(b));
+  $: normalizedTagQuery = tagQuery.trim().toLocaleLowerCase();
+  $: visibleTagEntries = normalizedTagQuery
+    ? tagEntries.filter(([tag]) => tag.toLocaleLowerCase().includes(normalizedTagQuery))
+    : tagEntries;
+  $: tagScopeLabel =
+    $selected_type === "WorkspaceProject"
+      ? "Markdown"
+      : $selected_type === "Projects"
+        ? "Quill"
+        : "Memo";
 
   // Add
   const handleAdd = (e) => {
@@ -449,64 +461,74 @@
   {/if}
 
   <!-- Tag browser -->
-  <br />
-  <div class="Section">
-    <span class="TagLogo">#</span>
-    <span class="TextOverFlow">Tags</span>
-    <div class="AddButtonContainer">
-      <IconButton
-        ariaLabel="Toggle tags section"
-        normalColor="rgba(255,255,255,0.1)"
-        activeColor="rgba(255,255,255,0.2)"
+  <div class="TagBrowser">
+    <div class="TagHeader">
+      <div class="TagTitle">
+        <span class="TagLogo">#</span>
+        <div class="TagTitleText">
+          <span class="TextOverFlow">Tags</span>
+          <span class="TagScope">{tagScopeLabel}</span>
+        </div>
+      </div>
+      <button
+        class="TagToggle"
+        type="button"
+        aria-label="Toggle tags section"
+        aria-expanded={tagsExpanded}
         on:click={() => (tagsExpanded = !tagsExpanded)}
       >
         {#if tagsExpanded}
-          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path
-              d="M18 15L12 9L6 15"
-              stroke="white"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M18 15L12 9L6 15" />
           </svg>
         {:else}
-          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path
-              d="M6 9L12 15L18 9"
-              stroke="white"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6 9L12 15L18 9" />
           </svg>
         {/if}
-      </IconButton>
+      </button>
     </div>
+    {#if tagsExpanded}
+      <div class="TagContents" transition:slide={{ duration: 100 }}>
+        <label class="TagSearch">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M21 21L16.7 16.7M18 11A7 7 0 1 1 4 11A7 7 0 0 1 18 11Z" />
+          </svg>
+          <input
+            bind:value={tagQuery}
+            type="text"
+            placeholder="Filter tags"
+            aria-label="Filter tags"
+          />
+        </label>
+
+        {#if visibleTagEntries.length > 0}
+          {#each visibleTagEntries as [tag, nodes] (tag)}
+            <button
+              class="MenuRow TagRow"
+              class:Selected={$active_tag === tag}
+              use:ripple
+              on:click={() => ($active_tag = $active_tag === tag ? null : tag)}
+            >
+              <span class="TagRowMark">#</span>
+              <span class="TextOverFlow">{tag}</span>
+              <span class="TagBadge">{nodes.size}</span>
+            </button>
+          {/each}
+        {:else if $tag_index.size > 0}
+          <div class="MenuRow EmptyTagRow">
+            <span class="TagRowMark">#</span>
+            <span class="TextOverFlow">No matches</span>
+          </div>
+        {:else}
+          <div class="MenuRow EmptyTagRow">
+            <span class="TagRowMark">#</span>
+            <span class="TextOverFlow">No tags</span>
+          </div>
+        {/if}
+      </div>
+    {/if}
   </div>
-  {#if tagsExpanded}
-    <div class="TagContents" transition:slide={{ duration: 100 }}>
-      {#if $tag_index.size > 0}
-        {#each [...$tag_index.entries()].sort( ([a], [b]) => a.localeCompare(b) ) as [tag, nodes] (tag)}
-          <button
-            class="MenuRow"
-            class:Selected={$active_tag === tag}
-            use:ripple
-            on:click={() => ($active_tag = $active_tag === tag ? null : tag)}
-          >
-            <div class="TreeLine" style="flex-shrink: 0"></div>
-            <span class="TextOverFlow">{tag}</span>
-            <span class="TagBadge">{nodes.size}</span>
-          </button>
-        {/each}
-      {:else}
-        <div class="MenuRow EmptyTagRow">
-          <div class="TreeLine" style="flex-shrink: 0"></div>
-          <span class="TextOverFlow">No tags</span>
-        </div>
-      {/if}
-    </div>
-  {/if}
 </div>
 <Dialog
   show={show_confirm}
@@ -680,26 +702,144 @@
   .NoWorkspace:hover {
     text-decoration: underline;
   }
-  .TagLogo {
+  .TagBrowser {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    margin: 0.75rem 0.5rem 0.5rem;
+    padding: 0.55rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    background-color: rgba(255, 255, 255, 0.045);
+  }
+  .TagHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+  .TagTitle {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    min-width: 0;
+    color: white;
+  }
+  .TagLogo,
+  .TagRowMark {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 1.5rem;
-    height: 1.5rem;
-    margin-right: 1rem;
-    color: white;
-    font-weight: bold;
-    font-size: 1.1rem;
     flex-shrink: 0;
+    font-weight: 700;
+  }
+  .TagLogo {
+    width: 1.7rem;
+    height: 1.7rem;
+    border-radius: 8px;
+    color: var(--theme-color-Accent-main);
+    background-color: rgba(255, 255, 255, 0.08);
+    font-size: 1rem;
+  }
+  .TagTitleText {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    min-width: 0;
+    font-size: 0.86rem;
+    font-weight: 700;
+  }
+  .TagScope {
+    color: rgba(255, 255, 255, 0.58);
+    font-size: 0.68rem;
+    font-weight: 600;
+    line-height: 1;
+  }
+  .TagToggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.9rem;
+    height: 1.9rem;
+    border: none;
+    border-radius: 999px;
+    color: rgba(255, 255, 255, 0.76);
+    background-color: rgba(255, 255, 255, 0.08);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .TagToggle:hover,
+  .TagToggle:focus-visible {
+    color: white;
+    background-color: rgba(255, 255, 255, 0.16);
+  }
+  .TagToggle svg,
+  .TagSearch svg {
+    width: 1rem;
+    height: 1rem;
+  }
+  .TagToggle path,
+  .TagSearch path {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
   }
   .TagContents {
     display: flex;
     flex-direction: column;
+    gap: 0.25rem;
     width: 100%;
-    max-height: 30%;
+    max-height: 32%;
     overflow-y: auto;
   }
+  .TagSearch {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-height: 2rem;
+    margin-bottom: 0.25rem;
+    padding: 0 0.55rem;
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    border-radius: 8px;
+    color: rgba(255, 255, 255, 0.58);
+    background-color: rgba(0, 0, 0, 0.14);
+  }
+  .TagSearch:focus-within {
+    border-color: var(--theme-color-Accent-main);
+    color: white;
+    box-shadow: inset 0 0 0 1px var(--theme-color-Accent-main);
+  }
+  .TagSearch input {
+    min-width: 0;
+    width: 100%;
+    border: none;
+    outline: none;
+    color: white;
+    background: transparent;
+    font-size: 0.78rem;
+  }
+  .TagSearch input::placeholder {
+    color: rgba(255, 255, 255, 0.44);
+  }
+  .TagRow {
+    gap: 0.55rem;
+    min-height: 2rem;
+    padding: 0 0.45rem;
+    border-radius: 8px;
+  }
+  .TagRowMark {
+    width: 1.35rem;
+    height: 1.35rem;
+    border-radius: 999px;
+    color: var(--theme-color-Accent-main);
+    background-color: rgba(255, 255, 255, 0.07);
+    font-size: 0.74rem;
+  }
   .EmptyTagRow {
+    gap: 0.55rem;
     color: rgba(255, 255, 255, 0.55);
     cursor: default;
   }
@@ -710,10 +850,18 @@
     display: none;
   }
   .TagBadge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.45rem;
+    height: 1.25rem;
     margin-left: auto;
-    margin-right: 0.5rem;
-    font-size: 0.7rem;
-    color: rgba(255, 255, 255, 0.6);
+    padding: 0 0.35rem;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.7);
+    background-color: rgba(255, 255, 255, 0.08);
     flex-shrink: 0;
   }
 </style>
