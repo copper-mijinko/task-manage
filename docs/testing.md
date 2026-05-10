@@ -1,7 +1,8 @@
 # テストガイド
 
 関連ドキュメント:
-[specification.md](specification.md) / [../README.md](../README.md)
+[specification.md](specification.md) /
+[how-to-contribute.md](how-to-contribute.md) / [../README.md](../README.md)
 
 ## 1. テストの種類
 
@@ -184,4 +185,5 @@ Electron アプリ全体を起動して確認する。
 - `Playwright` の E2E は、実行環境によっては Electron の起動制約を受けることがある
 
 関連ドキュメント:
-[specification.md](specification.md) / [../README.md](../README.md)
+[specification.md](specification.md) /
+[how-to-contribute.md](how-to-contribute.md) / [../README.md](../README.md)
