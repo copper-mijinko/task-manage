@@ -91,10 +91,14 @@
   $: selectedMemo = memo[selectedMemoIndex];
   $: currentTags = selectedMemo?.tags ?? [];
   $: suggestedTags = allTags.filter((tag) => !currentTags.includes(tag));
-  $: visibleSuggestedTags = suggestedTags.slice(0, 8);
+  $: normalizedTagQuery = normalizeTagInput(tagInput);
+  $: visibleSuggestedTags = suggestedTags
+    .filter((tag) => !normalizedTagQuery || tag.includes(normalizedTagQuery))
+    .slice(0, 8);
   $: tagScopeLabel = isWorkspaceProject ? "Markdown" : "Quill";
 
   let tagInput = "";
+  let tagInputElement;
 
   function normalizeTagInput(value) {
     return String(value || "")
@@ -115,12 +119,17 @@
   }
 
   function handleTagInput(e) {
-    if (e.key === "Enter" && tagInput.trim()) {
+    if ((e.key === "Enter" || e.key === ",") && tagInput.trim()) {
       e.preventDefault();
       addTagFromInput();
     } else if (e.key === "Backspace" && tagInput === "" && currentTags.length > 0 && saveMemoTags) {
       saveMemoTags(selectedMemoIndex, currentTags.slice(0, -1));
     }
+  }
+
+  function focusTagInput(e) {
+    if (e.target?.closest?.("button")) return;
+    tagInputElement?.focus();
   }
 
   function removeTag(tag) {
@@ -289,16 +298,18 @@
 
   {#if selectedMemo}
     <div class="tag-panel" aria-label="Memo tags">
-      <div class="tag-panel-header">
+      <div class="tag-editor">
         <div class="tag-title" aria-hidden="true">
           <span class="tag-mark">#</span>
-          <span>Tags</span>
+          <span class="tag-title-copy">
+            <span>Tags</span>
+            <span class="tag-scope">{tagScopeLabel}</span>
+          </span>
         </div>
-        <span class="tag-scope">{tagScopeLabel}</span>
-      </div>
 
-      <div class="tag-editor-row">
-        <div class="tag-field" class:is-empty={currentTags.length === 0}>
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div class="tag-field" class:is-empty={currentTags.length === 0} on:click={focusTagInput}>
           {#each currentTags as tag (tag)}
             <span class="tag-chip">
               <span>{tag}</span>
@@ -317,11 +328,13 @@
           <input
             class="tag-input"
             type="text"
-            list="memo-tag-suggestions"
+            bind:this={tagInputElement}
             bind:value={tagInput}
             on:keydown={handleTagInput}
             placeholder="Add tag"
             aria-label="Memo tag"
+            autocomplete="off"
+            spellcheck="false"
           />
         </div>
         <button
@@ -334,6 +347,7 @@
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M12 5V19M5 12H19" />
           </svg>
+          <span>Add</span>
         </button>
       </div>
 
@@ -351,10 +365,6 @@
           {/each}
         </div>
       {/if}
-
-      <datalist id="memo-tag-suggestions">
-        {#each suggestedTags as t}<option value={t}></option>{/each}
-      </datalist>
     </div>
   {/if}
 
@@ -500,37 +510,28 @@
   .tag-panel {
     display: flex;
     flex-direction: column;
-    gap: 0.45rem;
-    padding: 0.55rem 0.75rem 0.65rem;
-    border-top: 1px solid color-mix(in srgb, var(--theme-color-Sub-dark) 35%, transparent);
+    gap: 0.5rem;
+    padding: 0.75rem;
     border-bottom: 1px solid color-mix(in srgb, var(--theme-color-Sub-dark) 65%, transparent);
-    background-color: var(--theme-color-Main-dark);
+    background-color: color-mix(in srgb, var(--theme-color-Main-dark) 90%, transparent);
     flex-shrink: 0;
   }
 
-  .tag-panel-header,
-  .tag-editor-row {
-    display: flex;
+  .tag-editor {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
-    width: 100%;
-    min-width: 0;
-  }
-
-  .tag-panel-header {
-    justify-content: space-between;
     gap: 0.75rem;
-  }
-
-  .tag-editor-row {
-    gap: 0.5rem;
+    min-width: 0;
   }
 
   .tag-title {
     display: inline-flex;
     align-items: center;
-    gap: 0.45rem;
+    gap: 0.5rem;
     flex: 0 0 auto;
-    color: var(--theme-color-Sub-light);
+    min-width: 5.5rem;
+    color: var(--theme-color-Sub-main);
     font-size: 0.82rem;
     font-weight: 700;
   }
@@ -546,18 +547,25 @@
     background-color: color-mix(in srgb, var(--theme-color-Accent-main) 13%, transparent);
   }
 
+  .tag-title-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 0.08rem;
+    line-height: 1.1;
+  }
+
   .tag-scope {
-    display: inline-flex;
-    align-items: center;
-    min-height: 1.45rem;
-    padding: 0 0.55rem;
-    border-radius: 999px;
+    display: block;
+    min-height: 0;
+    padding: 0;
+    border-radius: 0;
     color: var(--theme-color-Sub-main);
-    background-color: color-mix(in srgb, var(--theme-color-Sub-dark) 22%, transparent);
-    font-size: 0.7rem;
+    background-color: transparent;
+    font-size: 0.66rem;
     font-weight: 600;
     letter-spacing: 0;
     white-space: nowrap;
+    opacity: 0.78;
   }
 
   .tag-field {
@@ -567,12 +575,13 @@
     align-items: center;
     gap: 0.25rem;
     min-width: 0;
-    min-height: 2.25rem;
-    padding: 0.25rem 0.45rem;
+    min-height: 2.75rem;
+    padding: 0.35rem 0.55rem;
     border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 40%, transparent);
     border-radius: 8px;
-    background-color: color-mix(in srgb, var(--theme-color-Main-light) 90%, transparent);
+    background-color: var(--theme-color-Main-light);
     box-shadow: inset 0 0 0 1px transparent;
+    cursor: text;
     transition:
       border-color 0.12s ease,
       box-shadow 0.12s ease,
@@ -592,15 +601,19 @@
   .tag-chip {
     display: inline-flex;
     align-items: center;
-    gap: 0.3rem;
-    min-height: 1.55rem;
-    max-width: 13rem;
-    padding: 0 0.2rem 0 0.6rem;
-    border-radius: 999px;
-    border: 1px solid color-mix(in srgb, var(--theme-color-Accent-main) 35%, transparent);
-    background-color: color-mix(in srgb, var(--theme-color-Accent-main) 15%, transparent);
+    gap: 0.35rem;
+    min-height: 2rem;
+    max-width: 14rem;
+    padding: 0 0.35rem 0 0.75rem;
+    border-radius: 8px;
+    border: none;
+    background-color: color-mix(
+      in srgb,
+      var(--theme-color-Accent-main) 24%,
+      var(--theme-color-Main-light)
+    );
     color: var(--theme-color-Sub-light);
-    font-size: 0.76rem;
+    font-size: 0.84rem;
     font-weight: 600;
     white-space: nowrap;
   }
@@ -618,8 +631,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 1.25rem;
-    height: 1.25rem;
+    width: 1.35rem;
+    height: 1.35rem;
     padding: 0;
     border-radius: 50%;
   }
@@ -642,15 +655,24 @@
   }
 
   .tag-input {
+    appearance: none;
     background: transparent;
     border: none;
     color: var(--theme-color-Sub-light);
-    font-size: 0.82rem;
-    min-width: 4.5rem;
-    flex: 1 1 6rem;
-    outline: none;
+    font-size: 0.84rem;
+    min-width: 5rem;
+    flex: 1 1 7rem;
+    outline: 0;
     padding: 0;
     text-align: left;
+    width: auto;
+    cursor: text;
+  }
+
+  input.tag-input:focus,
+  input.tag-input:hover {
+    outline: 0;
+    cursor: text;
   }
 
   .tag-input::placeholder {
@@ -661,9 +683,10 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    gap: 0.5rem;
     flex: 0 0 auto;
-    width: 2.35rem;
-    height: 2.35rem;
+    min-height: 2.5rem;
+    padding: 0 1rem;
     border: 1px solid color-mix(in srgb, var(--theme-color-Accent-main) 35%, transparent);
     border-radius: 8px;
     color: var(--theme-color-Main-main);
@@ -697,6 +720,12 @@
     height: 1rem;
   }
 
+  .tag-add span {
+    font-size: 0.82rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+
   .tag-add path {
     fill: none;
     stroke: currentColor;
@@ -711,16 +740,18 @@
     gap: 0.35rem;
     width: 100%;
     min-width: 0;
+    padding-left: 6.25rem;
+    box-sizing: border-box;
   }
 
   .tag-suggestion {
     display: inline-flex;
     align-items: center;
     max-width: 12rem;
-    min-height: 1.55rem;
-    padding: 0 0.6rem;
+    min-height: 2rem;
+    padding: 0 0.65rem;
     border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 24%, transparent);
-    border-radius: 999px;
+    border-radius: 8px;
     color: var(--theme-color-Sub-main);
     background-color: color-mix(in srgb, var(--theme-color-Main-light) 70%, transparent);
     font-size: 0.72rem;
@@ -745,11 +776,21 @@
 
   @media (max-width: 760px) {
     .tag-panel {
-      padding: 0.5rem;
+      padding: 0.6rem;
     }
 
-    .tag-panel-header {
-      align-items: flex-start;
+    .tag-editor {
+      grid-template-columns: 1fr;
+      align-items: stretch;
+      gap: 0.55rem;
+    }
+
+    .tag-title {
+      min-width: 0;
+    }
+
+    .tag-suggestions {
+      padding-left: 0;
     }
   }
 
