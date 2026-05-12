@@ -65,7 +65,7 @@ async function openTaskDetailWindow(
   }, detailData);
 
   const detailWindow = await detailWindowPromise;
-  await expect(detailWindow.getByText("Task Detail")).toBeVisible();
+  await expect(detailWindow.locator(".eyebrow")).toHaveText("Task Detail");
   await expect(detailWindow.getByRole("heading", { name: detailData.taskName })).toBeVisible();
 
   return detailWindow;
