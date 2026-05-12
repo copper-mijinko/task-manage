@@ -42,9 +42,11 @@ describe("button color reactivity", () => {
       },
     });
 
-    expect(container.querySelector("button").getAttribute("style")).toContain(
-      "--backgroundColor: gray"
+    const disabledStyle = container.querySelector("button").getAttribute("style");
+    expect(disabledStyle).toContain(
+      "--backgroundColor: color-mix(in srgb, var(--theme-color-Main-dark) 72%, var(--theme-color-Main-light))"
     );
+    expect(disabledStyle).toContain("--fontColor: var(--theme-color-Sub-main)");
 
     await rerender({
       disabled: false,

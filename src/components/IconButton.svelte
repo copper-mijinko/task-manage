@@ -24,15 +24,17 @@
     abgcolor = disabled
       ? "color-mix(in srgb, var(--theme-color-Main-dark) 72%, var(--theme-color-Main-light))"
       : activeColor;
-    abdcolor = disabled ? "color-mix(in srgb, var(--theme-color-Sub-main) 28%, transparent)" : "none";
+    abdcolor = disabled
+      ? "color-mix(in srgb, var(--theme-color-Sub-main) 28%, transparent)"
+      : "none";
     fcolor = disabled ? "var(--theme-color-Sub-main)" : "var(--theme-color-Main-light)";
     bgcolor = disabled
       ? "color-mix(in srgb, var(--theme-color-Main-dark) 72%, var(--theme-color-Main-light))"
       : normalColor;
-    bdcolor = disabled ? "color-mix(in srgb, var(--theme-color-Sub-main) 28%, transparent)" : "none";
-    shadow = disabled
-      ? "none"
-      : "0 .2rem .5rem rgba(0,0,0,0.25), 0 .1em .25rem rgba(0,0,0,0);";
+    bdcolor = disabled
+      ? "color-mix(in srgb, var(--theme-color-Sub-main) 28%, transparent)"
+      : "none";
+    shadow = disabled ? "none" : "0 .2rem .5rem rgba(0,0,0,0.25), 0 .1em .25rem rgba(0,0,0,0);";
 
     if (!disabled) {
       switch (variant) {
