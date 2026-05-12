@@ -2,6 +2,7 @@
   import { onDestroy, onMount } from "svelte";
 
   export let defaultRatio = [];
+  export let direction = "horizontal";
 
   let split_pane_root; // Bind
 
@@ -13,7 +14,13 @@
   let paneCount = 0;
 
   // Min width
-  let minWidth;
+  let minWidth = "auto";
+  let minHeight = "auto";
+
+  $: isVertical = direction === "vertical";
+  $: primaryDimension = isVertical ? "height" : "width";
+  $: primaryClient = isVertical ? "clientY" : "clientX";
+  $: primaryCursor = isVertical ? "row-resize" : "col-resize";
 
   onMount(() => {
     refreshLayout();
@@ -48,7 +55,8 @@
     const panes = [...split_pane_root.querySelectorAll(":scope > .Pane")];
     const canPreserveWidths = preserveWidths && panes.length === paneCount;
     paneCount = panes.length;
-    minWidth = `${4 * panes.length}rem`; // magic number 4rem.
+    minWidth = isVertical ? "0" : `${4 * panes.length}rem`; // magic number 4rem.
+    minHeight = isVertical ? `${4 * panes.length}rem` : "0";
 
     if (!panes.length) {
       resize_observer?.disconnect();
@@ -56,24 +64,24 @@
       return;
     }
 
-    const rootWidth = split_pane_root.getBoundingClientRect().width;
-    const widths = getPaneWidths(panes, rootWidth, canPreserveWidths);
+    const rootSize = split_pane_root.getBoundingClientRect()[primaryDimension];
+    const sizes = getPaneSizes(panes, rootSize, canPreserveWidths);
 
     panes.forEach((pane, index) => {
-      pane.style.width = `${widths[index]}px`;
+      pane.style[primaryDimension] = `${sizes[index]}px`;
     });
 
-    resizers = createResizers(panes, widths);
+    resizers = createResizers(panes, sizes);
     handlers = setResizersEvents(resizers, panes);
     observeRootResize(panes);
   };
 
-  const getPaneWidths = (panes, rootWidth, preserveWidths) => {
+  const getPaneSizes = (panes, rootSize, preserveWidths) => {
     if (preserveWidths) {
-      const currentWidths = panes.map((pane) => pane.getBoundingClientRect().width);
-      const currentTotal = currentWidths.reduce((partialSum, width) => partialSum + width, 0);
+      const currentSizes = panes.map((pane) => pane.getBoundingClientRect()[primaryDimension]);
+      const currentTotal = currentSizes.reduce((partialSum, size) => partialSum + size, 0);
       if (currentTotal > 0) {
-        return currentWidths.map((width) => (width * rootWidth) / currentTotal);
+        return currentSizes.map((size) => (size * rootSize) / currentTotal);
       }
     }
 
@@ -84,12 +92,12 @@
       ratios = ratios.slice(0, panes.length);
     }
     const ratioSum = ratios.reduce((partialSum, ratio) => partialSum + ratio, 0) || panes.length;
-    return ratios.map((ratio) => (rootWidth * ratio) / ratioSum);
+    return ratios.map((ratio) => (rootSize * ratio) / ratioSum);
   };
 
-  const createResizers = (panes, paneWidths) => {
+  const createResizers = (panes, paneSizes) => {
     const nextResizers = [];
-    let left = 0;
+    let offset = 0;
 
     panes.forEach((pane, index) => {
       if (index == 0) {
@@ -97,8 +105,8 @@
       }
       const resizer = document.createElement("div");
       resizer.classList.add("Resizer");
-      resizer.style.left = `${left + paneWidths[index - 1] - 3}px`;
-      left += paneWidths[index - 1];
+      resizer.style[isVertical ? "top" : "left"] = `${offset + paneSizes[index - 1] - 3}px`;
+      offset += paneSizes[index - 1];
       pane.parentNode.insertBefore(resizer, pane);
       nextResizers.push(resizer);
     });
@@ -108,27 +116,32 @@
 
   const observeRootResize = (panes) => {
     resize_observer?.disconnect();
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
     resize_observer = new ResizeObserver((entries) => {
-      // Width setting
-      let root_width = 0;
+      // Primary-size setting
+      let root_size = 0;
       panes.forEach((pane) => {
-        root_width += pane.getBoundingClientRect().width;
+        root_size += pane.getBoundingClientRect()[primaryDimension];
       });
-      if (root_width === 0) {
+      if (root_size === 0) {
         return;
       }
-      let new_root_width = entries[0].contentRect.width;
-      let new_pane_widths = [];
+      let new_root_size = entries[0].contentRect[primaryDimension];
+      let new_pane_sizes = [];
       panes.forEach((pane) => {
-        new_pane_widths.push((pane.getBoundingClientRect().width * new_root_width) / root_width);
+        new_pane_sizes.push(
+          (pane.getBoundingClientRect()[primaryDimension] * new_root_size) / root_size
+        );
       });
       panes.forEach((pane, index) => {
-        pane.style.width = `${new_pane_widths[index]}px`;
+        pane.style[primaryDimension] = `${new_pane_sizes[index]}px`;
       });
-      let left = 0;
+      let offset = 0;
       resizers.forEach((resizer, index) => {
-        resizer.style.left = `${left + new_pane_widths[index] - 3}px`;
-        left += new_pane_widths[index];
+        resizer.style[isVertical ? "top" : "left"] = `${offset + new_pane_sizes[index] - 3}px`;
+        offset += new_pane_sizes[index];
       });
     });
     resize_observer.observe(split_pane_root);
@@ -142,39 +155,44 @@
       const pane_r = panes[i + 1];
       const resizer = resizers[i];
 
-      const style_min_w = window.getComputedStyle(pane).minWidth;
+      const minProperty = isVertical ? "minHeight" : "minWidth";
+      const style_min_w = window.getComputedStyle(pane)[minProperty];
       const min_w = style_min_w.includes("%")
-        ? (parseFloat(window.getComputedStyle(pane).minWidth, 10) / 100) *
-          split_pane_root.getBoundingClientRect().width
-        : parseFloat(window.getComputedStyle(pane).minWidth, 10) || 10;
-      const style_min_wr = window.getComputedStyle(pane_r).minWidth;
+        ? (parseFloat(style_min_w, 10) / 100) *
+          split_pane_root.getBoundingClientRect()[primaryDimension]
+        : parseFloat(style_min_w, 10) || 10;
+      const style_min_wr = window.getComputedStyle(pane_r)[minProperty];
       const min_wr = style_min_wr.includes("%")
-        ? (parseFloat(window.getComputedStyle(pane_r).minWidth, 10) / 100) *
-          split_pane_root.getBoundingClientRect().width
-        : parseFloat(window.getComputedStyle(pane_r).minWidth, 10) || 10;
+        ? (parseFloat(style_min_wr, 10) / 100) *
+          split_pane_root.getBoundingClientRect()[primaryDimension]
+        : parseFloat(style_min_wr, 10) || 10;
 
       // Track the current position of mouse
-      let x = 0;
-      let w = 0;
-      let wr = 0;
-      let l = 0;
+      let startPointer = 0;
+      let size = 0;
+      let sizeR = 0;
+      let resizerOffset = 0;
 
       const mouseDownHandler = function (e) {
         let cssText = document.body.style.cssText;
-        document.body.style.cssText = cssText + "cursor: col-resize !important;";
+        document.body.style.cssText = cssText + `cursor: ${primaryCursor} !important;`;
 
         // Add HandlingResizer class
         resizer.classList.add("HandlingResizer");
 
         // Get the current mouse position
-        x = e.clientX;
+        startPointer = e[primaryClient];
 
-        // Calculate the current width of column
-        w = pane.getBoundingClientRect().width;
-        wr = pane_r.getBoundingClientRect().width;
+        // Calculate the current size of pane
+        size = pane.getBoundingClientRect()[primaryDimension];
+        sizeR = pane_r.getBoundingClientRect()[primaryDimension];
 
-        // Calculate the curent left of resizer
-        l = resizer.getBoundingClientRect().left - resizer.parentNode.getBoundingClientRect().left;
+        // Calculate the current offset of resizer
+        const resizerRect = resizer.getBoundingClientRect();
+        const parentRect = resizer.parentNode.getBoundingClientRect();
+        resizerOffset = isVertical
+          ? resizerRect.top - parentRect.top
+          : resizerRect.left - parentRect.left;
 
         // Attach listeners for document's events
         document.addEventListener("mousemove", mouseMoveHandler);
@@ -183,27 +201,27 @@
 
       const mouseMoveHandler = function (e) {
         // Determine how far the mouse has been moved
-        let dx = e.clientX - x;
-        let new_width = w + dx;
-        let new_widthr = wr - dx;
+        let delta = e[primaryClient] - startPointer;
+        let newSize = size + delta;
+        let newSizeR = sizeR - delta;
 
-        if (new_width < min_w) {
-          new_widthr = w + wr - min_w;
-          new_width = min_w;
-          dx = new_width - w;
+        if (newSize < min_w) {
+          newSizeR = size + sizeR - min_w;
+          newSize = min_w;
+          delta = newSize - size;
         }
-        if (new_widthr < min_wr) {
-          new_width = w + wr - min_wr;
-          new_widthr = min_wr;
-          dx = new_width - w;
+        if (newSizeR < min_wr) {
+          newSize = size + sizeR - min_wr;
+          newSizeR = min_wr;
+          delta = newSize - size;
         }
 
-        // Update the width of column
-        pane.style.width = `${new_width}px`;
-        pane_r.style.width = `${new_widthr}px`;
+        // Update the size of pane
+        pane.style[primaryDimension] = `${newSize}px`;
+        pane_r.style[primaryDimension] = `${newSizeR}px`;
 
         // Update resizer pos
-        resizer.style.left = `${l + dx}px`;
+        resizer.style[isVertical ? "top" : "left"] = `${resizerOffset + delta}px`;
       };
 
       // When user releases the mouse, remove the existing event listeners
@@ -232,7 +250,12 @@
   };
 </script>
 
-<div bind:this={split_pane_root} class:SplitPaneRoot={true} style="--minWidth: {minWidth}">
+<div
+  bind:this={split_pane_root}
+  class:SplitPaneRoot={true}
+  class:Vertical={isVertical}
+  style="--minWidth: {minWidth}; --minHeight: {minHeight}"
+>
   <slot />
 </div>
 
@@ -243,7 +266,11 @@
     width: 100%;
     height: 100%;
     min-width: var(--minWidth);
+    min-height: var(--minHeight);
     position: relative;
+  }
+  .SplitPaneRoot.Vertical {
+    flex-direction: column;
   }
   .SplitPaneRoot > :global(.Resizer) {
     position: absolute;
@@ -255,6 +282,14 @@
     user-select: none;
     z-index: 999;
   }
+  .SplitPaneRoot.Vertical > :global(.Resizer) {
+    top: auto;
+    left: 0;
+    right: 0;
+    width: 100%;
+    height: 5px;
+    cursor: row-resize;
+  }
   .SplitPaneRoot > :global(.Resizer::before) {
     content: "";
     position: absolute;
@@ -265,6 +300,12 @@
     background-color: color-mix(in srgb, var(--theme-color-Sub-dark) 28%, transparent);
     opacity: 0.7;
   }
+  .SplitPaneRoot.Vertical > :global(.Resizer::before) {
+    top: 2px;
+    left: 0;
+    width: 100%;
+    height: 1px;
+  }
   .SplitPaneRoot > :global(.HandlingResizer),
   .SplitPaneRoot > :global(.Resizer:hover) {
     background-color: transparent;
@@ -274,5 +315,10 @@
     width: 2px;
     background-color: var(--theme-color-Accent-main);
     opacity: 0.9;
+  }
+  .SplitPaneRoot.Vertical > :global(.HandlingResizer::before),
+  .SplitPaneRoot.Vertical > :global(.Resizer:hover::before) {
+    width: 100%;
+    height: 2px;
   }
 </style>

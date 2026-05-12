@@ -87,6 +87,36 @@ describe("TaskDetail", () => {
     expect(screen.getByText("Tabs here")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("No page")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add a memo" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Memo type")).toHaveValue("Quill");
+  });
+
+  test("edits task detail fields independent of visible table columns", async () => {
+    table_selected_id.set("task-1");
+    render(TaskDetail);
+
+    await fireEvent.input(screen.getByLabelText("Task name"), {
+      target: { value: "Updated Task" },
+    });
+    await fireEvent.blur(screen.getByLabelText("Task name"));
+    await tick();
+
+    await fireEvent.change(screen.getByLabelText("Status"), {
+      target: { value: "In Progress" },
+    });
+    await fireEvent.change(screen.getByLabelText("Start Date"), {
+      target: { value: "2026-06-01" },
+    });
+    await fireEvent.change(screen.getByLabelText("Due Date"), {
+      target: { value: "2026-06-10" },
+    });
+    await tick();
+
+    const task = get(tree_data).data.children[0].data;
+    expect(task.name).toBe("Updated Task");
+    expect(task.status).toBe("In Progress");
+    expect(task["start date"]).toBe("2026-06-01");
+    expect(task["due date"]).toBe("2026-06-10");
+    expect(screen.getByLabelText("Memo count")).toHaveValue(0);
   });
 
   test("adds a memo tab to the selected task", async () => {

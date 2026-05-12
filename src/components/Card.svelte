@@ -2,7 +2,7 @@
   export let style = "";
 </script>
 
-<div class="container" {style}>
+<div class="container Card" {style}>
   <slot />
 </div>
 

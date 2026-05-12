@@ -20,13 +20,19 @@
   let shadow = "0 .2rem .5rem rgba(0,0,0,0.25), 0 .1em .25rem rgba(0,0,0,0);";
 
   $: {
-    afcolor = disabled ? "gray" : "var(--theme-color-Main-light)";
-    abgcolor = disabled ? "gray" : activeColor;
-    abdcolor = disabled ? "gray" : "none";
-    fcolor = disabled ? "gray" : "var(--theme-color-Main-light)";
-    bgcolor = disabled ? "gray" : normalColor;
-    bdcolor = disabled ? "gray" : "none";
-    shadow = "0 .2rem .5rem rgba(0,0,0,0.25), 0 .1em .25rem rgba(0,0,0,0);";
+    afcolor = disabled ? "var(--theme-color-Sub-main)" : "var(--theme-color-Main-light)";
+    abgcolor = disabled
+      ? "color-mix(in srgb, var(--theme-color-Main-dark) 72%, var(--theme-color-Main-light))"
+      : activeColor;
+    abdcolor = disabled ? "color-mix(in srgb, var(--theme-color-Sub-main) 28%, transparent)" : "none";
+    fcolor = disabled ? "var(--theme-color-Sub-main)" : "var(--theme-color-Main-light)";
+    bgcolor = disabled
+      ? "color-mix(in srgb, var(--theme-color-Main-dark) 72%, var(--theme-color-Main-light))"
+      : normalColor;
+    bdcolor = disabled ? "color-mix(in srgb, var(--theme-color-Sub-main) 28%, transparent)" : "none";
+    shadow = disabled
+      ? "none"
+      : "0 .2rem .5rem rgba(0,0,0,0.25), 0 .1em .25rem rgba(0,0,0,0);";
 
     if (!disabled) {
       switch (variant) {
@@ -59,7 +65,7 @@
   aria-label={ariaLabel}
   use:ripple={{
     duration: 350,
-    color: disabled ? "gray" : rippleColor,
+    color: disabled ? "var(--theme-color-Sub-dark)" : rippleColor,
     disable: !use_ripple,
   }}
   use:tooltip={{
@@ -105,6 +111,9 @@
     background-color: var(--activeBackgroundColor);
     color: var(--activeFontColor);
     box-shadow: var(--shadow);
+  }
+  button:disabled {
+    cursor: not-allowed;
   }
   .IconButton :global(svg) {
     width: 100%;
