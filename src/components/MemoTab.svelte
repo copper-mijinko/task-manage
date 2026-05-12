@@ -242,6 +242,7 @@
         {/each}
       {/if}
     </div>
+    <span class="memo-type-label">{tagScopeLabel}</span>
     <div class="memotab-control">
       <IconButton
         tooltipContent="Add a memo."
@@ -303,7 +304,6 @@
           <span class="tag-mark">#</span>
           <span class="tag-title-copy">
             <span>Tags</span>
-            <span class="tag-scope">{tagScopeLabel}</span>
           </span>
         </div>
 
@@ -313,16 +313,18 @@
           {#each currentTags as tag (tag)}
             <span class="tag-chip">
               <span>{tag}</span>
-              <button
-                class="tag-remove"
-                type="button"
+              <IconButton
+                variant="text"
+                normalColor={"var(--theme-color-Sub-main)"}
+                activeColor={"var(--theme-color-Sub-light)"}
+                style="margin: 0; width: 1.35rem; height: 1.35rem; border: none;"
+                ariaLabel="Remove tag {tag}"
                 on:click={() => removeTag(tag)}
-                aria-label="Remove tag {tag}"
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M7 7L17 17M17 7L7 17" />
                 </svg>
-              </button>
+              </IconButton>
             </span>
           {/each}
           <input
@@ -337,31 +339,33 @@
             spellcheck="false"
           />
         </div>
-        <button
-          class="tag-add"
-          type="button"
-          aria-label="Add tag"
+        <IconButton
+          tooltipContent="Add tag"
+          ariaLabel="Add tag"
+          normalColor={"var(--theme-color-Primary-main)"}
+          activeColor={"var(--theme-color-Primary-dark)"}
+          style="margin: 0; width: 2rem; height: 2rem;"
           disabled={!tagInput.trim() || !saveMemoTags}
           on:click={addTagFromInput}
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M12 5V19M5 12H19" />
           </svg>
-          <span>Add</span>
-        </button>
+        </IconButton>
       </div>
 
       {#if visibleSuggestedTags.length > 0}
         <div class="tag-suggestions" aria-label="Suggested tags">
           {#each visibleSuggestedTags as tag (tag)}
-            <button
-              type="button"
-              class="tag-suggestion"
+            <Button
+              content={`#${tag}`}
+              variant="outlined"
+              normalColor={"var(--theme-color-Sub-main)"}
+              activeColor={"var(--theme-color-Accent-main)"}
+              style="margin: 0; min-height: 2rem; height: 2rem; max-width: 12rem; padding: 0 0.65rem; font-size: 0.72rem;"
               disabled={!saveMemoTags}
               on:click={() => addTag(tag)}
-            >
-              #{tag}
-            </button>
+            />
           {/each}
         </div>
       {/if}
@@ -430,6 +434,21 @@
     padding: 0.5rem;
     overflow-x: auto;
     flex: 1;
+  }
+
+  .memo-type-label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 5.5rem;
+    height: 2rem;
+    margin: 0.5rem 0.25rem;
+    padding: 0 0.5rem;
+    color: var(--theme-color-Sub-main);
+    font-size: 0.82rem;
+    font-weight: 700;
+    white-space: nowrap;
+    flex: 0 0 auto;
   }
 
   .memotab-control {
@@ -511,28 +530,32 @@
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
+    box-sizing: border-box;
+    min-width: 0;
     padding: 0.75rem;
     border-bottom: 1px solid color-mix(in srgb, var(--theme-color-Sub-dark) 65%, transparent);
-    background-color: color-mix(in srgb, var(--theme-color-Main-dark) 90%, transparent);
+    background-color: transparent;
+    container-type: inline-size;
     flex-shrink: 0;
   }
 
   .tag-editor {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    display: flex;
+    flex-direction: row;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0.5rem;
+    width: 100%;
     min-width: 0;
   }
 
   .tag-title {
     display: inline-flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.35rem;
     flex: 0 0 auto;
     min-width: 5.5rem;
     color: var(--theme-color-Sub-main);
-    font-size: 0.82rem;
+    font-size: 1rem;
     font-weight: 700;
   }
 
@@ -540,11 +563,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 1.5rem;
-    height: 1.5rem;
-    border-radius: 8px;
-    color: var(--theme-color-Accent-main);
-    background-color: color-mix(in srgb, var(--theme-color-Accent-main) 13%, transparent);
+    color: var(--theme-color-Sub-main);
   }
 
   .tag-title-copy {
@@ -554,26 +573,14 @@
     line-height: 1.1;
   }
 
-  .tag-scope {
-    display: block;
-    min-height: 0;
-    padding: 0;
-    border-radius: 0;
-    color: var(--theme-color-Sub-main);
-    background-color: transparent;
-    font-size: 0.66rem;
-    font-weight: 600;
-    letter-spacing: 0;
-    white-space: nowrap;
-    opacity: 0.78;
-  }
-
   .tag-field {
     display: flex;
     flex: 1 1 auto;
     flex-wrap: wrap;
     align-items: center;
     gap: 0.25rem;
+    box-sizing: border-box;
+    width: 100%;
     min-width: 0;
     min-height: 2.75rem;
     padding: 0.35rem 0.55rem;
@@ -602,8 +609,9 @@
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
+    min-width: 0;
     min-height: 2rem;
-    max-width: 14rem;
+    max-width: min(14rem, 100%);
     padding: 0 0.35rem 0 0.75rem;
     border-radius: 8px;
     border: none;
@@ -619,39 +627,28 @@
   }
 
   .tag-chip span {
+    flex: 1 1 auto;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
-  .tag-remove {
-    background: none;
-    border: none;
-    color: var(--theme-color-Sub-main);
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 1.35rem;
-    height: 1.35rem;
-    padding: 0;
-    border-radius: 50%;
+  .tag-chip :global(.IconButton) {
+    flex: 0 0 auto;
   }
 
-  .tag-remove:hover {
-    color: var(--theme-color-Sub-light);
-    background-color: color-mix(in srgb, var(--theme-color-Sub-main) 18%, transparent);
-  }
-
-  .tag-remove svg {
+  .tag-chip :global(.IconButton svg) {
     width: 0.85rem;
     height: 0.85rem;
   }
 
-  .tag-remove path {
+  .tag-chip :global(.IconButton path),
+  .tag-editor :global(.IconButton path) {
     fill: none;
     stroke: currentColor;
     stroke-width: 2;
     stroke-linecap: round;
+    stroke-linejoin: round;
   }
 
   .tag-input {
@@ -660,8 +657,9 @@
     border: none;
     color: var(--theme-color-Sub-light);
     font-size: 0.84rem;
-    min-width: 5rem;
-    flex: 1 1 7rem;
+    min-width: 0;
+    max-width: 100%;
+    flex: 1 1 4.5rem;
     outline: 0;
     padding: 0;
     text-align: left;
@@ -679,59 +677,9 @@
     color: var(--theme-color-Sub-dark);
   }
 
-  .tag-add {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    flex: 0 0 auto;
-    min-height: 2.5rem;
-    padding: 0 1rem;
-    border: 1px solid color-mix(in srgb, var(--theme-color-Accent-main) 35%, transparent);
-    border-radius: 8px;
-    color: var(--theme-color-Main-main);
-    background-color: var(--theme-color-Accent-dark);
-    cursor: pointer;
-    box-shadow: 0 0.15rem 0.35rem rgba(0, 0, 0, 0.18);
-    transition:
-      background-color 0.12s ease,
-      box-shadow 0.12s ease,
-      opacity 0.12s ease;
-  }
-
-  .tag-add:hover:not(:disabled),
-  .tag-add:focus-visible {
-    color: var(--theme-color-Main-main);
-    background-color: var(--theme-color-Accent-main);
-    box-shadow: 0 0.25rem 0.55rem rgba(0, 0, 0, 0.24);
-  }
-
-  .tag-add:disabled {
-    cursor: default;
-    color: var(--theme-color-Sub-dark);
-    background-color: color-mix(in srgb, var(--theme-color-Sub-dark) 18%, transparent);
-    border-color: color-mix(in srgb, var(--theme-color-Sub-dark) 26%, transparent);
-    box-shadow: none;
-    opacity: 1;
-  }
-
-  .tag-add svg {
+  .tag-editor :global(.IconButton svg) {
     width: 1rem;
     height: 1rem;
-  }
-
-  .tag-add span {
-    font-size: 0.82rem;
-    font-weight: 700;
-    line-height: 1;
-  }
-
-  .tag-add path {
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 2;
-    stroke-linecap: round;
-    stroke-linejoin: round;
   }
 
   .tag-suggestions {
@@ -744,34 +692,10 @@
     box-sizing: border-box;
   }
 
-  .tag-suggestion {
-    display: inline-flex;
-    align-items: center;
-    max-width: 12rem;
-    min-height: 2rem;
-    padding: 0 0.65rem;
-    border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 24%, transparent);
-    border-radius: 8px;
-    color: var(--theme-color-Sub-main);
-    background-color: color-mix(in srgb, var(--theme-color-Main-light) 70%, transparent);
-    font-size: 0.72rem;
-    font-weight: 600;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    cursor: pointer;
-  }
-
-  .tag-suggestion:hover:not(:disabled),
-  .tag-suggestion:focus-visible {
-    color: var(--theme-color-Sub-light);
-    border-color: var(--theme-color-Accent-main);
-    background-color: color-mix(in srgb, var(--theme-color-Accent-main) 12%, transparent);
-  }
-
-  .tag-suggestion:disabled {
-    cursor: default;
-    opacity: 0.5;
+  @container (max-width: 34rem) {
+    .tag-suggestions {
+      padding-left: 0;
+    }
   }
 
   @media (max-width: 760px) {
@@ -780,9 +704,7 @@
     }
 
     .tag-editor {
-      grid-template-columns: 1fr;
-      align-items: stretch;
-      gap: 0.55rem;
+      gap: 0.45rem;
     }
 
     .tag-title {

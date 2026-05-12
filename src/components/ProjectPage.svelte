@@ -99,8 +99,9 @@
 {#if $tree_data}
   <div class:Content={true}>
     <SplitPanes defaultRatio={detailPaneVisible ? [3, 2] : [1]}>
-      <Pane style={"padding: 1rem; min-width: 10rem;"}>
+      <Pane style={"min-width: 10rem;"}>
         <Card style={"height: 100%; width: 100%; padding: 1rem;"}>
+          <div class="PaneTitle">Task Tree</div>
           <div class="TaskListToolbar">
             <div class:TableButtons={true}>
               <IconButton
@@ -245,12 +246,10 @@
         </Card>
       </Pane>
       {#if detailPaneVisible}
-        <Pane style={"padding: 1rem; min-width: 10rem;"}>
-          <Card style={"height: 100%; width: 100%;"}>
-            <div class:TaskDetail={true}>
-              <TaskDetail />
-            </div>
-          </Card>
+        <Pane style={"min-width: 10rem;"}>
+          <div class:TaskDetail={true}>
+            <TaskDetail />
+          </div>
         </Pane>
       {/if}
     </SplitPanes>
@@ -320,6 +319,21 @@
     box-sizing: border-box;
     flex-wrap: wrap;
   }
+  .PaneTitle {
+    display: flex;
+    align-items: center;
+    min-height: 2rem;
+    padding: 0 0.75rem;
+    border-left: 0.25rem solid var(--theme-color-Accent-main);
+    border-radius: 6px;
+    color: var(--theme-color-Sub-light);
+    background-color: color-mix(in srgb, var(--theme-color-Sub-dark) 12%, transparent);
+    font-size: 1.15rem;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0;
+    flex: 0 0 auto;
+  }
   .TreeAndGantt {
     height: 100%;
     width: 100%;
@@ -355,10 +369,12 @@
     background: rgba(128, 128, 128, 0.5);
   }
   div.TaskDetail {
-    height: calc(100% - 2rem);
-    width: calc(100% - 2rem);
+    flex: 1;
+    min-height: 0;
+    height: 100%;
+    width: 100%;
     box-sizing: border-box;
-    margin: 1rem;
+    margin: 0;
   }
 
   @media (max-width: 760px) {

@@ -2,6 +2,7 @@
   import Select from "./Select.svelte";
 
   export let status = "Open";
+  export let style = "height: 1.5rem;";
 
   const color_map = {
     Open: "var(--theme-color-Sub-light)",
@@ -65,7 +66,7 @@
     >
   {/if}
   <Select
-    style="height: 1.5rem;"
+    {style}
     backgroundColor="var(--backgroundColor)"
     color={color_map[status]}
     id="status"

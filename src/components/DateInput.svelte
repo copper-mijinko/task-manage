@@ -29,7 +29,9 @@
 
 <div
   class="Container"
-  style="--dark:{is_dark ? 'dark' : ''}; --borderColor: {borderColor}; --color-datetime: {color};"
+  style="--dark:{is_dark
+    ? 'dark'
+    : ''}; --backgroundColor: {backgroundColor}; --borderColor: {borderColor}; --color-datetime: {color};"
 >
   <input
     {style}
