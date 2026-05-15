@@ -46,7 +46,7 @@ interface ScanState {
   index: number; // -1 when no matches
 }
 
-let state: ScanState = { query: "", matches: [], index: -1 };
+const state: ScanState = { query: "", matches: [], index: -1 };
 
 const matchCountStore = writable<number>(0);
 const currentIndexStore = writable<number>(-1);

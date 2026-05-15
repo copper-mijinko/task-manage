@@ -65,7 +65,8 @@ async function openTaskDetailWindow(
   }, detailData);
 
   const detailWindow = await detailWindowPromise;
-  await expect(detailWindow.locator(".eyebrow")).toHaveText("Task Detail");
+  // The standalone TaskDetail window no longer carries a redundant
+  // "Task Detail" eyebrow above the heading — the task-name H1 is enough.
   await expect(detailWindow.getByRole("heading", { name: detailData.taskName })).toBeVisible();
 
   return detailWindow;
@@ -102,10 +103,13 @@ test("filters the visible task rows from the project search box", async () => {
   }
 });
 
-test("opens and closes the page search box with keyboard shortcuts", async () => {
+test("focuses the page-search input with Ctrl+F and clears it on Escape", async () => {
   const app = await launchSeededApp();
 
   try {
+    // The page-search overlay was replaced with a permanent header input
+    // ("画面内をハイライト検索…"). Ctrl+F now focuses that input rather than
+    // showing/hiding a separate dialog.
     await app.window.evaluate(() => {
       window.dispatchEvent(
         new KeyboardEvent("keydown", {
@@ -116,12 +120,16 @@ test("opens and closes the page search box with keyboard shortcuts", async () =>
       );
     });
 
-    const pageSearchInput = app.window.locator('input[placeholder="search..."]');
+    const pageSearchInput = app.window.locator(
+      'input[placeholder="画面内をハイライト検索…"]'
+    );
     await expect(pageSearchInput).toBeVisible();
     await expect(pageSearchInput).toBeFocused();
 
+    await pageSearchInput.fill("First");
     await pageSearchInput.press("Escape");
-    await expect(pageSearchInput).not.toBeVisible();
+    // Escape clears the query (the input still exists in the header).
+    await expect(pageSearchInput).toHaveValue("");
   } finally {
     await closeSeededApp(app);
   }
@@ -132,7 +140,10 @@ test("adds a sibling task from the project toolbar and persists it", async () =>
 
   try {
     await app.window.locator("#task-1").dispatchEvent("click");
-    await app.window.locator(".TableButtons button").nth(0).click();
+    // Toolbar was renamed from `.TableButtons` to `.TbGroup` (one group per
+    // logical button cluster — Add/Move/Expand/Undo/View). The first group's
+    // first button is still タスク追加 (insert sibling).
+    await app.window.locator(".TbGroup button").nth(0).click();
 
     await app.window.waitForTimeout(1200);
 

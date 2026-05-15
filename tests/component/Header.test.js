@@ -1,7 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/svelte";
 import { get } from "svelte/store";
 import { tick } from "svelte";
-import { vi } from "vitest";
 
 import Header from "@features/navigation/components/Header.svelte";
 import { sidebarCollapsed, saveStatus } from "@stores";
