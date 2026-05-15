@@ -70,8 +70,10 @@ async function launchTagsApp() {
   const window = await electronApp.firstWindow();
   await expect(window.getByText("Task Manage")).toBeVisible();
 
-  // Open the navigation drawer, then select the workspace project
-  await window.getByRole("button", { name: "Open navigation menu" }).click();
+  // The drawer-based nav was replaced with a persistent sidebar that starts
+  // collapsed. Click "Show sidebar" to expand it, then select the workspace
+  // project from the workspace list.
+  await window.getByRole("button", { name: "Show sidebar" }).click();
   const projectBtn = window.locator("button.MenuRow", { hasText: "Tagged Project" });
   await projectBtn.waitFor();
   await projectBtn.click();
@@ -147,15 +149,12 @@ test("tag input adds a chip and the tag persists after app restart", async () =>
   try {
     const window1 = await app1.firstWindow();
     await expect(window1.getByText("Task Manage")).toBeVisible();
-    await window1.getByRole("button", { name: "Open navigation menu" }).click();
+    // Persistent sidebar (starts collapsed) — open it via the header toggle.
+    await window1.getByRole("button", { name: "Show sidebar" }).click();
     const projectBtn1 = window1.locator("button.MenuRow", { hasText: "Tagged Project" });
     await projectBtn1.waitFor();
     await projectBtn1.click();
     await expect(window1.locator(`#${WS_TASK_ID}`)).toBeVisible();
-
-    // Close the navigation drawer before interacting with task rows
-    await window1.getByRole("button", { name: "Close navigation menu" }).click();
-    await expect(window1.locator(".Mask")).not.toBeVisible();
 
     // Dispatch click directly on the row element to avoid child stopPropagation
     await window1.locator(`#${WS_TASK_ID}`).dispatchEvent("click");
@@ -176,13 +175,11 @@ test("tag input adds a chip and the tag persists after app restart", async () =>
   try {
     const window2 = await app2.firstWindow();
     await expect(window2.getByText("Task Manage")).toBeVisible();
-    await window2.getByRole("button", { name: "Open navigation menu" }).click();
+    await window2.getByRole("button", { name: "Show sidebar" }).click();
     const projectBtn2 = window2.locator("button.MenuRow", { hasText: "Tagged Project" });
     await projectBtn2.waitFor();
     await projectBtn2.click();
     await expect(window2.locator(`#${WS_TASK_ID}`)).toBeVisible();
-    await window2.getByRole("button", { name: "Close navigation menu" }).click();
-    await expect(window2.locator(".Mask")).not.toBeVisible();
     await window2.locator(`#${WS_TASK_ID}`).dispatchEvent("click");
 
     await expect(window2.locator('[aria-label="Remove tag ux"]')).toBeVisible();
