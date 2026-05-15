@@ -494,7 +494,9 @@
     /* Smooth chevron rotation while the rows themselves fade-in (see RowEnter
        keyframes below). Keep this longer than RowEnter so the chevron motion
        reads as the cause. */
-    transition: transform 0.18s ease-out, background-color 0.12s ease;
+    transition:
+      transform 0.18s ease-out,
+      background-color 0.12s ease;
   }
   .ExpandButton svg {
     width: 100%;

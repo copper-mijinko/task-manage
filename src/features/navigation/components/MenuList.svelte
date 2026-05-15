@@ -775,7 +775,9 @@
     font-weight: 500;
     cursor: pointer;
     flex-shrink: 0;
-    transition: background-color 0.12s ease, border-color 0.12s ease;
+    transition:
+      background-color 0.12s ease,
+      border-color 0.12s ease;
   }
   .WorkspaceManageBtn:hover {
     background-color: rgba(255, 255, 255, 0.18);

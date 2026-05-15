@@ -88,8 +88,7 @@ const electronAPI = {
     ipcRenderer.invoke("ws:delete-task", { projectDir, taskId }),
   wsCreateProject: (workspacePath, name, id) =>
     ipcRenderer.invoke("ws:create-project", { workspacePath, name, id }),
-  wsDeleteProject: (projectDir) =>
-    ipcRenderer.invoke("ws:delete-project", { projectDir }),
+  wsDeleteProject: (projectDir) => ipcRenderer.invoke("ws:delete-project", { projectDir }),
   wsSelectDirectory: () => ipcRenderer.invoke("ws:select-directory"),
   wsGetLegacyProjects: () => ipcRenderer.invoke("ws:get-legacy-projects"),
   wsExportLegacyProjects: (workspacePath) =>

@@ -128,7 +128,9 @@
     border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 30%, transparent);
     border-radius: var(--shape-xs);
     background-color: var(--theme-color-Main-light);
-    transition: border-color 0.12s ease, box-shadow 0.12s ease;
+    transition:
+      border-color 0.12s ease,
+      box-shadow 0.12s ease;
   }
   .SearchBoxRoot:focus-within {
     border-color: var(--theme-color-Primary-main);

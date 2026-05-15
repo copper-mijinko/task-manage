@@ -263,7 +263,10 @@
     height: 100%;
     background-color: var(--theme-color-Theme-main);
     box-shadow: var(--elevation-1);
-    transition: flex-basis 0.18s ease, width 0.18s ease, min-width 0.18s ease;
+    transition:
+      flex-basis 0.18s ease,
+      width 0.18s ease,
+      min-width 0.18s ease;
     overflow: hidden;
     box-sizing: border-box;
   }

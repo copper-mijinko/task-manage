@@ -153,11 +153,7 @@
   <div class:Content={true}>
     <SplitPanes defaultRatio={detailPaneVisible ? [3, 2] : [1]}>
       <Pane style={"min-width: 10rem;"}>
-        <Card
-          title="Task Tree"
-          padded={false}
-          style={"height: 100%; width: 100%;"}
-        >
+        <Card title="Task Tree" padded={false} style={"height: 100%; width: 100%;"}>
           <div class="TaskListToolbar">
             <!-- Group 1: Add / Delete -->
             <div class="TbGroup">
@@ -578,5 +574,4 @@
     box-sizing: border-box;
     margin: 0;
   }
-
 </style>

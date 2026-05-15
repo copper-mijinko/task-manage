@@ -610,11 +610,7 @@
     padding: 0.1rem var(--sp1) 0.1rem var(--sp3);
     border-radius: var(--shape-pill);
     border: 1px solid var(--theme-color-Primary-main);
-    background-color: color-mix(
-      in srgb,
-      var(--theme-color-Primary-main) 18%,
-      transparent
-    );
+    background-color: color-mix(in srgb, var(--theme-color-Primary-main) 18%, transparent);
     color: var(--theme-color-Sub-main);
     font-size: var(--font-label-md);
     font-weight: 500;
@@ -712,11 +708,7 @@
   }
 
   .tag-pill:hover {
-    background-color: color-mix(
-      in srgb,
-      var(--theme-color-Primary-main) 12%,
-      transparent
-    );
+    background-color: color-mix(in srgb, var(--theme-color-Primary-main) 12%, transparent);
     border-color: var(--theme-color-Primary-main);
     color: var(--theme-color-Primary-main);
   }
