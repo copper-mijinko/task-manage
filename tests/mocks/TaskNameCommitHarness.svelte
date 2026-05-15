@@ -1,5 +1,5 @@
-<script>
-  import TaskName from "../../src/components/TaskName.svelte";
+﻿<script>
+  import TaskName from "@features/tasks/components/TaskName.svelte";
 
   export let initialText = "Task 1";
   let currentText = initialText;

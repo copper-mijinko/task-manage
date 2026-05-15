@@ -1,4 +1,4 @@
-<script>
+﻿<script>
   import {
     selected_type,
     selected_id,
@@ -11,16 +11,19 @@
     undoHistory,
     redoHistory,
     saveStatus,
-  } from "./stores.ts";
+  } from "@stores";
   import { onMount, onDestroy } from "svelte";
-  import * as platform from "./lib/platform";
-  import ProjectPage from "./components/ProjectPage.svelte";
-  import Header from "./components/Header.svelte";
-  import InfoPage from "./components/InfoPage.svelte";
-  import Modal from "./components/Modal.svelte";
-  import Button from "./components/Button.svelte";
-  import PageSearchBox from "./components/PageSearchBox.svelte";
-  import TaskDetailWindow from "./components/TaskDetailWindow.svelte";
+  import * as platform from "@lib/ipc/platform";
+  import ProjectPage from "@pages/MainPage.svelte";
+  import Header from "@features/navigation/components/Header.svelte";
+  import MenuList from "@features/navigation/components/MenuList.svelte";
+  import InfoPage from "@features/navigation/components/InfoPage.svelte";
+  import Modal from "@lib/primitives/Modal.svelte";
+  import Button from "@lib/primitives/Button.svelte";
+  import PageSearchBox from "@features/search/components/PageSearchBox.svelte";
+  import TaskDetailWindow from "@pages/TaskDetailPage.svelte";
+  import { sidebarCollapsed } from "@stores";
+  import { startAutoRescan, stopAutoRescan } from "@features/search/utils/page_search_highlighter";
   let show = Array(4).fill(false);
   let saveErrorMessage = null;
 
@@ -75,12 +78,7 @@
   }
 
   function handleKeyDown(event) {
-    if ((event.ctrlKey || event.metaKey) && event.key === "f") {
-      event.preventDefault();
-      $showPageSearch = true;
-      searchBox?.focusInput();
-      return;
-    }
+    // Ctrl+F is handled by Header.svelte (focuses the inline search input)
 
     if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key === "z") {
       event.preventDefault();
@@ -130,10 +128,15 @@
       saveErrorMessage = message;
       saveStatus.set("error");
     });
+
+    // Start the document-wide page-search highlighter. It watches the whole
+    // document for changes and re-applies CSS Custom Highlight ranges.
+    startAutoRescan();
   });
 
   onDestroy(() => {
     window.removeEventListener("keydown", handleKeyDown, true);
+    stopAutoRescan();
   });
 </script>
 
@@ -149,66 +152,58 @@
       >
     </div>
   {/if}
-  {#if !saveErrorMessage && $saveStatus !== "idle"}
-    <div
-      class="save-status-indicator"
-      data-testid="save-status-indicator"
-      data-status={$saveStatus}
-    >
-      {#if $saveStatus === "saving"}
-        保存中...
-      {:else if $saveStatus === "saved"}
-        保存済み
-      {:else if $saveStatus === "error"}
-        保存失敗
-      {/if}
-    </div>
-  {/if}
   {#if !isTaskDetailWindow}
     <div class="Header">
       <Header />
     </div>
   {/if}
-  <div class="Main" class:DetailWindowMain={isTaskDetailWindow}>
-    {#if isTaskDetailWindow}
-      <TaskDetailWindow
-        initialTaskName={detailWindowTaskName}
-        initialTaskId={detailWindowTaskId}
-        initialProjectId={detailWindowProjectId}
-        ready={detailWindowReady}
-      />
-    {:else}
-      {#if !($selected_type && $selected_id)}
-        <h1 style="color:var(--theme-color-Sub-main); display:flex; justify-content:center">
-          No data.
-        </h1>
-      {/if}
-      {#if $selected_type == "Projects" || $selected_type == "WorkspaceProject"}
-        <ProjectPage />
-      {/if}
-      {#if $selected_type == "Info"}
-        <div
-          style="height:100%; display: flex; flex-direction: column; justify-content: center; align-items: center;"
-        >
-          {#each [1, 2, 3, 4] as i}
-            <Button
-              content="Setp{i}"
-              on:click={() => {
-                show[i - 1] = !show[i - 1];
-              }}
-            />
-            <Modal
-              show={show[i - 1]}
-              toggle={() => {
-                show[i - 1] = !show[i - 1];
-              }}
-            >
-              <InfoPage index={i} />
-            </Modal>
-          {/each}
-        </div>
-      {/if}
+  <div class="Body" class:DetailWindowBody={isTaskDetailWindow}>
+    {#if !isTaskDetailWindow}
+      <aside class="Sidebar" class:Collapsed={$sidebarCollapsed} aria-label="ナビゲーション">
+        <MenuList />
+      </aside>
     {/if}
+    <div class="Main" class:DetailWindowMain={isTaskDetailWindow}>
+      {#if isTaskDetailWindow}
+        <TaskDetailWindow
+          initialTaskName={detailWindowTaskName}
+          initialTaskId={detailWindowTaskId}
+          initialProjectId={detailWindowProjectId}
+          ready={detailWindowReady}
+        />
+      {:else}
+        {#if !($selected_type && $selected_id)}
+          <h1 style="color:var(--theme-color-Sub-main); display:flex; justify-content:center">
+            No data.
+          </h1>
+        {/if}
+        {#if $selected_type == "Projects" || $selected_type == "WorkspaceProject"}
+          <ProjectPage />
+        {/if}
+        {#if $selected_type == "Info"}
+          <div
+            style="height:100%; display: flex; flex-direction: column; justify-content: center; align-items: center;"
+          >
+            {#each [1, 2, 3, 4] as i}
+              <Button
+                content="Setp{i}"
+                on:click={() => {
+                  show[i - 1] = !show[i - 1];
+                }}
+              />
+              <Modal
+                show={show[i - 1]}
+                toggle={() => {
+                  show[i - 1] = !show[i - 1];
+                }}
+              >
+                <InfoPage index={i} />
+              </Modal>
+            {/each}
+          </div>
+        {/if}
+      {/if}
+    </div>
   </div>
 </div>
 
@@ -224,46 +219,80 @@
 <style>
   :global(html) {
     font-size: 75%;
+    overflow: hidden;
   }
   :global(body) {
     font-family: "Roboto", "Helvetica", "Arial", sans-serif;
     padding: 0;
     margin: 0;
+    overflow: hidden;
   }
   div.Container {
     display: flex;
     flex-direction: column;
     box-sizing: border-box;
-    height: 100%;
-    width: 100%;
+    height: 100vh;
+    width: 100vw;
+    max-width: 100vw;
+    max-height: 100vh;
     background-color: var(--theme-color-Main-dark);
     margin: 0;
     padding: 0;
-    overflow: auto;
-    position: relative; /* 子要素のためのコンテキスト設定 */
+    overflow: hidden;
+    position: relative;
   }
   div.Header {
     height: 3.5rem;
+  }
+  div.Body {
+    display: flex;
+    flex-direction: row;
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    height: calc(100% - 3.5rem);
+    overflow: hidden;
+  }
+  div.Body.DetailWindowBody {
+    height: 100%;
+  }
+  aside.Sidebar {
+    flex: 0 0 18rem;
+    width: 18rem;
+    min-width: 18rem;
+    height: 100%;
+    background-color: var(--theme-color-Theme-main);
+    box-shadow: var(--elevation-1);
+    transition: flex-basis 0.18s ease, width 0.18s ease, min-width 0.18s ease;
+    overflow: hidden;
+    box-sizing: border-box;
+  }
+  aside.Sidebar.Collapsed {
+    flex: 0 0 0;
+    width: 0;
+    min-width: 0;
+    box-shadow: none;
   }
   div.Main {
     display: flex;
     justify-content: center;
     align-items: center;
-    height: calc(100% - 3.5rem);
-    width: 100%;
-    flex: 1;
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 100%;
   }
   div.Main.DetailWindowMain {
     height: 100%;
+    flex: 1;
   }
   .save-error-banner {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0.4rem 0.75rem;
-    background-color: #c0392b;
+    padding: var(--sp1) var(--sp3);
+    background-color: var(--theme-color-Error-main);
     color: #fff;
-    font-size: 0.875rem;
+    font-size: var(--font-body-sm);
     flex-shrink: 0;
     z-index: 10000;
   }
@@ -272,24 +301,8 @@
     border: none;
     color: #fff;
     cursor: pointer;
-    font-size: 1rem;
+    font-size: var(--font-body-md);
     line-height: 1;
-    padding: 0 0.25rem;
-  }
-  .save-status-indicator {
-    position: fixed;
-    bottom: 0.75rem;
-    right: 0.75rem;
-    padding: 0.2rem 0.6rem;
-    border-radius: 0.25rem;
-    font-size: 0.75rem;
-    opacity: 0.85;
-    pointer-events: none;
-    z-index: 9999;
-    background-color: rgba(0, 0, 0, 0.55);
-    color: #fff;
-  }
-  .save-status-indicator[data-status="error"] {
-    background-color: #c0392b;
+    padding: 0 var(--sp1);
   }
 </style>

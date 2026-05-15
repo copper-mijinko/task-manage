@@ -1,8 +1,8 @@
-import { render } from "@testing-library/svelte";
+﻿import { render } from "@testing-library/svelte";
 import { tick } from "svelte";
 
-import Button from "../../src/components/Button.svelte";
-import IconButton from "../../src/components/IconButton.svelte";
+import Button from "@lib/primitives/Button.svelte";
+import IconButton from "@lib/primitives/IconButton.svelte";
 
 describe("button color reactivity", () => {
   test("Button updates theme colors when disabled changes", async () => {
@@ -42,11 +42,11 @@ describe("button color reactivity", () => {
       },
     });
 
-    const disabledStyle = container.querySelector("button").getAttribute("style");
-    expect(disabledStyle).toContain(
-      "--backgroundColor: color-mix(in srgb, var(--theme-color-Main-dark) 72%, var(--theme-color-Main-light))"
-    );
-    expect(disabledStyle).toContain("--fontColor: var(--theme-color-Sub-main)");
+    // Disabled state: variant shape preserved; visual muting handled by CSS opacity (0.38).
+    // Inline CSS variables keep the configured colors so the button still resembles its enabled form.
+    const disabledButton = container.querySelector("button");
+    expect(disabledButton.disabled).toBe(true);
+    expect(disabledButton.getAttribute("style")).toContain("--shadow: none");
 
     await rerender({
       disabled: false,

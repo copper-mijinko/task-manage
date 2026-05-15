@@ -1,4 +1,4 @@
-import {
+﻿import {
   addNode,
   canIndentNode,
   canMoveNodeDown,
@@ -15,7 +15,7 @@ import {
   reorderTree,
   rmNode,
   updateNodeDataById,
-} from "../../src/common/tree_control.ts";
+} from "@features/tasks/utils/tree_control";
 
 function createTree() {
   return {

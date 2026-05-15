@@ -1,36 +1,36 @@
-import { fireEvent, render, screen } from "@testing-library/svelte";
+﻿import { fireEvent, render, screen } from "@testing-library/svelte";
 import { get } from "svelte/store";
 import { tick } from "svelte";
 import { vi } from "vitest";
 
-vi.mock("../../src/components/SplitPanes.svelte", async () => {
+vi.mock("@lib/layouts/SplitPanes.svelte", async () => {
   const mod = await import("../mocks/PassThroughStub.svelte");
   return { default: mod.default };
 });
 
-vi.mock("../../src/components/TreeTable.svelte", async () => {
+vi.mock("@features/tasks/components/TreeTable.svelte", async () => {
   const mod = await import("../mocks/TreeTableStub.svelte");
   return { default: mod.default };
 });
 
-vi.mock("../../src/components/TaskDetail.svelte", async () => {
+vi.mock("@features/tasks/components/TaskDetail.svelte", async () => {
   const mod = await import("../mocks/TaskDetailStub.svelte");
   return { default: mod.default };
 });
 
-vi.mock("../../src/components/GanttPanel.svelte", async () => {
+vi.mock("@features/gantt/components/GanttPanel.svelte", async () => {
   const mod = await import("../mocks/GanttPanelStub.svelte");
   return { default: mod.default };
 });
 
-import ProjectPage from "../../src/components/ProjectPage.svelte";
+import ProjectPage from "@pages/MainPage.svelte";
 import {
   closed_node_ids,
   ganttVisible,
   selected_id,
   table_selected_id,
   tree_data,
-} from "../../src/stores.ts";
+} from "@stores";
 
 function createProjectData() {
   return {
@@ -87,7 +87,7 @@ describe("ProjectPage", () => {
 
   test("adds a sibling task and selects it", async () => {
     const { container } = render(ProjectPage);
-    const buttons = container.querySelectorAll(".TableButtons button");
+    const buttons = container.querySelectorAll(".TbGroup button");
 
     await fireEvent.click(buttons[0]);
     await vi.runAllTimersAsync();
@@ -105,7 +105,7 @@ describe("ProjectPage", () => {
     table_selected_id.set(undefined);
 
     const { container } = render(ProjectPage);
-    const buttons = container.querySelectorAll(".TableButtons button");
+    const buttons = container.querySelectorAll(".TbGroup button");
 
     await fireEvent.click(buttons[0]);
     await vi.runAllTimersAsync();
@@ -116,16 +116,41 @@ describe("ProjectPage", () => {
     expect(get(table_selected_id)).toBe(get(tree_data).data.children[0].id);
   });
 
-  test("adds a task under the project root when the root is selected", async () => {
+  test("shows an alert when adding a sibling next to the project root", async () => {
+    // Pressing the toolbar "insert after current" button while the user has
+    // explicitly selected the root row is meaningless — the root has no
+    // parent to receive a sibling. We surface that as a Dialog alert rather
+    // than silently re-routing the add. The "add child" button (buttons[1])
+    // remains the correct way to add a top-level task.
     const data = createProjectData();
     data.data.children = [];
     tree_data.set(data);
     table_selected_id.set("project-1");
 
     const { container } = render(ProjectPage);
-    const buttons = container.querySelectorAll(".TableButtons button");
+    const buttons = container.querySelectorAll(".TbGroup button");
 
     await fireEvent.click(buttons[0]);
+    await vi.runAllTimersAsync();
+    await tick();
+
+    // No task added — alert dialog shown instead.
+    expect(get(tree_data).data.children).toHaveLength(0);
+    expect(document.body.textContent).toMatch(/Cannot insert a sibling/);
+  });
+
+  test("adds a task under the project root via 子タスク追加 when the root is selected", async () => {
+    const data = createProjectData();
+    data.data.children = [];
+    tree_data.set(data);
+    table_selected_id.set("project-1");
+
+    const { container } = render(ProjectPage);
+    const buttons = container.querySelectorAll(".TbGroup button");
+
+    // buttons[1] is "子タスク追加" (append as child) which is the correct
+    // way to add a child task to the root.
+    await fireEvent.click(buttons[1]);
     await vi.runAllTimersAsync();
     await tick();
 
@@ -138,7 +163,7 @@ describe("ProjectPage", () => {
     closed_node_ids.set(new Set(["task-1"]));
 
     const { container } = render(ProjectPage);
-    const buttons = container.querySelectorAll(".TableButtons button");
+    const buttons = container.querySelectorAll(".TbGroup button");
 
     await fireEvent.click(buttons[1]);
     await vi.runAllTimersAsync();
@@ -153,7 +178,7 @@ describe("ProjectPage", () => {
   test("shows an alert when trying to delete the root node", async () => {
     table_selected_id.set("project-1");
     const { container } = render(ProjectPage);
-    const buttons = container.querySelectorAll(".TableButtons button");
+    const buttons = container.querySelectorAll(".TbGroup button");
 
     await fireEvent.click(buttons[2]);
 
@@ -163,7 +188,7 @@ describe("ProjectPage", () => {
 
   test("removes the selected task after confirmation", async () => {
     const { container } = render(ProjectPage);
-    const buttons = container.querySelectorAll(".TableButtons button");
+    const buttons = container.querySelectorAll(".TbGroup button");
 
     await fireEvent.click(buttons[2]);
     expect(

@@ -1,8 +1,8 @@
-import { fireEvent, render } from "@testing-library/svelte";
+﻿import { fireEvent, render } from "@testing-library/svelte";
 import { get } from "svelte/store";
 import { tick } from "svelte";
 
-import GanttPanel from "../../src/components/GanttPanel.svelte";
+import GanttPanel from "@features/gantt/components/GanttPanel.svelte";
 import {
   closed_node_ids,
   filtered_data,
@@ -10,7 +10,7 @@ import {
   ganttScrollTop,
   theme,
   tree_data,
-} from "../../src/stores.ts";
+} from "@stores";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -137,7 +137,7 @@ describe("GanttPanel", () => {
 
     const title = container.querySelector(".GanttTitle");
 
-    expect(title).toHaveTextContent("gantt");
+    expect(title).toHaveTextContent("Gantt");
     expect(title).toHaveClass("GanttTitle");
     expect(container.querySelector(".GanttTitleRow .ScaleButtons")).toBeInTheDocument();
     expect(container.querySelector(".TimelineHeaderViewport .HeaderCell")).toBeInTheDocument();
@@ -176,9 +176,9 @@ describe("GanttPanel", () => {
     await tick();
     const monthWidth = getBarWidthRem(container);
 
-    expect(dayWidth).toBeCloseTo(7 * 1.667, 3);
-    expect(weekWidth).toBeCloseTo(6, 3);
-    expect(monthWidth).toBeCloseTo((7 * 7.667) / 30, 3);
+    expect(dayWidth).toBeCloseTo(7 * 2.25, 3);
+    expect(weekWidth).toBeCloseTo(7, 3);
+    expect(monthWidth).toBeCloseTo((7 * 8.5) / 30, 3);
     expect(dayWidth).toBeGreaterThan(weekWidth);
     expect(weekWidth).toBeGreaterThan(monthWidth);
   });
@@ -201,6 +201,6 @@ describe("GanttPanel", () => {
     const expectedEnd = new Date(2030, 8, 1).getTime();
     const expectedDays = (expectedEnd - expectedStart) / DAY_MS;
 
-    expect(getTimelineWidthRem(container)).toBeCloseTo(expectedDays * 1.667, 3);
+    expect(getTimelineWidthRem(container)).toBeCloseTo(expectedDays * 2.25, 3);
   });
 });

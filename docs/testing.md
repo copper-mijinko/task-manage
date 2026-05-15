@@ -80,9 +80,10 @@ Electron アプリ全体を起動して確認する。
 | `src/components/TaskDetail.svelte`    | `adds a memo tab to the selected task`                                      | メモ追加で store とタブ表示を更新する                                                               | [tests/component/TaskDetail.test.js](/home/akai/develop/task-manage-roo/tests/component/TaskDetail.test.js:1)       |
 | `src/components/TaskDetail.svelte`    | `deletes the selected memo after confirmation`                              | メモ削除確認後に store から削除する                                                                 | [tests/component/TaskDetail.test.js](/home/akai/develop/task-manage-roo/tests/component/TaskDetail.test.js:1)       |
 | `src/components/TaskDetail.svelte`    | `resets the selected memo tab when the selected task changes`               | タスク切替時にメモタブ選択を初期化する                                                              | [tests/component/TaskDetail.test.js](/home/akai/develop/task-manage-roo/tests/component/TaskDetail.test.js:1)       |
-| `src/components/ProjectPage.svelte`   | `adds a sibling task and selects it`                                        | 兄弟タスク追加後に新規ノードを選択する                                                              | [tests/component/ProjectPage.test.js](/home/akai/develop/task-manage-roo/tests/component/ProjectPage.test.js:1)     |
-| `src/components/ProjectPage.svelte`   | `adds the first task under the project root when nothing is selected`       | タスク未選択の空プロジェクトで、ルート配下に最初のタスクを追加する                                  | [tests/component/ProjectPage.test.js](/home/akai/develop/task-manage-roo/tests/component/ProjectPage.test.js:1)     |
-| `src/components/ProjectPage.svelte`   | `adds a task under the project root when the root is selected`              | ルート選択時の「下に追加」をルート配下への追加として扱う                                            | [tests/component/ProjectPage.test.js](/home/akai/develop/task-manage-roo/tests/component/ProjectPage.test.js:1)     |
+| `src/pages/MainPage.svelte`           | `adds a sibling task and selects it`                                        | 兄弟タスク追加後に新規ノードを選択する                                                              | [tests/component/ProjectPage.test.js](../tests/component/ProjectPage.test.js)                                       |
+| `src/pages/MainPage.svelte`           | `adds the first task under the project root when nothing is selected`       | タスク未選択の空プロジェクトで、ルート配下に最初のタスクを追加する                                  | [tests/component/ProjectPage.test.js](../tests/component/ProjectPage.test.js)                                       |
+| `src/pages/MainPage.svelte`           | `shows an alert when adding a sibling next to the project root`             | ルート選択 + 兄弟挿入 = アラート表示する（v1.1 で挙動変更）                                          | [tests/component/ProjectPage.test.js](../tests/component/ProjectPage.test.js)                                       |
+| `src/pages/MainPage.svelte`           | `adds a task under the project root via 子タスク追加 when the root is selected` | ルート選択時は「子タスク追加」ボタンを使って配下にタスクを追加する                                  | [tests/component/ProjectPage.test.js](../tests/component/ProjectPage.test.js)                                       |
 | `src/components/ProjectPage.svelte`   | `adds a child task and expands the parent when it was collapsed`            | 子タスク追加時に折りたたみ親を展開する                                                              | [tests/component/ProjectPage.test.js](/home/akai/develop/task-manage-roo/tests/component/ProjectPage.test.js:1)     |
 | `src/components/ProjectPage.svelte`   | `shows an alert when trying to delete the root node`                        | ルートノード削除を禁止する                                                                          | [tests/component/ProjectPage.test.js](/home/akai/develop/task-manage-roo/tests/component/ProjectPage.test.js:1)     |
 | `src/components/ProjectPage.svelte`   | `removes the selected task after confirmation`                              | 削除確認後に選択中タスクを削除する                                                                  | [tests/component/ProjectPage.test.js](/home/akai/develop/task-manage-roo/tests/component/ProjectPage.test.js:1)     |
@@ -142,7 +143,9 @@ Electron アプリ全体を起動して確認する。
 | `src/components/TaskDetail.svelte`    | メモ削除                                   | 実装済み | [tests/component/TaskDetail.test.js](/home/akai/develop/task-manage-roo/tests/component/TaskDetail.test.js:1)       |
 | `src/components/TaskDetail.svelte`    | タスク切替時のタブ選択初期化               | 実装済み | [tests/component/TaskDetail.test.js](/home/akai/develop/task-manage-roo/tests/component/TaskDetail.test.js:1)       |
 | `src/components/ProjectPage.svelte`   | タスク追加                                 | 実装済み | [tests/component/ProjectPage.test.js](/home/akai/develop/task-manage-roo/tests/component/ProjectPage.test.js:1)     |
-| `src/components/ProjectPage.svelte`   | 未選択 / ルート選択時の初回タスク追加      | 実装済み | [tests/component/ProjectPage.test.js](/home/akai/develop/task-manage-roo/tests/component/ProjectPage.test.js:1)     |
+| `src/pages/MainPage.svelte`           | 未選択時の初回タスク追加                   | 実装済み | [tests/component/ProjectPage.test.js](../tests/component/ProjectPage.test.js)                                       |
+| `src/pages/MainPage.svelte`           | ルート選択時の兄弟挿入アラート             | 実装済み | [tests/component/ProjectPage.test.js](../tests/component/ProjectPage.test.js)                                       |
+| `src/pages/MainPage.svelte`           | ルート配下への子タスク追加                 | 実装済み | [tests/component/ProjectPage.test.js](../tests/component/ProjectPage.test.js)                                       |
 | `src/components/ProjectPage.svelte`   | 子タスク追加                               | 実装済み | [tests/component/ProjectPage.test.js](/home/akai/develop/task-manage-roo/tests/component/ProjectPage.test.js:1)     |
 | `src/components/ProjectPage.svelte`   | タスク削除                                 | 実装済み | [tests/component/ProjectPage.test.js](/home/akai/develop/task-manage-roo/tests/component/ProjectPage.test.js:1)     |
 | `src/components/ProjectPage.svelte`   | ルートノード削除禁止                       | 実装済み | [tests/component/ProjectPage.test.js](/home/akai/develop/task-manage-roo/tests/component/ProjectPage.test.js:1)     |
@@ -182,6 +185,30 @@ Electron アプリ全体を起動して確認する。
 - GitHub Actions
   - `.github/workflows/main.yml` で `check`、`unit`、`component`、`e2e` を実行する
 - `Playwright` の E2E は、実行環境によっては Electron の起動制約を受けることがある
+
+## 6. 現在の合計件数（v1.1 時点）
+
+| 種別 | 件数 |
+|------|------|
+| Test files | 24 passed / 1 skipped (25) |
+| Tests | 213 passed / 7 skipped (220) |
+| svelte-check | 159 files / 0 errors / 0 warnings |
+
+### v1.1 で追加された新規テストファイル
+
+| ファイル | 対象 |
+|---------|------|
+| `tests/unit/globalDismiss.test.js` | `globalDismiss` action（外部クリック / Escape / disabled ボタンによる dismiss） |
+| `tests/unit/page_search_highlighter.test.js` | ページ内ハイライト検索エンジン（マッチ列挙、`next` / `prev` 循環、`rescan`、非表示要素の除外） |
+| `tests/unit/sidebarCollapsed.test.js` | サイドバー折りたたみストア（デフォルト true / set / update） |
+| `tests/unit/tooltip.test.js` | tooltip action の表示 / 隠 / update / destroy / 残存防止 |
+| `tests/component/Card.test.js` | `Card` プリミティブの `title` / `padded` / `style` プロパティ |
+| `tests/component/StatusSelect.test.js` | 自前ドロップダウンの開閉、選択イベント、同値選択の抑止、配色非伝搬、外側クリックで閉じる |
+| `tests/component/Header.test.js` | 画面内検索 UI、Escape クリア、上下ボタン表示、ハンバーガートグル、保存状態インジケータ |
+
+`tests/component/SplitPanes.test.js` には snap-collapse / 再展開 / `HasCollapsedNeighbour` クラスのテストを追加。
+`tests/component/TaskName.test.js` には三点リーダ再クリックでの閉 / disabled ボタンクリックでの dismiss を追加。
+`tests/unit/workspace.test.js` には `deleteProject` の正常 / 不正引数 / 既不在 / 他プロジェクト保持の 5 テストを追加。
 
 関連ドキュメント:
 [specification.md](specification.md) / [../README.md](../README.md)

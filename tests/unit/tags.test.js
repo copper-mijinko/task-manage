@@ -1,9 +1,9 @@
-import { get } from "svelte/store";
+﻿import { get } from "svelte/store";
 import { describe, expect, test, beforeEach } from "vitest";
 
-import { active_tag, tag_index } from "../../src/stores/tags.ts";
-import { selected_type } from "../../src/stores/ui.ts";
-import { tree_data } from "../../src/stores/tree.ts";
+import { active_tag, tag_index } from "@features/memos/stores/tags";
+import { selected_type } from "@stores/ui";
+import { tree_data } from "@features/tasks/stores/tree";
 
 function createProjectData(tags = ["design"]) {
   return {

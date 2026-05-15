@@ -674,6 +674,17 @@ app.on("ready", () => {
     }
   });
 
+  ipcMain.handle("ws:delete-project", async (event, { projectDir }) => {
+    try {
+      const result = workspace.deleteProject(projectDir);
+      wsCache.delete(projectDir);
+      return result;
+    } catch (err) {
+      log.error("ws:delete-project error:", err.message);
+      return { success: false, error: err.message };
+    }
+  });
+
   async function exportLegacyProjects(workspacePath) {
     const migrated = [];
     const errors = [];

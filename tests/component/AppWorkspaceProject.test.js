@@ -1,38 +1,38 @@
-import { render, screen } from "@testing-library/svelte";
+﻿import { render, screen } from "@testing-library/svelte";
 import { tick } from "svelte";
 import { vi } from "vitest";
 
-vi.mock("../../src/components/Header.svelte", async () => {
+vi.mock("@features/navigation/components/Header.svelte", async () => {
   const mod = await import("../mocks/PassThroughStub.svelte");
   return { default: mod.default };
 });
-vi.mock("../../src/components/ProjectPage.svelte", async () => {
+vi.mock("@pages/MainPage.svelte", async () => {
   const mod = await import("../mocks/TreeTableStub.svelte");
   return { default: mod.default };
 });
-vi.mock("../../src/components/InfoPage.svelte", async () => {
+vi.mock("@features/navigation/components/InfoPage.svelte", async () => {
   const mod = await import("../mocks/PassThroughStub.svelte");
   return { default: mod.default };
 });
-vi.mock("../../src/components/Modal.svelte", async () => {
+vi.mock("@lib/primitives/Modal.svelte", async () => {
   const mod = await import("../mocks/DialogStub.svelte");
   return { default: mod.default };
 });
-vi.mock("../../src/components/Button.svelte", async () => {
+vi.mock("@lib/primitives/Button.svelte", async () => {
   const mod = await import("../mocks/PassThroughStub.svelte");
   return { default: mod.default };
 });
-vi.mock("../../src/components/PageSearchBox.svelte", async () => {
+vi.mock("@features/search/components/PageSearchBox.svelte", async () => {
   const mod = await import("../mocks/PassThroughStub.svelte");
   return { default: mod.default };
 });
-vi.mock("../../src/components/TaskDetailWindow.svelte", async () => {
+vi.mock("@pages/TaskDetailPage.svelte", async () => {
   const mod = await import("../mocks/TaskDetailStub.svelte");
   return { default: mod.default };
 });
 
 import App from "../../src/App.svelte";
-import { selected_id, selected_type } from "../../src/stores.ts";
+import { selected_id, selected_type } from "@stores";
 
 function makeElectronAPI() {
   return {

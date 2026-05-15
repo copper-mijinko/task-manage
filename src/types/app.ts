@@ -1,4 +1,4 @@
-import type { ProjectData } from "../common/tree_control";
+﻿import type { ProjectData } from "@features/tasks/utils/tree_control";
 import type {
   WorkspaceInfo,
   WorkspaceProject,
@@ -92,6 +92,9 @@ export interface ElectronAPI {
     name: string,
     id: string
   ) => Promise<{ success: boolean; projectDir?: string; dirName?: string; error?: string }>;
+  wsDeleteProject: (
+    projectDir: string
+  ) => Promise<{ success: boolean; error?: string }>;
   wsSelectDirectory: () => Promise<string | null>;
   wsGetLegacyProjects: () => Promise<{ id: string; name: string; taskCount: number }[]>;
   wsExportLegacyProjects: (workspacePath: string) => Promise<{

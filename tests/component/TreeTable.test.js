@@ -1,24 +1,24 @@
-import { fireEvent, render, screen } from "@testing-library/svelte";
+﻿import { fireEvent, render, screen } from "@testing-library/svelte";
 import { get } from "svelte/store";
 import { tick } from "svelte";
 import { vi } from "vitest";
 
-vi.mock("../../src/components/TreeTableHeader.svelte", async () => {
+vi.mock("@features/tasks/components/TreeTableHeader.svelte", async () => {
   const mod = await import("../mocks/TreeTableHeaderTestStub.svelte");
   return { default: mod.default };
 });
 
-vi.mock("../../src/components/TreeTableRow.svelte", async () => {
+vi.mock("@features/tasks/components/TreeTableRow.svelte", async () => {
   const mod = await import("../mocks/TreeTableRowTestStub.svelte");
   return { default: mod.default };
 });
 
-vi.mock("../../src/components/Dialog.svelte", async () => {
+vi.mock("@lib/primitives/Dialog.svelte", async () => {
   const mod = await import("../mocks/DialogStub.svelte");
   return { default: mod.default };
 });
 
-import TreeTable from "../../src/components/TreeTable.svelte";
+import TreeTable from "@features/tasks/components/TreeTable.svelte";
 import {
   closed_node_ids,
   filtered_data,
@@ -26,7 +26,7 @@ import {
   table_selected_id,
   theme,
   tree_data,
-} from "../../src/stores.ts";
+} from "@stores";
 
 function createProjectData() {
   return {

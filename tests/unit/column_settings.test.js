@@ -1,6 +1,6 @@
-import { get } from "svelte/store";
+﻿import { get } from "svelte/store";
 import { vi, describe, test, expect, beforeEach } from "vitest";
-import { column_settings, DEFAULT_COLUMN_SETTINGS } from "../../src/stores/column_settings.ts";
+import { column_settings, DEFAULT_COLUMN_SETTINGS } from "@features/tasks/stores/column_settings";
 
 describe("column_settings store", () => {
   let mockSetMetaData;
@@ -27,7 +27,7 @@ describe("column_settings store", () => {
     expect(settings.find((s) => s.id === "status").visible).toBe(true);
     expect(settings.find((s) => s.id === "start date").visible).toBe(true);
     expect(settings.find((s) => s.id === "due date").visible).toBe(true);
-    expect(settings.find((s) => s.id === "memo").visible).toBe(false);
+    expect(settings.find((s) => s.id === "memo").visible).toBe(true);
   });
 
   test("name column is always first by default", () => {

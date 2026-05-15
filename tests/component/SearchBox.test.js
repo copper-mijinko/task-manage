@@ -1,8 +1,8 @@
-import { fireEvent, render, screen } from "@testing-library/svelte";
+﻿import { fireEvent, render, screen } from "@testing-library/svelte";
 import { tick } from "svelte";
 import { get } from "svelte/store";
-import SearchBox from "../../src/components/SearchBox.svelte";
-import { filter } from "../../src/stores.ts";
+import SearchBox from "@lib/primitives/SearchBox.svelte";
+import { filter } from "@stores";
 
 describe("SearchBox", () => {
   beforeEach(() => {

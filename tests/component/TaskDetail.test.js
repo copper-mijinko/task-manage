@@ -1,14 +1,14 @@
-import { fireEvent, render, screen } from "@testing-library/svelte";
+﻿import { fireEvent, render, screen } from "@testing-library/svelte";
 import { get } from "svelte/store";
 import { tick } from "svelte";
 import { vi } from "vitest";
 
-vi.mock("../../src/components/Memo.svelte", async () => {
+vi.mock("@features/memos/components/Memo.svelte", async () => {
   const mod = await import("../mocks/MemoStub.svelte");
   return { default: mod.default };
 });
 
-import TaskDetail from "../../src/components/TaskDetail.svelte";
+import TaskDetail from "@features/tasks/components/TaskDetail.svelte";
 import {
   selected_id,
   selected_type,
@@ -16,7 +16,7 @@ import {
   tag_index,
   tree_data,
   workspace_store,
-} from "../../src/stores.ts";
+} from "@stores";
 
 function createProjectData() {
   return {
@@ -86,8 +86,8 @@ describe("TaskDetail", () => {
 
     expect(screen.getByText("Tabs here")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("No page")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Add a memo" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Memo type")).toHaveValue("Quill");
+    expect(screen.getByRole("button", { name: "メモを追加" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Memo type")).toHaveTextContent("Quill");
   });
 
   test("edits task detail fields independent of visible table columns", async () => {
@@ -100,9 +100,8 @@ describe("TaskDetail", () => {
     await fireEvent.blur(screen.getByLabelText("Task name"));
     await tick();
 
-    await fireEvent.change(screen.getByLabelText("Status"), {
-      target: { value: "In Progress" },
-    });
+    await fireEvent.click(screen.getByLabelText("Status"));
+    await fireEvent.click(screen.getByRole("option", { name: /In Progress/ }));
     await fireEvent.change(screen.getByLabelText("Start Date"), {
       target: { value: "2026-06-01" },
     });
@@ -116,7 +115,7 @@ describe("TaskDetail", () => {
     expect(task.status).toBe("In Progress");
     expect(task["start date"]).toBe("2026-06-01");
     expect(task["due date"]).toBe("2026-06-10");
-    expect(screen.getByLabelText("Memo count")).toHaveValue(0);
+    expect(screen.getByLabelText("Memo count")).toHaveTextContent("0");
   });
 
   test("adds a memo tab to the selected task", async () => {

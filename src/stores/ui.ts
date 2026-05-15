@@ -1,10 +1,10 @@
-import { get, writable, type Writable } from "svelte/store";
-import { getNode, type TreeData } from "../common/tree_control";
-import { workspaceToProjectData } from "../common/workspace_tree";
-import type { PendingTaskDetailSelection, SelectedType } from "../types/app";
-import { clearHistory, tree_data } from "./tree";
-import { workspace_store, workspace_tasks_cache } from "./workspace";
-import * as platform from "../lib/platform";
+﻿import { get, writable, type Writable } from "svelte/store";
+import { getNode, type TreeData } from "@features/tasks/utils/tree_control";
+import { workspaceToProjectData } from "@features/workspace/utils/workspace_tree";
+import type { PendingTaskDetailSelection, SelectedType } from "@app-types/app";
+import { clearHistory, tree_data } from "@features/tasks/stores/tree";
+import { workspace_store, workspace_tasks_cache } from "@features/workspace/stores/workspace";
+import * as platform from "@lib/ipc/platform";
 
 const currentHash = typeof window !== "undefined" ? window.location.hash : "";
 const currentSearch =
@@ -278,3 +278,10 @@ export type SaveStatus = "idle" | "saving" | "saved" | "error";
 export const saveStatus = writable<SaveStatus>("idle");
 
 export const copied_task = writable<TreeData | null>(null);
+
+/**
+ * The left navigation sidebar always starts hidden on launch. Per UX
+ * feedback we do NOT persist the open/closed preference across sessions —
+ * each window opens with the maximum amount of working space available.
+ */
+export const sidebarCollapsed = writable<boolean>(true);
