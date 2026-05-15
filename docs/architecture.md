@@ -1,11 +1,11 @@
 # アーキテクチャ — Task Manage
 
-| 項目 | 内容 |
-|------|------|
-| 文書ID | TM-ARCH-001 |
-| 版数 | 1.1 |
-| 更新日 | 2026-05-15 |
-| 対象 | Electron 41 + Svelte 5 + TypeScript + Vite 8 |
+| 項目   | 内容                                         |
+| ------ | -------------------------------------------- |
+| 文書ID | TM-ARCH-001                                  |
+| 版数   | 1.1                                          |
+| 更新日 | 2026-05-15                                   |
+| 対象   | Electron 41 + Svelte 5 + TypeScript + Vite 8 |
 
 ---
 
@@ -105,13 +105,13 @@ src/
 - **依存許可**: 同レイヤ内 (`@lib/*`)、外部ライブラリのみ
 - 他プロジェクトへの切り出しを可能な品質を維持する
 
-| サブディレクトリ | 役割 |
-|--------------|------|
-| `primitives/` | 単独で意味を持つ最小UI要素。プロパティとイベントのみで構成 |
-| `layouts/` | 子要素の配置と分割を担う |
-| `actions/` | Svelte `use:xxx` ディレクティブ用関数 |
-| `utils/` | 純粋関数・型定義・トークン |
-| `ipc/` | Electron preload 経由の通信ラッパ |
+| サブディレクトリ | 役割                                                       |
+| ---------------- | ---------------------------------------------------------- |
+| `primitives/`    | 単独で意味を持つ最小UI要素。プロパティとイベントのみで構成 |
+| `layouts/`       | 子要素の配置と分割を担う                                   |
+| `actions/`       | Svelte `use:xxx` ディレクティブ用関数                      |
+| `utils/`         | 純粋関数・型定義・トークン                                 |
+| `ipc/`           | Electron preload 経由の通信ラッパ                          |
 
 ### 3.2 `features/<domain>/`（ドメイン層）
 
@@ -121,15 +121,15 @@ src/
 
 ドメイン分割:
 
-| ドメイン | スコープ |
-|---------|---------|
-| `tasks` | タスクツリー、ノードCRUD、行/列操作、状態 |
-| `memos` | メモ本体、タグ管理、Markdown/Quill エディタ |
-| `gantt` | 時系列可視化 |
-| `workspace` | ワークスペース（ディレクトリ＋Markdown ベース）管理 |
-| `projects` | 標準（JSON ベース）プロジェクト管理 |
-| `search` | フィルター・ページ内検索 |
-| `navigation` | サイドナビ、トップヘッダー、Info |
+| ドメイン     | スコープ                                            |
+| ------------ | --------------------------------------------------- |
+| `tasks`      | タスクツリー、ノードCRUD、行/列操作、状態           |
+| `memos`      | メモ本体、タグ管理、Markdown/Quill エディタ         |
+| `gantt`      | 時系列可視化                                        |
+| `workspace`  | ワークスペース（ディレクトリ＋Markdown ベース）管理 |
+| `projects`   | 標準（JSON ベース）プロジェクト管理                 |
+| `search`     | フィルター・ページ内検索                            |
+| `navigation` | サイドナビ、トップヘッダー、Info                    |
 
 ### 3.3 `pages/`（画面層）
 
@@ -156,13 +156,13 @@ src/
 
 `vite.config.js` / `tsconfig.json` / `vitest.config.mjs` に統一定義:
 
-| エイリアス | 解決先 | 使用例 |
-|----------|--------|--------|
-| `@lib/*` | `src/lib/*` | `import Button from "@lib/primitives/Button.svelte"` |
-| `@features/*` | `src/features/*` | `import { tree_data } from "@features/tasks/stores/tree"` |
-| `@pages/*` | `src/pages/*` | `import MainPage from "@pages/MainPage.svelte"` |
-| `@stores/*` | `src/stores/*` | `import { ui } from "@stores/ui"` |
-| `@app-types/*` | `src/types/*` | `import type { TreeData } from "@app-types/app"` |
+| エイリアス     | 解決先           | 使用例                                                    |
+| -------------- | ---------------- | --------------------------------------------------------- |
+| `@lib/*`       | `src/lib/*`      | `import Button from "@lib/primitives/Button.svelte"`      |
+| `@features/*`  | `src/features/*` | `import { tree_data } from "@features/tasks/stores/tree"` |
+| `@pages/*`     | `src/pages/*`    | `import MainPage from "@pages/MainPage.svelte"`           |
+| `@stores/*`    | `src/stores/*`   | `import { ui } from "@stores/ui"`                         |
+| `@app-types/*` | `src/types/*`    | `import type { TreeData } from "@app-types/app"`          |
 
 > **注意**: `@types/*` は npm の `@types/*` 名前空間と衝突するため使用しない。`@app-types/*` で代替。
 
@@ -200,20 +200,20 @@ import LocalComponent from "./LocalComponent.svelte";
 
 ### 5.1 ストア一覧
 
-| ストア | 配置 | 役割 |
-|--------|------|------|
-| `tree_data` | `@features/tasks/stores/tree` | タスクツリー本体 + Undo/Redo |
-| `column_settings` | `@features/tasks/stores/column_settings` | 列の幅・順序・可視性 |
-| `sort_state` | `@features/tasks/stores/sort` | ソート状態 |
-| `tag_index` / `active_tag` | `@features/memos/stores/tags` | タグインデックス・選択中タグ |
-| `ganttVisible` / `ganttScale` 等 | `@features/gantt/stores/gantt` | Gantt 表示設定 |
-| `workspace_store` 等 | `@features/workspace/stores/workspace` | ワークスペース管理（含 `deleteProject`） |
-| `project_ids` | `@features/projects/stores/project` | プロジェクト一覧 |
-| `filter` / `pageSearchQuery` | `@features/search/stores/search` | フィルター条件 / 画面内検索クエリ |
-| `pageSearchMatchCount` / `pageSearchCurrentIndex` | `@features/search/utils/page_search_highlighter` | 画面内検索の件数と現在位置（readable store） |
-| `selected_id` / `closed_node_ids` / `sidebarCollapsed` / `copied_task` 等 | `@stores/ui` | UI状態 |
-| `theme` | `@stores/theme` | テーマ |
-| `panelCoordinator` | `@stores/panel_coordinator` | ポップオーバー調停 |
+| ストア                                                                    | 配置                                             | 役割                                         |
+| ------------------------------------------------------------------------- | ------------------------------------------------ | -------------------------------------------- |
+| `tree_data`                                                               | `@features/tasks/stores/tree`                    | タスクツリー本体 + Undo/Redo                 |
+| `column_settings`                                                         | `@features/tasks/stores/column_settings`         | 列の幅・順序・可視性                         |
+| `sort_state`                                                              | `@features/tasks/stores/sort`                    | ソート状態                                   |
+| `tag_index` / `active_tag`                                                | `@features/memos/stores/tags`                    | タグインデックス・選択中タグ                 |
+| `ganttVisible` / `ganttScale` 等                                          | `@features/gantt/stores/gantt`                   | Gantt 表示設定                               |
+| `workspace_store` 等                                                      | `@features/workspace/stores/workspace`           | ワークスペース管理（含 `deleteProject`）     |
+| `project_ids`                                                             | `@features/projects/stores/project`              | プロジェクト一覧                             |
+| `filter` / `pageSearchQuery`                                              | `@features/search/stores/search`                 | フィルター条件 / 画面内検索クエリ            |
+| `pageSearchMatchCount` / `pageSearchCurrentIndex`                         | `@features/search/utils/page_search_highlighter` | 画面内検索の件数と現在位置（readable store） |
+| `selected_id` / `closed_node_ids` / `sidebarCollapsed` / `copied_task` 等 | `@stores/ui`                                     | UI状態                                       |
+| `theme`                                                                   | `@stores/theme`                                  | テーマ                                       |
+| `panelCoordinator`                                                        | `@stores/panel_coordinator`                      | ポップオーバー調停                           |
 
 ### 5.2 init_store()
 
@@ -226,47 +226,47 @@ import LocalComponent from "./LocalComponent.svelte";
 
 ### 6.1 npm scripts
 
-| コマンド | 内容 |
-|---------|------|
-| `npm run dev` | Vite 開発サーバー + Electron 起動 |
-| `npm run build` | Vite による production ビルド → `renderer/` |
-| `npm run start` | Electron 単体起動 |
-| `npm run check` | svelte-check による型・テンプレ検証 |
-| `npm run test:unit` | Vitest（`tests/unit/`） |
-| `npm run test:component` | Vitest（`tests/component/`） |
-| `npm run test:e2e` | Playwright |
-| `npm run dist` | electron-builder で実行ファイル生成 |
+| コマンド                 | 内容                                        |
+| ------------------------ | ------------------------------------------- |
+| `npm run dev`            | Vite 開発サーバー + Electron 起動           |
+| `npm run build`          | Vite による production ビルド → `renderer/` |
+| `npm run start`          | Electron 単体起動                           |
+| `npm run check`          | svelte-check による型・テンプレ検証         |
+| `npm run test:unit`      | Vitest（`tests/unit/`）                     |
+| `npm run test:component` | Vitest（`tests/component/`）                |
+| `npm run test:e2e`       | Playwright                                  |
+| `npm run dist`           | electron-builder で実行ファイル生成         |
 
 ### 6.2 検証結果（v1.1 完了時）
 
-| 項目 | 結果 |
-|------|------|
-| `npm run build` | ✅ 成功 |
-| `npm run check` | ✅ 159 files / 0 errors / 0 warnings |
-| `npm test` | ✅ 213 passed / 7 skipped / 0 failed (out of 220) |
+| 項目            | 結果                                              |
+| --------------- | ------------------------------------------------- |
+| `npm run build` | ✅ 成功                                           |
+| `npm run check` | ✅ 159 files / 0 errors / 0 warnings              |
+| `npm test`      | ✅ 213 passed / 7 skipped / 0 failed (out of 220) |
 
 ---
 
 ## 7. コンポーネント / ファイル対応表
 
-| 領域 | ファイル |
-|---------|---------|
-| メインウィンドウ | `src/App.svelte` + `src/pages/MainPage.svelte` |
-| タスク詳細ウィンドウ | `src/App.svelte` + `src/pages/TaskDetailPage.svelte` |
-| ヘッダ（含 画面内検索 + サイドバートグル + 保存状態 + テーマ切替） | `src/features/navigation/components/Header.svelte` |
-| 左サイドバー（永続表示） | `src/App.svelte` に直接配置 + `src/features/navigation/components/MenuList.svelte` |
-| サイドバー Workspace / Projects / Info / Tags 各セクション | `MenuList.svelte` 内の `.Section` + `.Contents` パターン |
-| プロジェクトエリア | `src/pages/MainPage.svelte` |
-| ツリーペイン | `src/features/tasks/components/TreeTable.svelte` + `TreeTableHeader.svelte` + `TreeTableRow.svelte` |
-| ガントペイン | `src/features/gantt/components/GanttPanel.svelte` |
-| 右ペイン（Task Detail + Memo） | `src/features/tasks/components/TaskDetail.svelte` |
-| メモパネル | `src/features/memos/components/MemoTab.svelte` |
-| メモエディタ | `src/features/memos/components/Memo.svelte` → `MarkdownMemo.svelte` / `QuillMemo.svelte` |
-| ダイアログ | `@lib/primitives/Dialog.svelte` を使用した個別実装（タスク削除、プロジェクト削除、ワークスペースプロジェクト削除、ルート兄弟挿入のアラートなど） |
-| ページ内ハイライト検索 | `Header.svelte` の検索ボックス + `@features/search/utils/page_search_highlighter.ts` |
-| 列ヘッダのフィルタ / 列設定ポップオーバー | `TreeTableHeader.svelte` + `@features/search/components/*FilterPanel.svelte` |
-| ツリーの三点リーダメニュー | `TaskMenu.svelte` + `TaskName.svelte` |
-| ワークスペース管理ダイアログ | `WorkspaceSetup.svelte` + `MigrationWizard.svelte` |
+| 領域                                                               | ファイル                                                                                                                                         |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| メインウィンドウ                                                   | `src/App.svelte` + `src/pages/MainPage.svelte`                                                                                                   |
+| タスク詳細ウィンドウ                                               | `src/App.svelte` + `src/pages/TaskDetailPage.svelte`                                                                                             |
+| ヘッダ（含 画面内検索 + サイドバートグル + 保存状態 + テーマ切替） | `src/features/navigation/components/Header.svelte`                                                                                               |
+| 左サイドバー（永続表示）                                           | `src/App.svelte` に直接配置 + `src/features/navigation/components/MenuList.svelte`                                                               |
+| サイドバー Workspace / Projects / Info / Tags 各セクション         | `MenuList.svelte` 内の `.Section` + `.Contents` パターン                                                                                         |
+| プロジェクトエリア                                                 | `src/pages/MainPage.svelte`                                                                                                                      |
+| ツリーペイン                                                       | `src/features/tasks/components/TreeTable.svelte` + `TreeTableHeader.svelte` + `TreeTableRow.svelte`                                              |
+| ガントペイン                                                       | `src/features/gantt/components/GanttPanel.svelte`                                                                                                |
+| 右ペイン（Task Detail + Memo）                                     | `src/features/tasks/components/TaskDetail.svelte`                                                                                                |
+| メモパネル                                                         | `src/features/memos/components/MemoTab.svelte`                                                                                                   |
+| メモエディタ                                                       | `src/features/memos/components/Memo.svelte` → `MarkdownMemo.svelte` / `QuillMemo.svelte`                                                         |
+| ダイアログ                                                         | `@lib/primitives/Dialog.svelte` を使用した個別実装（タスク削除、プロジェクト削除、ワークスペースプロジェクト削除、ルート兄弟挿入のアラートなど） |
+| ページ内ハイライト検索                                             | `Header.svelte` の検索ボックス + `@features/search/utils/page_search_highlighter.ts`                                                             |
+| 列ヘッダのフィルタ / 列設定ポップオーバー                          | `TreeTableHeader.svelte` + `@features/search/components/*FilterPanel.svelte`                                                                     |
+| ツリーの三点リーダメニュー                                         | `TaskMenu.svelte` + `TaskName.svelte`                                                                                                            |
+| ワークスペース管理ダイアログ                                       | `WorkspaceSetup.svelte` + `MigrationWizard.svelte`                                                                                               |
 
 > `src/lib/primitives/Drawer.svelte` は現在は未使用（旧 Drawer 形式の左ナビ用）。互換のためファイルは残置するが、本アプリの画面構成では使用しない。
 
@@ -419,23 +419,23 @@ import LocalComponent from "./LocalComponent.svelte";
 
 #### 検証
 
-| 項目 | 結果 |
-|------|------|
-| `npm run check` | ✅ 159 files / 0 errors / 0 warnings |
-| `npm test` | ✅ 213 passed / 7 skipped / 0 failed（v1.1 で 54 件の新規テストを追加）|
-| `npm run build` | ✅ 成功 |
+| 項目            | 結果                                                                    |
+| --------------- | ----------------------------------------------------------------------- |
+| `npm run check` | ✅ 159 files / 0 errors / 0 warnings                                    |
+| `npm test`      | ✅ 213 passed / 7 skipped / 0 failed（v1.1 で 54 件の新規テストを追加） |
+| `npm run build` | ✅ 成功                                                                 |
 
 #### 追加した新規テストファイル
 
-| ファイル | 対象 |
-|---------|------|
-| `tests/unit/globalDismiss.test.js` | `lib/actions` の `globalDismiss` action |
+| ファイル                                     | 対象                                                  |
+| -------------------------------------------- | ----------------------------------------------------- |
+| `tests/unit/globalDismiss.test.js`           | `lib/actions` の `globalDismiss` action               |
 | `tests/unit/page_search_highlighter.test.js` | CSS Custom Highlight API ベースのページ内検索エンジン |
-| `tests/unit/sidebarCollapsed.test.js` | サイドバー折りたたみストアの初期値と挙動 |
-| `tests/unit/tooltip.test.js` | tooltip action の update / destroy / 残存防止 |
-| `tests/component/Card.test.js` | `Card` プリミティブの `title` / `padded` プロパティ |
-| `tests/component/StatusSelect.test.js` | 自前ドロップダウンの開閉・選択・色非伝搬 |
-| `tests/component/Header.test.js` | 画面内検索 UI とサイドバートグル |
+| `tests/unit/sidebarCollapsed.test.js`        | サイドバー折りたたみストアの初期値と挙動              |
+| `tests/unit/tooltip.test.js`                 | tooltip action の update / destroy / 残存防止         |
+| `tests/component/Card.test.js`               | `Card` プリミティブの `title` / `padded` プロパティ   |
+| `tests/component/StatusSelect.test.js`       | 自前ドロップダウンの開閉・選択・色非伝搬              |
+| `tests/component/Header.test.js`             | 画面内検索 UI とサイドバートグル                      |
 
 `tests/component/SplitPanes.test.js` には snap-collapse / re-expand / wide-resizer のテストを追加。
 `tests/component/TaskName.test.js` には三点リーダの再クリック閉と disabled ボタンクリックでの dismiss のテストを追加。
@@ -460,14 +460,14 @@ import LocalComponent from "./LocalComponent.svelte";
 
 #### 数値
 
-| 観点 | 変更前 | 変更後 |
-|------|--------|--------|
-| `src/components/` のファイル数 | 37 | 0（全移動済み） |
-| `src/common/` のファイル数 | 6 | 0（全移動済み） |
-| `src/stores/` のファイル数 | 12 | 4（ui/theme/panel_coordinator/index） |
-| ディレクトリ階層 | 1 段（flat） | 3〜4 段（layer + domain） |
-| svelte-check エラー | (測定なし) | 0 |
-| テスト件数 | 165 | 165（全 pass 維持） |
+| 観点                           | 変更前       | 変更後                                |
+| ------------------------------ | ------------ | ------------------------------------- |
+| `src/components/` のファイル数 | 37           | 0（全移動済み）                       |
+| `src/common/` のファイル数     | 6            | 0（全移動済み）                       |
+| `src/stores/` のファイル数     | 12           | 4（ui/theme/panel_coordinator/index） |
+| ディレクトリ階層               | 1 段（flat） | 3〜4 段（layer + domain）             |
+| svelte-check エラー            | (測定なし)   | 0                                     |
+| テスト件数                     | 165          | 165（全 pass 維持）                   |
 
 ---
 
@@ -484,7 +484,7 @@ import LocalComponent from "./LocalComponent.svelte";
 
 **改版履歴**
 
-| 版 | 日付 | 内容 |
-|---|------|------|
+| 版  | 日付       | 内容                                  |
+| --- | ---------- | ------------------------------------- |
 | 1.0 | 2026-05-13 | 初版 — リファクタリング v1.0 完了時点 |
-| 1.1 | 2026-05-15 | UX 全面リフレッシュ完了時点 |
+| 1.1 | 2026-05-15 | UX 全面リフレッシュ完了時点           |

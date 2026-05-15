@@ -139,7 +139,8 @@ function scanForMatches(query: string): Range[] {
   if (!root) return matches;
 
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-    acceptNode: (node) => (shouldSkipNode(node) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+    acceptNode: (node) =>
+      shouldSkipNode(node) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
   } as NodeFilter);
 
   let textNode = walker.nextNode() as Text | null;

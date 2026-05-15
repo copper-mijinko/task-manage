@@ -42,15 +42,11 @@ function newAnchor() {
 }
 
 function fireMouseEnter(el) {
-  el.dispatchEvent(
-    new MouseEvent("mouseenter", { bubbles: true, clientX: 0, clientY: 0 })
-  );
+  el.dispatchEvent(new MouseEvent("mouseenter", { bubbles: true, clientX: 0, clientY: 0 }));
 }
 
 function fireMouseLeave(el) {
-  el.dispatchEvent(
-    new MouseEvent("mouseleave", { bubbles: true, clientX: 0, clientY: 0 })
-  );
+  el.dispatchEvent(new MouseEvent("mouseleave", { bubbles: true, clientX: 0, clientY: 0 }));
 }
 
 function visibleTooltip() {

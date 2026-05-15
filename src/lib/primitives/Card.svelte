@@ -43,7 +43,11 @@
     flex-shrink: 0;
     padding: var(--sp2) var(--sp4);
     border-bottom: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 20%, transparent);
-    background-color: color-mix(in srgb, var(--theme-color-Primary-main) 12%, var(--theme-color-Main-main));
+    background-color: color-mix(
+      in srgb,
+      var(--theme-color-Primary-main) 12%,
+      var(--theme-color-Main-main)
+    );
   }
   .CardHeaderTitle {
     flex: 1 1 auto;

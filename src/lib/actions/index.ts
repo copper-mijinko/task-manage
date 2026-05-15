@@ -186,8 +186,7 @@ export function tooltip(
       // user doesn't see stale content (e.g. the close button still saying
       // "open" after the sidebar opened).
       if (entry) {
-        entry.element.textContent =
-          current.content ?? node.textContent ?? node.value ?? "";
+        entry.element.textContent = current.content ?? node.textContent ?? node.value ?? "";
         entry.element.style.color = getFg();
         entry.element.style.backgroundColor = getBg();
         if (isDisabled()) removeOwn();

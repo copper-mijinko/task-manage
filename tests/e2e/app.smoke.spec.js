@@ -120,9 +120,7 @@ test("focuses the page-search input with Ctrl+F and clears it on Escape", async 
       );
     });
 
-    const pageSearchInput = app.window.locator(
-      'input[placeholder="画面内をハイライト検索…"]'
-    );
+    const pageSearchInput = app.window.locator('input[placeholder="画面内をハイライト検索…"]');
     await expect(pageSearchInput).toBeVisible();
     await expect(pageSearchInput).toBeFocused();
 

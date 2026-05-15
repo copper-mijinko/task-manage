@@ -225,8 +225,7 @@
         // neighbouring pane is collapsed, so the user sees a clear handle
         // for re-opening the hidden pane.
         const eitherCollapsed =
-          pane.classList.contains("PaneCollapsed") ||
-          pane_r.classList.contains("PaneCollapsed");
+          pane.classList.contains("PaneCollapsed") || pane_r.classList.contains("PaneCollapsed");
         resizer.classList.toggle("HasCollapsedNeighbour", eitherCollapsed);
       }
 

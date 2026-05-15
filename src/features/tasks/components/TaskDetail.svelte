@@ -233,14 +233,18 @@
 
             <div class="detail-field">
               <span class="detail-label" id="lbl-memo-count">Memo 数</span>
-              <output class="detail-readonly" aria-labelledby="lbl-memo-count" aria-label="Memo count"
-                >{memo.length}</output>
+              <output
+                class="detail-readonly"
+                aria-labelledby="lbl-memo-count"
+                aria-label="Memo count">{memo.length}</output
+              >
             </div>
 
             <div class="detail-field">
               <span class="detail-label" id="lbl-memo-type">Memo Type</span>
               <output class="detail-badge" aria-labelledby="lbl-memo-type" aria-label="Memo type"
-                >{memoType}</output>
+                >{memoType}</output
+              >
             </div>
           </div>
         </Card>

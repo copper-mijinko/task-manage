@@ -20,10 +20,7 @@
     // Ignore mousedowns on a three-dot trigger button. The button's own click
     // handler is responsible for toggling its menu, so if we closed here the
     // subsequent click would just re-open it (a "won't ever close" loop).
-    if (
-      event.target instanceof Element &&
-      event.target.closest("[data-task-menu-trigger]")
-    ) {
+    if (event.target instanceof Element && event.target.closest("[data-task-menu-trigger]")) {
       return;
     }
     dispatch("close");

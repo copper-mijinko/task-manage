@@ -880,10 +880,7 @@
         {/each}
         <!-- Today line + 1-day highlight in header -->
         {#if todayRem >= 0 && todayRem <= totalWidthRem}
-          <div
-            class="TodayDayHeader"
-            style="left:{todayRem}rem; width:{remPerDay}rem;"
-          ></div>
+          <div class="TodayDayHeader" style="left:{todayRem}rem; width:{remPerDay}rem;"></div>
           <div class="TodayLine" style="left:{todayRem}rem;"></div>
         {/if}
       </div>
@@ -910,10 +907,7 @@
       {/each}
       <!-- Today 1-day cell + line in body -->
       {#if todayRem >= 0 && todayRem <= totalWidthRem}
-        <div
-          class="TodayDayBody"
-          style="left:{todayRem}rem; width:{remPerDay}rem;"
-        ></div>
+        <div class="TodayDayBody" style="left:{todayRem}rem; width:{remPerDay}rem;"></div>
         <div class="TodayLineFull" style="left:{todayRem}rem;"></div>
       {/if}
       {#each rows as row (row.id)}
@@ -950,11 +944,7 @@
                 : bar.isStartOnly
                   ? "開始日を変更"
                   : "期間を移動"}
-              title={bar.isDue
-                ? "期限日を変更"
-                : bar.isStartOnly
-                  ? "開始日を変更"
-                  : "期間を移動"}
+              title={bar.isDue ? "期限日を変更" : bar.isStartOnly ? "開始日を変更" : "期間を移動"}
               disabled={bar.isInherited}
               on:pointerdown={(event) =>
                 startDrag(event, row, bar.isStartOnly ? "start" : "move", bar)}

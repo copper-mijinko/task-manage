@@ -234,9 +234,7 @@ export function wsCreateProject(
   );
 }
 
-export function wsDeleteProject(
-  projectDir: string
-): Promise<{ success: boolean; error?: string }> {
+export function wsDeleteProject(projectDir: string): Promise<{ success: boolean; error?: string }> {
   return (
     api()?.wsDeleteProject?.(projectDir) ??
     Promise.resolve({ success: false, error: "API unavailable" })

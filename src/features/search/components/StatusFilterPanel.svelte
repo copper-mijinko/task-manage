@@ -39,9 +39,7 @@
   }
 
   function toggle(opt: string) {
-    const next = selected.includes(opt)
-      ? selected.filter((s) => s !== opt)
-      : [...selected, opt];
+    const next = selected.includes(opt) ? selected.filter((s) => s !== opt) : [...selected, opt];
     dispatch("change", { selected: next });
   }
 
@@ -76,11 +74,7 @@
   <div class="PanelBody">
     {#each options as opt}
       <label class="OptionRow">
-        <input
-          type="checkbox"
-          checked={selected.includes(opt)}
-          on:change={() => toggle(opt)}
-        />
+        <input type="checkbox" checked={selected.includes(opt)} on:change={() => toggle(opt)} />
         <span class="StatusDot" style="--dot: {STATUS_DOT_COLOR[opt] ?? '#888'};"></span>
         <span class="OptionLabel">{opt}</span>
       </label>

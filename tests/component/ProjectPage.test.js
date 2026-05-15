@@ -24,13 +24,7 @@ vi.mock("@features/gantt/components/GanttPanel.svelte", async () => {
 });
 
 import ProjectPage from "@pages/MainPage.svelte";
-import {
-  closed_node_ids,
-  ganttVisible,
-  selected_id,
-  table_selected_id,
-  tree_data,
-} from "@stores";
+import { closed_node_ids, ganttVisible, selected_id, table_selected_id, tree_data } from "@stores";
 
 function createProjectData() {
   return {

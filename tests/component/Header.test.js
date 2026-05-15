@@ -35,9 +35,7 @@ beforeEach(() => {
 describe("Header", () => {
   test("renders the page-search input with the highlight placeholder", () => {
     render(Header);
-    expect(
-      screen.getByPlaceholderText("画面内をハイライト検索…")
-    ).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("画面内をハイライト検索…")).toBeInTheDocument();
   });
 
   test("typing into the search input feeds pageSearchQuery", async () => {

@@ -43,12 +43,7 @@
 
   function handleWindowClick(e) {
     if (!open) return;
-    if (
-      containerEl &&
-      !containerEl.contains(e.target) &&
-      popupEl &&
-      !popupEl.contains(e.target)
-    ) {
+    if (containerEl && !containerEl.contains(e.target) && popupEl && !popupEl.contains(e.target)) {
       open = false;
     }
   }
@@ -77,12 +72,7 @@
 
 <svelte:window on:click={handleWindowClick} on:keydown={handleKey} />
 
-<span
-  class="s-chip"
-  data-status={status}
-  style={style}
-  bind:this={containerEl}
->
+<span class="s-chip" data-status={status} {style} bind:this={containerEl}>
   <button
     type="button"
     class="s-button"
@@ -96,8 +86,14 @@
     <span class="s-dot" style="--dot-color: {color_map[status]};"></span>
     <span class="s-label">{status}</span>
     <svg class="s-caret" viewBox="0 0 12 12" aria-hidden="true">
-      <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" fill="none"
-        stroke-linecap="round" stroke-linejoin="round" />
+      <path
+        d="M3 4.5L6 7.5L9 4.5"
+        stroke="currentColor"
+        stroke-width="1.5"
+        fill="none"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
     </svg>
   </button>
 </span>
@@ -121,12 +117,19 @@
           class:selected={opt === status}
           on:click={() => select(opt)}
         >
-          <span class="s-dot s-dot-static" style="--dot-color: {color_map[opt]};" data-status={opt}></span>
+          <span class="s-dot s-dot-static" style="--dot-color: {color_map[opt]};" data-status={opt}
+          ></span>
           <span class="s-option-label">{opt}</span>
           {#if opt === status}
             <svg class="s-check" viewBox="0 0 16 16" aria-hidden="true">
-              <path d="M3 8.5L6.5 12L13 5" stroke="currentColor" stroke-width="2" fill="none"
-                stroke-linecap="round" stroke-linejoin="round" />
+              <path
+                d="M3 8.5L6.5 12L13 5"
+                stroke="currentColor"
+                stroke-width="2"
+                fill="none"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
             </svg>
           {/if}
         </button>
