@@ -1,7 +1,7 @@
-import { get } from "svelte/store";
+﻿import { get } from "svelte/store";
 import { vi } from "vitest";
-import { saveStatus, selected_id, selected_type } from "../../src/stores/ui.ts";
-import { tree_data } from "../../src/stores/tree.ts";
+import { saveStatus, selected_id, selected_type } from "@stores/ui";
+import { tree_data } from "@features/tasks/stores/tree";
 
 function makeElectronAPI(overrides = {}) {
   return {

@@ -1,8 +1,8 @@
-import { get } from "svelte/store";
+﻿import { get } from "svelte/store";
 import { describe, expect, test } from "vitest";
 
-import { filtered_data, filter } from "../../src/stores/search.ts";
-import { tree_data } from "../../src/stores/tree.ts";
+import { filtered_data, filter } from "@features/search/stores/search";
+import { tree_data } from "@features/tasks/stores/tree";
 
 function createProjectData() {
   return {

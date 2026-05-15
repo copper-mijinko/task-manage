@@ -1,7 +1,7 @@
-import { writable, type Writable } from "svelte/store";
-import { THEME_DARK, THEME_LIGHT } from "../common/theme";
-import type { ThemeName } from "../types/app";
-import * as platform from "../lib/platform";
+﻿import { writable, type Writable } from "svelte/store";
+import { THEME_DARK, THEME_LIGHT } from "@lib/utils/theme";
+import type { ThemeName } from "@app-types/app";
+import * as platform from "@lib/ipc/platform";
 
 type ThemePalette = {
   [key: string]: string | ThemePalette;

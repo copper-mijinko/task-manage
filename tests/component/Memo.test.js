@@ -1,4 +1,4 @@
-import { fireEvent, render, waitFor } from "@testing-library/svelte";
+﻿import { fireEvent, render, waitFor } from "@testing-library/svelte";
 import { tick } from "svelte";
 import { vi } from "vitest";
 
@@ -33,7 +33,7 @@ vi.mock("quill", () => {
   return { default: MockQuill };
 });
 
-import Memo from "../../src/components/Memo.svelte";
+import Memo from "@features/memos/components/Memo.svelte";
 
 function renderMarkdownMemo(props = {}) {
   return render(Memo, {

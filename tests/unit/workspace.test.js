@@ -15,6 +15,7 @@ import {
   saveMemoImage,
   resolveMemoAssetPath,
   deleteTaskDir,
+  deleteProject,
   listProjects,
   exportProjectData,
   legacyMemoContentToMarkdown,
@@ -226,6 +227,49 @@ describe("file system operations", () => {
     const projects = listProjects(tmpDir);
     expect(projects).toHaveLength(2);
     expect(projects.map((p) => p.name)).toEqual(expect.arrayContaining(["Alpha", "Beta"]));
+  });
+
+  it("deleteProject removes the project directory recursively", () => {
+    const { projectDir } = createProject(tmpDir, "Doomed", "doomed-id");
+    // Throw in a few nested files / dirs so we know it really walks the tree.
+    fs.mkdirSync(path.join(projectDir, "sub-task"), { recursive: true });
+    fs.writeFileSync(path.join(projectDir, "sub-task", "task.md"), "# nested");
+    fs.writeFileSync(path.join(projectDir, "extra.txt"), "leftover");
+    expect(fs.existsSync(projectDir)).toBe(true);
+
+    const result = deleteProject(projectDir);
+
+    expect(result.success).toBe(true);
+    expect(fs.existsSync(projectDir)).toBe(false);
+  });
+
+  it("deleteProject returns alreadyMissing=true when the directory is gone", () => {
+    const missing = path.join(tmpDir, "never-existed");
+    const result = deleteProject(missing);
+    expect(result.success).toBe(true);
+    expect(result.alreadyMissing).toBe(true);
+  });
+
+  it("deleteProject throws when projectDir is invalid", () => {
+    expect(() => deleteProject("")).toThrow(/Invalid projectDir/);
+    expect(() => deleteProject(null)).toThrow(/Invalid projectDir/);
+  });
+
+  it("deleteProject throws when target is not a directory", () => {
+    const filePath = path.join(tmpDir, "just-a-file.txt");
+    fs.writeFileSync(filePath, "hello");
+    expect(() => deleteProject(filePath)).toThrow(/not a directory/);
+  });
+
+  it("deleteProject leaves other projects in the same workspace alone", () => {
+    const { projectDir: keepDir } = createProject(tmpDir, "Keep", "keep-id");
+    const { projectDir: dropDir } = createProject(tmpDir, "Drop", "drop-id");
+
+    deleteProject(dropDir);
+
+    expect(fs.existsSync(dropDir)).toBe(false);
+    expect(fs.existsSync(keepDir)).toBe(true);
+    expect(listProjects(tmpDir).map((p) => p.name)).toEqual(["Keep"]);
   });
 
   it("readProject returns root task with empty parents", () => {

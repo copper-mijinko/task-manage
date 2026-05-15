@@ -1,23 +1,31 @@
-export * from "./theme";
-export * from "./tree";
-export * from "./gantt";
-export * from "./project";
-export * from "./search";
-export * from "./ui";
-export * from "./column_settings";
-export * from "./workspace";
-export * from "./tags";
-export * from "./sort";
+// Cross-cutting stores barrel
+// 機能横断的なストアのみを export。各 feature 固有のストアは
+// @features/<feature>/stores から直接 import すること。
 
-import { tree_data } from "./tree";
-import { project_ids } from "./project";
+export * from "./theme";
+export * from "./ui";
+export * from "./panel_coordinator";
+
+// Feature stores も互換性のため再エクスポート
+// 新規コードは @features/* から直接 import を推奨
+export * from "@features/tasks/stores/tree";
+export * from "@features/tasks/stores/column_settings";
+export * from "@features/tasks/stores/sort";
+export * from "@features/memos/stores/tags";
+export * from "@features/gantt/stores/gantt";
+export * from "@features/workspace/stores/workspace";
+export * from "@features/projects/stores/project";
+export * from "@features/search/stores/search";
+
+import { tree_data } from "@features/tasks/stores/tree";
+import { project_ids } from "@features/projects/stores/project";
 import { selected_id, closed_node_ids } from "./ui";
-import { filter } from "./search";
+import { filter } from "@features/search/stores/search";
 import { theme } from "./theme";
-import { column_settings } from "./column_settings";
-import { workspace_store } from "./workspace";
-import { active_tag } from "./tags";
-import { sort_state } from "./sort";
+import { column_settings } from "@features/tasks/stores/column_settings";
+import { workspace_store } from "@features/workspace/stores/workspace";
+import { active_tag } from "@features/memos/stores/tags";
+import { sort_state } from "@features/tasks/stores/sort";
 
 export function init_store() {
   tree_data.init();

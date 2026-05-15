@@ -1,3 +1,44 @@
+﻿/* ============================================================
+   Global tokens — spacing / shape / elevation / typography scale
+   These bridge the M3-aligned mock with the existing theme.ts color tokens.
+   ============================================================ */
+:root {
+  /* Spacing — 4pt grid */
+  --sp0: 0px;
+  --sp1: 4px;
+  --sp2: 8px;
+  --sp3: 12px;
+  --sp4: 16px;
+  --sp5: 20px;
+  --sp6: 24px;
+  --sp7: 32px;
+  --sp8: 48px;
+
+  /* Shape */
+  --shape-xs: 4px;
+  --shape-sm: 8px;
+  --shape-md: 12px;
+  --shape-lg: 16px;
+  --shape-pill: 100px;
+
+  /* Elevation */
+  --elevation-1: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.08);
+  --elevation-2: 0 2px 6px rgba(0, 0, 0, 0.15), 0 1px 4px rgba(0, 0, 0, 0.10);
+  --elevation-3: 0 4px 12px rgba(0, 0, 0, 0.20), 0 2px 6px rgba(0, 0, 0, 0.12);
+
+  /* Typography scale */
+  --font-display: 28px;
+  --font-headline: 24px;
+  --font-title-lg: 20px;
+  --font-title-md: 16px;
+  --font-title-sm: 14px;
+  --font-body-md: 14px;
+  --font-body-sm: 13px;
+  --font-label-lg: 14px;
+  --font-label-md: 12px;
+  --font-label-sm: 11px;
+}
+
 html,
 body {
   position: relative;
@@ -10,17 +51,18 @@ body {
 }
 
 body {
-  color: #333;
+  color: var(--theme-color-Sub-main, #262d32);
   margin: 0;
-  padding: 8px;
+  padding: 0;
   box-sizing: border-box;
   font-family:
     -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell,
     "Helvetica Neue", sans-serif;
+  font-size: var(--font-body-md);
 }
 
 a {
-  color: rgb(0, 100, 200);
+  color: var(--theme-color-Primary-main, #1976d2);
   text-decoration: none;
 }
 
@@ -29,7 +71,7 @@ a:hover {
 }
 
 a:visited {
-  color: rgb(0, 80, 160);
+  color: var(--theme-color-Primary-dark, #1565c0);
 }
 
 label {
@@ -42,32 +84,129 @@ select,
 textarea {
   font-family: inherit;
   font-size: inherit;
-  -webkit-padding: 0.4em 0;
-  padding: 0.4em;
-  margin: 0 0 0.5em 0;
   box-sizing: border-box;
-  border: 1px solid #ccc;
-  border-radius: 2px;
 }
 
 input:disabled {
-  color: #ccc;
+  color: color-mix(in srgb, var(--theme-color-Sub-main) 38%, transparent);
 }
 
-button {
-  color: #333;
-  background-color: #f4f4f4;
-  outline: none;
+/* Unified focus ring (M3-style 2px ring around focused interactive elements) */
+:focus-visible {
+  outline: 2px solid var(--theme-color-Primary-main);
+  outline-offset: 2px;
 }
 
-button:disabled {
-  color: #999;
+/* Shared PaneTitle (used by TaskTree / Task Detail / Memo pane headers) */
+.PaneTitle {
+  display: flex;
+  align-items: center;
+  min-height: 2rem;
+  padding: 0 var(--sp3);
+  border-left: 3px solid var(--theme-color-Primary-main);
+
+  color: var(--theme-color-Sub-main);
+  background-color: color-mix(in srgb, var(--theme-color-Sub-dark) 10%, transparent);
+  font-size: var(--font-title-md);
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0;
+  flex: 0 0 auto;
 }
 
-button:not(:disabled):active {
-  background-color: #ddd;
+/* ============================================================
+   CSS-only motion: keep all UI animation in CSS rather than driving
+   from Svelte. These keyframes are picked up by buttons, ripples,
+   menus, modals, and toggle controls without re-rendering Svelte.
+   ============================================================ */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes slideInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes pulseAttention {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--theme-color-Primary-main) 50%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 8px color-mix(in srgb, var(--theme-color-Primary-main) 0%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--theme-color-Primary-main) 0%, transparent);
+  }
 }
 
-button:focus {
-  border-color: #666;
+/* Make all interactive controls feel responsive: a uniform short transition
+   for color / shadow / transform on buttons, links, and inputs. */
+button,
+a,
+input,
+select,
+textarea,
+summary,
+[role="button"],
+[role="option"],
+[role="menuitem"] {
+  transition:
+    background-color 0.14s ease,
+    color 0.14s ease,
+    border-color 0.14s ease,
+    box-shadow 0.18s ease,
+    transform 0.12s ease;
+}
+
+button:not(:disabled):active,
+[role="button"]:not([aria-disabled="true"]):active {
+  transform: translateY(1px);
+}
+
+/* Honor users that prefer reduced motion: kill all transitions/animations. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+/* ============================================================
+   Page-search highlights (CSS Custom Highlight API)
+   The header's search box scans every text node and pushes Range
+   objects into CSS.highlights under "page-search" (all matches)
+   and "page-search-current" (the active match). These selectors
+   apply visible styling to those ranges without touching the DOM,
+   so Quill, Markdown preview, the tree, etc. all light up.
+   ============================================================ */
+::highlight(page-search) {
+  background-color: color-mix(in srgb, #f5c518 55%, transparent);
+  color: inherit;
+}
+::highlight(page-search-current) {
+  background-color: color-mix(in srgb, #ff8a3d 80%, transparent);
+  color: #1f1f1f;
 }

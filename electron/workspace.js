@@ -511,6 +511,25 @@ function migrateProjectData(workspacePath, projectData) {
   return exportProjectData(workspacePath, projectData);
 }
 
+/**
+ * Recursively delete a workspace project directory.
+ * Returns { success: true } or throws on failure.
+ */
+function deleteProject(projectDir) {
+  if (!projectDir || typeof projectDir !== "string") {
+    throw new Error("Invalid projectDir");
+  }
+  if (!fs.existsSync(projectDir)) {
+    return { success: true, alreadyMissing: true };
+  }
+  const stat = fs.statSync(projectDir);
+  if (!stat.isDirectory()) {
+    throw new Error("projectDir is not a directory");
+  }
+  fs.rmSync(projectDir, { recursive: true, force: true });
+  return { success: true };
+}
+
 module.exports = {
   slugify,
   parseFrontmatter,
@@ -521,6 +540,7 @@ module.exports = {
   resolveMemoAssetPath,
   deleteTaskDir,
   createProject,
+  deleteProject,
   listProjects,
   wouldCreateCycle,
   bfsFromRoot,
