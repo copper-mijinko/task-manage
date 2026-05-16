@@ -256,39 +256,44 @@
       existingResizeObserver.disconnect(table_root);
     }
     /**
-     * Track the user-set widths of every non-last column. The LAST column
-     * stretches to fill any remaining horizontal space — this way:
-     *  - widening the pane fills the trailing gap (no white space)
-     *  - narrowing the pane leaves the user-resized columns alone (they
-     *    keep their pixel widths and the body scrolls when needed)
+     * The NAME column (index 0) absorbs pane resizes. Name is the only
+     * column guaranteed to exist (the others can be hidden via column
+     * settings) and typically holds the longest content, so making it
+     * the flexible one is both safe and matches users' expectations:
+     *  - widening the pane fills the trailing gap into Name
+     *  - narrowing the pane shrinks Name down to its CSS min-width; the
+     *    other user-resized columns keep their pixel widths and the
+     *    body scrolls when needed
      *  - collapse/expand cycles don't drift column widths because we
-     *    always recompute the last column from a stable formula instead
-     *    of accumulating deltas.
+     *    always recompute Name from a stable formula instead of
+     *    accumulating deltas.
      */
-    function fitLastColumn() {
+    function fitNameColumn() {
       if (domHeaders.length === 0) return;
-      const lastIdx = domHeaders.length - 1;
       const tableWidth = table_root.getBoundingClientRect().width;
       const widths = domHeaders.map((h) => h.getBoundingClientRect().width);
-      const fixedTotal = widths.slice(0, lastIdx).reduce((s, w) => s + w, 0);
-      const lastMin = parseFloat(window.getComputedStyle(domHeaders[lastIdx]).minWidth) || 0;
-      const lastWidth = Math.max(lastMin, tableWidth - fixedTotal);
+      const fixedTotal = widths.slice(1).reduce((s, w) => s + w, 0);
+      const nameMin = parseFloat(window.getComputedStyle(domHeaders[0]).minWidth) || 0;
+      const nameWidth = Math.max(nameMin, tableWidth - fixedTotal);
 
-      domHeaders[lastIdx].style.width = `${lastWidth}px`;
+      domHeaders[0].style.width = `${nameWidth}px`;
       data_rows.forEach((data_row) => {
-        const cell = data_row[lastIdx];
-        if (cell) cell.style.width = `${lastWidth}px`;
+        const cell = data_row[0];
+        if (cell) cell.style.width = `${nameWidth}px`;
       });
-      let left = 0;
-      for (let i = 0; i < lastIdx; i++) {
-        left += widths[i];
-        if (existingResizers[i]) existingResizers[i].style.left = `${left - 3}px`;
-      }
+      // Every resizer sits between two columns; since column 0 changed,
+      // ALL resizer left positions shift by the delta. Re-place them
+      // using the new Name width followed by each fixed downstream width.
+      let left = nameWidth;
+      existingResizers.forEach((resizer, idx) => {
+        resizer.style.left = `${left - 3}px`;
+        left += widths[idx + 1] ?? 0;
+      });
     }
 
     const newResizeObserver = new ResizeObserver(() => {
       syncResizerBounds(existingResizers);
-      fitLastColumn();
+      fitNameColumn();
     });
     newResizeObserver.observe(table_root);
 
