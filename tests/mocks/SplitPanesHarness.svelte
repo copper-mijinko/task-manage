@@ -9,7 +9,7 @@
   <SplitPanes {defaultRatio}>
     <!-- min-width in px (not rem) so jsdom's getComputedStyle returns a
          pixel value the resizer can parseFloat() correctly. -->
-    <Pane style="height: 100%; min-width: 64px;">left</Pane>
-    <Pane style="height: 100%; min-width: 64px;">right</Pane>
+    <Pane style="height: 100%; min-width: 128px;">left</Pane>
+    <Pane style="height: 100%; min-width: 128px;">right</Pane>
   </SplitPanes>
 </div>

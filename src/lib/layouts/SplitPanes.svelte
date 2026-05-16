@@ -114,26 +114,41 @@
     return nextResizers;
   };
 
+  const MINI_PANE_SIZE = 64;
   const observeRootResize = (panes) => {
     resize_observer?.disconnect();
     if (typeof ResizeObserver === "undefined") {
       return;
     }
     resize_observer = new ResizeObserver((entries) => {
-      // Primary-size setting
-      let root_size = 0;
-      panes.forEach((pane) => {
-        root_size += pane.getBoundingClientRect()[primaryDimension];
-      });
-      if (root_size === 0) {
+      // Primary-size setting. Mini panes must keep their fixed MINI_PANE_SIZE
+      // — only non-mini panes share the remaining space proportionally,
+      // otherwise the placeholder Card would visibly shrink/grow with the
+      // container.
+      const mini_total = panes.reduce(
+        (sum, pane) => sum + (pane.classList.contains("PaneMini") ? MINI_PANE_SIZE : 0),
+        0
+      );
+      const non_mini_size = panes.reduce(
+        (sum, pane) =>
+          sum + (pane.classList.contains("PaneMini")
+            ? 0
+            : pane.getBoundingClientRect()[primaryDimension]),
+        0
+      );
+      const new_root_size = entries[0].contentRect[primaryDimension];
+      const non_mini_target = Math.max(0, new_root_size - mini_total);
+      if (non_mini_size === 0 && non_mini_target === 0) {
         return;
       }
-      let new_root_size = entries[0].contentRect[primaryDimension];
-      let new_pane_sizes = [];
-      panes.forEach((pane) => {
-        new_pane_sizes.push(
-          (pane.getBoundingClientRect()[primaryDimension] * new_root_size) / root_size
-        );
+      const new_pane_sizes = panes.map((pane) => {
+        if (pane.classList.contains("PaneMini")) {
+          return MINI_PANE_SIZE;
+        }
+        if (non_mini_size === 0) {
+          return non_mini_target / Math.max(1, panes.length - mini_total / MINI_PANE_SIZE);
+        }
+        return (pane.getBoundingClientRect()[primaryDimension] * non_mini_target) / non_mini_size;
       });
       panes.forEach((pane, index) => {
         pane.style[primaryDimension] = `${new_pane_sizes[index]}px`;
@@ -177,6 +192,11 @@
         let cssText = document.body.style.cssText;
         document.body.style.cssText = cssText + `cursor: ${primaryCursor} !important;`;
 
+        // Cancel any in-flight snap transition so the resizer tracks the cursor
+        // immediately without a lag from the previous mouseup animation.
+        pane.classList.remove("PaneSnapping");
+        pane_r.classList.remove("PaneSnapping");
+
         // Add HandlingResizer class
         resizer.classList.add("HandlingResizer");
 
@@ -199,34 +219,61 @@
         document.addEventListener("mouseup", mouseUpHandler);
       };
 
-      // Snap-to-collapse threshold. Per UX feedback the snap should only
-      // apply when the mouse is RELEASED below the threshold — during drag
-      // the user must be free to move past it without the pane sticking.
-      const closeThreshold = min_w * 0.6;
-      const closeThresholdR = min_wr * 0.6;
+      // Snap-to-mini: fixed pixel thresholds give a consistent feel across
+      // panes with different min sizes. Mini snap is only enabled when the
+      // pane's min size exceeds the threshold — otherwise the pane can
+      // naturally sit below the snap target and the deadzone disappears.
+      // Snap only applies on mouseup; during drag the user is free to
+      // move past the threshold without the pane sticking.
+      const SNAP_THRESHOLD = 80;
+      const enableMini = min_w > SNAP_THRESHOLD;
+      const enableMiniR = min_wr > SNAP_THRESHOLD;
 
-      // Helper: apply a (potentially zero) size to a pane, overriding the
-      // CSS min-width / min-height when the pane is being collapsed so the
-      // visual content actually disappears.
+      // Helper: apply a size to a pane.
+      // When mini=true the pane snaps to MINI_PANE_SIZE: its real content is
+      // hidden via inline style and a blank Card placeholder is injected.
+      // When mini=false (default, used during drag) real content is visible.
       const minPropertyKey = isVertical ? "minHeight" : "minWidth";
-      function applyPaneSize(p, sizeVal) {
+      function applyPaneSize(p, sizeVal, mini = false) {
+        // Safety: in mini mode the size is always MINI_PANE_SIZE — this
+        // protects against any caller (or stale ResizeObserver re-entry)
+        // accidentally passing the raw drag value instead.
+        if (mini) {
+          sizeVal = MINI_PANE_SIZE;
+        }
         p.style[primaryDimension] = `${sizeVal}px`;
-        if (sizeVal === 0) {
-          // Inline `min-*: 0` wins over the stylesheet-level `min-width: 10rem`
-          // declarations that pane consumers set. Without this, dragging to
-          // the edge would snap the resizer but the pane body stayed visible.
+        // Use :scope > to find ONLY the direct-child placeholder. Without
+        // this, nested SplitPanes would interfere: querying the outer pane
+        // would find the inner pane's placeholder and incorrectly skip
+        // creating its own (or wrongly delete the inner one on un-mini).
+        const directPlaceholder = p.querySelector(":scope > .PaneMiniPlaceholder");
+        if (mini) {
+          // Override CSS min-* so the pane can shrink below its declared minimum.
+          // Keep the pane's natural padding so the placeholder Card sits
+          // inside with the same breathing room a real Card would have.
           p.style[minPropertyKey] = "0px";
-          p.classList.add("PaneCollapsed");
+          p.classList.add("PaneMini");
+          if (!directPlaceholder) {
+            const placeholder = document.createElement("div");
+            placeholder.classList.add("PaneMiniPlaceholder");
+            p.appendChild(placeholder);
+          }
+          // Hide real children via inline style (CSS :global selectors can't
+          // reach grandchildren of SplitPaneRoot reliably).
+          for (const child of p.children) {
+            if (!child.classList.contains("PaneMiniPlaceholder")) {
+              child.style.display = "none";
+            }
+          }
         } else {
           p.style[minPropertyKey] = "";
-          p.classList.remove("PaneCollapsed");
+          p.classList.remove("PaneMini");
+          if (directPlaceholder) directPlaceholder.remove();
+          // Restore real children.
+          for (const child of p.children) {
+            child.style.display = "";
+          }
         }
-        // Toggle the wide-hit-area indicator on the resizer whenever either
-        // neighbouring pane is collapsed, so the user sees a clear handle
-        // for re-opening the hidden pane.
-        const eitherCollapsed =
-          pane.classList.contains("PaneCollapsed") || pane_r.classList.contains("PaneCollapsed");
-        resizer.classList.toggle("HasCollapsedNeighbour", eitherCollapsed);
       }
 
       // Track the pointer's raw desired size for each pane during a drag.
@@ -260,9 +307,9 @@
         resizer.style[isVertical ? "top" : "left"] = `${resizerOffset + (rawSize - size)}px`;
       };
 
-      // On mouseup: if the pointer ended below the snap threshold, collapse
-      // that pane to 0; otherwise clamp it to its declared min size so the
-      // configured minimum is still enforced as a resting state.
+      // On mouseup: if the pointer ended below the snap threshold, snap to
+      // MINI_PANE_SIZE and show the placeholder Card; otherwise clamp to the
+      // declared min size so the configured minimum is still enforced.
       const mouseUpHandler = function () {
         document.body.style.cursor = "";
         resizer.classList.remove("HandlingResizer");
@@ -271,25 +318,39 @@
 
         let finalSize = lastDesiredSize;
         let finalSizeR = lastDesiredSizeR;
+        let leftMini = false;
+        let rightMini = false;
 
-        if (finalSize < closeThreshold) {
-          finalSize = 0;
-          finalSizeR = size + sizeR;
+        if (enableMini && finalSize < SNAP_THRESHOLD) {
+          finalSize = MINI_PANE_SIZE;
+          finalSizeR = size + sizeR - MINI_PANE_SIZE;
+          leftMini = true;
         } else if (finalSize < min_w) {
           finalSize = min_w;
           finalSizeR = size + sizeR - min_w;
         }
-        if (finalSizeR < closeThresholdR) {
-          finalSizeR = 0;
-          finalSize = size + sizeR;
+        if (enableMiniR && finalSizeR < SNAP_THRESHOLD) {
+          finalSizeR = MINI_PANE_SIZE;
+          finalSize = size + sizeR - MINI_PANE_SIZE;
+          rightMini = true;
         } else if (finalSizeR < min_wr) {
           finalSizeR = min_wr;
           finalSize = size + sizeR - min_wr;
         }
 
-        applyPaneSize(pane, finalSize);
-        applyPaneSize(pane_r, finalSizeR);
+        // Enable snap transition for this release only, then remove it so
+        // subsequent drag moves are not slowed down.
+        pane.classList.add("PaneSnapping");
+        pane_r.classList.add("PaneSnapping");
+
+        applyPaneSize(pane, finalSize, leftMini);
+        applyPaneSize(pane_r, finalSizeR, rightMini);
         resizer.style[isVertical ? "top" : "left"] = `${resizerOffset + (finalSize - size)}px`;
+
+        setTimeout(() => {
+          pane.classList.remove("PaneSnapping");
+          pane_r.classList.remove("PaneSnapping");
+        }, 180);
       };
 
       resizer.addEventListener("mousedown", mouseDownHandler);
@@ -346,32 +407,6 @@
     width: 100%;
     height: 5px;
     cursor: row-resize;
-  }
-  /* Wider hit area when an adjacent pane has been collapsed: makes it
-     obvious that there's a hidden pane there, and gives the user a much
-     bigger grab target for re-opening it. */
-  .SplitPaneRoot > :global(.Resizer.HasCollapsedNeighbour) {
-    width: 14px;
-  }
-  .SplitPaneRoot.Vertical > :global(.Resizer.HasCollapsedNeighbour) {
-    width: 100%;
-    height: 14px;
-  }
-  .SplitPaneRoot > :global(.Resizer.HasCollapsedNeighbour::before) {
-    width: 6px;
-    background-color: var(--theme-color-Primary-main);
-    opacity: 0.9;
-  }
-  .SplitPaneRoot.Vertical > :global(.Resizer.HasCollapsedNeighbour::before) {
-    width: 100%;
-    height: 6px;
-  }
-  /* Tiny chevron-like hint inside the wide resizer to point toward the
-     hidden pane. We rotate via a CSS variable assigned from JS. */
-  .SplitPaneRoot > :global(.Resizer.HasCollapsedNeighbour::after) {
-    color: var(--theme-color-Main-light);
-    background-image: none;
-    opacity: 1;
   }
   .SplitPaneRoot > :global(.Resizer::before) {
     content: "";
@@ -437,8 +472,39 @@
     top: 0;
     left: 0;
   }
-  /* A collapsed pane has 0 size — kill its overflow so nothing leaks. */
-  .SplitPaneRoot > :global(.Pane.PaneCollapsed) {
+  /* Mini pane: overflow hidden so nothing bleeds out, and force padding so
+     the placeholder Card has breathing room regardless of whether the pane's
+     original child was a Card (which would have applied padding via :has). */
+  .SplitPaneRoot > :global(.Pane.PaneMini) {
     overflow: hidden;
+    padding: var(--sp4);
+  }
+
+  /* Blank Card placeholder injected when a pane enters mini state.
+     Styled as a Card header bar — the entire strip gets the CardHeader
+     blue-tinted background so it reads as "a collapsed card".
+     PaneMiniPlaceholder is a grandchild of SplitPaneRoot, so we use a
+     descendant combinator (space) instead of > to reach it. */
+  .SplitPaneRoot :global(.PaneMiniPlaceholder) {
+    width: 100%;
+    height: 100%;
+    background-color: color-mix(
+      in srgb,
+      var(--theme-color-Primary-main) 12%,
+      var(--theme-color-Main-main)
+    );
+    border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 12%, transparent);
+    border-radius: var(--shape-sm);
+    box-shadow: var(--elevation-2);
+    box-sizing: border-box;
+  }
+
+  /* Snap transition — active only for the 180 ms after mouseup so the pane
+     glides to its resting position. Removed before the next drag starts. */
+  .SplitPaneRoot > :global(.Pane.PaneSnapping) {
+    transition: width 0.18s ease;
+  }
+  .SplitPaneRoot.Vertical > :global(.Pane.PaneSnapping) {
+    transition: height 0.18s ease;
   }
 </style>
