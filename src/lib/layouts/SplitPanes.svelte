@@ -131,7 +131,8 @@
       );
       const non_mini_size = panes.reduce(
         (sum, pane) =>
-          sum + (pane.classList.contains("PaneMini")
+          sum +
+          (pane.classList.contains("PaneMini")
             ? 0
             : pane.getBoundingClientRect()[primaryDimension]),
         0
