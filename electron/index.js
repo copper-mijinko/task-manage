@@ -545,7 +545,7 @@ app.on("ready", () => {
         }
       }
 
-      workspace.writeTask(projectDir, task, taskDirs);
+      await workspace.writeTaskAsync(projectDir, task, taskDirs);
       tasks.set(task.id, task);
       return { success: true };
     } catch (err) {
@@ -565,7 +565,7 @@ app.on("ready", () => {
           wsCache.set(projectDir, cached);
         }
 
-        const result = workspace.saveMemoImage(
+        const result = await workspace.saveMemoImageAsync(
           projectDir,
           cached.taskDirs,
           taskId,
@@ -621,7 +621,7 @@ app.on("ready", () => {
         return { success: false, error: "Cannot delete because this would orphan child tasks" };
       }
 
-      workspace.deleteTaskDir(projectDir, taskDirs, taskId);
+      await workspace.deleteTaskDirAsync(projectDir, taskDirs, taskId);
       tasks.delete(taskId);
       return { success: true };
     } catch (err) {
@@ -638,12 +638,12 @@ app.on("ready", () => {
       // Delete task dirs no longer in the new task list
       for (const id of [...taskDirs.keys()]) {
         if (!newTaskIds.has(id)) {
-          workspace.deleteTaskDir(projectDir, taskDirs, id);
+          await workspace.deleteTaskDirAsync(projectDir, taskDirs, id);
         }
       }
 
       for (const task of tasks) {
-        workspace.writeTask(projectDir, task, taskDirs);
+        await workspace.writeTaskAsync(projectDir, task, taskDirs);
       }
 
       // Invalidate cache so next read reflects the new state
@@ -666,7 +666,7 @@ app.on("ready", () => {
 
   ipcMain.handle("ws:create-project", async (event, { workspacePath, name, id }) => {
     try {
-      const result = workspace.createProject(workspacePath, name, id);
+      const result = await workspace.createProjectAsync(workspacePath, name, id);
       return { success: true, ...result };
     } catch (err) {
       log.error("ws:create-project error:", err.message);
@@ -676,7 +676,7 @@ app.on("ready", () => {
 
   ipcMain.handle("ws:delete-project", async (event, { projectDir }) => {
     try {
-      const result = workspace.deleteProject(projectDir);
+      const result = await workspace.deleteProjectAsync(projectDir);
       wsCache.delete(projectDir);
       return result;
     } catch (err) {

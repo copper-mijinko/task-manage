@@ -7,15 +7,22 @@ import {
   slugify,
   parseFrontmatter,
   stringifyFrontmatter,
+  atomicWriteFile,
+  retryFileOperation,
   wouldCreateCycle,
   bfsFromRoot,
   createProject,
+  createProjectAsync,
   readProject,
   writeTask,
+  writeTaskAsync,
   saveMemoImage,
+  saveMemoImageAsync,
   resolveMemoAssetPath,
   deleteTaskDir,
+  deleteTaskDirAsync,
   deleteProject,
+  deleteProjectAsync,
   listProjects,
   exportProjectData,
   legacyMemoContentToMarkdown,
@@ -531,6 +538,112 @@ describe("file system operations", () => {
     );
 
     expect(fileUrl).toBe(pathToFileURL(assetPath).toString());
+  });
+
+  it("atomicWriteFile replaces files without leaving temp files", async () => {
+    const target = path.join(tmpDir, "note.md");
+
+    await atomicWriteFile(target, "hello", "utf8");
+    await atomicWriteFile(target, "updated", "utf8");
+
+    expect(fs.readFileSync(target, "utf8")).toBe("updated");
+    expect(fs.readdirSync(tmpDir).filter((entry) => entry.includes(".tmp"))).toEqual([]);
+  });
+
+  it("retryFileOperation retries temporary OneDrive-style filesystem errors", async () => {
+    let attempts = 0;
+
+    const result = await retryFileOperation(
+      () => {
+        attempts += 1;
+        if (attempts < 2) {
+          const err = new Error("locked");
+          err.code = "EPERM";
+          throw err;
+        }
+        return "ok";
+      },
+      { attempts: 3, baseDelay: 1 }
+    );
+
+    expect(result).toBe("ok");
+    expect(attempts).toBe(2);
+  });
+
+  it("createProjectAsync writes the root file through the async save path", async () => {
+    const { projectDir } = await createProjectAsync(tmpDir, "Async Project", "async-root");
+    const { tasks } = readProject(projectDir);
+
+    expect(tasks.get("async-root").name).toBe("Async Project");
+    expect(fs.readdirSync(projectDir).filter((entry) => entry.includes(".tmp"))).toEqual([]);
+  });
+
+  it("writeTaskAsync + readProject round-trips a regular task", async () => {
+    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
+    const taskDirs = new Map([["root-id", "_project"]]);
+    const task = {
+      id: "task-async",
+      name: "Async Task",
+      status: "Open",
+      parents: ["root-id"],
+      memos: [{ id: "memo-async", title: "Notes", content: "Async content" }],
+      createdAt: "2026-04-24",
+    };
+
+    await writeTaskAsync(projectDir, task, taskDirs);
+
+    const { tasks } = readProject(projectDir);
+    expect(tasks.get("task-async").memos[0].content).toBe("Async content");
+    expect(
+      fs.readdirSync(path.join(projectDir, "task-async")).some((e) => e.includes(".tmp"))
+    ).toBe(false);
+  });
+
+  it("saveMemoImageAsync writes pasted images atomically", async () => {
+    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
+    const taskDirs = new Map([["root-id", "_project"]]);
+    const task = {
+      id: "task-async-assets",
+      name: "Assets",
+      status: "Open",
+      parents: ["root-id"],
+      memos: [],
+      createdAt: "2026-04-24",
+    };
+    writeTask(projectDir, task, taskDirs);
+
+    const result = await saveMemoImageAsync(
+      projectDir,
+      taskDirs,
+      "task-async-assets",
+      Uint8Array.from([137, 80, 78, 71]),
+      "image/png"
+    );
+
+    expect(result.relativePath).toMatch(/^\.\/assets\/pasted-.+\.png$/);
+    expect(fs.existsSync(result.assetPath)).toBe(true);
+  });
+
+  it("deleteTaskDirAsync and deleteProjectAsync remove directories", async () => {
+    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
+    const taskDirs = new Map([["root-id", "_project"]]);
+    const task = {
+      id: "task-del-async",
+      name: "Delete",
+      status: "Open",
+      parents: ["root-id"],
+      memos: [],
+      createdAt: "2026-04-24",
+    };
+    writeTask(projectDir, task, taskDirs);
+
+    await deleteTaskDirAsync(projectDir, taskDirs, "task-del-async");
+    expect(taskDirs.has("task-del-async")).toBe(false);
+    expect(fs.existsSync(path.join(projectDir, "task-del-async"))).toBe(false);
+
+    const result = await deleteProjectAsync(projectDir);
+    expect(result.success).toBe(true);
+    expect(fs.existsSync(projectDir)).toBe(false);
   });
 });
 
