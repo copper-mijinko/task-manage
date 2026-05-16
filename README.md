@@ -1,9 +1,11 @@
 # task-manage
 
-`task-manage` は、Electron と Svelte で作られたデスクトップ向けタスク管理アプリケーションです。  
+`task-manage` は、Electron と Svelte で作られたデスクトップ向けタスク管理アプリケーションです。
 プロジェクトごとにタスクをツリー構造で管理でき、各タスクに状態、期限日、メモを持たせられます。
 
 データはローカルの JSON ファイルに保存されるため、サーバーを前提とせずに動作します。
+
+技術文書は [docs/outline.md](docs/outline.md) を参照してください。
 
 ## 主な機能
 
@@ -22,8 +24,8 @@
 ## 技術構成
 
 - デスクトップ実行環境: Electron
-- UI: Svelte 3
-- ビルド: Rollup
+- UI: Svelte 5
+- ビルド: Vite
 - 言語: TypeScript と JavaScript の混在構成
 - ローカル保存: `@commonify/lowdb`
 - テスト: `Vitest`, `@testing-library/svelte`, `Playwright`
@@ -31,7 +33,7 @@
 ## 開発時によく使うコマンド
 
 - `npm run dev`
-  - 開発用ビルドと watch を実行する
+  - Vite dev server を起動し、Electron を自動起動する
 - `npm run build`
   - 配布用ビルドを作成する
 - `npm run check`
@@ -42,15 +44,3 @@
   - component テストを実行する
 - `npm run test:e2e`
   - E2E テストを実行する
-
-## Documents
-
-正式な仕様やテスト基盤の説明は `docs/` 配下にまとめています。  
-ここに置く文書は、今時点の実装を断面として説明するためのもので、課題の経緯や今後の改善メモは含めません。
-
-- [docs/specification.md](docs/specification.md)
-  - 現在のアプリ構成、画面、データ構造の仕様
-- [docs/testing.md](docs/testing.md)
-  - テスト基盤の考え方と実行方法
-- [docs/how-to-contribute.md](docs/how-to-contribute.md)
-  - 開発、CI、リリース workflow の運用手順と権限設計

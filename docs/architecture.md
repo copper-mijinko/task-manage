@@ -1,20 +1,11 @@
 # アーキテクチャ — Task Manage
 
-| 項目   | 内容                                         |
-| ------ | -------------------------------------------- |
-| 文書ID | TM-ARCH-001                                  |
-| 版数   | 1.2                                          |
-| 更新日 | 2026-05-16                                   |
-| 対象   | Electron 41 + Svelte 5 + TypeScript + Vite 8 |
-
----
+← [outline.md](outline.md)
 
 ## 1. 目的
 
 本文書は Task Manage デスクトップアプリのソースコード構造、ディレクトリ命名規約、import 規約、コンポーネント階層の設計指針を規定する。
 新規開発者・コードレビューア・保守担当者の参照基盤とする。
-
----
 
 ## 2. ソースコード階層
 
@@ -95,8 +86,6 @@ src/
 └── svelte.d.ts
 ```
 
----
-
 ## 3. レイヤー責務
 
 ### 3.1 `lib/`（再利用層）
@@ -148,8 +137,6 @@ src/
 - 複数 feature から参照される型を置く
 - feature 固有型は `features/<domain>/types.ts` でも可（必要時）
 
----
-
 ## 4. import 規約
 
 ### 4.1 パスエイリアス
@@ -194,8 +181,6 @@ import type { TreeData } from "@app-types/app";
 import LocalComponent from "./LocalComponent.svelte";
 ```
 
----
-
 ## 5. ストア構成
 
 ### 5.1 ストア一覧
@@ -220,8 +205,6 @@ import LocalComponent from "./LocalComponent.svelte";
 `src/stores/index.ts` の `init_store()` が起動時に全ストアを初期化する。
 追加ストアは原則ここに登録する。
 
----
-
 ## 6. ビルド・テスト・開発
 
 ### 6.1 npm scripts
@@ -237,15 +220,13 @@ import LocalComponent from "./LocalComponent.svelte";
 | `npm run test:e2e`       | Playwright                                  |
 | `npm run dist`           | electron-builder で実行ファイル生成         |
 
-### 6.2 検証結果（v1.1 完了時）
+### 6.2 検証結果
 
 | 項目            | 結果                                              |
 | --------------- | ------------------------------------------------- |
 | `npm run build` | ✅ 成功                                           |
 | `npm run check` | ✅ 159 files / 0 errors / 0 warnings              |
 | `npm test`      | ✅ 213 passed / 7 skipped / 0 failed (out of 220) |
-
----
 
 ## 7. コンポーネント / ファイル対応表
 
@@ -271,8 +252,6 @@ import LocalComponent from "./LocalComponent.svelte";
 | ワークスペースのコンフリクト / 通知バナー                          | `src/App.svelte` の `workspace-conflict-banner` / `workspace-notice-banner`                                                                      |
 
 > `src/lib/primitives/Drawer.svelte` は現在は未使用（旧 Drawer 形式の左ナビ用）。互換のためファイルは残置するが、本アプリの画面構成では使用しない。
-
----
 
 ## 8. 主要パターン
 
@@ -419,224 +398,3 @@ WriteQueue で書き込んだ直後、対象ファイルの SHA-256 と TTL（5 
 #### 終了時 flush
 
 `app.on("before-quit")` を拡張し、`workspaceWriteQueue.hasPending()` が真なら `event.preventDefault()` → `flush()` 完了 → `reconciler.stop()` → `app.quit()` の順で終了する。これにより未書出データを失わない。
-
----
-
-## 9. 履歴
-
-### v1.2（2026-05-16）— ワークスペース永続化パイプライン
-
-#### 動機
-
-- ワークスペースが OneDrive 等の同期フォルダ上にある場合、UI 操作と保存が同期に張り付いていた
-  ため、データ量の増加とともに GUI 操作の遅延が顕在化していた
-- ワークスペース形式（ディレクトリ + Markdown）の保存は、変更がなくてもプロジェクト全体を
-  毎回フル書き直ししており、不要な mtime 更新が同期サービスをかき回していた
-- 別 PC からの OneDrive 同期や手動編集など、外部書込が発生したケースで挙動が未定義だった
-
-#### 主な変更
-
-- **メモリを唯一の正とする方針**
-  - renderer の `tree_data` が単一の真実。ディスクへの反映は main プロセスが非同期に実施し、
-    renderer は保存完了を待たない（fire-and-forget）
-  - 保存状態は `workspace-save-status` IPC の push で renderer に届け、`saveStatus` ストアへ反映
-- **原子的・増分書込**（`electron/workspace.js`）
-  - `atomicWriteFile`: 同一ディレクトリ内の `.<name>.<pid>.<ts>.<uuid>.tmp` に書いて `rename` で確定
-  - `writeFileIfChanged`: 既存ファイルと Buffer 比較し、内容が同一なら書込をスキップ。OneDrive 上で
-    変更のないタスク/メモが無用に同期されない
-  - `retryFileOperation`: `EBUSY` / `EPERM` / `ENOTEMPTY` を指数バックオフで 5 回まで再試行
-  - `writeTaskAsync` / `writeProjectAsync` / `saveMemoImageAsync` / `deleteTaskDirAsync` /
-    `createProjectAsync` / `deleteProjectAsync` を導入。export / migrate のバッチ系は同期版を維持
-- **直列ライトキュー**（`electron/workspace-write-queue.js`）
-  - `WorkspaceWriteQueue` クラス。`projectDir` をキーに latest-wins マージで最新の保存対象だけを保持
-  - `maxPendingProjects = 8`。既知の active 以外でこの上限を超えると enqueue で例外
-  - 状態遷移: `queued` → `writing` → `saved`（失敗時は `error`、後述）
-  - `flush()` を `before-quit` で待機。未保存データを残さずに終了する
-- **外部書込リコンサイラ**（`electron/workspace-reconciler.js`）
-  - `chokidar` を新規依存に追加。アクティブワークスペース配下を監視
-  - `awaitWriteFinish: { stabilityThreshold: 150, pollInterval: 50 }` で OneDrive 同期完了を待つ
-  - `recentlyWritten: Map<absPath, { hash, expiresAt }>` で直近 5 秒の自前書込（SHA-256 一致）を握りつぶす
-  - イベントは 100ms デバウンスのうえ `reconcileProject` でハンドリング
-    - ペンディング書込なし → 再読込して `workspace-project-updated` を発火、UI に通知バナー
-    - ペンディング書込あり → `workspace-conflict` を発火、UI に競合バナー
-  - `conflicted copy` ファイル名検知 → `workspace-notice (kind: "conflicted-copy")` を発火（自動マージなし）
-  - 状態スナップショット: `<TASK_MANAGE_DATA_DIR>/workspace-state/<sha256(workspacePath).slice(0,16)>.json`
-    にファイルハッシュ表を保存
-- **IPC 拡張**
-  - main → renderer: `workspace-save-status` / `workspace-project-updated` / `workspace-conflict` /
-    `workspace-notice`
-  - renderer → main: `ws:resolve-conflict (action: "keep-local" | "reload")`
-  - 既存 `ws:write-project` は WriteQueue への enqueue だけ行い `{ success, queued: true }` を即返す
-- **SaveStatus の拡張**
-  - `SaveStatus = "idle" | "queued" | "writing" | "retrying" | "saved" | "error" | "conflict"`
-  - Header の保存状態インジケータは `保存待ち` / `保存中...` / `再試行中` / `保存済み` / `保存失敗` / `競合`
-    をラベル + `data-status` 属性で表示
-- **コンフリクト UI**（`src/App.svelte`）
-  - `workspace-conflict-banner`（Warning 色）に `維持` / `再読込` の 2 ボタン
-  - `workspace-notice-banner`（Info 色）は 4 秒で自動消去、× ボタンでも dismiss 可
-  - `workspace-notice (kind: "error")` は既存 `save-error-banner` 経路へフォールバック
-
-#### 検証
-
-PR #171 (`[codex] Redesign workspace persistence pipeline`) のローカル / CI 検証で次のコマンドがすべて成功:
-
-| 項目                                      | 結果                                                     |
-| ----------------------------------------- | -------------------------------------------------------- |
-| `svelte-check --tsconfig ./tsconfig.json` | ✅ 成功                                                  |
-| `vitest run tests/unit`                   | ✅ 成功                                                  |
-| `vitest run tests/component`              | ✅ 成功（`GanttPanel` の timeout を 1 回リトライで通過） |
-| `vite build`                              | ✅ 成功                                                  |
-| `npm run test:e2e`                        | ✅ 成功                                                  |
-
-#### 追加した新規テストファイル
-
-| ファイル                                   | 対象                                                                                               |
-| ------------------------------------------ | -------------------------------------------------------------------------------------------------- |
-| `tests/unit/workspace-write-queue.test.js` | `WorkspaceWriteQueue` の latest-wins マージ、`maxPendingProjects` 上限、ステータス遷移とエラー通知 |
-| `tests/unit/workspace-reconciler.test.js`  | `WorkspaceReconciler` の自前書込抑制、外部書込取り込み、コンフリクト発火、conflicted copy 通知     |
-| `tests/component/App.test.js`              | コンフリクトバナーの `維持` / `再読込` ボタンが `wsResolveConflict` を正しい引数で呼ぶ             |
-
-`tests/unit/workspace.test.js` には `atomicWriteFile` / `writeFileIfChanged` / `retryFileOperation` /
-`writeProjectAsync` の増分書込・`*Async` 系の動作確認テストを追加。
-`tests/component/Header.test.js` の保存状態インジケータテストは `queued` / `writing` / `error` の各状態で
-ラベルと `data-status` 属性が更新されることを検証する形に拡張。
-`tests/unit/saveStatus.test.js` は新しい `SaveStatus`（`queued` / `writing` / `retrying` / `saved` /
-`error` / `conflict`）に合わせて検証値を更新。
-
-#### 既知の引き継ぎ事項
-
-- `db.json` モードの引退は本リリースのスコープ外。標準プロジェクト（同期 lowdb 経由）は従来どおり
-  並走する
-- リアルタイム協調や同一マシン複数インスタンスの同時編集はスコープ外。ロックファイルも導入しない
-- 同一タスク・同一メモを別 PC から OneDrive 越しに同時編集した場合は OS の mtime に依存した
-  後勝ち。OneDrive が生成する `*conflicted copy*` を検知してユーザに通知する
-
-### v1.1（2026-05-15）— UX 全面リフレッシュ
-
-#### 動機
-
-- モック / 画面仕様書に合わせて、サイドバー、Card、ガント、メモ、ペイン、検索、ツリー操作の
-  挙動 / 見た目を全面的に整える
-- 既存の挙動上のクセ（disabled ボタンクリックでメニューが閉じない、ペイン min-width が効きすぎる、
-  検索ボックスの文字列がハイライト対象に含まれる、など）を解消する
-
-#### 主な変更
-
-- **画面構成**
-  - 左ナビを Drawer から永続表示のサイドバーへ。起動時は常に折りたたみ
-  - ヘッダのハンバーガーアイコンは状態で `＜` に切り替わる
-  - Card プリミティブに `title` / `padded` プロパティを追加。タイトル全体に半透明 Primary 背景
-  - Tags セクションを Workspace / Projects / Info と同じ `Section` + `Contents` レイアウトに統一
-- **検索系の役割分離**
-  - ヘッダのボックスは画面内ハイライト専用（`pageSearchQuery` + `page_search_highlighter`）
-  - 「filter tasks」ボックスは行絞り込み専用（`filter` store）
-  - ハイライトは CSS Custom Highlight API で全テキストノード対象。`↑↓ Enter Shift+Enter F3 Ctrl+G` で前後移動。検索ボックス自身と折りたたみ済み要素は除外
-- **ツリー操作**
-  - 3 ゾーン DnD（兄として挿入 / 子として追加 / 弟として挿入）
-  - 三点リーダ再クリックでメニュー閉、`globalDismiss` で任意位置クリックでも閉
-  - rename ボタンは削除（三点リーダ menu の rename に統一）
-  - ステータス選択は `<select>` から自前ポップアップに置換
-  - 列幅: ユーザー指定列は維持、最終列は余白を埋める
-  - スティッキーブレッドクラム: ツリーヘッダ直下、行高は本体行と一致
-  - ルート選択時の「兄弟挿入」を Dialog アラートに変更
-  - 行 enter / chevron 回転を CSS アニメーション（Svelte transition なし）
-- **ペイン**
-  - SplitPanes: マウスアップ時に snap-collapse。`min-width: 0` も inline で付与
-  - 折りたたみ済みペインの隣リサイザーはヒット領域 14px / Primary 色で強調
-- **ガント**
-  - 今日表示を Accent 色の 1 日帯 + 縦線として描画（週 / 月表示でも視認）
-  - 初回マウント / スケール切替で今日を画面中央付近に自動スクロール
-  - 週表示は `mm/dd ～ mm/dd` フォーマット
-  - 開始日のみ / 期限日のみは 1 日マーカー（インセットアウトラインで識別）
-  - スケール切替ボタンをセグメント風 UI に。アクティブを白背景で強調
-- **メモ**
-  - Quill / Markdown バッジを Detail のメモタイプバッジと同サイズに統一
-  - タグ入力欄のフォーカス時は外側リングのみ Primary 色（インナーは neutral）
-  - Markdown 編集 / プレビュー間のリサイザーを SplitPanes と同デザインに統一
-  - QuillMemo の上端二重ボーダーを解消
-- **ワークスペース**
-  - ワークスペースプロジェクト削除機能を追加（IPC `ws:delete-project`）
-  - 管理ボタンを「アイコン + 管理」ラベル付きのボタンに変更
-  - ワークスペース管理ダイアログのアイテム角丸を除去、罫線区切りに
-- **ツールチップ**
-  - グローバルクリーンアップで残存防止
-  - リアクティブプロパティ更新に追従（`update()` ライフサイクル）
-- **アクション / 共通基盤**
-  - `globalDismiss` action 追加
-  - `page_search_highlighter` 追加
-  - `sidebarCollapsed` store 追加（永続化なし）
-  - `public/global.css` に `fadeIn` / `slideInUp` 等のキーフレームとボタン共通トランジション、
-    `prefers-reduced-motion` 対応を追加
-
-#### 検証
-
-| 項目            | 結果                                                                    |
-| --------------- | ----------------------------------------------------------------------- |
-| `npm run check` | ✅ 159 files / 0 errors / 0 warnings                                    |
-| `npm test`      | ✅ 213 passed / 7 skipped / 0 failed（v1.1 で 54 件の新規テストを追加） |
-| `npm run build` | ✅ 成功                                                                 |
-
-#### 追加した新規テストファイル
-
-| ファイル                                     | 対象                                                  |
-| -------------------------------------------- | ----------------------------------------------------- |
-| `tests/unit/globalDismiss.test.js`           | `lib/actions` の `globalDismiss` action               |
-| `tests/unit/page_search_highlighter.test.js` | CSS Custom Highlight API ベースのページ内検索エンジン |
-| `tests/unit/sidebarCollapsed.test.js`        | サイドバー折りたたみストアの初期値と挙動              |
-| `tests/unit/tooltip.test.js`                 | tooltip action の update / destroy / 残存防止         |
-| `tests/component/Card.test.js`               | `Card` プリミティブの `title` / `padded` プロパティ   |
-| `tests/component/StatusSelect.test.js`       | 自前ドロップダウンの開閉・選択・色非伝搬              |
-| `tests/component/Header.test.js`             | 画面内検索 UI とサイドバートグル                      |
-
-`tests/component/SplitPanes.test.js` には snap-collapse / re-expand / wide-resizer のテストを追加。
-`tests/component/TaskName.test.js` には三点リーダの再クリック閉と disabled ボタンクリックでの dismiss のテストを追加。
-`tests/unit/workspace.test.js` には `deleteProject` の 5 テストを追加。
-
-### v1.0（2026-05-13）— 初回構造化
-
-#### 動機
-
-- `src/components/` に 37 ファイルが flat に並び、責務分離が不明瞭だった
-- 再利用可能なプリミティブとドメイン固有が混在
-- ストアとコンポーネントの結合度が高く、グローバル barrel に依存
-
-#### 主な変更
-
-1. **エイリアス導入**: `@lib`, `@features`, `@pages`, `@stores`, `@app-types` を 3 config に統一
-2. **lib 層分離**: 11 個のプリミティブ + 2 個のレイアウトを `lib/` 配下に隔離
-3. **features 統廃合**: 7 ドメインに集約。各ドメイン内に components/stores/utils を内包
-4. **pages 新設**: 旧 `ProjectPage.svelte` → `pages/MainPage.svelte`、旧 `TaskDetailWindow.svelte` → `pages/TaskDetailPage.svelte`
-5. **stores/ 整理**: 横断ストア（ui, theme, panel_coordinator）のみ直下、feature 固有は `@features/X/stores/` へ
-6. **互換 barrel 維持**: `src/stores.ts` および `src/stores/index.ts` は引き続き利用可
-
-#### 数値
-
-| 観点                           | 変更前       | 変更後                                |
-| ------------------------------ | ------------ | ------------------------------------- |
-| `src/components/` のファイル数 | 37           | 0（全移動済み）                       |
-| `src/common/` のファイル数     | 6            | 0（全移動済み）                       |
-| `src/stores/` のファイル数     | 12           | 4（ui/theme/panel_coordinator/index） |
-| ディレクトリ階層               | 1 段（flat） | 3〜4 段（layer + domain）             |
-| svelte-check エラー            | (測定なし)   | 0                                     |
-| テスト件数                     | 165          | 165（全 pass 維持）                   |
-
----
-
-## 10. 今後の方針
-
-- 新規プリミティブ追加時は `lib/primitives/` に配置し、tests/component に Storybook 風テストを追加
-- ドメイン追加時は `features/<新ドメイン>/` を新規作成し、本書に追記
-- 循環依存検出時は ESLint plugin `eslint-plugin-import` の `no-cycle` を有効化検討
-- pages 数が増えた場合（4 以上）はルーティングライブラリ導入を検討
-- ポップオーバー / メニューを新規実装する時は `globalDismiss` を必ず通す
-- 全画面横断のテキスト機能（コピー、共有プレビュー等）は `page_search_highlighter` 同様 CSS Custom Highlight / TreeWalker パターンを利用する
-
----
-
-**改版履歴**
-
-| 版  | 日付       | 内容                                  |
-| --- | ---------- | ------------------------------------- |
-| 1.0 | 2026-05-13 | 初版 — リファクタリング v1.0 完了時点 |
-| 1.1 | 2026-05-15 | UX 全面リフレッシュ完了時点           |
-| 1.2 | 2026-05-16 | ワークスペース永続化パイプライン導入  |
