@@ -72,6 +72,21 @@ const electronAPI = {
       callback(payload);
     });
   },
+  onWorkspaceProjectUpdated: (callback) => {
+    ipcRenderer.on("workspace-project-updated", (event, payload) => {
+      callback(payload);
+    });
+  },
+  onWorkspaceConflict: (callback) => {
+    ipcRenderer.on("workspace-conflict", (event, payload) => {
+      callback(payload);
+    });
+  },
+  onWorkspaceNotice: (callback) => {
+    ipcRenderer.on("workspace-notice", (event, payload) => {
+      callback(payload);
+    });
+  },
   // 現在のテーマを取得する
   getCurrentTheme: () => {
     return ipcRenderer.invoke("get-current-theme");
@@ -94,6 +109,8 @@ const electronAPI = {
   wsCreateProject: (workspacePath, name, id) =>
     ipcRenderer.invoke("ws:create-project", { workspacePath, name, id }),
   wsDeleteProject: (projectDir) => ipcRenderer.invoke("ws:delete-project", { projectDir }),
+  wsResolveConflict: (projectDir, action) =>
+    ipcRenderer.invoke("ws:resolve-conflict", { projectDir, action }),
   wsSelectDirectory: () => ipcRenderer.invoke("ws:select-directory"),
   wsGetLegacyProjects: () => ipcRenderer.invoke("ws:get-legacy-projects"),
   wsExportLegacyProjects: (workspacePath) =>

@@ -44,6 +44,14 @@ class WorkspaceWriteQueue {
     return this.activeProjectDir !== null || this.pending.size > 0 || this.processing;
   }
 
+  isWriting(projectDir) {
+    return this.activeProjectDir === projectDir;
+  }
+
+  discard(projectDir) {
+    return this.pending.delete(projectDir);
+  }
+
   pendingSize(projectDir) {
     if (projectDir) {
       return this.pending.has(projectDir) ? 1 : 0;

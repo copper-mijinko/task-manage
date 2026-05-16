@@ -49,6 +49,25 @@ export interface WorkspaceSaveStatusEvent {
   message?: string;
 }
 
+export interface WorkspaceProjectUpdatedEvent {
+  projectDir: string;
+  tasks: Record<string, WorkspaceTask>;
+  reason: "external-update" | "conflict-reload";
+}
+
+export interface WorkspaceConflictEvent {
+  projectDir: string;
+  path?: string;
+  message: string;
+}
+
+export interface WorkspaceNoticeEvent {
+  kind: "workspace-updated" | "conflicted-copy" | "error";
+  projectDir?: string;
+  path?: string;
+  message: string;
+}
+
 export interface ElectronAPI {
   setTreeData: (treeData: ProjectData) => void;
   getTreeData: (projectId?: string) => Promise<ProjectData | undefined>;
@@ -73,6 +92,9 @@ export interface ElectronAPI {
   onProjectDeleted: (callback: (projectId: string) => void) => void;
   onSaveError: (callback: (message: string) => void) => void;
   onWorkspaceSaveStatus: (callback: (event: WorkspaceSaveStatusEvent) => void) => void;
+  onWorkspaceProjectUpdated: (callback: (event: WorkspaceProjectUpdatedEvent) => void) => void;
+  onWorkspaceConflict: (callback: (event: WorkspaceConflictEvent) => void) => void;
+  onWorkspaceNotice: (callback: (event: WorkspaceNoticeEvent) => void) => void;
   getCurrentTheme: () => Promise<ThemeName>;
 
   // Workspace API
@@ -109,6 +131,10 @@ export interface ElectronAPI {
     id: string
   ) => Promise<{ success: boolean; projectDir?: string; dirName?: string; error?: string }>;
   wsDeleteProject: (projectDir: string) => Promise<{ success: boolean; error?: string }>;
+  wsResolveConflict: (
+    projectDir: string,
+    action: "reload" | "keep-local"
+  ) => Promise<{ success: boolean; error?: string }>;
   wsSelectDirectory: () => Promise<string | null>;
   wsGetLegacyProjects: () => Promise<{ id: string; name: string; taskCount: number }[]>;
   wsExportLegacyProjects: (workspacePath: string) => Promise<{

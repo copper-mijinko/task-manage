@@ -4,6 +4,7 @@ const path = require("path");
 const { LowSync, JSONFileSync } = require("@commonify/lowdb");
 const log = require("electron-log/main");
 const workspace = require("./workspace");
+const { WorkspaceReconciler } = require("./workspace-reconciler");
 const { WorkspaceWriteQueue } = require("./workspace-write-queue");
 
 function countNodes(treeData) {
@@ -140,9 +141,58 @@ app.on("ready", () => {
     });
   }
 
-  const workspaceWriteQueue = new WorkspaceWriteQueue({
+  function sendWorkspaceProjectUpdated(payload) {
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed()) {
+        win.webContents.send("workspace-project-updated", payload);
+      }
+    });
+  }
+
+  function sendWorkspaceConflict(payload) {
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed()) {
+        win.webContents.send("workspace-conflict", payload);
+      }
+    });
+  }
+
+  function sendWorkspaceNotice(payload) {
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed()) {
+        win.webContents.send("workspace-notice", payload);
+      }
+    });
+  }
+
+  let workspaceWriteQueue;
+  const workspaceReconciler = new WorkspaceReconciler({
+    readProject: workspace.readProject,
+    stateRootDir: resolveAppDataPath("workspace-state"),
+    hasPendingWrite: (projectDir) => workspaceWriteQueue?.hasPending(projectDir),
+    onProjectUpdated: ({ projectDir, tasks, taskDirs, reason }) => {
+      wsCache.set(projectDir, { tasks, taskDirs });
+      sendWorkspaceProjectUpdated({
+        projectDir,
+        tasks: Object.fromEntries(tasks),
+        reason,
+      });
+    },
+    onConflict: (event) => {
+      sendWorkspaceSaveStatus({
+        projectDir: event.projectDir,
+        status: "conflict",
+        message: event.message,
+      });
+      sendWorkspaceConflict(event);
+    },
+    onNotice: sendWorkspaceNotice,
+  });
+
+  workspaceWriteQueue = new WorkspaceWriteQueue({
     writeProject: async (projectDir, tasks) => {
       const updated = await workspace.writeProjectAsync(projectDir, tasks);
+      await workspaceReconciler.markProjectWritten(projectDir);
       wsCache.set(projectDir, updated);
       return updated;
     },
@@ -152,6 +202,11 @@ app.on("ready", () => {
     },
   });
   let flushingBeforeQuit = false;
+  if (db_meta.data.activeWorkspace) {
+    workspaceReconciler.start(db_meta.data.activeWorkspace).catch((err) => {
+      log.error("workspace watcher start error:", err.message);
+    });
+  }
 
   app.on("before-quit", (event) => {
     dbWriter.flush();
@@ -161,6 +216,7 @@ app.on("ready", () => {
       event.preventDefault();
       flushingBeforeQuit = true;
       workspaceWriteQueue.flush().finally(() => {
+        workspaceReconciler.stop().finally(() => {});
         app.quit();
       });
     }
@@ -526,7 +582,12 @@ app.on("ready", () => {
 
   ipcMain.on("ws:set-workspaces", (event, { workspaces, activeWorkspace }) => {
     db_meta.data.workspaces = workspaces;
-    if (activeWorkspace !== undefined) db_meta.data.activeWorkspace = activeWorkspace;
+    if (activeWorkspace !== undefined) {
+      db_meta.data.activeWorkspace = activeWorkspace;
+      workspaceReconciler.start(activeWorkspace).catch((err) => {
+        log.error("workspace watcher start error:", err.message);
+      });
+    }
     try {
       db_meta.write();
     } catch (err) {
@@ -665,6 +726,36 @@ app.on("ready", () => {
       return workspaceWriteQueue.enqueue(projectDir, tasks);
     } catch (err) {
       log.error("ws:write-project error:", err.message);
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle("ws:resolve-conflict", async (event, { projectDir, action }) => {
+    try {
+      if (action === "keep-local") {
+        return { success: true };
+      }
+
+      if (action !== "reload") {
+        return { success: false, error: "Unknown conflict action" };
+      }
+
+      if (workspaceWriteQueue.isWriting(projectDir)) {
+        return { success: false, error: "Cannot reload while a workspace save is writing" };
+      }
+
+      workspaceWriteQueue.discard(projectDir);
+      const { tasks, taskDirs } = workspace.readProject(projectDir);
+      wsCache.set(projectDir, { tasks, taskDirs });
+      sendWorkspaceProjectUpdated({
+        projectDir,
+        tasks: Object.fromEntries(tasks),
+        reason: "conflict-reload",
+      });
+      sendWorkspaceSaveStatus({ projectDir, status: "saved" });
+      return { success: true };
+    } catch (err) {
+      log.error("ws:resolve-conflict error:", err.message);
       return { success: false, error: err.message };
     }
   });

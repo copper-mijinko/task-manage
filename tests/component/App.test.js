@@ -43,6 +43,9 @@ function makeElectronAPI(overrides = {}) {
     onTreeDataUpdated: vi.fn(),
     onThemeChanged: vi.fn(),
     onSaveError: vi.fn(),
+    onWorkspaceConflict: vi.fn(),
+    onWorkspaceNotice: vi.fn(),
+    wsResolveConflict: vi.fn().mockResolvedValue({ success: true }),
     getMetaData: vi.fn().mockResolvedValue(null),
     setMetaData: vi.fn(),
     getCurrentTheme: vi.fn().mockResolvedValue("dark"),
@@ -163,5 +166,57 @@ describe.skip("App - save status indicator", () => {
     saveStatus.set("saved");
     await tick();
     expect(screen.getByTestId("save-status-indicator")).toHaveTextContent("保存済み");
+  });
+});
+
+describe("App - workspace conflict notifications", () => {
+  afterEach(() => {
+    saveStatus.set("idle");
+    delete window.electronAPI;
+  });
+
+  test("shows workspace conflict actions and keeps local changes", async () => {
+    let conflictCallback;
+    const api = makeElectronAPI({
+      onWorkspaceConflict: vi.fn((cb) => {
+        conflictCallback = cb;
+      }),
+    });
+    await renderApp(api);
+
+    conflictCallback({
+      projectDir: "C:\\workspace\\project",
+      message: "Workspace changed on disk.",
+    });
+    await tick();
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Workspace changed on disk.");
+    await fireEvent.click(screen.getByRole("button", { name: "維持" }));
+    await tick();
+
+    expect(api.wsResolveConflict).toHaveBeenCalledWith("C:\\workspace\\project", "keep-local");
+    expect(screen.queryByText("Workspace changed on disk.")).toBeNull();
+  });
+
+  test("resolves workspace conflict by reloading from disk", async () => {
+    let conflictCallback;
+    const api = makeElectronAPI({
+      onWorkspaceConflict: vi.fn((cb) => {
+        conflictCallback = cb;
+      }),
+    });
+    await renderApp(api);
+
+    conflictCallback({
+      projectDir: "C:\\workspace\\project",
+      message: "Workspace changed on disk.",
+    });
+    await tick();
+
+    await fireEvent.click(screen.getByRole("button", { name: "再読込" }));
+    await tick();
+
+    expect(api.wsResolveConflict).toHaveBeenCalledWith("C:\\workspace\\project", "reload");
+    expect(screen.queryByText("Workspace changed on disk.")).toBeNull();
   });
 });

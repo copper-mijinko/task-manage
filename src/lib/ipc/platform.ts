@@ -4,6 +4,9 @@
   ProjectListItem,
   TaskDetailWindowData,
   ThemeName,
+  WorkspaceConflictEvent,
+  WorkspaceNoticeEvent,
+  WorkspaceProjectUpdatedEvent,
   WorkspaceSaveStatusEvent,
 } from "@app-types/app";
 import type {
@@ -145,6 +148,20 @@ export function onWorkspaceSaveStatus(callback: (event: WorkspaceSaveStatusEvent
   api()?.onWorkspaceSaveStatus?.(callback);
 }
 
+export function onWorkspaceProjectUpdated(
+  callback: (event: WorkspaceProjectUpdatedEvent) => void
+): void {
+  api()?.onWorkspaceProjectUpdated?.(callback);
+}
+
+export function onWorkspaceConflict(callback: (event: WorkspaceConflictEvent) => void): void {
+  api()?.onWorkspaceConflict?.(callback);
+}
+
+export function onWorkspaceNotice(callback: (event: WorkspaceNoticeEvent) => void): void {
+  api()?.onWorkspaceNotice?.(callback);
+}
+
 export function onSearchResultUpdated(callback: (result: FindInPageResult) => void): void {
   api()?.onSearchResultUpdated?.(callback);
 }
@@ -242,6 +259,16 @@ export function wsCreateProject(
 export function wsDeleteProject(projectDir: string): Promise<{ success: boolean; error?: string }> {
   return (
     api()?.wsDeleteProject?.(projectDir) ??
+    Promise.resolve({ success: false, error: "API unavailable" })
+  );
+}
+
+export function wsResolveConflict(
+  projectDir: string,
+  action: "reload" | "keep-local"
+): Promise<{ success: boolean; error?: string }> {
+  return (
+    api()?.wsResolveConflict?.(projectDir, action) ??
     Promise.resolve({ success: false, error: "API unavailable" })
   );
 }
