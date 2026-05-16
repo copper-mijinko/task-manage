@@ -67,6 +67,11 @@ const electronAPI = {
       callback(/** @type {string} */ (message));
     });
   },
+  onWorkspaceSaveStatus: (callback) => {
+    ipcRenderer.on("workspace-save-status", (event, payload) => {
+      callback(payload);
+    });
+  },
   // 現在のテーマを取得する
   getCurrentTheme: () => {
     return ipcRenderer.invoke("get-current-theme");

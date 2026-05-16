@@ -4,6 +4,7 @@ const path = require("path");
 const { LowSync, JSONFileSync } = require("@commonify/lowdb");
 const log = require("electron-log/main");
 const workspace = require("./workspace");
+const { WorkspaceWriteQueue } = require("./workspace-write-queue");
 
 function countNodes(treeData) {
   if (!treeData) return 0;
@@ -129,10 +130,40 @@ app.on("ready", () => {
 
   const dbWriter = createAsyncWriter(db, file, "db");
   const dbMetaWriter = createAsyncWriter(db_meta, file_meta, "meta", 100);
+  const wsCache = new Map();
 
-  app.on("before-quit", () => {
+  function sendWorkspaceSaveStatus(payload) {
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed()) {
+        win.webContents.send("workspace-save-status", payload);
+      }
+    });
+  }
+
+  const workspaceWriteQueue = new WorkspaceWriteQueue({
+    writeProject: async (projectDir, tasks) => {
+      const updated = await workspace.writeProjectAsync(projectDir, tasks);
+      wsCache.set(projectDir, updated);
+      return updated;
+    },
+    onStatus: sendWorkspaceSaveStatus,
+    onError: ({ projectDir, error }) => {
+      log.error(`workspace write failed (${projectDir}):`, error.message);
+    },
+  });
+  let flushingBeforeQuit = false;
+
+  app.on("before-quit", (event) => {
     dbWriter.flush();
     dbMetaWriter.flush();
+
+    if (workspaceWriteQueue.hasPending() && !flushingBeforeQuit) {
+      event.preventDefault();
+      flushingBeforeQuit = true;
+      workspaceWriteQueue.flush().finally(() => {
+        app.quit();
+      });
+    }
   });
 
   ////////////// IPC //////////////
@@ -485,7 +516,6 @@ app.on("ready", () => {
 
   ////////////// Workspace IPC //////////////
   // projectDir 竊・{ tasks: Map, taskDirs: Map } 縺ｮ繧､繝ｳ繝｡繝｢繝ｪ繧ｭ繝｣繝・す繝･
-  const wsCache = new Map();
 
   ipcMain.handle("ws:get-workspaces", async () => {
     return {
@@ -632,10 +662,7 @@ app.on("ready", () => {
 
   ipcMain.handle("ws:write-project", async (event, { projectDir, tasks }) => {
     try {
-      const updated = await workspace.writeProjectAsync(projectDir, tasks);
-      wsCache.set(projectDir, updated);
-
-      return { success: true };
+      return workspaceWriteQueue.enqueue(projectDir, tasks);
     } catch (err) {
       log.error("ws:write-project error:", err.message);
       return { success: false, error: err.message };

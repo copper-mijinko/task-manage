@@ -107,9 +107,15 @@ describe("Header", () => {
     render(Header);
     const indicator = screen.getByTestId("save-status-indicator");
 
-    saveStatus.set("saving");
+    saveStatus.set("queued");
     await tick();
-    expect(indicator).toHaveAttribute("data-status", "saving");
+    expect(indicator).toHaveAttribute("data-status", "queued");
+    expect(indicator).toHaveTextContent("保存待ち");
+
+    saveStatus.set("writing");
+    await tick();
+    expect(indicator).toHaveAttribute("data-status", "writing");
+    expect(indicator).toHaveTextContent("保存中...");
 
     saveStatus.set("error");
     await tick();

@@ -52,6 +52,19 @@
       else nextMatch();
     }
   }
+
+  function isSavePending(status) {
+    return status === "queued" || status === "writing" || status === "retrying";
+  }
+
+  function saveStatusLabel(status) {
+    if (status === "error") return "保存失敗";
+    if (status === "conflict") return "競合";
+    if (status === "queued") return "保存待ち";
+    if (status === "retrying") return "再試行中";
+    if (status === "writing") return "保存中...";
+    return "保存済み";
+  }
 </script>
 
 <svelte:window on:keydown={handleGlobalKeydown} />
@@ -182,8 +195,8 @@
     <div
       class="SaveIndicator"
       class:saved={$saveStatus === "saved" || $saveStatus === "idle"}
-      class:saving={$saveStatus === "saving"}
-      class:error={$saveStatus === "error"}
+      class:pending={isSavePending($saveStatus)}
+      class:error={$saveStatus === "error" || $saveStatus === "conflict"}
       role="status"
       aria-live="polite"
       aria-atomic="true"
@@ -191,9 +204,7 @@
       data-status={$saveStatus}
     >
       <span class="SaveDot" aria-hidden="true"></span>
-      <span class="SaveLabel">
-        {#if $saveStatus === "error"}保存失敗{:else if $saveStatus === "saving"}保存中...{:else}保存済み{/if}
-      </span>
+      <span class="SaveLabel">{saveStatusLabel($saveStatus)}</span>
     </div>
 
     <div class="ToggleSwitchContainer">
@@ -372,7 +383,7 @@
     background-color: var(--theme-color-Success-main);
     transition: background-color 0.2s ease;
   }
-  .SaveIndicator.saving .SaveDot {
+  .SaveIndicator.pending .SaveDot {
     background-color: var(--theme-color-Warning-main);
   }
   .SaveIndicator.error .SaveDot {
