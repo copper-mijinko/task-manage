@@ -1169,16 +1169,18 @@
     position: absolute;
     top: 0;
     bottom: 0;
-    /* Use the Accent token: it's a saturated pink/magenta that contrasts
-       cleanly with the Primary-blue gantt header in both themes, and
-       isn't reserved for error/overdue semantics. */
-    background-color: var(--theme-color-Accent-main);
+    /* Frame the today column with thin top + bottom Accent strips instead
+       of filling the whole cell, so the date text underneath stays
+       readable. The vertical TodayLine handles "where exactly is today". */
+    border-top: 3px solid var(--theme-color-Accent-main);
+    border-bottom: 3px solid var(--theme-color-Accent-main);
+    background-color: transparent;
     pointer-events: none;
     z-index: 5;
     /* In week / month modes a single day is only a few pixels wide; bump
-       the visible minimum to 8px so it's still recognizable. */
-    min-width: 8px;
-    box-shadow: 0 0 0 1px var(--theme-color-Accent-dark);
+       the visible minimum so the framing is still recognizable. */
+    min-width: 12px;
+    box-sizing: border-box;
   }
   .TodayDayBody {
     position: absolute;
@@ -1189,7 +1191,7 @@
     /* Above GridCell (0) and GanttRow (1) so the today fill is never
        hidden by a transparent row. */
     z-index: 2;
-    min-width: 8px;
+    min-width: 12px;
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--theme-color-Accent-main) 55%, transparent);
   }
 
@@ -1197,7 +1199,9 @@
     position: absolute;
     top: 0;
     bottom: 0;
-    width: 2px;
+    /* Wider than a single pixel so the today marker is unambiguously
+       visible in every scale (especially month, where one day is ~4 px). */
+    width: 3px;
     /* Accent instead of Primary: in dark theme Primary-main is nearly
        indistinguishable from the gantt header background. */
     background: var(--theme-color-Accent-main);
@@ -1230,7 +1234,9 @@
     position: absolute;
     top: 0;
     bottom: 0;
-    width: 1px;
+    /* Match TodayLine's 3 px so the marker carries from header into the
+       body without an apparent step change between the two. */
+    width: 3px;
     background: var(--theme-color-Accent-main);
     opacity: 0.6;
     pointer-events: none;
