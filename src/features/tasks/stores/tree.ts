@@ -3,7 +3,10 @@ import _ from "lodash";
 import { get, writable, type Writable } from "svelte/store";
 import * as platform from "@lib/ipc/platform";
 import { getNode, type ProjectData, type TreeData } from "@features/tasks/utils/tree_control";
-import { projectDataToWorkspaceTasks } from "@features/workspace/utils/workspace_tree";
+import {
+  projectDataToWorkspaceTasks,
+  workspaceToProjectData,
+} from "@features/workspace/utils/workspace_tree";
 import { filter } from "@features/search/stores/search";
 import { project_ids } from "@features/projects/stores/project";
 import {
@@ -176,6 +179,24 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
           if (!event.projectDir || event.projectDir === activeProjectDir) {
             saveStatus.set(event.status);
           }
+        });
+        platform.onWorkspaceProjectUpdated((event) => {
+          const currentSelectedType = get(selected_type);
+          const currentSelectedId = get(selected_id);
+          const activeProjectDir = get(workspace_store).activeProjectDir;
+
+          if (
+            currentSelectedType !== "WorkspaceProject" ||
+            !currentSelectedId ||
+            event.projectDir !== activeProjectDir
+          ) {
+            return;
+          }
+
+          workspace_tasks_cache.set(event.tasks);
+          skipPersistOnce = true;
+          set(workspaceToProjectData(event.tasks, currentSelectedId));
+          saveStatus.set("saved");
         });
         platform.onTreeDataUpdated((nextTreeData) => {
           if (!nextTreeData) {

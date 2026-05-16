@@ -26,6 +26,8 @@
   import { startAutoRescan, stopAutoRescan } from "@features/search/utils/page_search_highlighter";
   let show = Array(4).fill(false);
   let saveErrorMessage = null;
+  let workspaceConflict = null;
+  let workspaceNoticeMessage = null;
 
   const currentHash = typeof window !== "undefined" ? window.location.hash : "";
   const currentSearch =
@@ -100,6 +102,20 @@
     }
   }
 
+  async function resolveWorkspaceConflict(action) {
+    if (!workspaceConflict?.projectDir) return;
+    const result = await platform.wsResolveConflict(workspaceConflict.projectDir, action);
+    if (result?.success) {
+      workspaceConflict = null;
+      if (action === "keep-local") {
+        saveStatus.set("queued");
+      }
+    } else {
+      saveErrorMessage = result?.error ?? "Failed to resolve workspace conflict";
+      saveStatus.set("error");
+    }
+  }
+
   onMount(async () => {
     try {
       performance.mark("app-mounted");
@@ -129,6 +145,25 @@
       saveStatus.set("error");
     });
 
+    platform.onWorkspaceConflict((event) => {
+      workspaceConflict = event;
+      saveStatus.set("conflict");
+    });
+
+    platform.onWorkspaceNotice((event) => {
+      if (event.kind === "error") {
+        saveErrorMessage = event.message;
+        saveStatus.set("error");
+        return;
+      }
+      workspaceNoticeMessage = event.message;
+      setTimeout(() => {
+        if (workspaceNoticeMessage === event.message) {
+          workspaceNoticeMessage = null;
+        }
+      }, 4000);
+    });
+
     // Start the document-wide page-search highlighter. It watches the whole
     // document for changes and re-applies CSS Custom Highlight ranges.
     startAutoRescan();
@@ -150,6 +185,22 @@
           $saveStatus = "idle";
         }}>×</button
       >
+    </div>
+  {/if}
+  {#if workspaceConflict}
+    <div class="workspace-conflict-banner" role="alert">
+      <span>{workspaceConflict.message}</span>
+      <div class="workspace-conflict-actions">
+        <button type="button" on:click={() => resolveWorkspaceConflict("keep-local")}>
+          維持
+        </button>
+        <button type="button" on:click={() => resolveWorkspaceConflict("reload")}> 再読込 </button>
+      </div>
+    </div>
+  {:else if workspaceNoticeMessage}
+    <div class="workspace-notice-banner" role="status">
+      <span>{workspaceNoticeMessage}</span>
+      <button type="button" on:click={() => (workspaceNoticeMessage = null)}>×</button>
     </div>
   {/if}
   {#if !isTaskDetailWindow}
@@ -307,5 +358,37 @@
     font-size: var(--font-body-md);
     line-height: 1;
     padding: 0 var(--sp1);
+  }
+  .workspace-conflict-banner,
+  .workspace-notice-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp2);
+    padding: var(--sp1) var(--sp3);
+    color: #fff;
+    font-size: var(--font-body-sm);
+    flex-shrink: 0;
+    z-index: 10000;
+  }
+  .workspace-conflict-banner {
+    background-color: var(--theme-color-Warning-main);
+  }
+  .workspace-notice-banner {
+    background-color: var(--theme-color-Info-main, var(--theme-color-Theme-main));
+  }
+  .workspace-conflict-actions {
+    display: flex;
+    gap: var(--sp1);
+  }
+  .workspace-conflict-banner button,
+  .workspace-notice-banner button {
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    border-radius: var(--shape-xs);
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    cursor: pointer;
+    font-size: var(--font-body-sm);
+    padding: 0 var(--sp2);
   }
 </style>
