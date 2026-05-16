@@ -8,6 +8,7 @@ import {
   parseFrontmatter,
   stringifyFrontmatter,
   atomicWriteFile,
+  writeFileIfChanged,
   retryFileOperation,
   wouldCreateCycle,
   bfsFromRoot,
@@ -16,6 +17,7 @@ import {
   readProject,
   writeTask,
   writeTaskAsync,
+  writeProjectAsync,
   saveMemoImage,
   saveMemoImageAsync,
   resolveMemoAssetPath,
@@ -550,6 +552,18 @@ describe("file system operations", () => {
     expect(fs.readdirSync(tmpDir).filter((entry) => entry.includes(".tmp"))).toEqual([]);
   });
 
+  it("writeFileIfChanged skips unchanged content", async () => {
+    const target = path.join(tmpDir, "stable.md");
+    await writeFileIfChanged(target, "same", "utf8");
+    const oldTime = new Date("2020-01-01T00:00:00.000Z");
+    fs.utimesSync(target, oldTime, oldTime);
+
+    const changed = await writeFileIfChanged(target, "same", "utf8");
+
+    expect(changed).toBe(false);
+    expect(fs.statSync(target).mtimeMs).toBe(oldTime.getTime());
+  });
+
   it("retryFileOperation retries temporary OneDrive-style filesystem errors", async () => {
     let attempts = 0;
 
@@ -644,6 +658,95 @@ describe("file system operations", () => {
     const result = await deleteProjectAsync(projectDir);
     expect(result.success).toBe(true);
     expect(fs.existsSync(projectDir)).toBe(false);
+  });
+
+  it("writeProjectAsync skips unchanged task and memo files", async () => {
+    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
+    const rootTask = {
+      id: "root-id",
+      name: "Proj",
+      status: "Open",
+      parents: [],
+      memos: [],
+      createdAt: "2026-04-24",
+    };
+    const childTask = {
+      id: "task-stable",
+      name: "Stable",
+      status: "Open",
+      parents: ["root-id"],
+      memos: [{ id: "memo-stable", title: "Notes", content: "Stable content" }],
+      createdAt: "2026-04-24",
+    };
+    await writeProjectAsync(projectDir, [rootTask, childTask]);
+
+    const taskFile = path.join(projectDir, "task-stable", "_index.md");
+    const memoFile = path.join(projectDir, "task-stable", "memo-stable.md");
+    const oldTime = new Date("2020-01-01T00:00:00.000Z");
+    fs.utimesSync(taskFile, oldTime, oldTime);
+    fs.utimesSync(memoFile, oldTime, oldTime);
+
+    await writeProjectAsync(projectDir, [rootTask, childTask]);
+
+    expect(fs.statSync(taskFile).mtimeMs).toBe(oldTime.getTime());
+    expect(fs.statSync(memoFile).mtimeMs).toBe(oldTime.getTime());
+  });
+
+  it("writeProjectAsync touches only changed memo files and deletes removed tasks", async () => {
+    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
+    const rootTask = {
+      id: "root-id",
+      name: "Proj",
+      status: "Open",
+      parents: [],
+      memos: [],
+      createdAt: "2026-04-24",
+    };
+    const childTask = {
+      id: "task-change",
+      name: "Changing",
+      status: "Open",
+      parents: ["root-id"],
+      memos: [
+        { id: "memo-keep", title: "Keep", content: "Keep content" },
+        { id: "memo-change", title: "Change", content: "Before" },
+      ],
+      createdAt: "2026-04-24",
+    };
+    const removedTask = {
+      id: "task-remove",
+      name: "Remove",
+      status: "Open",
+      parents: ["root-id"],
+      memos: [],
+      createdAt: "2026-04-24",
+    };
+    await writeProjectAsync(projectDir, [rootTask, childTask, removedTask]);
+
+    const taskFile = path.join(projectDir, "task-change", "_index.md");
+    const keepMemoFile = path.join(projectDir, "task-change", "memo-keep.md");
+    const changedMemoFile = path.join(projectDir, "task-change", "memo-change.md");
+    const removedTaskDir = path.join(projectDir, "task-remove");
+    const oldTime = new Date("2020-01-01T00:00:00.000Z");
+    fs.utimesSync(taskFile, oldTime, oldTime);
+    fs.utimesSync(keepMemoFile, oldTime, oldTime);
+    fs.utimesSync(changedMemoFile, oldTime, oldTime);
+
+    await writeProjectAsync(projectDir, [
+      rootTask,
+      {
+        ...childTask,
+        memos: [
+          { id: "memo-keep", title: "Keep", content: "Keep content" },
+          { id: "memo-change", title: "Change", content: "After" },
+        ],
+      },
+    ]);
+
+    expect(fs.statSync(taskFile).mtimeMs).toBe(oldTime.getTime());
+    expect(fs.statSync(keepMemoFile).mtimeMs).toBe(oldTime.getTime());
+    expect(fs.statSync(changedMemoFile).mtimeMs).not.toBe(oldTime.getTime());
+    expect(fs.existsSync(removedTaskDir)).toBe(false);
   });
 });
 
