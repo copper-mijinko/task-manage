@@ -34,6 +34,21 @@ export interface FindInPageResult {
   activeMatchOrdinal: number;
 }
 
+export type SaveStatus =
+  | "idle"
+  | "queued"
+  | "writing"
+  | "retrying"
+  | "saved"
+  | "error"
+  | "conflict";
+
+export interface WorkspaceSaveStatusEvent {
+  projectDir: string;
+  status: SaveStatus;
+  message?: string;
+}
+
 export interface ElectronAPI {
   setTreeData: (treeData: ProjectData) => void;
   getTreeData: (projectId?: string) => Promise<ProjectData | undefined>;
@@ -57,6 +72,7 @@ export interface ElectronAPI {
   onTreeDataUpdated: (callback: (treeData: ProjectData) => void) => void;
   onProjectDeleted: (callback: (projectId: string) => void) => void;
   onSaveError: (callback: (message: string) => void) => void;
+  onWorkspaceSaveStatus: (callback: (event: WorkspaceSaveStatusEvent) => void) => void;
   getCurrentTheme: () => Promise<ThemeName>;
 
   // Workspace API
@@ -82,7 +98,7 @@ export interface ElectronAPI {
   wsWriteProject: (
     projectDir: string,
     tasks: WorkspaceTask[]
-  ) => Promise<{ success: boolean; error?: string }>;
+  ) => Promise<{ success: boolean; queued?: boolean; error?: string }>;
   wsDeleteTask: (
     projectDir: string,
     taskId: string

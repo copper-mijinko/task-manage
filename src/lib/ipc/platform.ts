@@ -4,6 +4,7 @@
   ProjectListItem,
   TaskDetailWindowData,
   ThemeName,
+  WorkspaceSaveStatusEvent,
 } from "@app-types/app";
 import type {
   WorkspaceInfo,
@@ -140,6 +141,10 @@ export function onSaveError(callback: (message: string) => void): void {
   api()?.onSaveError?.(callback);
 }
 
+export function onWorkspaceSaveStatus(callback: (event: WorkspaceSaveStatusEvent) => void): void {
+  api()?.onWorkspaceSaveStatus?.(callback);
+}
+
 export function onSearchResultUpdated(callback: (result: FindInPageResult) => void): void {
   api()?.onSearchResultUpdated?.(callback);
 }
@@ -206,7 +211,7 @@ export function wsResolveMemoAsset(
 export function wsWriteProject(
   projectDir: string,
   tasks: WorkspaceTask[]
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; queued?: boolean; error?: string }> {
   return (
     api()?.wsWriteProject?.(projectDir, tasks) ??
     Promise.resolve({ success: false, error: "API unavailable" })

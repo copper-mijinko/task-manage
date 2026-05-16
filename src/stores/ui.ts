@@ -1,7 +1,7 @@
 ﻿import { get, writable, type Writable } from "svelte/store";
 import { getNode, type TreeData } from "@features/tasks/utils/tree_control";
 import { workspaceToProjectData } from "@features/workspace/utils/workspace_tree";
-import type { PendingTaskDetailSelection, SelectedType } from "@app-types/app";
+import type { PendingTaskDetailSelection, SaveStatus, SelectedType } from "@app-types/app";
 import { clearHistory, tree_data } from "@features/tasks/stores/tree";
 import { workspace_store, workspace_tasks_cache } from "@features/workspace/stores/workspace";
 import * as platform from "@lib/ipc/platform";
@@ -274,7 +274,6 @@ export function setTaskDetailWindowTarget(projectId: string, taskId: string) {
 
 export const showPageSearch = writable(false);
 
-export type SaveStatus = "idle" | "saving" | "saved" | "error";
 export const saveStatus = writable<SaveStatus>("idle");
 
 export const copied_task = writable<TreeData | null>(null);

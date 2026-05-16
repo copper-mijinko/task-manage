@@ -53,14 +53,14 @@ describe("saveStatus store", () => {
     expect(get(saveStatus)).toBe("idle");
   });
 
-  test("setting tree_data changes status to saving", () => {
+  test("setting tree_data changes status to writing", () => {
     tree_data.set(createProjectData());
-    expect(get(saveStatus)).toBe("saving");
+    expect(get(saveStatus)).toBe("writing");
   });
 
   test("setting tree_data to undefined changes status to idle", () => {
     tree_data.set(createProjectData());
-    expect(get(saveStatus)).toBe("saving");
+    expect(get(saveStatus)).toBe("writing");
 
     tree_data.set(undefined);
     expect(get(saveStatus)).toBe("idle");
@@ -68,7 +68,7 @@ describe("saveStatus store", () => {
 
   test("successful setTreeData changes status to saved", async () => {
     tree_data.set(createProjectData());
-    expect(get(saveStatus)).toBe("saving");
+    expect(get(saveStatus)).toBe("writing");
 
     await vi.runAllTimersAsync();
 
@@ -97,7 +97,7 @@ describe("saveStatus store", () => {
     });
 
     tree_data.set(createProjectData());
-    expect(get(saveStatus)).toBe("saving");
+    expect(get(saveStatus)).toBe("writing");
 
     await vi.runAllTimersAsync();
 
@@ -115,9 +115,9 @@ describe("saveStatus store", () => {
     expect(get(saveStatus)).toBe("idle");
   });
 
-  test("saving to error to idle transitions are allowed", async () => {
+  test("writing to error to idle transitions are allowed", async () => {
     tree_data.set(createProjectData());
-    expect(get(saveStatus)).toBe("saving");
+    expect(get(saveStatus)).toBe("writing");
 
     saveStatus.set("error");
     expect(get(saveStatus)).toBe("error");

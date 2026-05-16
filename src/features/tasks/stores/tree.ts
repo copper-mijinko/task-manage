@@ -128,8 +128,17 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
         const cachedTasks = context.cachedWorkspaceTasks;
         const tasks = projectDataToWorkspaceTasks(current, cachedTasks);
         try {
-          await platform.wsWriteProject(activeProjectDir, tasks);
-          saveStatus.set("saved");
+          platform
+            .wsWriteProject(activeProjectDir, tasks)
+            .then((result) => {
+              if (!result?.success) {
+                saveStatus.set("error");
+              }
+            })
+            .catch(() => {
+              saveStatus.set("error");
+            });
+          saveStatus.set("queued");
         } catch {
           saveStatus.set("error");
         }
@@ -162,6 +171,12 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
     init: () => {
       if (!syncListenerRegistered) {
         syncListenerRegistered = true;
+        platform.onWorkspaceSaveStatus((event) => {
+          const activeProjectDir = get(workspace_store).activeProjectDir;
+          if (!event.projectDir || event.projectDir === activeProjectDir) {
+            saveStatus.set(event.status);
+          }
+        });
         platform.onTreeDataUpdated((nextTreeData) => {
           if (!nextTreeData) {
             return;
@@ -235,7 +250,7 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
         }
 
         if (current !== undefined) {
-          saveStatus.set("saving");
+          saveStatus.set("writing");
         } else {
           saveStatus.set("idle");
         }
