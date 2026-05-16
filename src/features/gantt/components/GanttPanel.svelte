@@ -767,17 +767,29 @@
     }
   }
 
-  function centerOnToday() {
+  // Initial Gantt view places today at this fraction from the left edge,
+  // so the user sees mostly upcoming work with a little context before
+  // today. Centred (0.5) feels symmetric but wastes space showing the
+  // past; 0.25 keeps today recognisable while giving the future ~75%.
+  const TODAY_INITIAL_OFFSET_RATIO = 0.25;
+
+  function scrollToTodayAt(offsetRatio) {
     if (!bodyEl) return;
     const todayPx = todayRem * rootFontSizePx;
     const viewportWidth = bodyEl.clientWidth;
     if (!viewportWidth) return;
-    // Position today around the centre of the viewport, but clamp to the
-    // total scrollable width so we never scroll past either end.
-    const desired = Math.max(0, todayPx - viewportWidth / 2);
+    const desired = Math.max(0, todayPx - viewportWidth * offsetRatio);
     const maxScroll = Math.max(0, bodyEl.scrollWidth - viewportWidth);
     bodyEl.scrollLeft = Math.min(desired, maxScroll);
     headerScrollLeft = bodyEl.scrollLeft;
+  }
+
+  function remPerDayFor(scale) {
+    return scale === "day"
+      ? CELL_REM.day
+      : scale === "week"
+        ? CELL_REM.week / 7
+        : CELL_REM.month / 30;
   }
 
   let didInitialCentre = false;
@@ -786,28 +798,44 @@
     updateRootFontSizePx();
     window.addEventListener("resize", updateRootFontSizePx);
 
-    // Centre on today once the layout has settled. tick + 2 rAFs makes sure
+    // Position today on first paint. tick + 2 rAFs makes sure
     // GanttBodyInner has its real width / scrollWidth before we read them.
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         if (!didInitialCentre && totalWidthRem > 0) {
           didInitialCentre = true;
-          centerOnToday();
+          scrollToTodayAt(TODAY_INITIAL_OFFSET_RATIO);
         }
       });
     });
 
-    // Re-centre whenever the user toggles the scale (day / week / month) —
-    // pixel distances change wildly between modes so the previous
-    // scrollLeft no longer points at today. Done via a manual subscription
-    // (rather than `$:`) to avoid Svelte tracking lastScale as a dep and
-    // re-running the block in test environments.
+    // When the user toggles the scale (day / week / month), preserve the
+    // date that was at the left edge of the viewport rather than jumping
+    // back to today. This way they keep their visual context across
+    // scale changes. Done via a manual subscription (rather than `$:`)
+    // to avoid Svelte tracking lastScale as a dep and re-running the
+    // block in test environments.
     let lastScale = $ganttScale;
     scaleUnsub = ganttScale.subscribe((next) => {
       if (next === lastScale) return;
+      // Capture the left-edge date BEFORE the new remPerDay propagates.
+      // We use the previous scale's remPerDay so the conversion from
+      // pixels to days reflects what the user was actually looking at.
+      const oldRemPerDay = remPerDayFor(lastScale);
+      const leftEdgeDays =
+        bodyEl && rootFontSizePx > 0 && oldRemPerDay > 0
+          ? bodyEl.scrollLeft / rootFontSizePx / oldRemPerDay
+          : null;
       lastScale = next;
       requestAnimationFrame(() => {
-        requestAnimationFrame(centerOnToday);
+        requestAnimationFrame(() => {
+          if (leftEdgeDays === null || !bodyEl) return;
+          const newRemPerDay = remPerDayFor(next);
+          const newScrollPx = leftEdgeDays * newRemPerDay * rootFontSizePx;
+          const maxScroll = Math.max(0, bodyEl.scrollWidth - bodyEl.clientWidth);
+          bodyEl.scrollLeft = Math.max(0, Math.min(newScrollPx, maxScroll));
+          headerScrollLeft = bodyEl.scrollLeft;
+        });
       });
     });
 
