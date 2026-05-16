@@ -3,8 +3,8 @@
 | 項目   | 内容                                         |
 | ------ | -------------------------------------------- |
 | 文書ID | TM-ARCH-001                                  |
-| 版数   | 1.1                                          |
-| 更新日 | 2026-05-15                                   |
+| 版数   | 1.2                                          |
+| 更新日 | 2026-05-16                                   |
 | 対象   | Electron 41 + Svelte 5 + TypeScript + Vite 8 |
 
 ---
@@ -200,20 +200,20 @@ import LocalComponent from "./LocalComponent.svelte";
 
 ### 5.1 ストア一覧
 
-| ストア                                                                    | 配置                                             | 役割                                         |
-| ------------------------------------------------------------------------- | ------------------------------------------------ | -------------------------------------------- |
-| `tree_data`                                                               | `@features/tasks/stores/tree`                    | タスクツリー本体 + Undo/Redo                 |
-| `column_settings`                                                         | `@features/tasks/stores/column_settings`         | 列の幅・順序・可視性                         |
-| `sort_state`                                                              | `@features/tasks/stores/sort`                    | ソート状態                                   |
-| `tag_index` / `active_tag`                                                | `@features/memos/stores/tags`                    | タグインデックス・選択中タグ                 |
-| `ganttVisible` / `ganttScale` 等                                          | `@features/gantt/stores/gantt`                   | Gantt 表示設定                               |
-| `workspace_store` 等                                                      | `@features/workspace/stores/workspace`           | ワークスペース管理（含 `deleteProject`）     |
-| `project_ids`                                                             | `@features/projects/stores/project`              | プロジェクト一覧                             |
-| `filter` / `pageSearchQuery`                                              | `@features/search/stores/search`                 | フィルター条件 / 画面内検索クエリ            |
-| `pageSearchMatchCount` / `pageSearchCurrentIndex`                         | `@features/search/utils/page_search_highlighter` | 画面内検索の件数と現在位置（readable store） |
-| `selected_id` / `closed_node_ids` / `sidebarCollapsed` / `copied_task` 等 | `@stores/ui`                                     | UI状態                                       |
-| `theme`                                                                   | `@stores/theme`                                  | テーマ                                       |
-| `panelCoordinator`                                                        | `@stores/panel_coordinator`                      | ポップオーバー調停                           |
+| ストア                                                                                   | 配置                                             | 役割                                                    |
+| ---------------------------------------------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------- |
+| `tree_data`                                                                              | `@features/tasks/stores/tree`                    | タスクツリー本体 + Undo/Redo                            |
+| `column_settings`                                                                        | `@features/tasks/stores/column_settings`         | 列の幅・順序・可視性                                    |
+| `sort_state`                                                                             | `@features/tasks/stores/sort`                    | ソート状態                                              |
+| `tag_index` / `active_tag`                                                               | `@features/memos/stores/tags`                    | タグインデックス・選択中タグ                            |
+| `ganttVisible` / `ganttScale` 等                                                         | `@features/gantt/stores/gantt`                   | Gantt 表示設定                                          |
+| `workspace_store` 等                                                                     | `@features/workspace/stores/workspace`           | ワークスペース管理（含 `deleteProject`）                |
+| `project_ids`                                                                            | `@features/projects/stores/project`              | プロジェクト一覧                                        |
+| `filter` / `pageSearchQuery`                                                             | `@features/search/stores/search`                 | フィルター条件 / 画面内検索クエリ                       |
+| `pageSearchMatchCount` / `pageSearchCurrentIndex`                                        | `@features/search/utils/page_search_highlighter` | 画面内検索の件数と現在位置（readable store）            |
+| `selected_id` / `closed_node_ids` / `sidebarCollapsed` / `copied_task` / `saveStatus` 等 | `@stores/ui`                                     | UI状態（`saveStatus` はヘッダの保存状態インジケータ用） |
+| `theme`                                                                                  | `@stores/theme`                                  | テーマ                                                  |
+| `panelCoordinator`                                                                       | `@stores/panel_coordinator`                      | ポップオーバー調停                                      |
 
 ### 5.2 init_store()
 
@@ -267,6 +267,8 @@ import LocalComponent from "./LocalComponent.svelte";
 | 列ヘッダのフィルタ / 列設定ポップオーバー                          | `TreeTableHeader.svelte` + `@features/search/components/*FilterPanel.svelte`                                                                     |
 | ツリーの三点リーダメニュー                                         | `TaskMenu.svelte` + `TaskName.svelte`                                                                                                            |
 | ワークスペース管理ダイアログ                                       | `WorkspaceSetup.svelte` + `MigrationWizard.svelte`                                                                                               |
+| ワークスペース永続化パイプライン（main プロセス）                  | `electron/workspace.js` + `electron/workspace-write-queue.js` + `electron/workspace-reconciler.js`                                               |
+| ワークスペースのコンフリクト / 通知バナー                          | `src/App.svelte` の `workspace-conflict-banner` / `workspace-notice-banner`                                                                      |
 
 > `src/lib/primitives/Drawer.svelte` は現在は未使用（旧 Drawer 形式の左ナビ用）。互換のためファイルは残置するが、本アプリの画面構成では使用しない。
 
@@ -356,9 +358,158 @@ import LocalComponent from "./LocalComponent.svelte";
 - 実行ラッパ: `src/lib/ipc/platform.ts` の `wsDeleteProject(projectDir)`
 - ストア: `workspace_store.deleteProject(projectDir)` が呼出し後にプロジェクト一覧を再読込
 
+### 8.9 ワークスペース永続化パイプライン
+
+メモリ上の `tree_data` を単一の真実とし、main プロセスが非同期にディスクへ反映する。renderer は保存完了を待たず（fire-and-forget）、状態は main からの IPC push で更新する。
+
+```
+[ renderer ]
+  tree_data (Svelte store)
+        │  ws:write-project（fire-and-forget）
+        ▼
+[ main ]
+  WorkspaceWriteQueue ─ atomicWriteFile (tmp → rename) ─► disk
+        │                                                  │
+        │                                          (chokidar watch)
+        ▼                                                  ▼
+  recentlyWritten                                  WorkspaceReconciler
+  （5 秒間の自前書込ログ） ◄─────────────────────────────┘
+                                                           │
+                                  ┌────────────────────────┤
+                                  ▼                        ▼
+                          自前書込なら無視        外部書込として取り込み
+                                                  または conflict 通知
+```
+
+#### 構成要素
+
+| 要素                 | 配置                                                 | 主要 API                                                                                 |
+| -------------------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| 原子的・増分書込     | `electron/workspace.js`                              | `atomicWriteFile` / `writeFileIfChanged` / `retryFileOperation` / `writeProjectAsync` 等 |
+| 直列ライトキュー     | `electron/workspace-write-queue.js`                  | `WorkspaceWriteQueue`（`enqueue` / `flush` / `hasPending` / `isWriting` / `discard`）    |
+| 外部書込リコンサイラ | `electron/workspace-reconciler.js`                   | `WorkspaceReconciler`（`start` / `stop` / `markProjectWritten`）+ `isConflictCopy` 判定  |
+| 状態スナップショット | `<TASK_MANAGE_DATA_DIR>/workspace-state/<hash>.json` | 配下ファイルの SHA-256 ハッシュ表                                                        |
+
+#### main → renderer の IPC イベント
+
+| チャネル                    | ペイロード                              | 用途                                                     |
+| --------------------------- | --------------------------------------- | -------------------------------------------------------- |
+| `workspace-save-status`     | `{ projectDir, status, message? }`      | キュー進行状態の楽観 UI 用 push                          |
+| `workspace-project-updated` | `{ projectDir, tasks, reason }`         | 外部書込・コンフリクト解決後の再読込通知                 |
+| `workspace-conflict`        | `{ projectDir, message }`               | ローカルにペンディング書込ありの外部編集検知             |
+| `workspace-notice`          | `{ kind, projectDir?, path?, message }` | `workspace-updated` / `conflicted-copy` / `error` の通知 |
+
+renderer → main の追加 IPC は `ws:resolve-conflict (action: "keep-local" | "reload")`。
+
+#### SaveStatus 状態遷移
+
+`SaveStatus = "idle" | "queued" | "writing" | "retrying" | "saved" | "error" | "conflict"`
+
+renderer の `saveStatus` ストアは:
+
+- 通常: `idle → queued → writing → saved`
+- リトライ発生時: `… → retrying → saved`
+- 失敗時: `… → error`
+- 外部書込との衝突時: `… → conflict`（`ws:resolve-conflict` 後に `saved` / `queued` へ復帰）
+
+#### 自前書込フィルタ（`recentlyWritten`）
+
+WriteQueue で書き込んだ直後、対象ファイルの SHA-256 と TTL（5 秒）を `recentlyWritten: Map<absPath, { hash, expiresAt }>` に登録する。Reconciler は chokidar イベントを受けたとき、ディスクの SHA-256 が記録と一致すれば「自分の書込」として無視する。これにより `chokidar` 監視と自前書込の二重反映を防ぐ。
+
+#### 終了時 flush
+
+`app.on("before-quit")` を拡張し、`workspaceWriteQueue.hasPending()` が真なら `event.preventDefault()` → `flush()` 完了 → `reconciler.stop()` → `app.quit()` の順で終了する。これにより未書出データを失わない。
+
 ---
 
 ## 9. 履歴
+
+### v1.2（2026-05-16）— ワークスペース永続化パイプライン
+
+#### 動機
+
+- ワークスペースが OneDrive 等の同期フォルダ上にある場合、UI 操作と保存が同期に張り付いていた
+  ため、データ量の増加とともに GUI 操作の遅延が顕在化していた
+- ワークスペース形式（ディレクトリ + Markdown）の保存は、変更がなくてもプロジェクト全体を
+  毎回フル書き直ししており、不要な mtime 更新が同期サービスをかき回していた
+- 別 PC からの OneDrive 同期や手動編集など、外部書込が発生したケースで挙動が未定義だった
+
+#### 主な変更
+
+- **メモリを唯一の正とする方針**
+  - renderer の `tree_data` が単一の真実。ディスクへの反映は main プロセスが非同期に実施し、
+    renderer は保存完了を待たない（fire-and-forget）
+  - 保存状態は `workspace-save-status` IPC の push で renderer に届け、`saveStatus` ストアへ反映
+- **原子的・増分書込**（`electron/workspace.js`）
+  - `atomicWriteFile`: 同一ディレクトリ内の `.<name>.<pid>.<ts>.<uuid>.tmp` に書いて `rename` で確定
+  - `writeFileIfChanged`: 既存ファイルと Buffer 比較し、内容が同一なら書込をスキップ。OneDrive 上で
+    変更のないタスク/メモが無用に同期されない
+  - `retryFileOperation`: `EBUSY` / `EPERM` / `ENOTEMPTY` を指数バックオフで 5 回まで再試行
+  - `writeTaskAsync` / `writeProjectAsync` / `saveMemoImageAsync` / `deleteTaskDirAsync` /
+    `createProjectAsync` / `deleteProjectAsync` を導入。export / migrate のバッチ系は同期版を維持
+- **直列ライトキュー**（`electron/workspace-write-queue.js`）
+  - `WorkspaceWriteQueue` クラス。`projectDir` をキーに latest-wins マージで最新の保存対象だけを保持
+  - `maxPendingProjects = 8`。既知の active 以外でこの上限を超えると enqueue で例外
+  - 状態遷移: `queued` → `writing` → `saved`（失敗時は `error`、後述）
+  - `flush()` を `before-quit` で待機。未保存データを残さずに終了する
+- **外部書込リコンサイラ**（`electron/workspace-reconciler.js`）
+  - `chokidar` を新規依存に追加。アクティブワークスペース配下を監視
+  - `awaitWriteFinish: { stabilityThreshold: 150, pollInterval: 50 }` で OneDrive 同期完了を待つ
+  - `recentlyWritten: Map<absPath, { hash, expiresAt }>` で直近 5 秒の自前書込（SHA-256 一致）を握りつぶす
+  - イベントは 100ms デバウンスのうえ `reconcileProject` でハンドリング
+    - ペンディング書込なし → 再読込して `workspace-project-updated` を発火、UI に通知バナー
+    - ペンディング書込あり → `workspace-conflict` を発火、UI に競合バナー
+  - `conflicted copy` ファイル名検知 → `workspace-notice (kind: "conflicted-copy")` を発火（自動マージなし）
+  - 状態スナップショット: `<TASK_MANAGE_DATA_DIR>/workspace-state/<sha256(workspacePath).slice(0,16)>.json`
+    にファイルハッシュ表を保存
+- **IPC 拡張**
+  - main → renderer: `workspace-save-status` / `workspace-project-updated` / `workspace-conflict` /
+    `workspace-notice`
+  - renderer → main: `ws:resolve-conflict (action: "keep-local" | "reload")`
+  - 既存 `ws:write-project` は WriteQueue への enqueue だけ行い `{ success, queued: true }` を即返す
+- **SaveStatus の拡張**
+  - `SaveStatus = "idle" | "queued" | "writing" | "retrying" | "saved" | "error" | "conflict"`
+  - Header の保存状態インジケータは `保存待ち` / `保存中...` / `再試行中` / `保存済み` / `保存失敗` / `競合`
+    をラベル + `data-status` 属性で表示
+- **コンフリクト UI**（`src/App.svelte`）
+  - `workspace-conflict-banner`（Warning 色）に `維持` / `再読込` の 2 ボタン
+  - `workspace-notice-banner`（Info 色）は 4 秒で自動消去、× ボタンでも dismiss 可
+  - `workspace-notice (kind: "error")` は既存 `save-error-banner` 経路へフォールバック
+
+#### 検証
+
+PR #171 (`[codex] Redesign workspace persistence pipeline`) のローカル / CI 検証で次のコマンドがすべて成功:
+
+| 項目                                      | 結果                                                     |
+| ----------------------------------------- | -------------------------------------------------------- |
+| `svelte-check --tsconfig ./tsconfig.json` | ✅ 成功                                                  |
+| `vitest run tests/unit`                   | ✅ 成功                                                  |
+| `vitest run tests/component`              | ✅ 成功（`GanttPanel` の timeout を 1 回リトライで通過） |
+| `vite build`                              | ✅ 成功                                                  |
+| `npm run test:e2e`                        | ✅ 成功                                                  |
+
+#### 追加した新規テストファイル
+
+| ファイル                                   | 対象                                                                                               |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| `tests/unit/workspace-write-queue.test.js` | `WorkspaceWriteQueue` の latest-wins マージ、`maxPendingProjects` 上限、ステータス遷移とエラー通知 |
+| `tests/unit/workspace-reconciler.test.js`  | `WorkspaceReconciler` の自前書込抑制、外部書込取り込み、コンフリクト発火、conflicted copy 通知     |
+| `tests/component/App.test.js`              | コンフリクトバナーの `維持` / `再読込` ボタンが `wsResolveConflict` を正しい引数で呼ぶ             |
+
+`tests/unit/workspace.test.js` には `atomicWriteFile` / `writeFileIfChanged` / `retryFileOperation` /
+`writeProjectAsync` の増分書込・`*Async` 系の動作確認テストを追加。
+`tests/component/Header.test.js` の保存状態インジケータテストは `queued` / `writing` / `error` の各状態で
+ラベルと `data-status` 属性が更新されることを検証する形に拡張。
+`tests/unit/saveStatus.test.js` は新しい `SaveStatus`（`queued` / `writing` / `retrying` / `saved` /
+`error` / `conflict`）に合わせて検証値を更新。
+
+#### 既知の引き継ぎ事項
+
+- `db.json` モードの引退は本リリースのスコープ外。標準プロジェクト（同期 lowdb 経由）は従来どおり
+  並走する
+- リアルタイム協調や同一マシン複数インスタンスの同時編集はスコープ外。ロックファイルも導入しない
+- 同一タスク・同一メモを別 PC から OneDrive 越しに同時編集した場合は OS の mtime に依存した
+  後勝ち。OneDrive が生成する `*conflicted copy*` を検知してユーザに通知する
 
 ### v1.1（2026-05-15）— UX 全面リフレッシュ
 
@@ -488,3 +639,4 @@ import LocalComponent from "./LocalComponent.svelte";
 | --- | ---------- | ------------------------------------- |
 | 1.0 | 2026-05-13 | 初版 — リファクタリング v1.0 完了時点 |
 | 1.1 | 2026-05-15 | UX 全面リフレッシュ完了時点           |
+| 1.2 | 2026-05-16 | ワークスペース永続化パイプライン導入  |
