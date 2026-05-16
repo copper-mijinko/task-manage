@@ -632,22 +632,8 @@ app.on("ready", () => {
 
   ipcMain.handle("ws:write-project", async (event, { projectDir, tasks }) => {
     try {
-      const { taskDirs } = workspace.readProject(projectDir);
-      const newTaskIds = new Set(tasks.map((t) => t.id));
-
-      // Delete task dirs no longer in the new task list
-      for (const id of [...taskDirs.keys()]) {
-        if (!newTaskIds.has(id)) {
-          await workspace.deleteTaskDirAsync(projectDir, taskDirs, id);
-        }
-      }
-
-      for (const task of tasks) {
-        await workspace.writeTaskAsync(projectDir, task, taskDirs);
-      }
-
-      // Invalidate cache so next read reflects the new state
-      wsCache.delete(projectDir);
+      const updated = await workspace.writeProjectAsync(projectDir, tasks);
+      wsCache.set(projectDir, updated);
 
       return { success: true };
     } catch (err) {

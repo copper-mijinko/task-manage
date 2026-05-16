@@ -192,6 +192,20 @@ async function atomicWriteFile(filePath, data, options) {
   }
 }
 
+async function writeFileIfChanged(filePath, data, options) {
+  const nextBuffer = Buffer.isBuffer(data) ? data : Buffer.from(String(data));
+  try {
+    const currentBuffer = await fs.promises.readFile(filePath);
+    if (Buffer.compare(currentBuffer, nextBuffer) === 0) {
+      return false;
+    }
+  } catch (err) {
+    if (err.code !== "ENOENT") throw err;
+  }
+  await atomicWriteFile(filePath, data, options);
+  return true;
+}
+
 function taskFrontmatterData(task) {
   const data = { id: task.id, name: task.name, status: task.status };
   if (task.startDate) data.start = task.startDate;
@@ -314,15 +328,21 @@ async function writeMemoFilesAsync(taskDir, indexFileName, memos) {
   const existing = (await fs.promises.readdir(taskDir)).filter(
     (f) => f.endsWith(".md") && f !== indexFileName
   );
-  for (const f of existing) {
-    await retryFileOperation(() => fs.promises.unlink(path.join(taskDir, f)));
-  }
+  const nextFiles = new Set();
+
   for (const memo of memos || []) {
     const id = memo.id || crypto.randomUUID();
-    await atomicWriteFile(
+    nextFiles.add(`${id}.md`);
+    await writeFileIfChanged(
       path.join(taskDir, `${id}.md`),
       stringifyFrontmatter({ id, title: memo.title, tags: memo.tags ?? [] }, memo.content)
     );
+  }
+
+  for (const f of existing) {
+    if (!nextFiles.has(f)) {
+      await retryFileOperation(() => fs.promises.unlink(path.join(taskDir, f)));
+    }
   }
 }
 
@@ -339,7 +359,7 @@ function writeRootTask(projectDir, task) {
 /** Write root task to _project.md using atomic async file writes. */
 async function writeRootTaskAsync(projectDir, task) {
   await fs.promises.mkdir(projectDir, { recursive: true });
-  await atomicWriteFile(
+  await writeFileIfChanged(
     path.join(projectDir, "_project.md"),
     stringifyFrontmatter(taskFrontmatterData(task))
   );
@@ -392,7 +412,7 @@ async function writeTaskAsync(projectDir, task, taskDirs) {
   const taskDir = path.join(projectDir, dirName);
   await fs.promises.mkdir(taskDir, { recursive: true });
 
-  await atomicWriteFile(
+  await writeFileIfChanged(
     path.join(taskDir, "_index.md"),
     stringifyFrontmatter(taskFrontmatterData(task))
   );
@@ -490,6 +510,26 @@ async function deleteTaskDirAsync(projectDir, taskDirs, taskId) {
     await retryFileOperation(() => fs.promises.rm(taskDir, { recursive: true, force: true }));
   }
   taskDirs.delete(taskId);
+}
+
+async function writeProjectAsync(projectDir, tasks) {
+  const { taskDirs } = readProject(projectDir);
+  const nextTaskIds = new Set(tasks.map((task) => task.id));
+
+  for (const id of [...taskDirs.keys()]) {
+    if (!nextTaskIds.has(id)) {
+      await deleteTaskDirAsync(projectDir, taskDirs, id);
+    }
+  }
+
+  for (const task of tasks) {
+    await writeTaskAsync(projectDir, task, taskDirs);
+  }
+
+  return {
+    tasks: new Map(tasks.map((task) => [task.id, task])),
+    taskDirs,
+  };
 }
 
 /**
@@ -707,10 +747,12 @@ module.exports = {
   parseFrontmatter,
   stringifyFrontmatter,
   atomicWriteFile,
+  writeFileIfChanged,
   retryFileOperation,
   readProject,
   writeTask,
   writeTaskAsync,
+  writeProjectAsync,
   saveMemoImage,
   saveMemoImageAsync,
   resolveMemoAssetPath,
