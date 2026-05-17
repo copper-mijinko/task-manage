@@ -91,6 +91,8 @@
     top: 50%;
     transform: translateY(-50%);
     flex-shrink: 0;
+    width: var(--sp4);
+    text-align: center;
     font-size: var(--font-label-md);
     color: var(--theme-color-Error-main);
     line-height: 1;
@@ -115,9 +117,9 @@
     font-size: var(--font-label-md);
     cursor: pointer;
   }
-  /* Make room for the leading warning icon */
+  /* Make room for the leading warning icon (icon is sp1 from left + sp4 wide, plus sp1 gap) */
   .Container.Overdue .Date {
-    padding-left: calc(var(--sp1) + var(--sp4));
+    padding-left: calc(var(--sp1) * 2 + var(--sp4));
   }
   .Container.Overdue .Date,
   .Container.DueSoon .Date {

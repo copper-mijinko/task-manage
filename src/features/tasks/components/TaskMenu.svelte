@@ -98,62 +98,66 @@
   >
     <ul class="task-menu" role="menu" aria-label="Task actions">
       {#each menuItems as item}
-        <li class="menu-item-shell">
-          <button
-            class="task-menu-item"
-            class:disabled={item.disabled}
-            class:has-children={item.children?.length > 0}
-            disabled={item.disabled}
-            role="menuitem"
-            aria-disabled={item.disabled ? "true" : undefined}
-            on:click={(event) => triggerAction(item, event)}
-          >
-            <span class="menu-item-content">
-              {#if item.icon}
-                <svg
-                  viewBox={item.icon.viewBox}
-                  xmlns="http://www.w3.org/2000/svg"
-                  class="menu-icon"
-                >
-                  <path d={item.icon.path}></path>
-                </svg>
+        {#if item.type === "separator"}
+          <li class="menu-separator" role="separator" aria-hidden="true"></li>
+        {:else}
+          <li class="menu-item-shell">
+            <button
+              class="task-menu-item"
+              class:disabled={item.disabled}
+              class:has-children={item.children?.length > 0}
+              disabled={item.disabled}
+              role="menuitem"
+              aria-disabled={item.disabled ? "true" : undefined}
+              on:click={(event) => triggerAction(item, event)}
+            >
+              <span class="menu-item-content">
+                {#if item.icon}
+                  <svg
+                    viewBox={item.icon.viewBox}
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="menu-icon"
+                  >
+                    <path d={item.icon.path}></path>
+                  </svg>
+                {/if}
+                <span class="menu-label">{item.title}</span>
+              </span>
+              {#if item.children?.length}
+                <span class="submenu-arrow">›</span>
               {/if}
-              <span class="menu-label">{item.title}</span>
-            </span>
-            {#if item.children?.length}
-              <span class="submenu-arrow">›</span>
-            {/if}
-          </button>
+            </button>
 
-          {#if item.children?.length}
-            <div class={`submenu ${submenuSideClass}`}>
-              <ul class="task-menu" role="menu">
-                {#each item.children as child}
-                  <li class="menu-item-shell">
-                    <button
-                      class="task-menu-item"
-                      role="menuitem"
-                      on:click={(event) => triggerAction(child, event)}
-                    >
-                      <span class="menu-item-content">
-                        {#if child.icon}
-                          <svg
-                            viewBox={child.icon.viewBox}
-                            xmlns="http://www.w3.org/2000/svg"
-                            class="menu-icon"
-                          >
-                            <path d={child.icon.path}></path>
-                          </svg>
-                        {/if}
-                        <span class="menu-label">{child.title}</span>
-                      </span>
-                    </button>
-                  </li>
-                {/each}
-              </ul>
-            </div>
-          {/if}
-        </li>
+            {#if item.children?.length}
+              <div class={`submenu ${submenuSideClass}`}>
+                <ul class="task-menu" role="menu">
+                  {#each item.children as child}
+                    <li class="menu-item-shell">
+                      <button
+                        class="task-menu-item"
+                        role="menuitem"
+                        on:click={(event) => triggerAction(child, event)}
+                      >
+                        <span class="menu-item-content">
+                          {#if child.icon}
+                            <svg
+                              viewBox={child.icon.viewBox}
+                              xmlns="http://www.w3.org/2000/svg"
+                              class="menu-icon"
+                            >
+                              <path d={child.icon.path}></path>
+                            </svg>
+                          {/if}
+                          <span class="menu-label">{child.title}</span>
+                        </span>
+                      </button>
+                    </li>
+                  {/each}
+                </ul>
+              </div>
+            {/if}
+          </li>
+        {/if}
       {/each}
     </ul>
   </div>
@@ -258,5 +262,14 @@
 
   .menu-item-shell:hover > .submenu {
     display: block;
+  }
+
+  .menu-separator {
+    height: 1px;
+    margin: 4px 0;
+    padding: 0;
+    background-color: color-mix(in srgb, var(--theme-color-Sub-light) 22%, transparent);
+    list-style: none;
+    pointer-events: none;
   }
 </style>

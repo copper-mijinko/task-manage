@@ -15,6 +15,7 @@
   import {
     flattenVisibleTree,
     buildInheritedDueDateMap,
+    buildNodePathMap,
     updateNodeDataById,
     isChild,
     reorderTree,
@@ -48,6 +49,7 @@
 
   $: rows = $filtered_data ? flattenVisibleTree($filtered_data, $closed_node_ids) : [];
   $: inheritedDueDateMap = buildInheritedDueDateMap(rows);
+  $: nodePathMap = buildNodePathMap(rows);
   $: isDark = $theme == "dark";
   $: hasNoTasks = !$tree_data?.data?.children?.length;
   let scrollTop = 0;
@@ -104,19 +106,24 @@
       return [];
     }
 
-    const stickyOverlayRows = 1;
-    const topVisibleIndex = Math.min(
+    // スティッキー表示自体が 1 行分 (2.5rem) を覆い隠す。スクロール量から
+    // 計算される「画面最上段の行」はちょうどスティッキーに覆われている行で、
+    // ユーザが実際に見える最初の本文行 (content-visible) はその 1 つ下。
+    // スティッキー上のパスを「画面で見える行の親パス」と一致させるには、
+    // 覆われている行 (= floor(scrollTop / rowHeight)) の祖先 (自身含む) を
+    // パンくずに使えばよい。
+    const coveredIndex = Math.min(
       visibleRows.length - 1,
-      Math.max(0, Math.floor(currentScrollTop / rowHeightPx) - stickyOverlayRows)
+      Math.max(0, Math.floor(currentScrollTop / rowHeightPx))
     );
-    const topRow = visibleRows[topVisibleIndex];
-    if (!topRow || topRow.depth === 0) {
+    const coveredRow = visibleRows[coveredIndex];
+    if (!coveredRow || coveredRow.depth === 0) {
       return [];
     }
 
     const rowById = new Map(visibleRows.map((row) => [row.id, row]));
     const trail = [];
-    let currentRow = topRow;
+    let currentRow = coveredRow;
 
     while (currentRow) {
       trail.unshift(currentRow);
@@ -676,6 +683,7 @@
         canIndent={row.canIndent}
         canOutdent={row.canOutdent}
         inheritedDueDate={inheritedDueDateMap.get(row.id) ?? ""}
+        nodePath={nodePathMap.get(row.id) ?? ""}
         on:select={handleSelectRow}
         on:toggle={handleToggleRow}
         on:commit={handleCommit}

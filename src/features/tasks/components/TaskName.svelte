@@ -17,6 +17,7 @@
   export let canMoveDown = false;
   export let canIndent = false;
   export let canOutdent = false;
+  export let nodePath = "";
   let draftText = text ?? "";
   let input;
   let isEditing = false;
@@ -24,58 +25,78 @@
   let menuPosition = { x: 0, y: 0 };
   const menuOwnerId = Math.random().toString(36).slice(2);
 
-  // メニュー項目の定義
-  $: menuItems = [
-    {
-      title: "rename",
-      action: "rename",
-      icon: {
-        viewBox: "-4 -4 32 32",
-        path: "M18.111,2.293,9.384,11.021a.977.977,0,0,0-.241.39L8.052,14.684A1,1,0,0,0,9,16a.987.987,0,0,0,.316-.052l3.273-1.091a.977.977,0,0,0,.39-.241l8.728-8.727a1,1,0,0,0,0-1.414L19.525,2.293A1,1,0,0,0,18.111,2.293Z",
+  // メニュー項目の定義（7グループ。空グループは区切り線が連続しないよう自動的にスキップ）
+  function withSeparators(groups) {
+    const result = [];
+    for (const group of groups) {
+      if (!group.length) continue;
+      if (result.length > 0) result.push({ type: "separator" });
+      result.push(...group);
+    }
+    return result;
+  }
+
+  $: menuItems = withSeparators([
+    // 1. Rename
+    [
+      {
+        title: "rename",
+        action: "rename",
+        icon: {
+          viewBox: "-4 -4 32 32",
+          path: "M18.111,2.293,9.384,11.021a.977.977,0,0,0-.241.39L8.052,14.684A1,1,0,0,0,9,16a.987.987,0,0,0,.316-.052l3.273-1.091a.977.977,0,0,0,.39-.241l8.728-8.727a1,1,0,0,0,0-1.414L19.525,2.293A1,1,0,0,0,18.111,2.293Z",
+        },
       },
-    },
-    ...(!isRoot
-      ? [
-          {
-            title: "add task below",
-            action: "addBelow",
-            icon: {
-              viewBox: "0 0 24 24",
-              path: "M12 5V19M5 12H19",
+    ],
+    // 2. Add
+    [
+      ...(!isRoot
+        ? [
+            {
+              title: "add task below",
+              action: "addBelow",
+              icon: {
+                viewBox: "0 0 24 24",
+                path: "M12 5V19M5 12H19",
+              },
             },
-          },
-        ]
-      : []),
-    {
-      title: "add child task",
-      action: "addChild",
-      icon: {
-        viewBox: "0 0 24 24",
-        path: "M5 5V14H15M11 10L15 14L11 18M19 5V9M17 7H21",
+          ]
+        : []),
+      {
+        title: "add child task",
+        action: "addChild",
+        icon: {
+          viewBox: "0 0 24 24",
+          path: "M5 5V14H15M11 10L15 14L11 18M19 5V9M17 7H21",
+        },
       },
-    },
-    ...(!isRoot
-      ? [
-          {
-            title: "copy",
-            action: "copyTask",
-            icon: {
-              viewBox: "0 0 24 24",
-              path: "M8 4v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7.242a2 2 0 0 0-.602-1.43L16.083 2.57A2 2 0 0 0 14.685 2H10a2 2 0 0 0-2 2ZM4 8H2v12a2 2 0 0 0 2 2h8v-2H4Z",
+    ],
+    // 3. Clipboard
+    [
+      ...(!isRoot
+        ? [
+            {
+              title: "copy",
+              action: "copyTask",
+              icon: {
+                viewBox: "0 0 24 24",
+                path: "M8 4v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7.242a2 2 0 0 0-.602-1.43L16.083 2.57A2 2 0 0 0 14.685 2H10a2 2 0 0 0-2 2ZM4 8H2v12a2 2 0 0 0 2 2h8v-2H4Z",
+              },
             },
-          },
-        ]
-      : []),
-    {
-      title: "paste as child",
-      action: "pasteTask",
-      disabled: $copied_task === null,
-      icon: {
-        viewBox: "0 0 24 24",
-        path: "M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2",
+          ]
+        : []),
+      {
+        title: "paste as child",
+        action: "pasteTask",
+        disabled: $copied_task === null,
+        icon: {
+          viewBox: "0 0 24 24",
+          path: "M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2",
+        },
       },
-    },
-    ...(hasChildren
+    ],
+    // 4. Expand/collapse
+    hasChildren
       ? [
           {
             title: expanded ? "collapse" : "expand",
@@ -86,52 +107,59 @@
             },
           },
         ]
-      : []),
-    {
-      title: "move up",
-      action: "moveUp",
-      disabled: !canMoveUp,
-      icon: {
-        viewBox: "0 0 24 24",
-        path: "M12 5L6 11H10V19H14V11H18L12 5Z",
+      : [],
+    // 5. Move
+    [
+      {
+        title: "move up",
+        action: "moveUp",
+        disabled: !canMoveUp,
+        icon: {
+          viewBox: "0 0 24 24",
+          path: "M12 5L6 11H10V19H14V11H18L12 5Z",
+        },
       },
-    },
-    {
-      title: "move down",
-      action: "moveDown",
-      disabled: !canMoveDown,
-      icon: {
-        viewBox: "0 0 24 24",
-        path: "M12 19L18 13H14V5H10V13H6L12 19Z",
+      {
+        title: "move down",
+        action: "moveDown",
+        disabled: !canMoveDown,
+        icon: {
+          viewBox: "0 0 24 24",
+          path: "M12 19L18 13H14V5H10V13H6L12 19Z",
+        },
       },
-    },
-    {
-      title: "move right",
-      action: "indentTask",
-      disabled: !canIndent,
-      icon: {
-        viewBox: "0 0 24 24",
-        path: "M4 6H14V8H4V6ZM4 11H14V13H4V11ZM4 16H14V18H4V16ZM12 9L17 14L12 19V16H8V12H12V9Z",
+      {
+        title: "move right",
+        action: "indentTask",
+        disabled: !canIndent,
+        icon: {
+          viewBox: "0 0 24 24",
+          path: "M4 6H14V8H4V6ZM4 11H14V13H4V11ZM4 16H14V18H4V16ZM12 9L17 14L12 19V16H8V12H12V9Z",
+        },
       },
-    },
-    {
-      title: "move left",
-      action: "outdentTask",
-      disabled: !canOutdent,
-      icon: {
-        viewBox: "0 0 24 24",
-        path: "M10 9L5 14L10 19V16H16V12H10V9ZM10 6H20V8H10V6ZM10 16H20V18H10V16Z",
+      {
+        title: "move left",
+        action: "outdentTask",
+        disabled: !canOutdent,
+        icon: {
+          viewBox: "0 0 24 24",
+          path: "M10 9L5 14L10 19V16H16V12H10V9ZM10 6H20V8H10V6ZM10 16H20V18H10V16Z",
+        },
       },
-    },
-    {
-      title: "show details",
-      action: "openTaskDetailWindow",
-      icon: {
-        viewBox: "0 0 24 24",
-        path: "M12 4C7 4 2.73 7.11 1 12c1.73 4.89 6 8 11 8s9.27-3.11 11-8c-1.73-4.89-6-8-11-8Zm0 13a5 5 0 1 1 0-10 5 5 0 0 1 0 10Zm0-8.2A3.2 3.2 0 1 0 12 15.2 3.2 3.2 0 0 0 12 8.8Z",
+    ],
+    // 6. Detail
+    [
+      {
+        title: "show details",
+        action: "openTaskDetailWindow",
+        icon: {
+          viewBox: "0 0 24 24",
+          path: "M12 4C7 4 2.73 7.11 1 12c1.73 4.89 6 8 11 8s9.27-3.11 11-8c-1.73-4.89-6-8-11-8Zm0 13a5 5 0 1 1 0-10 5 5 0 0 1 0 10Zm0-8.2A3.2 3.2 0 1 0 12 15.2 3.2 3.2 0 0 0 12 8.8Z",
+        },
       },
-    },
-    ...(!isRoot
+    ],
+    // 7. Delete
+    !isRoot
       ? [
           {
             title: "delete task",
@@ -142,8 +170,8 @@
             },
           },
         ]
-      : []),
-  ];
+      : [],
+  ]);
 
   const dispatch = createEventDispatcher();
 
@@ -155,15 +183,21 @@
     lastSubmittedText = null;
   }
 
-  const params = {
+  // ノードパス ("root / a / b / current") をツールチップで表示。
+  // nodePath が空のときは従来挙動 (truncated 時のみ value/textContent を表示) に戻す。
+  $: params = {
     color: "var(--theme-color-Main-main)",
     backgroundColor: "var(--theme-color-Sub-main)",
     wrapped: true,
+    content: nodePath || undefined,
+    force: !!nodePath,
   };
 
-  const spanTooltipParams = {
+  $: spanTooltipParams = {
     color: "var(--theme-color-Main-main)",
     backgroundColor: "var(--theme-color-Sub-main)",
+    content: nodePath || undefined,
+    force: !!nodePath,
   };
 
   function splitHighlight(str, query) {

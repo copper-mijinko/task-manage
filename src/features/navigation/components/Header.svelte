@@ -213,6 +213,8 @@
         right={"Light"}
         leftColor="black"
         rightColor="white"
+        leftTextColor="rgba(255,255,255,0.95)"
+        rightTextColor="rgba(255,255,255,0.95)"
         leftColorBack="rgba(0,0,0,0.5)"
         rightColorBack="rgba(255,255,255,0.5)"
         checked={$theme == "light"}
@@ -380,17 +382,17 @@
     width: var(--sp2);
     height: var(--sp2);
     border-radius: 50%;
-    background-color: var(--theme-color-Success-main);
+    background-color: var(--on-theme-success);
     transition: background-color 0.2s ease;
   }
   .SaveIndicator.pending .SaveDot {
-    background-color: var(--theme-color-Warning-main);
+    background-color: var(--on-theme-warning);
   }
   .SaveIndicator.error .SaveDot {
-    background-color: var(--theme-color-Error-main);
+    background-color: var(--on-theme-error);
   }
   .SaveIndicator.error {
-    color: var(--theme-color-Error-light);
+    color: var(--on-theme-error-light);
   }
   .ToggleSwitchContainer {
     flex-shrink: 0;

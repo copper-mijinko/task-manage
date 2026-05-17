@@ -130,6 +130,12 @@ export function tooltip(
     }
   };
 
+  // mouseenter/leave/move を受ける実 anchor。wrapped:true なら親要素にイベントを
+  // 付けるので、sweepTooltips の :hover 判定も同じ要素で行わないと、カーソルが
+  // 親内の他の子要素 (ボタン等) に乗ったときに原 node の :hover が外れて
+  // safety sweep (1秒) でツールチップが消されてしまう。
+  const target = params.wrapped ? (node.parentElement ?? node) : node;
+
   const handleMouseEnter = (e: MouseEvent) => {
     // Defensive: kill any tooltip we might have left over from a previous
     // anchor (this can happen if mouseleave never fired).
@@ -161,7 +167,7 @@ export function tooltip(
       z-index: 9999999999;
     `;
     document.body.appendChild(element);
-    entry = { node, element };
+    entry = { node: target, element };
     activeTooltips.add(entry);
     scheduleSafetySweep();
   };
@@ -174,7 +180,6 @@ export function tooltip(
       entry.element.style.top = `calc(${e.pageY}px + 1rem)`;
     }
   };
-  const target = params.wrapped ? (node.parentElement ?? node) : node;
   target.addEventListener("mouseenter", handleMouseEnter);
   target.addEventListener("mouseleave", handleMouseLeave);
   target.addEventListener("mousemove", handleMouseMove);
