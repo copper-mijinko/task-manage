@@ -356,6 +356,22 @@ export function flattenVisibleTree(
   return rows;
 }
 
+// 各行に対し、ルートから現在ノードまでの名前パス ("root / a / b / current") を返す。
+// 行は flattenVisibleTree の DFS 順 (親が子より先) なので、親のパスを引いて連結するだけで O(N)。
+export function buildNodePathMap(rows: VisibleTreeRow[]): Map<string, string> {
+  const result = new Map<string, string>();
+  for (const row of rows) {
+    const name = row.node.data["name"] ?? "";
+    if (row.parentId) {
+      const parentPath = result.get(row.parentId);
+      result.set(row.id, parentPath ? `${parentPath} / ${name}` : name);
+    } else {
+      result.set(row.id, name);
+    }
+  }
+  return result;
+}
+
 export function buildInheritedDueDateMap(rows: VisibleTreeRow[]): Map<string, string> {
   const rowMap = new Map(rows.map((r) => [r.id, r]));
   const result = new Map<string, string>();

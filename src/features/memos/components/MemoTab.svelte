@@ -6,7 +6,7 @@
   import SegmentedControl from "@lib/primitives/SegmentedControl.svelte";
   import Memo from "@features/memos/components/Memo.svelte";
   import Dialog from "@lib/primitives/Dialog.svelte";
-  import { normalizeMemoFormat } from "@features/memos/utils/memo_utils";
+  import { normalizeMemoFormat, isEmptyMemoContent } from "@features/memos/utils/memo_utils";
 
   export let memo = [];
   export let saveMemo;
@@ -167,6 +167,11 @@
   function requestMemoFormatChange(nextFormat) {
     if (!selectedMemo || !changeMemoFormat || nextFormat === selectedMemoFormat) return;
     pendingFormat = nextFormat;
+    // 空メモなら装飾損失が発生し得ないので、確認ダイアログを出さず即変換
+    if (isEmptyMemoContent(selectedMemo.content)) {
+      callback_format_confirm();
+      return;
+    }
     show_format_confirm = true;
   }
 

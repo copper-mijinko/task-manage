@@ -333,10 +333,11 @@
       <span
         class="SubsectionLabel TextOverFlow"
         use:tooltip={{
-          color: "var(--theme-color-Main-main)",
-          backgroundColor: "var(--theme-color-Sub-main)",
+          color: "var(--on-theme-tooltip-fg)",
+          backgroundColor: "var(--on-theme-tooltip-bg)",
           content:
             "Workspaceフォルダに保存されるプロジェクトです。メモはWorkspaceファイルとして管理されます。",
+          force: true,
         }}>Workspace Projects</span
       >
       <div class="AddButtonContainer">
@@ -376,8 +377,8 @@
             <span
               class="TextOverFlow"
               use:tooltip={{
-                color: "var(--theme-color-Main-main)",
-                backgroundColor: "var(--theme-color-Sub-main)",
+                color: "var(--on-theme-tooltip-fg)",
+                backgroundColor: "var(--on-theme-tooltip-bg)",
                 content: proj.name,
               }}>{proj.name}</span
             >
@@ -415,10 +416,11 @@
       <span
         class="SubsectionLabel TextOverFlow"
         use:tooltip={{
-          color: "var(--theme-color-Main-main)",
-          backgroundColor: "var(--theme-color-Sub-main)",
+          color: "var(--on-theme-tooltip-fg)",
+          backgroundColor: "var(--on-theme-tooltip-bg)",
           content:
             "従来のdb.jsonに保存されるアプリ内プロジェクトです。db.jsonは将来的に非推奨予定です。",
+          force: true,
         }}>InApp Projects (db.json)</span
       >
       <div class="AddButtonContainer">
@@ -458,8 +460,8 @@
           <span
             class:TextOverFlow={true}
             use:tooltip={{
-              color: "var(--theme-color-Main-main)",
-              backgroundColor: "var(--theme-color-Sub-main)",
+              color: "var(--on-theme-tooltip-fg)",
+              backgroundColor: "var(--on-theme-tooltip-bg)",
               content: child.name,
             }}>{child.name}</span
           >
@@ -562,8 +564,8 @@
               <span
                 class:TextOverFlow={true}
                 use:tooltip={{
-                  color: "var(--theme-color-Main-main)",
-                  backgroundColor: "var(--theme-color-Sub-main)",
+                  color: "var(--on-theme-tooltip-fg)",
+                  backgroundColor: "var(--on-theme-tooltip-bg)",
                   content: child.name,
                 }}>{child.name}</span
               >
@@ -791,7 +793,7 @@
     display: block;
   }
   .MenuRow:focus-visible {
-    outline: 2px solid var(--theme-color-Primary-main);
+    outline: 2px solid var(--on-theme-primary);
     outline-offset: -2px;
     z-index: 1;
   }
@@ -815,7 +817,7 @@
     left: 0;
     width: 3px;
     height: 100%;
-    background-color: var(--theme-color-Primary-main);
+    background-color: var(--on-theme-primary);
     z-index: 99999;
   }
   .TextOverFlow {
@@ -836,9 +838,9 @@
     position: absolute;
     top: -1000rem;
     display: inline;
-    background-color: var(--theme-color-Primary-dark);
-    border: 1px solid var(--theme-color-Primary-dark);
-    color: var(--theme-color-Sub-main);
+    background-color: var(--on-theme-primary);
+    border: 1px solid var(--on-theme-primary);
+    color: #ffffff;
     padding: 0 var(--sp2);
     z-index: 10000;
   }
@@ -848,7 +850,7 @@
   }
 
   .MenuRow:global(.DragOverTop):before {
-    border-top: 0.2rem solid var(--theme-color-Primary-dark);
+    border-top: 0.2rem solid var(--on-theme-primary);
     position: absolute;
     content: "";
     height: 2rem;
@@ -860,7 +862,7 @@
   }
 
   .MenuRow:global(.DragOverBottom):before {
-    border-bottom: 0.2rem solid var(--theme-color-Primary-dark);
+    border-bottom: 0.2rem solid var(--on-theme-primary);
     position: absolute;
     content: "";
     height: 2rem;
@@ -960,9 +962,9 @@
     flex-shrink: 0;
   }
   .TagSearch:focus-within {
-    border-color: var(--theme-color-Primary-main);
+    border-color: var(--on-theme-primary);
     color: white;
-    box-shadow: inset 0 0 0 1px var(--theme-color-Primary-main);
+    box-shadow: inset 0 0 0 1px var(--on-theme-primary);
   }
   .TagSearch input {
     min-width: 0;
@@ -986,7 +988,7 @@
     width: 1.25rem;
     height: 1.25rem;
     border-radius: var(--shape-pill);
-    color: var(--theme-color-Primary-main);
+    color: var(--on-theme-primary);
     background-color: rgba(255, 255, 255, 0.07);
     font-size: var(--font-label-md);
   }

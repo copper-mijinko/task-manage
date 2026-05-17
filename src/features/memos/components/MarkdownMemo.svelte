@@ -3,7 +3,8 @@
   import { EditorView, keymap } from "@codemirror/view";
   import { EditorState } from "@codemirror/state";
   import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
-  import { syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language";
+  import { syntaxHighlighting, HighlightStyle } from "@codemirror/language";
+  import { tags as t } from "@lezer/highlight";
   import { languages } from "@codemirror/language-data";
   import { history, defaultKeymap, historyKeymap } from "@codemirror/commands";
   import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
@@ -484,11 +485,33 @@
     ".cm-gutters": { display: "none" },
   });
 
+  // テーマ非依存の Markdown 用シンタックスハイライト。defaultHighlightStyle は
+  // 白背景前提の固定色 (#708, #a11, #940 など) を使うため、Dark テーマの
+  // 暗い背景 (Main-light = #394249) で見えなくなる。base color は editorTheme
+  // の color (Sub-light) を継承させ、トークンには太字/斜体/テーマ追従の
+  // accent 色のみを乗せて両テーマで可読性を確保する。
+  const markdownHighlightStyle = HighlightStyle.define([
+    { tag: t.heading, fontWeight: "bold" },
+    { tag: t.heading1, fontWeight: "bold" },
+    { tag: t.heading2, fontWeight: "bold" },
+    { tag: t.heading3, fontWeight: "bold" },
+    { tag: t.heading4, fontWeight: "bold" },
+    { tag: t.heading5, fontWeight: "bold" },
+    { tag: t.heading6, fontWeight: "bold" },
+    { tag: t.strong, fontWeight: "bold" },
+    { tag: t.emphasis, fontStyle: "italic" },
+    { tag: t.link, color: "var(--theme-color-Primary-main)", textDecoration: "underline" },
+    { tag: t.url, color: "var(--theme-color-Primary-main)" },
+    { tag: t.monospace, color: "var(--theme-color-Accent-main)" },
+    { tag: t.quote, opacity: "0.78" },
+    { tag: t.meta, opacity: "0.55" },
+  ]);
+
   function buildExtensions() {
     return [
       editorTheme,
       markdown({ base: markdownLanguage, codeLanguages: languages }),
-      syntaxHighlighting(defaultHighlightStyle),
+      syntaxHighlighting(markdownHighlightStyle),
       highlightSelectionMatches(),
       keymap.of([
         {

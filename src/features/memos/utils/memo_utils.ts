@@ -54,6 +54,24 @@ export function convertMemoContent(
   return markdownToQuillDelta(content);
 }
 
+// 空メモ判定: 装飾損失の警告を出すかどうかの判定に使う
+// Markdown: 空文字 / 空白のみ
+// Quill: ops 空 / 単一の空 insert / 単一の改行のみ insert
+export function isEmptyMemoContent(content: unknown): boolean {
+  if (content == null) return true;
+  if (typeof content === "string") return content.trim() === "";
+  if (isQuillDelta(content)) {
+    const { ops } = content;
+    if (ops.length === 0) return true;
+    if (ops.length === 1) {
+      const insert = ops[0].insert;
+      return insert === "" || insert === "\n";
+    }
+    return false;
+  }
+  return false;
+}
+
 export function toMarkdown(val: unknown): string {
   if (!val) return "";
   if (typeof val === "string") return val;

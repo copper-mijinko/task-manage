@@ -170,7 +170,9 @@
   $: totalDays = Math.ceil((timelineEnd.getTime() - timelineStart.getTime()) / DAY_MS);
   $: totalWidthRem = totalDays * remPerDay;
   $: todayTs = startOfDay();
-  $: todayRem = remFromDate(todayTs);
+  // remPerDay も依存に含めて、スケール (日/週/月) 切替時に再計算されるようにする。
+  // (remFromDate の default 引数で間接参照すると Svelte の reactive 解析対象外)
+  $: todayRem = dayOffset(todayTs, timelineStart) * remPerDay;
 
   // ── Header cells ─────────────────────────────────────────────────
 
@@ -1197,30 +1199,23 @@
     position: absolute;
     top: 0;
     bottom: 0;
-    /* Frame the today column with thin top + bottom Accent strips instead
-       of filling the whole cell, so the date text underneath stays
-       readable. The vertical TodayLine handles "where exactly is today". */
-    border-top: 3px solid var(--theme-color-Accent-main);
-    border-bottom: 3px solid var(--theme-color-Accent-main);
-    background-color: transparent;
+    /* 薄い Accent 色でスケール幅 (1日分) をフィル。枠線は付けず、
+       縦線 (.TodayLine) で「今日」の正確な位置を別途示す。 */
+    background-color: color-mix(in srgb, var(--theme-color-Accent-light) 55%, transparent);
     pointer-events: none;
     z-index: 5;
-    /* In week / month modes a single day is only a few pixels wide; bump
-       the visible minimum so the framing is still recognizable. */
-    min-width: 12px;
     box-sizing: border-box;
   }
   .TodayDayBody {
     position: absolute;
     top: 0;
     bottom: 0;
-    background-color: color-mix(in srgb, var(--theme-color-Accent-main) 22%, transparent);
+    background-color: color-mix(in srgb, var(--theme-color-Accent-light) 35%, transparent);
     pointer-events: none;
     /* Above GridCell (0) and GanttRow (1) so the today fill is never
        hidden by a transparent row. */
     z-index: 2;
-    min-width: 12px;
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--theme-color-Accent-main) 55%, transparent);
+    box-sizing: border-box;
   }
 
   .TodayLine {

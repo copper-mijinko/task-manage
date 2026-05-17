@@ -37,6 +37,19 @@
   --font-label-lg: 14px;
   --font-label-md: 12px;
   --font-label-sm: 11px;
+
+  /* Header/Sidebar の濃紺背景上で使う固定色（テーマ非依存）
+     Theme-main (#143693) は Dark/Light どちらでも同じため、その上に
+     乗る要素も常時同じ色で良い。テーマ依存の theme-color-* を使うと
+     ライトテーマで暗色版になり視認性が落ちるので、ダークテーマ寄りの
+     明るめバリアントを採用。 */
+  --on-theme-success: #66bb6a;
+  --on-theme-warning: #ffa726;
+  --on-theme-error: #f44336;
+  --on-theme-error-light: #e57373;
+  --on-theme-primary: #42a5f5;
+  --on-theme-tooltip-bg: #e8edf0;
+  --on-theme-tooltip-fg: #262d32;
 }
 
 html,

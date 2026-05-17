@@ -21,6 +21,7 @@
   export let canIndent = false;
   export let canOutdent = false;
   export let inheritedDueDate = "";
+  export let nodePath = "";
 
   const dispatch = createEventDispatcher();
   let taskName;
@@ -229,6 +230,7 @@
           {canMoveDown}
           {canIndent}
           {canOutdent}
+          {nodePath}
           on:commit={(e) => {
             commitData("name", e.detail.value);
           }}
@@ -434,7 +436,7 @@
   .TableRow:hover .TableData {
     background-color: var(--backgroundColor);
   }
-  .TableRow.Selected::before {
+  .TableRow.Selected::after {
     content: "";
     position: absolute;
     top: 0;
@@ -443,6 +445,7 @@
     height: 100%;
     background-color: var(--theme-color-Primary-main);
     z-index: 999;
+    pointer-events: none;
   }
   .TableData {
     display: flex;

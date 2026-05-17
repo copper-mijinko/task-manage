@@ -5,11 +5,15 @@
   export let leftColorBack = "#75bbff33";
   export let rightColor = "#ff8d8d";
   export let rightColorBack = "#ff8d8d33";
+  export let leftTextColor = null;
+  export let rightTextColor = null;
   export let checked = true;
+  $: leftTextResolved = leftTextColor ?? leftColor;
+  $: rightTextResolved = rightTextColor ?? rightColor;
 </script>
 
 <div
-  style="--leftColor:{leftColor}; --leftColorBack:{leftColorBack}; --rightColor:{rightColor}; --rightColorBack:{rightColorBack};"
+  style="--leftColor:{leftColor}; --leftColorBack:{leftColorBack}; --rightColor:{rightColor}; --rightColorBack:{rightColorBack}; --leftTextColor:{leftTextResolved}; --rightTextColor:{rightTextResolved};"
 >
   <span class="Left">{left}</span>
   <label class="ToggleButton">
@@ -66,11 +70,11 @@
   }
 
   .Left {
-    color: var(--leftColor);
+    color: var(--leftTextColor);
   }
 
   .Right {
-    color: var(--rightColor);
+    color: var(--rightTextColor);
   }
 
   .ToggleButton input {

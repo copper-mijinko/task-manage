@@ -156,6 +156,11 @@
         saveStatus.set("error");
         return;
       }
+      // "workspace-updated" はヘッダーの保存状態表示と意味が被るので非表示
+      // ("conflicted-copy" 等のユーザ操作が必要な通知のみバナー表示)
+      if (event.kind === "workspace-updated") {
+        return;
+      }
       workspaceNoticeMessage = event.message;
       setTimeout(() => {
         if (workspaceNoticeMessage === event.message) {
@@ -214,7 +219,16 @@
         <MenuList />
       </aside>
     {/if}
-    <div class="Main" class:DetailWindowMain={isTaskDetailWindow}>
+    <div
+      class="Main"
+      class:DetailWindowMain={isTaskDetailWindow}
+      on:pointerdown={() => {
+        if (!isTaskDetailWindow && !$sidebarCollapsed) {
+          $sidebarCollapsed = true;
+        }
+      }}
+      role="presentation"
+    >
       {#if isTaskDetailWindow}
         <TaskDetailWindow
           initialTaskName={detailWindowTaskName}
