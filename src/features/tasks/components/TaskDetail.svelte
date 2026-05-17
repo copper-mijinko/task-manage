@@ -13,18 +13,21 @@
   } from "@stores";
   import { debounce } from "lodash";
   import { onDestroy } from "svelte";
+  import { get } from "svelte/store";
   import MemoTab from "@features/memos/components/MemoTab.svelte";
-  import SplitPanes from "@lib/layouts/SplitPanes.svelte";
-  import Pane from "@lib/layouts/Pane.svelte";
   import Card from "@lib/primitives/Card.svelte";
   import StatusSelect from "@features/tasks/components/StatusSelect.svelte";
   import DateInput from "@lib/primitives/DateInput.svelte";
+  import {
+    convertMemoContent,
+    isQuillDelta,
+    normalizeMemoFormat,
+  } from "@features/memos/utils/memo_utils";
 
   /**
    * When TaskDetail is rendered inside its own dedicated window (TaskDetailPage),
-   * the "Task Detail" Card title is redundant — the OS-level title bar already
-   * says the same thing. Callers pass `hideDetailTitle` to suppress both the
-   * detail card title and the memo card title in that context.
+   * the card title is redundant with the OS-level title bar. Callers pass
+   * `hideDetailTitle` to suppress the local card header in that context.
    */
   export let hideDetailTitle = false;
 
@@ -35,11 +38,32 @@
   $: memo = node ? node.data["memo"] : [];
   $: isWorkspaceProject = $selected_type === "WorkspaceProject";
   $: workspaceProjectDir = isWorkspaceProject ? $workspace_store.activeProjectDir : null;
-  $: memoType = isWorkspaceProject ? "Markdown" : "Quill";
+  $: defaultMemoFormat = isWorkspaceProject ? "markdown" : "quill";
   $: isDark = $theme === "dark";
 
   const detailDateStyle =
     "border: 0; padding: 0 var(--sp7) 0 var(--sp2); font-size: 1rem; background-color: transparent;";
+  const RESIZER_SIZE = 5;
+  const MINI_PANE_SIZE = 0;
+  const SNAP_THRESHOLD = 80;
+  const DETAIL_MIN_HEIGHT = 96;
+  const MEMO_MIN_HEIGHT = 160;
+  const SNAP_TRANSITION_MS = 180;
+
+  let splitBody;
+  let detailPane;
+  let memoPane;
+  let detailPanePercent = 40;
+  let detailPaneSize = "40%";
+  let splitState = "open";
+  let splitSnapping = false;
+  let previousTaskDetailId = "";
+  let snapTimer;
+  let resizeStartY = 0;
+  let startDetailSize = 0;
+  let startMemoSize = 0;
+  let lastDesiredDetailSize = 0;
+  let lastDesiredMemoSize = 0;
 
   const getEditContext = () => ({
     selectedType: $selected_type,
@@ -62,13 +86,41 @@
     if (!node) {
       return;
     }
-    const data = updateNodeDataById($tree_data.data, node.id, { [key]: value });
-    if (data !== $tree_data.data) {
-      $tree_data = { ...$tree_data, data };
+    const liveTreeData = get(tree_data);
+    if (!liveTreeData?.data) {
+      return;
+    }
+    const data = updateNodeDataById(liveTreeData.data, node.id, { [key]: value });
+    if (data !== liveTreeData.data) {
+      tree_data.set({ ...liveTreeData, data });
     }
   };
   const changeDataDebounce = debounce(changeData, 500);
   let previousEditContextKey = "";
+
+  const getLiveNode = (editContext = getEditContext()) => {
+    const liveTreeData = get(tree_data);
+    if (!contextMatches(editContext) || !liveTreeData?.data || !editContext.tableSelectedId) {
+      return undefined;
+    }
+    return getNode(editContext.tableSelectedId, liveTreeData.data);
+  };
+
+  const changeMemoAtIndex = (selectedMemoIndex, updater, editContext = getEditContext()) => {
+    const liveNode = getLiveNode(editContext);
+    if (!liveNode) return false;
+
+    const updatedMemo = [...(liveNode.data["memo"] ?? [])];
+    const currentMemo = updatedMemo[selectedMemoIndex];
+    if (!currentMemo) return false;
+
+    const nextMemo = updater(currentMemo);
+    if (!nextMemo) return false;
+
+    updatedMemo[selectedMemoIndex] = nextMemo;
+    changeData(liveNode, "memo", updatedMemo, editContext);
+    return true;
+  };
 
   $: editContextKey = [
     $selected_type ?? "",
@@ -82,11 +134,19 @@
     previousEditContextKey = editContextKey;
   }
 
+  $: currentTaskDetailId = node?.id ?? "";
+  $: if (currentTaskDetailId !== previousTaskDetailId) {
+    previousTaskDetailId = currentTaskDetailId;
+    resetCardSplit();
+  }
+
   const unsubscribeCancelPending = cancelPendingOperations.subscribe(() => {
     changeDataDebounce.cancel();
   });
 
   onDestroy(() => {
+    stopCardResize();
+    clearTimeout(snapTimer);
     changeDataDebounce.cancel();
     unsubscribeCancelPending();
   });
@@ -94,7 +154,13 @@
 
   const addMemo = (newMemoTitle) => {
     if (newMemoTitle) {
-      let newMemo = { id: uuidV4(), title: newMemoTitle, content: "", tags: [] };
+      let newMemo = {
+        id: uuidV4(),
+        title: newMemoTitle,
+        content: "",
+        tags: [],
+        format: defaultMemoFormat,
+      };
       changeData(node, "memo", [...node.data.memo, newMemo]);
       return true;
     }
@@ -109,14 +175,18 @@
   };
   const saveMemo = (editedContent, selectedMemoIndex) => {
     const editContext = getEditContext();
-    const updatedMemo = [...node.data["memo"]];
-    updatedMemo[selectedMemoIndex] = {
-      ...updatedMemo[selectedMemoIndex],
-      content: editedContent,
-    };
-    node.data["memo"] = updatedMemo;
-    changeData(node, "memo", updatedMemo, editContext);
-    return true;
+    return changeMemoAtIndex(
+      selectedMemoIndex,
+      (currentMemo) => {
+        const targetFormat = normalizeMemoFormat(currentMemo.format, defaultMemoFormat);
+        const sourceFormat = isQuillDelta(editedContent) ? "quill" : "markdown";
+        return {
+          ...currentMemo,
+          content: convertMemoContent(editedContent, sourceFormat, targetFormat),
+        };
+      },
+      editContext
+    );
   };
   const renameMemo = (newMemoTitle, selectedMemoIndex) => {
     if (newMemoTitle) {
@@ -135,10 +205,27 @@
   };
   const saveMemoTags = (selectedMemoIndex, tags) => {
     const editContext = getEditContext();
-    const updatedMemo = [...node.data["memo"]];
-    updatedMemo[selectedMemoIndex] = { ...updatedMemo[selectedMemoIndex], tags };
-    node.data["memo"] = updatedMemo;
-    changeData(node, "memo", updatedMemo, editContext);
+    return changeMemoAtIndex(
+      selectedMemoIndex,
+      (currentMemo) => ({ ...currentMemo, tags }),
+      editContext
+    );
+  };
+  const changeMemoFormat = (selectedMemoIndex, nextFormat) => {
+    const editContext = getEditContext();
+    return changeMemoAtIndex(
+      selectedMemoIndex,
+      (currentMemo) => {
+        const currentFormat = normalizeMemoFormat(currentMemo.format, defaultMemoFormat);
+        if (currentFormat === nextFormat) return currentMemo;
+        return {
+          ...currentMemo,
+          format: nextFormat,
+          content: convertMemoContent(currentMemo.content, currentFormat, nextFormat),
+        };
+      },
+      editContext
+    );
   };
 
   const changeTaskField = (key, value, debounceChange = false) => {
@@ -162,136 +249,391 @@
   const flushNameChange = () => {
     changeDataDebounce.flush?.();
   };
+
+  function resetCardSplit() {
+    clearTimeout(snapTimer);
+    detailPaneSize = "auto";
+    detailPanePercent = 0;
+    splitState = "open";
+    splitSnapping = false;
+  }
+
+  function getCurrentPaneSizes() {
+    const total = Math.max(0, splitBody?.getBoundingClientRect().height - RESIZER_SIZE);
+    const detailHeight = detailPane?.getBoundingClientRect().height ?? 0;
+    const memoHeight =
+      memoPane?.getBoundingClientRect().height ?? Math.max(0, total - detailHeight);
+    return {
+      total: detailHeight + memoHeight || total,
+      detailHeight,
+      memoHeight,
+    };
+  }
+
+  function finishSnapTransition() {
+    clearTimeout(snapTimer);
+    snapTimer = setTimeout(() => {
+      splitSnapping = false;
+    }, SNAP_TRANSITION_MS);
+  }
+
+  function applyDetailSize(detailHeight, totalHeight, nextState = "open", snap = false) {
+    const safeTotal = Math.max(1, totalHeight);
+    splitState = nextState;
+    splitSnapping = snap;
+
+    if (nextState === "open") {
+      detailPanePercent = (detailHeight / safeTotal) * 100;
+      detailPaneSize = `${detailHeight}px`;
+    } else if (nextState === "detail-mini") {
+      detailPaneSize = `${MINI_PANE_SIZE}px`;
+      detailPanePercent = 0;
+    } else {
+      detailPaneSize = `${Math.max(0, safeTotal - MINI_PANE_SIZE)}px`;
+      detailPanePercent = 100;
+    }
+
+    if (snap) {
+      finishSnapTransition();
+    }
+  }
+
+  function handleCardResizePointerMove(event) {
+    const delta = event.clientY - resizeStartY;
+    let rawDetailSize = startDetailSize + delta;
+    let rawMemoSize = startMemoSize - delta;
+
+    if (rawDetailSize < 0) {
+      rawMemoSize += rawDetailSize;
+      rawDetailSize = 0;
+    }
+    if (rawMemoSize < 0) {
+      rawDetailSize += rawMemoSize;
+      rawMemoSize = 0;
+    }
+
+    lastDesiredDetailSize = rawDetailSize;
+    lastDesiredMemoSize = rawMemoSize;
+    applyDetailSize(rawDetailSize, startDetailSize + startMemoSize, "open");
+  }
+
+  function stopCardResize() {
+    window.removeEventListener("pointermove", handleCardResizePointerMove);
+    window.removeEventListener("pointerup", finishCardResize);
+    document.body.style.removeProperty("cursor");
+    document.body.style.removeProperty("user-select");
+  }
+
+  function finishCardResize() {
+    document.body.style.cursor = "";
+    stopCardResize();
+
+    const totalHeight = startDetailSize + startMemoSize;
+    let finalDetailSize = lastDesiredDetailSize;
+    let finalMemoSize = lastDesiredMemoSize;
+    let nextState = "open";
+
+    if (finalDetailSize < SNAP_THRESHOLD) {
+      finalDetailSize = MINI_PANE_SIZE;
+      finalMemoSize = totalHeight - MINI_PANE_SIZE;
+      nextState = "detail-mini";
+    } else if (finalDetailSize < DETAIL_MIN_HEIGHT) {
+      finalDetailSize = DETAIL_MIN_HEIGHT;
+      finalMemoSize = totalHeight - DETAIL_MIN_HEIGHT;
+    }
+
+    if (finalMemoSize < SNAP_THRESHOLD) {
+      finalMemoSize = MINI_PANE_SIZE;
+      finalDetailSize = totalHeight - MINI_PANE_SIZE;
+      nextState = "memo-mini";
+    } else if (nextState === "open" && finalMemoSize < MEMO_MIN_HEIGHT) {
+      finalMemoSize = MEMO_MIN_HEIGHT;
+      finalDetailSize = totalHeight - MEMO_MIN_HEIGHT;
+    }
+
+    applyDetailSize(finalDetailSize, totalHeight, nextState, true);
+  }
+
+  function startCardResize(event) {
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    clearTimeout(snapTimer);
+    splitSnapping = false;
+    const { total, detailHeight, memoHeight } = getCurrentPaneSizes();
+    resizeStartY = event.clientY;
+    startDetailSize = detailHeight;
+    startMemoSize = memoHeight || Math.max(0, total - detailHeight);
+    lastDesiredDetailSize = startDetailSize;
+    lastDesiredMemoSize = startMemoSize;
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("pointermove", handleCardResizePointerMove);
+    window.addEventListener("pointerup", finishCardResize);
+  }
+
+  function setDetailPanePercent(nextPercent) {
+    detailPanePercent = Math.min(76, Math.max(24, nextPercent));
+    detailPaneSize = `${detailPanePercent}%`;
+    splitState = "open";
+  }
+
+  function snapCardSplit(nextState) {
+    const { total } = getCurrentPaneSizes();
+    const nextDetailSize = nextState === "detail-mini" ? MINI_PANE_SIZE : total - MINI_PANE_SIZE;
+    applyDetailSize(nextDetailSize, total, nextState, true);
+  }
+
+  function handleCardResizeKeydown(event) {
+    switch (event.key) {
+      case "ArrowUp":
+        event.preventDefault();
+        setDetailPanePercent(detailPanePercent - 5);
+        break;
+      case "ArrowDown":
+        event.preventDefault();
+        setDetailPanePercent(detailPanePercent + 5);
+        break;
+      case "Home":
+        event.preventDefault();
+        snapCardSplit("detail-mini");
+        break;
+      case "End":
+        event.preventDefault();
+        snapCardSplit("memo-mini");
+        break;
+      case "Enter":
+      case " ":
+        event.preventDefault();
+        splitState = "open";
+        break;
+    }
+  }
 </script>
 
-<div class="container">
-  {#if is_selected && node}
-    <SplitPanes direction="vertical" defaultRatio={[2, 3]}>
-      <Pane
-        style={"width: 100%; min-height: 15rem; overflow: hidden; align-items: stretch; justify-content: stretch;"}
-      >
-        <Card
-          title={hideDetailTitle ? "" : "Task Detail"}
-          padded={false}
-          style={"height: 100%; width: 100%; overflow: hidden;"}
-        >
-          <div class="detail-container">
-            <label class="detail-field">
-              <span class="detail-label">Name</span>
-              <div class="detail-control">
-                <input
-                  class="detail-input"
-                  type="text"
-                  value={name}
-                  aria-label="Task name"
-                  on:input={handleNameInput}
-                  on:blur={flushNameChange}
-                />
-              </div>
-            </label>
-
-            <label class="detail-field">
-              <span class="detail-label">Status</span>
-              <div class="detail-control">
-                <StatusSelect
-                  status={node.data.status ?? "Open"}
-                  style="height: 100%; font-size: var(--font-body-md);"
-                  on:change={(event) => changeTaskField("status", event.detail.value)}
-                />
-              </div>
-            </label>
-
-            <label class="detail-field">
-              <span class="detail-label">Start Date</span>
-              <div class="detail-control">
-                <DateInput
-                  is_dark={isDark}
-                  id="detail-start-date"
-                  backgroundColor={"var(--theme-color-Main-light)"}
-                  style={detailDateStyle}
-                  value={node.data["start date"] ?? ""}
-                  on:change={(event) =>
-                    changeTaskField("start date", event.target.value || undefined)}
-                />
-              </div>
-            </label>
-
-            <label class="detail-field">
-              <span class="detail-label">Due Date</span>
-              <div class="detail-control">
-                <DateInput
-                  is_dark={isDark}
-                  id="detail-due-date"
-                  backgroundColor={"var(--theme-color-Main-light)"}
-                  style={detailDateStyle}
-                  value={node.data["due date"] ?? ""}
-                  on:change={(event) =>
-                    changeTaskField("due date", event.target.value || undefined)}
-                />
-              </div>
-            </label>
-
-            <div class="detail-field">
-              <span class="detail-label" id="lbl-memo-count">Memo 数</span>
-              <output
-                class="detail-readonly"
-                aria-labelledby="lbl-memo-count"
-                aria-label="Memo count">{memo.length}</output
-              >
+{#if is_selected && node}
+  <Card
+    title={hideDetailTitle ? "" : name}
+    padded={false}
+    style={"height: 100%; width: 100%; overflow: hidden;"}
+  >
+    <div
+      class="task-detail-card-body"
+      class:detail-mini={splitState === "detail-mini"}
+      class:memo-mini={splitState === "memo-mini"}
+      class:split-snapping={splitSnapping}
+      bind:this={splitBody}
+      style={`--detail-pane-size: ${detailPaneSize}`}
+    >
+      <div class="detail-pane" class:auto-detail={detailPaneSize === "auto"} bind:this={detailPane}>
+        <div class="detail-container">
+          <label class="detail-field">
+            <span class="detail-label">Name</span>
+            <div class="detail-control">
+              <input
+                class="detail-input"
+                type="text"
+                value={name}
+                aria-label="Task name"
+                on:input={handleNameInput}
+                on:blur={flushNameChange}
+              />
             </div>
+          </label>
 
-            <div class="detail-field">
-              <span class="detail-label" id="lbl-memo-type">Memo Type</span>
-              <output class="detail-badge" aria-labelledby="lbl-memo-type" aria-label="Memo type"
-                >{memoType}</output
-              >
+          <label class="detail-field">
+            <span class="detail-label">Status</span>
+            <div class="detail-control">
+              <StatusSelect
+                status={node.data.status ?? "Open"}
+                style="height: 100%; font-size: var(--font-body-md);"
+                on:change={(event) => changeTaskField("status", event.detail.value)}
+              />
             </div>
-          </div>
-        </Card>
-      </Pane>
+          </label>
 
-      <Pane
-        style={"width: 100%; min-height: 18rem; overflow: hidden; align-items: stretch; justify-content: stretch;"}
-      >
-        <Card
-          title={hideDetailTitle ? "" : "Memo"}
-          padded={false}
-          style={"height: 100%; width: 100%; overflow: hidden;"}
-        >
-          <div class="memotab-container">
-            <MemoTab
-              {memo}
-              {saveMemo}
-              {addMemo}
-              {deleteMemo}
-              {renameMemo}
-              {reorderMemo}
-              {saveMemoTags}
-              {allTags}
-              {isWorkspaceProject}
-              {workspaceProjectDir}
-              taskId={$table_selected_id ?? null}
-            />
+          <label class="detail-field">
+            <span class="detail-label">Start Date</span>
+            <div class="detail-control">
+              <DateInput
+                is_dark={isDark}
+                id="detail-start-date"
+                backgroundColor={"var(--theme-color-Main-light)"}
+                style={detailDateStyle}
+                value={node.data["start date"] ?? ""}
+                on:change={(event) =>
+                  changeTaskField("start date", event.target.value || undefined)}
+              />
+            </div>
+          </label>
+
+          <label class="detail-field">
+            <span class="detail-label">Due Date</span>
+            <div class="detail-control">
+              <DateInput
+                is_dark={isDark}
+                id="detail-due-date"
+                backgroundColor={"var(--theme-color-Main-light)"}
+                style={detailDateStyle}
+                value={node.data["due date"] ?? ""}
+                on:change={(event) => changeTaskField("due date", event.target.value || undefined)}
+              />
+            </div>
+          </label>
+
+          <div class="detail-field">
+            <span class="detail-label" id="lbl-memo-count">Memo 数</span>
+            <output class="detail-readonly" aria-labelledby="lbl-memo-count" aria-label="Memo count"
+              >{memo.length}</output
+            >
           </div>
-        </Card>
-      </Pane>
-    </SplitPanes>
-  {:else}
-    <h1 style="color:var(--theme-color-Sub-main); display:flex; justify-content:center">
-      No data.
-    </h1>
-  {/if}
-</div>
+        </div>
+      </div>
+
+      <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+      <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+      <div
+        class="card-split-resizer"
+        role="separator"
+        aria-label="Resize task detail and memo"
+        aria-orientation="horizontal"
+        aria-valuemin="0"
+        aria-valuemax="100"
+        aria-valuenow={splitState === "detail-mini"
+          ? 0
+          : splitState === "memo-mini"
+            ? 100
+            : Math.round(detailPanePercent)}
+        tabindex="0"
+        on:pointerdown={startCardResize}
+        on:keydown={handleCardResizeKeydown}
+      ></div>
+
+      <div class="memo-pane" bind:this={memoPane}>
+        <div class="memotab-container">
+          <MemoTab
+            {memo}
+            {saveMemo}
+            {addMemo}
+            {deleteMemo}
+            {renameMemo}
+            {reorderMemo}
+            {saveMemoTags}
+            {changeMemoFormat}
+            {allTags}
+            {isWorkspaceProject}
+            {defaultMemoFormat}
+            {workspaceProjectDir}
+            taskId={$table_selected_id ?? null}
+          />
+        </div>
+      </div>
+    </div>
+  </Card>
+{:else}
+  <h1 class="empty-state">No data.</h1>
+{/if}
 
 <style>
-  .container {
-    width: 100%;
-    height: 100%;
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
+  .empty-state {
+    color: var(--theme-color-Sub-main);
+    display: flex;
+    justify-content: center;
+  }
+  .task-detail-card-body {
     display: flex;
     flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+  .detail-pane {
+    flex: 0 0 var(--detail-pane-size);
+    min-height: 0;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+  .detail-pane.auto-detail {
+    flex-basis: auto;
+  }
+  .memo-pane {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+  .task-detail-card-body.split-snapping .detail-pane,
+  .task-detail-card-body.split-snapping .memo-pane {
+    transition: flex-basis 0.18s ease;
+  }
+  .task-detail-card-body.detail-mini .detail-pane {
+    flex-basis: 0;
+  }
+  .task-detail-card-body.memo-mini .detail-pane {
+    flex: 1 1 auto;
+  }
+  .task-detail-card-body.memo-mini .memo-pane {
+    flex: 0 0 0;
+  }
+  .task-detail-card-body.detail-mini .detail-container,
+  .task-detail-card-body.memo-mini .memotab-container {
+    display: none;
+  }
+  .card-split-resizer {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 5px;
+    min-height: 5px;
+    padding: 0;
+    cursor: row-resize;
+    background-color: transparent;
+    border: none;
+    touch-action: none;
+  }
+  .card-split-resizer::before {
+    content: "";
+    position: absolute;
+    top: 1px;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    background-color: color-mix(in srgb, var(--theme-color-Sub-dark) 48%, transparent);
+    border-radius: 1.5px;
+    opacity: 0.85;
+    transition:
+      background-color 0.15s ease,
+      height 0.15s ease,
+      opacity 0.15s ease;
+  }
+  .card-split-resizer::after {
+    content: "";
+    position: absolute;
+    top: 1px;
+    left: 50%;
+    width: 1.5rem;
+    height: 3px;
+    transform: translateX(-50%);
+    background-image: radial-gradient(circle, var(--theme-color-Main-main) 1px, transparent 1.2px);
+    background-size: 4px 3px;
+    background-repeat: repeat-x;
+    opacity: 0.9;
+    pointer-events: none;
+  }
+  .card-split-resizer:hover::before,
+  .card-split-resizer:focus-visible::before {
+    top: 0;
+    height: 5px;
+    background-color: var(--theme-color-Primary-main);
+    opacity: 1;
+  }
+  .card-split-resizer:focus-visible {
+    outline: 2px solid var(--theme-color-Primary-main);
+    outline-offset: -2px;
   }
   .detail-container {
     display: grid;
@@ -300,11 +642,17 @@
     gap: var(--sp2) var(--sp4);
     flex: 1;
     width: 100%;
+    height: 100%;
     min-height: 0;
     box-sizing: border-box;
     padding: var(--sp3);
     overflow: auto;
     container-type: inline-size;
+  }
+  .detail-pane.auto-detail .detail-container {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
   }
   .detail-field {
     display: flex;
@@ -364,15 +712,6 @@
     font-weight: 600;
     color: var(--theme-color-Sub-main);
   }
-  .detail-badge {
-    align-self: flex-start;
-    padding: var(--sp1) var(--sp2);
-    border-radius: var(--shape-xs);
-    background-color: color-mix(in srgb, var(--theme-color-Info-main) 18%, transparent);
-    color: var(--theme-color-Sub-main);
-    font-size: var(--font-label-md);
-    font-weight: 500;
-  }
   .detail-control :global(.StatusContainer) {
     gap: var(--sp1);
     padding: 0 var(--sp1);
@@ -389,13 +728,20 @@
     font-size: 1rem;
   }
   .memotab-container {
+    display: flex;
     flex: 1;
     width: 100%;
+    height: 100%;
     min-height: 0;
     box-sizing: border-box;
     margin: 0;
     padding: var(--sp3);
     overflow: hidden;
+  }
+  .memotab-container > :global(.container) {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
   }
   @container (max-width: 28rem) {
     .detail-container {

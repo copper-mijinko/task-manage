@@ -789,14 +789,14 @@ app.on("ready", () => {
     }
   });
 
-  async function exportLegacyProjects(workspacePath) {
+  async function exportLegacyProjects(workspacePath, options = {}) {
     const migrated = [];
     const errors = [];
 
     for (const projectData of db.data || []) {
       const name = projectData.data?.data?.name || "unknown";
       try {
-        const { count } = workspace.exportProjectData(workspacePath, projectData);
+        const { count } = workspace.exportProjectData(workspacePath, projectData, options);
         migrated.push({ name, count });
         log.info(`Exported legacy project "${name}" (${count} tasks)`);
       } catch (err) {
@@ -808,12 +808,12 @@ app.on("ready", () => {
     return { success: errors.length === 0, migrated, errors };
   }
 
-  ipcMain.handle("ws:export-legacy-projects", async (event, { workspacePath }) => {
-    return exportLegacyProjects(workspacePath);
+  ipcMain.handle("ws:export-legacy-projects", async (event, { workspacePath, options }) => {
+    return exportLegacyProjects(workspacePath, options);
   });
 
-  ipcMain.handle("ws:migrate-projects", async (event, { workspacePath }) => {
-    return exportLegacyProjects(workspacePath);
+  ipcMain.handle("ws:migrate-projects", async (event, { workspacePath, options }) => {
+    return exportLegacyProjects(workspacePath, options);
   });
 
   ipcMain.handle("ws:get-legacy-projects", async () => {

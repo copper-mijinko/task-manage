@@ -95,6 +95,51 @@ function legacyMemoContentToMarkdown(content, title = "Memo") {
   return "";
 }
 
+function normalizeMemoFormat(value, fallback = "markdown") {
+  return value === "quill" || value === "markdown" ? value : fallback;
+}
+
+function markdownToQuillDelta(value) {
+  const text = typeof value === "string" ? value : legacyMemoContentToMarkdown(value);
+  return {
+    ops: [
+      {
+        insert: text.endsWith("\n") ? text : `${text}\n`,
+      },
+    ],
+  };
+}
+
+function memoContentToQuillDelta(content) {
+  if (isQuillDelta(content)) return content;
+  return markdownToQuillDelta(content);
+}
+
+function parseQuillMemoBody(body) {
+  const trimmed = String(body || "").trim();
+  const fenceMatch = trimmed.match(/^```(?:json|quill-delta)?\s*\r?\n([\s\S]*?)\r?\n```$/i);
+  const jsonText = fenceMatch ? fenceMatch[1] : trimmed;
+
+  if (jsonText) {
+    try {
+      const parsed = JSON.parse(jsonText);
+      if (isQuillDelta(parsed)) return parsed;
+    } catch {
+      // Fall through to a text Delta so malformed files are still readable.
+    }
+  }
+
+  return markdownToQuillDelta(body);
+}
+
+function serializeMemoBody(memo) {
+  const format = normalizeMemoFormat(memo.format, "markdown");
+  if (format === "quill") {
+    return `\`\`\`json\n${JSON.stringify(memoContentToQuillDelta(memo.content), null, 2)}\n\`\`\``;
+  }
+  return legacyMemoContentToMarkdown(memo.content, memo.title);
+}
+
 /**
  * Parse YAML frontmatter from a markdown string.
  * Returns { data: Record<string, string | string[]>, body: string }.
@@ -238,7 +283,9 @@ function readMemos(taskDir, reservedFiles = ["_index.md"]) {
       }
     }
     const tags = Array.isArray(data.tags) ? data.tags.map(String) : [];
-    memos.push({ id, title, content: body.trim(), tags });
+    const format = normalizeMemoFormat(data.format, "markdown");
+    const content = format === "quill" ? parseQuillMemoBody(body) : body.trim();
+    memos.push({ id, title, content, tags, format });
   }
   return memos;
 }
@@ -319,7 +366,10 @@ function writeMemoFiles(taskDir, indexFileName, memos) {
     const id = memo.id || crypto.randomUUID();
     fs.writeFileSync(
       path.join(taskDir, `${id}.md`),
-      stringifyFrontmatter({ id, title: memo.title, tags: memo.tags ?? [] }, memo.content)
+      stringifyFrontmatter(
+        { id, title: memo.title, tags: memo.tags ?? [], format: normalizeMemoFormat(memo.format) },
+        serializeMemoBody(memo)
+      )
     );
   }
 }
@@ -335,7 +385,10 @@ async function writeMemoFilesAsync(taskDir, indexFileName, memos) {
     nextFiles.add(`${id}.md`);
     await writeFileIfChanged(
       path.join(taskDir, `${id}.md`),
-      stringifyFrontmatter({ id, title: memo.title, tags: memo.tags ?? [] }, memo.content)
+      stringifyFrontmatter(
+        { id, title: memo.title, tags: memo.tags ?? [], format: normalizeMemoFormat(memo.format) },
+        serializeMemoBody(memo)
+      )
     );
   }
 
@@ -655,25 +708,35 @@ function bfsFromRoot(tasks, rootId) {
  * Export a ProjectData (legacy db.json tree format) to workspace flat-file format.
  * @param {string} workspacePath  Destination workspace directory.
  * @param {object} projectData    ProjectData: { headers, data: TreeData }
+ * @param {{ memoFormat?: "preserve" | "markdown" }} options
  * @returns {{ dirName: string, projectDir: string, count: number }}
  */
-function exportProjectData(workspacePath, projectData) {
+function exportProjectData(workspacePath, projectData, options = {}) {
   const tasks = [];
   const today = new Date().toISOString().slice(0, 10);
+  const exportMemoFormat = options.memoFormat === "markdown" ? "markdown" : "preserve";
+  const exportedProjectId = crypto.randomUUID();
 
   function traverse(node, parentIds) {
     const memos = (node.data.memo || []).map((m) => {
       const title = String(m.title || "Memo");
+      const sourceFormat = normalizeMemoFormat(m.format, "quill");
+      const targetFormat = exportMemoFormat === "markdown" ? "markdown" : sourceFormat;
       return {
-        id: m.id || crypto.randomUUID(),
+        id: crypto.randomUUID(),
         title,
-        content: legacyMemoContentToMarkdown(m.content, title),
+        content:
+          targetFormat === "markdown"
+            ? legacyMemoContentToMarkdown(m.content, title)
+            : memoContentToQuillDelta(m.content),
         tags: Array.isArray(m.tags) ? m.tags.map(String) : [],
+        format: targetFormat,
       };
     });
+    const exportedTaskId = node === projectData.data ? exportedProjectId : node.id;
 
     tasks.push({
-      id: node.id,
+      id: exportedTaskId,
       name: node.data.name || "",
       status: node.data.status || "Open",
       startDate: node.data["start date"] || undefined,
@@ -684,7 +747,7 @@ function exportProjectData(workspacePath, projectData) {
     });
 
     for (const child of node.children || []) {
-      traverse(child, [node.id]);
+      traverse(child, [exportedTaskId]);
     }
   }
 
@@ -704,8 +767,8 @@ function exportProjectData(workspacePath, projectData) {
   return { dirName, projectDir, count: tasks.length };
 }
 
-function migrateProjectData(workspacePath, projectData) {
-  return exportProjectData(workspacePath, projectData);
+function migrateProjectData(workspacePath, projectData, options = {}) {
+  return exportProjectData(workspacePath, projectData, options);
 }
 
 /**

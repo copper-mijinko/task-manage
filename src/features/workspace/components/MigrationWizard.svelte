@@ -12,6 +12,7 @@
     migrated: { name: string; count: number }[];
     errors: { name: string; error: string }[];
   };
+  type ExportMemoFormat = "preserve" | "markdown";
   type Phase = "idle" | "loading" | "ready" | "running" | "done";
 
   let phase: Phase = "idle";
@@ -19,6 +20,7 @@
   let selectedPath = $workspace_store.activeWorkspacePath ?? "";
   let customPath = "";
   let useCustom = false;
+  let memoFormat: ExportMemoFormat = "preserve";
   let result: ExportResult | null = null;
   let loadError = "";
 
@@ -50,7 +52,7 @@
     if (!targetPath) return;
     phase = "running";
     try {
-      result = await platform.wsExportLegacyProjects(targetPath);
+      result = await platform.wsExportLegacyProjects(targetPath, { memoFormat });
       if (result) {
         await workspace_store.refreshProjects();
       }
@@ -115,9 +117,29 @@
           {/if}
         </div>
 
-        <p class="warn-note">
-          This exports Markdown files only. The source db.json is not changed.
-        </p>
+        <p class="section-label">Memo format</p>
+        <div class="format-area" role="group" aria-label="Export memo format">
+          <label class="format-option">
+            <input
+              type="radio"
+              bind:group={memoFormat}
+              value="preserve"
+              disabled={phase === "running"}
+            />
+            <span>形式を維持</span>
+          </label>
+          <label class="format-option">
+            <input
+              type="radio"
+              bind:group={memoFormat}
+              value="markdown"
+              disabled={phase === "running"}
+            />
+            <span>全メモを Markdown に変換</span>
+          </label>
+        </div>
+
+        <p class="warn-note">This exports to Workspace only. The source db.json is not changed.</p>
         {#if phase === "running"}
           <p class="note">Exporting...</p>
         {/if}
@@ -231,6 +253,24 @@
     flex-wrap: wrap;
     align-items: center;
     gap: var(--sp2);
+  }
+
+  .format-area {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp2);
+  }
+
+  .format-option {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp1);
+    padding: var(--sp1) var(--sp2);
+    border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 20%, transparent);
+    border-radius: var(--shape-xs);
+    color: var(--theme-color-Sub-main);
+    background-color: var(--theme-color-Main-main);
+    font-size: var(--font-body-sm);
   }
 
   .ws-select,

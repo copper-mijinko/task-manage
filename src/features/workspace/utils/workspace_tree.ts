@@ -1,4 +1,5 @@
 ﻿import type { WorkspaceTask, WorkspaceTaskStatus } from "@app-types/workspace";
+import { normalizeMemoFormat, toMarkdown } from "@features/memos/utils/memo_utils";
 import type { ProjectData, TreeData } from "@features/tasks/utils/tree_control";
 
 const DEFAULT_HEADERS = [
@@ -44,6 +45,7 @@ export function workspaceToProjectData(
           title: m.title,
           content: m.content,
           tags: m.tags,
+          format: normalizeMemoFormat(m.format, "markdown"),
         })),
       },
       children: childIds.map((cid) => buildNode(cid)),
@@ -90,12 +92,16 @@ export function projectDataToWorkspaceTasks(
       startDate: node.data["start date"] || undefined,
       dueDate: node.data["due date"] || undefined,
       parents: parentIds,
-      memos: (node.data.memo || []).map((m) => ({
-        id: m.id || "",
-        title: m.title || "",
-        content: typeof m.content === "string" ? m.content : "",
-        tags: Array.isArray(m.tags) ? m.tags : [],
-      })),
+      memos: (node.data.memo || []).map((m) => {
+        const format = normalizeMemoFormat(m.format, "markdown");
+        return {
+          id: m.id || "",
+          title: m.title || "",
+          content: format === "markdown" ? toMarkdown(m.content) : m.content,
+          tags: Array.isArray(m.tags) ? m.tags : [],
+          format,
+        };
+      }),
       createdAt: existing?.createdAt || today,
     });
     for (const child of node.children || []) {

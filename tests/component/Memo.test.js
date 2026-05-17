@@ -81,6 +81,34 @@ describe("Memo mode routing", () => {
     expect(document.querySelector(".preview h1")).toHaveTextContent("Workspace");
   });
 
+  test("uses Markdown editor for db.json memo when its format is markdown", () => {
+    render(Memo, {
+      props: {
+        saveMemo: vi.fn(),
+        content: "# Markdown in db",
+        isWorkspaceProject: false,
+        format: "markdown",
+      },
+    });
+
+    expect(quillInstances).toHaveLength(0);
+    expect(document.querySelector(".preview h1")).toHaveTextContent("Markdown in db");
+  });
+
+  test("uses Quill editor for workspace memo when its format is quill", () => {
+    render(Memo, {
+      props: {
+        saveMemo: vi.fn(),
+        content: { ops: [{ insert: "workspace quill\n" }] },
+        isWorkspaceProject: true,
+        format: "quill",
+      },
+    });
+
+    expect(quillInstances).toHaveLength(1);
+    expect(document.querySelector(".cm-editor")).not.toBeInTheDocument();
+  });
+
   test("db.json Projects save Quill Delta content", async () => {
     const saveMemo = vi.fn();
     render(Memo, { props: { saveMemo, content: "", isWorkspaceProject: false } });

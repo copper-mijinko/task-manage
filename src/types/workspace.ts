@@ -1,10 +1,13 @@
+import type { MemoFormat } from "@features/memos/utils/memo_utils";
+
 export type WorkspaceTaskStatus = "Open" | "Pending" | "In Progress" | "Completed" | "Canceled";
 
 export interface WorkspaceMemo {
   id: string;
   title: string;
-  content: string; // Markdown
+  content: unknown;
   tags: string[];
+  format?: MemoFormat;
 }
 
 export interface WorkspaceTask {

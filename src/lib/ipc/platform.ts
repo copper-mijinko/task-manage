@@ -281,24 +281,30 @@ export function wsGetLegacyProjects(): Promise<{ id: string; name: string; taskC
   return api()?.wsGetLegacyProjects?.() ?? Promise.resolve([]);
 }
 
-export function wsExportLegacyProjects(workspacePath: string): Promise<{
+export function wsExportLegacyProjects(
+  workspacePath: string,
+  options?: { memoFormat?: "preserve" | "markdown" }
+): Promise<{
   success: boolean;
   migrated: { name: string; count: number }[];
   errors: { name: string; error: string }[];
 }> {
   return (
-    api()?.wsExportLegacyProjects?.(workspacePath) ??
+    api()?.wsExportLegacyProjects?.(workspacePath, options) ??
     Promise.resolve({ success: false, migrated: [], errors: [] })
   );
 }
 
-export function wsMigrateProjects(workspacePath: string): Promise<{
+export function wsMigrateProjects(
+  workspacePath: string,
+  options?: { memoFormat?: "preserve" | "markdown" }
+): Promise<{
   success: boolean;
   migrated: { name: string; count: number }[];
   errors: { name: string; error: string }[];
 }> {
   return (
-    api()?.wsMigrateProjects?.(workspacePath) ??
+    api()?.wsMigrateProjects?.(workspacePath, options) ??
     Promise.resolve({ success: false, migrated: [], errors: [] })
   );
 }

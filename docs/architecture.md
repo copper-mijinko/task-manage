@@ -12,7 +12,7 @@
 ```
 src/
 ├── lib/                         # 再利用可能な汎用層（ドメイン非依存）
-│   ├── primitives/              # アトミックUI（11 ファイル）
+│   ├── primitives/              # アトミックUI（12 ファイル）
 │   │   ├── Button.svelte
 │   │   ├── IconButton.svelte
 │   │   ├── Card.svelte
@@ -20,6 +20,7 @@ src/
 │   │   ├── Dialog.svelte
 │   │   ├── Drawer.svelte
 │   │   ├── ToggleSwitch.svelte
+│   │   ├── SegmentedControl.svelte
 │   │   ├── Select.svelte
 │   │   ├── MultiSelect.svelte
 │   │   ├── SearchBox.svelte
@@ -46,7 +47,7 @@ src/
 │   │   ├── components/          # MemoTab / Memo / MarkdownMemo / QuillMemo
 │   │   ├── stores/              # tags
 │   │   └── utils/
-│   │       └── memo_utils.ts    # Markdown ⇄ Quill 変換
+│   │       └── memo_utils.ts    # フォーマット正規化・Markdown ⇄ Quill 変換
 │   ├── gantt/
 │   │   ├── components/          # GanttPanel
 │   │   └── stores/              # gantt
@@ -240,9 +241,10 @@ import LocalComponent from "./LocalComponent.svelte";
 | プロジェクトエリア                                                 | `src/pages/MainPage.svelte`                                                                                                                      |
 | ツリーペイン                                                       | `src/features/tasks/components/TreeTable.svelte` + `TreeTableHeader.svelte` + `TreeTableRow.svelte`                                              |
 | ガントペイン                                                       | `src/features/gantt/components/GanttPanel.svelte`                                                                                                |
-| 右ペイン（Task Detail + Memo）                                     | `src/features/tasks/components/TaskDetail.svelte`                                                                                                |
+| 右ペイン（Task Detail + Memo の単一 Card / Card 内部で上下分割）   | `src/features/tasks/components/TaskDetail.svelte`                                                                                                |
 | メモパネル                                                         | `src/features/memos/components/MemoTab.svelte`                                                                                                   |
 | メモエディタ                                                       | `src/features/memos/components/Memo.svelte` → `MarkdownMemo.svelte` / `QuillMemo.svelte`                                                         |
+| セグメントコントロール                                             | `src/lib/primitives/SegmentedControl.svelte`（Memo フォーマット切替・Markdown Read/Edit 切替で共用）                                             |
 | ダイアログ                                                         | `@lib/primitives/Dialog.svelte` を使用した個別実装（タスク削除、プロジェクト削除、ワークスペースプロジェクト削除、ルート兄弟挿入のアラートなど） |
 | ページ内ハイライト検索                                             | `Header.svelte` の検索ボックス + `@features/search/utils/page_search_highlighter.ts`                                                             |
 | 列ヘッダのフィルタ / 列設定ポップオーバー                          | `TreeTableHeader.svelte` + `@features/search/components/*FilterPanel.svelte`                                                                     |
@@ -398,3 +400,14 @@ WriteQueue で書き込んだ直後、対象ファイルの SHA-256 と TTL（5 
 #### 終了時 flush
 
 `app.on("before-quit")` を拡張し、`workspaceWriteQueue.hasPending()` が真なら `event.preventDefault()` → `flush()` 完了 → `reconciler.stop()` → `app.quit()` の順で終了する。これにより未書出データを失わない。
+
+### 8.10 メモフォーマットの責務分離
+
+メモ単位のフォーマット（Markdown / Quill）は次の責務分担で扱う。
+
+- **レンダラ分岐**: `src/features/memos/components/Memo.svelte` が `MemoEntry.format` を参照し、`MarkdownMemo.svelte` / `QuillMemo.svelte` のいずれかをマウントする
+- **正規化と変換**: `src/features/memos/utils/memo_utils.ts` が省略時デフォルトの解決と Markdown ⇄ Quill 変換を行う。個別変換・一括変換のいずれも本ユーティリティを経由する
+- **ワークスペース保存形式**: `electron/workspace.js` が `.md` ファイルへのシリアライズとパースを担当する。Quill メモは `format: quill` の YAML フロントマター + fenced JSON Delta の単一 `.md` 形式で保持する
+- **一括変換の Undo 記録**: 一括変換は現在開いている `tree_data` を 1 回だけ書き換える形で実装し、既存の Undo / Redo 履歴に単一アクションとして記録する。これにより 1 回の Undo でプロジェクト全体の変換が元に戻る
+- **UI セグメント**: 各メモのフォーマット切替と、Markdown の Read / Edit モード切替は共通プリミティブ `src/lib/primitives/SegmentedControl.svelte` を使用し、アクティブ状態・セパレータ・キーボードフォーカス表現を統一する
+- **エクスポート時の挙動**: `db.json` → Workspace エクスポートは `electron/workspace.js` で実装され、ワークスペースルートとメモには新規 UUID を発行する（コピー操作。ソース ID は引き継がない）。通常のフォーマット変換はコピーではないためメモ ID を維持する

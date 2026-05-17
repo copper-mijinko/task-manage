@@ -10,6 +10,7 @@
   import { marked } from "marked";
   import quillIcons from "quill/ui/icons.js";
   import { toMarkdown } from "@features/memos/utils/memo_utils";
+  import SegmentedControl from "@lib/primitives/SegmentedControl.svelte";
   import * as platform from "@lib/ipc/platform";
 
   export let saveMemo: (content: string) => void;
@@ -53,6 +54,10 @@
     quote: quillIcons.blockquote,
     codeBlock: quillIcons["code-block"],
   };
+  const memoModeOptions = [
+    { value: "read", label: "Read", className: "read-mode-btn" },
+    { value: "edit", label: "Edit", className: "edit-mode-btn" },
+  ];
 
   function normalizeMemoTitle(title: string): string {
     return title.trim().toLocaleLowerCase();
@@ -612,6 +617,14 @@
     isEditing = false;
   }
 
+  function handleModeChange(event: CustomEvent<{ value: string }>) {
+    if (event.detail.value === "edit") {
+      void startEdit();
+    } else {
+      stopEdit();
+    }
+  }
+
   onDestroy(() => {
     stopSplitResize();
     clearTimeout(savedTimer);
@@ -778,12 +791,12 @@
           <span class="save-status" aria-live="polite">
             {saveState === "dirty" ? "Unsaved" : saveState === "saved" ? "Saved" : ""}
           </span>
-          <div class="mode-switch" role="group" aria-label="Memo mode">
-            <button class="read-mode-btn" type="button" aria-pressed="false" on:click={stopEdit}
-              >Read</button
-            >
-            <button class="edit-mode-btn active" type="button" aria-pressed="true">Edit</button>
-          </div>
+          <SegmentedControl
+            options={memoModeOptions}
+            value="edit"
+            ariaLabel="Memo mode"
+            on:change={handleModeChange}
+          />
         </div>
       </div>
       <div
@@ -823,15 +836,12 @@
     <div class="preview-mode" on:click={handlePreviewClick} on:keydown={handlePreviewKeydown}>
       {#if !readOnly}
         <div class="preview-bar">
-          <div class="mode-switch" role="group" aria-label="Memo mode">
-            <button class="read-mode-btn active" type="button" aria-pressed="true">Read</button>
-            <button
-              class="edit-mode-btn"
-              type="button"
-              aria-pressed="false"
-              on:click|stopPropagation={startEdit}>Edit</button
-            >
-          </div>
+          <SegmentedControl
+            options={memoModeOptions}
+            value="read"
+            ariaLabel="Memo mode"
+            on:change={handleModeChange}
+          />
         </div>
       {/if}
       {#if currentContent.trim()}
@@ -855,6 +865,7 @@
     flex-direction: column;
     flex: 1;
     height: 100%;
+    min-height: 0;
     overflow: hidden;
     background-color: var(--theme-color-Main-light);
   }
@@ -862,7 +873,9 @@
   .edit-mode {
     display: flex;
     flex-direction: column;
+    flex: 1;
     height: 100%;
+    min-height: 0;
     overflow: hidden;
   }
 
@@ -1013,57 +1026,42 @@
     display: none;
   }
 
-  .mode-switch {
-    display: inline-flex;
-    align-items: center;
-    padding: 2px;
-    border: 1px solid var(--theme-color-Sub-dark);
-    border-radius: var(--shape-xs);
-    background-color: var(--theme-color-Main-main);
-    gap: 2px;
-  }
-
-  .mode-switch button {
-    border: none;
-    border-radius: var(--shape-xs);
-    background-color: transparent;
-    color: var(--theme-color-Sub-main);
-    padding: var(--sp1) var(--sp2);
-    margin: 0;
-    min-width: 2.85rem;
-    font-size: var(--font-label-md);
-    cursor: pointer;
-  }
-
-  .mode-switch button:hover {
-    color: var(--theme-color-Sub-light);
-    background-color: color-mix(in srgb, var(--theme-color-Sub-dark) 30%, transparent);
-  }
-
-  .mode-switch button.active {
-    background-color: var(--theme-color-Primary-dark);
-    color: var(--theme-color-Main-dark);
-    cursor: default;
-  }
-
   .edit-body {
     --editor-pane-width: 55%;
     display: flex;
     min-height: 0;
     flex: 1;
+    overflow: hidden;
   }
 
   .editor-pane {
     display: flex;
     flex: 0 0 var(--editor-pane-width);
     min-width: 0;
+    min-height: 0;
     overflow: hidden;
   }
 
   .editor {
+    display: flex;
     flex: 1;
     overflow: hidden;
     min-width: 0;
+    min-height: 0;
+  }
+
+  .editor :global(.cm-editor) {
+    flex: 1 1 auto;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .editor :global(.cm-scroller) {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
   }
 
   /* Match SplitPanes' resizer look: thin neutral bar that turns Primary on
@@ -1129,13 +1127,17 @@
   .live-preview {
     flex: 1 1 0;
     min-width: 0;
+    min-height: 0;
     overflow: auto;
     background-color: color-mix(in srgb, var(--theme-color-Main-light) 92%, black);
   }
 
   .preview-mode {
+    display: flex;
+    flex-direction: column;
     flex: 1;
     height: 100%;
+    min-height: 0;
     overflow: auto;
   }
 
@@ -1151,6 +1153,8 @@
   }
 
   .preview {
+    flex: 1 1 auto;
+    min-height: 0;
     padding: var(--sp4);
     color: var(--theme-color-Sub-light);
     font-size: var(--font-body-md);
@@ -1185,6 +1189,9 @@
   }
 
   .placeholder {
+    flex: 1 1 auto;
+    min-height: 100%;
+    box-sizing: border-box;
     padding: var(--sp4);
     color: var(--theme-color-Sub-main);
     font-size: var(--font-body-md);

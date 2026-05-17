@@ -62,6 +62,7 @@ function createProjectData() {
 
 describe("TaskDetail", () => {
   beforeEach(() => {
+    delete window.__memoStubSaveOnDestroy;
     selected_type.set("Projects");
     selected_id.set("project-1");
     workspace_store.set({
@@ -72,6 +73,10 @@ describe("TaskDetail", () => {
     });
     tree_data.set(createProjectData());
     table_selected_id.set(undefined);
+  });
+
+  afterEach(() => {
+    delete window.__memoStubSaveOnDestroy;
   });
 
   test("shows a placeholder when no task is selected", () => {
@@ -87,7 +92,8 @@ describe("TaskDetail", () => {
     expect(screen.getByText("Tabs here")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("No page")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "メモを追加" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Memo type")).toHaveTextContent("Quill");
+    expect(screen.getByText("First Task")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Storage mode")).not.toBeInTheDocument();
   });
 
   test("edits task detail fields independent of visible table columns", async () => {
@@ -177,6 +183,69 @@ describe("TaskDetail", () => {
     expect(get(tree_data).data.children[1].data.memo[0].tags).toEqual(["design"]);
     expect(get(tag_index).get("design")).toEqual(new Set(["task-2"]));
     expect(screen.getByLabelText("Remove tag design")).toBeInTheDocument();
+  });
+
+  test("converts the selected memo format after warning", async () => {
+    const project = createProjectData();
+    project.data.children[0].data.memo = [
+      {
+        id: "memo-quill",
+        title: "quill",
+        content: { ops: [{ insert: "hello\n" }] },
+        tags: [],
+        format: "quill",
+      },
+    ];
+    tree_data.set(project);
+    table_selected_id.set("task-1");
+
+    render(TaskDetail);
+
+    await fireEvent.click(screen.getByRole("button", { name: "Use Markdown memo format" }));
+
+    expect(screen.getByText(/情報が損なわれる可能性/)).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "ok" }));
+    await tick();
+
+    const memo = get(tree_data).data.children[0].data.memo[0];
+    expect(memo.format).toBe("markdown");
+    expect(memo.content).toBe("hello");
+    expect(screen.getByRole("button", { name: "Use Markdown memo format" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.getByTestId("memo-stub")).toHaveAttribute("data-format", "markdown");
+  });
+
+  test("keeps the converted format when the previous editor saves during remount", async () => {
+    const project = createProjectData();
+    project.data.children[0].data.memo = [
+      {
+        id: "memo-markdown",
+        title: "markdown",
+        content: "before",
+        tags: [],
+        format: "markdown",
+      },
+    ];
+    tree_data.set(project);
+    table_selected_id.set("task-1");
+    window.__memoStubSaveOnDestroy = "stale markdown save";
+
+    render(TaskDetail);
+
+    await fireEvent.click(screen.getByRole("button", { name: "Use Quill memo format" }));
+    await fireEvent.click(screen.getByRole("button", { name: "ok" }));
+    await tick();
+
+    const memo = get(tree_data).data.children[0].data.memo[0];
+    expect(memo.format).toBe("quill");
+    expect(memo.content).toEqual({ ops: [{ insert: "stale markdown save\n" }] });
+    expect(screen.getByRole("button", { name: "Use Quill memo format" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.getByTestId("memo-stub")).toHaveAttribute("data-format", "quill");
   });
 
   test("resets the selected memo tab when the selected task changes", async () => {

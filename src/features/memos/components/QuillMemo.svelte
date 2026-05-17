@@ -230,17 +230,21 @@
     flex-direction: column;
     flex: 1;
     height: 100%;
+    min-height: 0;
+    overflow: hidden;
     border: none !important;
     color: var(--theme-color-Sub-light);
     background-color: var(--theme-color-Main-dark);
   }
 
   .editor {
-    flex: 1;
-    overflow: auto;
+    flex: 1 1 0;
+    min-height: 0;
+    min-width: 0;
+    overflow: hidden;
     display: flex;
     flex-direction: column;
-    height: 100%;
+    height: auto;
     background-color: var(--theme-color-Main-light);
   }
 
@@ -265,22 +269,31 @@
     padding: 0 var(--sp1);
   }
 
-  :global(.ql-container) {
-    flex: 1;
-    min-height: 0;
+  .wrapper :global(.ql-container.ql-snow) {
+    display: flex;
+    flex: 1 1 0 !important;
+    flex-direction: column;
+    min-height: 0 !important;
+    min-width: 0;
+    height: auto !important;
+    overflow: hidden;
     border-color: var(--theme-color-Sub-dark) !important;
     border-top: 0 !important;
     color: var(--theme-color-Sub-light);
     font-family: inherit;
   }
 
-  :global(.ql-toolbar) {
+  .wrapper :global(.ql-toolbar) {
     flex-shrink: 0;
     border-color: var(--theme-color-Sub-dark) !important;
     background-color: var(--theme-color-Main-dark);
   }
 
-  :global(.ql-editor) {
+  .wrapper :global(.ql-editor) {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 0;
+    overflow-y: auto;
     color: var(--theme-color-Sub-light);
     font-size: var(--font-body-md);
     line-height: 1.7;
