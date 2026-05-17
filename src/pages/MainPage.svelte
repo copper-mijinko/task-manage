@@ -7,9 +7,17 @@
   import IconButton from "@lib/primitives/IconButton.svelte";
   import Card from "@lib/primitives/Card.svelte";
   import Dialog from "@lib/primitives/Dialog.svelte";
+  import Modal from "@lib/primitives/Modal.svelte";
   import SearchBox from "@lib/primitives/SearchBox.svelte";
   import { tick } from "svelte";
-  import { table_selected_id, tree_data, closed_node_ids, ganttVisible } from "@stores";
+  import {
+    table_selected_id,
+    tree_data,
+    closed_node_ids,
+    ganttVisible,
+    selected_type,
+  } from "@stores";
+  import { convertMemoContent, normalizeMemoFormat } from "@features/memos/utils/memo_utils";
   import {
     getNode,
     addNode,
@@ -43,6 +51,144 @@
   };
 
   let detailPaneVisible = true;
+  let show_memo_format_confirm = false;
+  let bulkMemoTargetFormat = "markdown";
+  let bulkMemoPhase = "ready";
+  let bulkMemoItems = [];
+
+  $: defaultMemoFormat = $selected_type === "WorkspaceProject" ? "markdown" : "quill";
+  $: projectName = $tree_data?.data?.data?.name || "Task Tree";
+  $: projectStorageLabel = $selected_type === "WorkspaceProject" ? "Workspace" : "InApp";
+  $: bulkMemoTargetLabel = getMemoFormatLabel(bulkMemoTargetFormat);
+  $: successfulBulkMemoItems = bulkMemoItems.filter((item) => item.status === "ok");
+  $: failedBulkMemoItems = bulkMemoItems.filter((item) => item.status === "error");
+
+  function getMemoFormatLabel(format) {
+    return format === "markdown" ? "Markdown" : "Quill";
+  }
+
+  function getBulkMemoId(node, entry, index) {
+    return `${node.id}:${entry.id ?? "memo"}:${index}`;
+  }
+
+  function collectProjectMemosForFormat(node, targetFormat, fallbackFormat) {
+    if (!node) return [];
+
+    const ownItems = (node.data.memo ?? []).flatMap((entry, index) => {
+      const currentFormat = normalizeMemoFormat(entry.format, fallbackFormat);
+      if (currentFormat === targetFormat) {
+        return [];
+      }
+      return [
+        {
+          id: getBulkMemoId(node, entry, index),
+          taskId: node.id,
+          taskName: node.data?.name || "Untitled task",
+          memoTitle: entry.title || `memo ${index + 1}`,
+          fromFormat: currentFormat,
+          toFormat: targetFormat,
+          status: "pending",
+          error: "",
+        },
+      ];
+    });
+
+    return ownItems.concat(
+      (node.children ?? []).flatMap((child) =>
+        collectProjectMemosForFormat(child, targetFormat, fallbackFormat)
+      )
+    );
+  }
+
+  function countProjectMemosForFormat(node, targetFormat, fallbackFormat) {
+    if (!node) return 0;
+    const ownCount = (node.data.memo ?? []).filter(
+      (memo) => normalizeMemoFormat(memo.format, fallbackFormat) !== targetFormat
+    ).length;
+    return (
+      ownCount +
+      (node.children ?? []).reduce(
+        (total, child) => total + countProjectMemosForFormat(child, targetFormat, fallbackFormat),
+        0
+      )
+    );
+  }
+
+  function convertNodeMemosToFormatWithResults(node, targetFormat, fallbackFormat, resultMap) {
+    const memo = (node.data.memo ?? []).map((entry, index) => {
+      const currentFormat = normalizeMemoFormat(entry.format, fallbackFormat);
+      if (currentFormat === targetFormat) {
+        return { ...entry, format: currentFormat };
+      }
+
+      const result = resultMap.get(getBulkMemoId(node, entry, index));
+      try {
+        const content = convertMemoContent(entry.content, currentFormat, targetFormat);
+        if (result) {
+          result.status = "ok";
+        }
+        return {
+          ...entry,
+          format: targetFormat,
+          content,
+        };
+      } catch (error) {
+        if (result) {
+          result.status = "error";
+          result.error = error instanceof Error ? error.message : String(error);
+        }
+        return { ...entry, format: currentFormat };
+      }
+    });
+
+    return {
+      ...node,
+      data: {
+        ...node.data,
+        memo,
+      },
+      children: (node.children ?? []).map((child) =>
+        convertNodeMemosToFormatWithResults(child, targetFormat, fallbackFormat, resultMap)
+      ),
+    };
+  }
+
+  function requestBulkMemoFormat(targetFormat) {
+    bulkMemoTargetFormat = targetFormat;
+    bulkMemoItems = collectProjectMemosForFormat($tree_data?.data, targetFormat, defaultMemoFormat);
+    bulkMemoPhase = "ready";
+    show_memo_format_confirm = true;
+  }
+
+  function closeBulkMemoFormatConfirm() {
+    show_memo_format_confirm = false;
+    bulkMemoPhase = "ready";
+    bulkMemoItems = [];
+  }
+
+  function applyBulkMemoFormat() {
+    if (!$tree_data?.data) return;
+    bulkMemoPhase = "running";
+    const results = bulkMemoItems.map((item) => ({ ...item, status: "pending", error: "" }));
+    const resultMap = new Map(results.map((item) => [item.id, item]));
+    $tree_data = {
+      ...$tree_data,
+      data: convertNodeMemosToFormatWithResults(
+        $tree_data.data,
+        bulkMemoTargetFormat,
+        defaultMemoFormat,
+        resultMap
+      ),
+    };
+    results.forEach((item) => {
+      if (item.status === "pending") {
+        item.status = "error";
+        item.error = "Target memo was not found.";
+      }
+    });
+    bulkMemoItems = results;
+    bulkMemoPhase = "done";
+  }
 
   // Add
   export async function handleAdd(e, action) {
@@ -153,7 +299,8 @@
   <div class:Content={true}>
     <SplitPanes defaultRatio={detailPaneVisible ? [3, 2] : [1]}>
       <Pane style={"min-width: 10rem;"}>
-        <Card title="Task Tree" padded={false} style={"height: 100%; width: 100%;"}>
+        <Card title={projectName} padded={false} style={"height: 100%; width: 100%;"}>
+          <span slot="header-actions" class="storage-badge">{projectStorageLabel}</span>
           <div class="TaskListToolbar">
             <!-- Group 1: Add / Delete -->
             <div class="TbGroup">
@@ -382,6 +529,57 @@
                 </svg>
               </IconButton>
             </div>
+            <span class="TbSep" aria-hidden="true"></span>
+
+            <!-- Group 5: Bulk memo format conversion -->
+            <div class="TbGroup">
+              <IconButton
+                tooltipContent="全メモをMarkdownへ変換"
+                ariaLabel="全メモをMarkdownへ変換"
+                variant="text"
+                normalColor={"var(--theme-color-Sub-main)"}
+                activeColor={"var(--theme-color-Primary-main)"}
+                disabled={countProjectMemosForFormat(
+                  $tree_data?.data,
+                  "markdown",
+                  defaultMemoFormat
+                ) === 0}
+                on:click={() => requestBulkMemoFormat("markdown")}
+              >
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path
+                    d="M4 17V7L8 13L12 7V17M17 7V15M14 12L17 15L20 12"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </IconButton>
+              <IconButton
+                tooltipContent="全メモをQuillへ変換"
+                ariaLabel="全メモをQuillへ変換"
+                variant="text"
+                normalColor={"var(--theme-color-Sub-main)"}
+                activeColor={"var(--theme-color-Primary-main)"}
+                disabled={countProjectMemosForFormat(
+                  $tree_data?.data,
+                  "quill",
+                  defaultMemoFormat
+                ) === 0}
+                on:click={() => requestBulkMemoFormat("quill")}
+              >
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path
+                    d="M12 4C7.6 4 4 7.2 4 11.5S7.6 19 12 19H16M12 8C9.8 8 8 9.6 8 11.5S9.8 15 12 15H14.5L17.5 19"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </IconButton>
+            </div>
 
             <!-- Tree filter search (filters rows by name) -->
             <div class="TbSearch">
@@ -453,9 +651,7 @@
       </Pane>
       {#if detailPaneVisible}
         <Pane style={"min-width: 10rem;"}>
-          <div class:TaskDetail={true}>
-            <TaskDetail />
-          </div>
+          <TaskDetail />
         </Pane>
       {/if}
     </SplitPanes>
@@ -475,6 +671,82 @@
     ok={false}
     cancel={"close"}
   />
+  <Modal
+    show={show_memo_format_confirm}
+    toggle={closeBulkMemoFormatConfirm}
+    width="44rem"
+    height="auto"
+    label="Bulk memo format conversion"
+  >
+    <div class="bulk-convert-container">
+      <div class="bulk-convert-header">Convert memos to {bulkMemoTargetLabel}</div>
+
+      <div class="bulk-convert-body">
+        {#if bulkMemoPhase === "ready" || bulkMemoPhase === "running"}
+          <p class="bulk-section-label">Memos to convert ({bulkMemoItems.length})</p>
+          <ul class="bulk-list">
+            {#each bulkMemoItems as item (item.id)}
+              <li class="bulk-item">
+                <span class="bulk-item-title">{item.taskName} / {item.memoTitle}</span>
+                <span class="bulk-item-format">
+                  {getMemoFormatLabel(item.fromFormat)} → {getMemoFormatLabel(item.toFormat)}
+                </span>
+              </li>
+            {/each}
+          </ul>
+
+          <p class="bulk-warn-note">
+            Markdown と Quill
+            の変換では、装飾や埋め込みなど一部の情報が損なわれる可能性があります。この操作は元に戻す
+            / やり直しで取り消しできます。
+          </p>
+          {#if bulkMemoPhase === "running"}
+            <p class="bulk-note">Converting...</p>
+          {/if}
+        {:else if bulkMemoPhase === "done"}
+          {#if successfulBulkMemoItems.length > 0}
+            <p class="bulk-section-label">Converted ({successfulBulkMemoItems.length})</p>
+            <ul class="bulk-result-list">
+              {#each successfulBulkMemoItems as item (item.id)}
+                <li class="bulk-result-ok">
+                  OK: {item.taskName} / {item.memoTitle} ({getMemoFormatLabel(item.fromFormat)}
+                  → {getMemoFormatLabel(item.toFormat)})
+                </li>
+              {/each}
+            </ul>
+          {/if}
+
+          {#if failedBulkMemoItems.length > 0}
+            <p class="bulk-section-label bulk-error-label">Errors ({failedBulkMemoItems.length})</p>
+            <ul class="bulk-result-list">
+              {#each failedBulkMemoItems as item (item.id)}
+                <li class="bulk-result-err">
+                  Error: {item.taskName} / {item.memoTitle}: {item.error}
+                </li>
+              {/each}
+            </ul>
+          {/if}
+
+          {#if failedBulkMemoItems.length === 0}
+            <p class="bulk-success-note">Conversion completed.</p>
+          {/if}
+        {/if}
+      </div>
+
+      <div class="bulk-convert-footer">
+        {#if bulkMemoPhase === "ready"}
+          <button
+            class="bulk-convert-btn"
+            disabled={bulkMemoItems.length === 0}
+            on:click={applyBulkMemoFormat}>Convert</button
+          >
+        {/if}
+        <button class="bulk-close-btn" on:click={closeBulkMemoFormatConfirm}>
+          {bulkMemoPhase === "done" ? "Close" : "Cancel"}
+        </button>
+      </div>
+    </div>
+  </Modal>
 {:else}
   <h1 style="color:var(--theme-color-Sub-main); display:flex; justify-content:center">
     Loading...
@@ -524,6 +796,16 @@
     border-bottom: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 12%, transparent);
     flex-shrink: 0;
   }
+  .storage-badge {
+    flex: 0 0 auto;
+    padding: 0.15rem var(--sp2);
+    border-radius: var(--shape-xs);
+    background-color: color-mix(in srgb, var(--theme-color-Info-main) 18%, transparent);
+    color: var(--theme-color-Sub-main);
+    font-size: var(--font-label-md);
+    font-weight: 600;
+    white-space: nowrap;
+  }
   .TbSep {
     display: inline-block;
     width: 1px;
@@ -566,12 +848,120 @@
     border-radius: var(--shape-sm);
     background: rgba(128, 128, 128, 0.5);
   }
-  div.TaskDetail {
-    flex: 1;
-    min-height: 0;
-    height: 100%;
+  .bulk-convert-container {
+    display: flex;
+    flex-direction: column;
     width: 100%;
-    box-sizing: border-box;
+    background-color: var(--theme-color-Main-light);
+    border-radius: var(--shape-sm);
+    overflow: hidden;
+  }
+
+  .bulk-convert-header {
+    padding: var(--sp3) var(--sp4);
+    font-weight: bold;
+    font-size: 1.4rem;
+    color: var(--theme-color-Sub-main);
+    background-color: var(--theme-color-Main-main);
+    border-bottom: 1px solid var(--theme-color-Sub-dark);
+  }
+
+  .bulk-convert-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp2);
+    padding: var(--sp4);
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+
+  .bulk-section-label {
+    font-size: var(--font-body-md);
+    font-weight: bold;
+    color: var(--theme-color-Sub-main);
+    margin: var(--sp2) 0 var(--sp1);
+    opacity: 0.75;
+  }
+
+  .bulk-list,
+  .bulk-result-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp1);
+    list-style: none;
+    padding: 0;
     margin: 0;
+  }
+
+  .bulk-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp3);
+    padding: var(--sp2) var(--sp3);
+    border-radius: var(--shape-xs);
+    background-color: var(--theme-color-Main-main);
+  }
+
+  .bulk-item-title {
+    min-width: 0;
+    color: var(--theme-color-Sub-main);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .bulk-item-format,
+  .bulk-note,
+  .bulk-warn-note {
+    color: var(--theme-color-Sub-dark);
+    font-size: var(--font-body-sm);
+  }
+
+  .bulk-result-ok {
+    color: var(--theme-color-Success-main);
+  }
+
+  .bulk-result-err,
+  .bulk-error-label {
+    color: var(--theme-color-Error-main);
+  }
+
+  .bulk-success-note {
+    color: var(--theme-color-Success-main);
+  }
+
+  .bulk-convert-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--sp2);
+    padding: var(--sp3) var(--sp4);
+    border-top: 1px solid var(--theme-color-Sub-dark);
+    background-color: var(--theme-color-Main-main);
+  }
+
+  .bulk-convert-btn,
+  .bulk-close-btn {
+    border: none;
+    border-radius: var(--shape-xs);
+    padding: var(--sp1) var(--sp3);
+    font-size: var(--font-body-md);
+  }
+
+  .bulk-convert-btn {
+    cursor: pointer;
+    background-color: var(--theme-color-Primary-main);
+    color: white;
+  }
+
+  .bulk-convert-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .bulk-close-btn {
+    cursor: pointer;
+    background-color: var(--theme-color-Sub-dark);
+    color: var(--theme-color-Main-main);
   }
 </style>

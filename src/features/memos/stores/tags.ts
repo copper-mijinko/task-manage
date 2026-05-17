@@ -6,14 +6,14 @@ import type { SelectedType } from "@app-types/app";
 
 /** tag name (lowercase) → set of task node IDs that have a memo with this tag */
 export type TagIndex = Map<string, Set<string>>;
-export type MemoTagScope = "quill" | "markdown" | "none";
+export type MemoTagScope = "db" | "workspace" | "none";
 
 export const tag_index = writable<TagIndex>(new Map());
 export const active_tag = writable<string | null>(null);
 
 export function memoTagScopeForSelectedType(selectedType: SelectedType): MemoTagScope {
-  if (selectedType === "WorkspaceProject") return "markdown";
-  if (selectedType === "Projects") return "quill";
+  if (selectedType === "WorkspaceProject") return "workspace";
+  if (selectedType === "Projects") return "db";
   return "none";
 }
 

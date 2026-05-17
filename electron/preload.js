@@ -113,10 +113,10 @@ const electronAPI = {
     ipcRenderer.invoke("ws:resolve-conflict", { projectDir, action }),
   wsSelectDirectory: () => ipcRenderer.invoke("ws:select-directory"),
   wsGetLegacyProjects: () => ipcRenderer.invoke("ws:get-legacy-projects"),
-  wsExportLegacyProjects: (workspacePath) =>
-    ipcRenderer.invoke("ws:export-legacy-projects", { workspacePath }),
-  wsMigrateProjects: (workspacePath) =>
-    ipcRenderer.invoke("ws:migrate-projects", { workspacePath }),
+  wsExportLegacyProjects: (workspacePath, options) =>
+    ipcRenderer.invoke("ws:export-legacy-projects", { workspacePath, options }),
+  wsMigrateProjects: (workspacePath, options) =>
+    ipcRenderer.invoke("ws:migrate-projects", { workspacePath, options }),
 };
 
 contextBridge.exposeInMainWorld("electronAPI", electronAPI);

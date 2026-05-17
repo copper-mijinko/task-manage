@@ -1,5 +1,5 @@
 ﻿import { uuidV4 } from "@lib/utils/uuid";
-import { memoContentForSearch } from "@features/memos/utils/memo_utils";
+import { memoContentForSearch, type MemoFormat } from "@features/memos/utils/memo_utils";
 import type { SortState } from "@app-types/app";
 
 export type TaskStatus = "Open" | "Pending" | "In Progress" | "Completed" | "Canceled";
@@ -9,6 +9,7 @@ export interface MemoEntry {
   title: string;
   content: unknown;
   tags: string[];
+  format?: MemoFormat;
 }
 
 export interface TreeNodeData {

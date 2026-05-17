@@ -80,10 +80,6 @@
   }
   $: menu_data = [
     {
-      name: "Projects",
-      children: $project_ids,
-    },
-    {
       name: "Info",
       children: $info_ids,
     },
@@ -95,9 +91,9 @@
     : tagEntries;
   $: tagScopeLabel =
     $selected_type === "WorkspaceProject"
-      ? "Markdown"
+      ? "Workspace"
       : $selected_type === "Projects"
-        ? "Quill"
+        ? "db.json"
         : "Memo";
 
   // Add
@@ -288,27 +284,6 @@
       />
     </svg>
     <span class="TextOverFlow">Workspace</span>
-    <div class="AddButtonContainer">
-      {#if $workspace_store.activeWorkspacePath}
-        <IconButton
-          tooltipContent="Add a workspace project."
-          ariaLabel="Add a workspace project"
-          normalColor="rgba(255,255,255,0.1)"
-          activeColor="rgba(255,255,255,0.2)"
-          on:click={addWorkspaceProject}
-        >
-          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
-            ><path
-              d="M12 5V19M5 12H19"
-              stroke="white"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            ></path></svg
-          >
-        </IconButton>
-      {/if}
-    </div>
   </div>
   <div class="WorkspaceInfo">
     {#if $workspace_store.activeWorkspacePath}
@@ -340,32 +315,164 @@
       <span>管理</span>
     </button>
   </div>
-  {#if $workspace_store.projects.length > 0}
-    <div class="Contents">
-      {#each $workspace_store.projects as proj (proj.rootId)}
-        <button
-          class="MenuRow"
-          class:Selected={proj.rootId === $selected_id && $selected_type === "WorkspaceProject"}
-          use:ripple
-          on:click={() => selectWorkspaceProject(proj)}
-        >
+  <br />
+  <div class:Section={true}>
+    <svg class="Logo" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" mirror-in-rtl="true"
+      ><path
+        d="M8 6H5c-.553 0-1-.448-1-1s.447-1 1-1h3c.553 0 1 .448 1 1s-.447 1-1 1zM13 10H5c-.553 0-1-.448-1-1s.447-1 1-1h8c.553 0 1 .448 1 1s-.447 1-1 1zM13 14H5c-.553 0-1-.448-1-1s.447-1 1-1h8c.553 0 1 .448 1 1s-.447 1-1 1z"
+      ></path><path
+        d="M18 2v8c0 .55-.45 1-1 1s-1-.45-1-1V2.5c0-.28-.22-.5-.5-.5h-13c-.28 0-.5.22-.5.5v19c0 .28.22.5.5.5h13c.28 0 .5-.22.5-.5V21c0-.55.45-1 1-1s1 .45 1 1v1c0 1.1-.9 2-2 2H2c-1.1 0-2-.9-2-2V2C0 .9.9 0 2 0h14c1.1 0 2 .9 2 2z"
+      ></path><path
+        d="M23.87 11.882c.31.54.045 1.273-.595 1.643l-9.65 5.57c-.084.05-.176.086-.265.11l-2.656.66c-.37.092-.72-.035-.88-.314-.162-.278-.09-.65.17-.913l1.907-1.958c.063-.072.137-.123.214-.167.004-.01.012-.015.012-.015l9.65-5.57c.64-.37 1.408-.234 1.72.305l.374.65z"
+      ></path></svg
+    >
+    <span class:TextOverFlow={true}>Projects</span>
+  </div>
+  <div class="ProjectSubsection">
+    <div class="ProjectSubsectionHeader">
+      <span
+        class="SubsectionLabel TextOverFlow"
+        use:tooltip={{
+          color: "var(--theme-color-Main-main)",
+          backgroundColor: "var(--theme-color-Sub-main)",
+          content:
+            "Workspaceフォルダに保存されるプロジェクトです。メモはWorkspaceファイルとして管理されます。",
+        }}>Workspace Projects</span
+      >
+      <div class="AddButtonContainer">
+        {#if $workspace_store.activeWorkspacePath}
+          <IconButton
+            tooltipContent="Add a workspace project."
+            ariaLabel="Add a workspace project"
+            normalColor="rgba(255,255,255,0.1)"
+            activeColor="rgba(255,255,255,0.2)"
+            on:click={addWorkspaceProject}
+          >
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
+              ><path
+                d="M12 5V19M5 12H19"
+                stroke="white"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              ></path></svg
+            >
+          </IconButton>
+        {/if}
+      </div>
+    </div>
+    <div class="Contents ProjectContents">
+      {#if $workspace_store.projects.length > 0}
+        {#each $workspace_store.projects as proj (proj.rootId)}
+          <button
+            class="MenuRow"
+            class:Selected={proj.rootId === $selected_id && $selected_type === "WorkspaceProject"}
+            use:ripple
+            data-id={proj.rootId}
+            data-section="WorkspaceProject"
+            on:click={() => selectWorkspaceProject(proj)}
+          >
+            <div class="TreeLine" style="flex-shrink: 0"></div>
+            <span
+              class="TextOverFlow"
+              use:tooltip={{
+                color: "var(--theme-color-Main-main)",
+                backgroundColor: "var(--theme-color-Sub-main)",
+                content: proj.name,
+              }}>{proj.name}</span
+            >
+            <div class="DeleteButtonContainer">
+              <IconButton
+                tooltipContent="Delete this workspace project."
+                ariaLabel="Delete workspace project"
+                style="height: 100%; margin:0; box-shadow:none;"
+                normalColor="transparent"
+                activeColor="rgba(255,255,255,0.2)"
+                on:click={(e) => handleDeleteWorkspaceProject(e, proj)}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"
+                  ><path
+                    fill="white"
+                    d="M13.05 42q-1.25 0-2.125-.875T10.05 39V10.5H8v-3h9.4V6h13.2v1.5H40v3h-2.05V39q0 1.2-.9 2.1-.9.9-2.1.9Zm21.9-31.5h-21.9V39h21.9Zm-16.6 24.2h3V14.75h-3Zm8.3 0h3V14.75h-3Zm-13.6-24.2V39Z"
+                  /></svg
+                >
+              </IconButton>
+            </div>
+          </button>
+        {/each}
+      {:else}
+        <div class="MenuRow EmptyProjectRow">
           <div class="TreeLine" style="flex-shrink: 0"></div>
+          <span class="TextOverFlow">
+            {$workspace_store.activeWorkspacePath ? "No workspace projects" : "Workspace未設定"}
+          </span>
+        </div>
+      {/if}
+    </div>
+  </div>
+  <div class="ProjectSubsection">
+    <div class="ProjectSubsectionHeader">
+      <span
+        class="SubsectionLabel TextOverFlow"
+        use:tooltip={{
+          color: "var(--theme-color-Main-main)",
+          backgroundColor: "var(--theme-color-Sub-main)",
+          content:
+            "従来のdb.jsonに保存されるアプリ内プロジェクトです。db.jsonは将来的に非推奨予定です。",
+        }}>InApp Projects (db.json)</span
+      >
+      <div class="AddButtonContainer">
+        <IconButton
+          tooltipContent="Add an InApp project."
+          ariaLabel="Add an InApp project"
+          normalColor="rgba(255,255,255,0.1)"
+          activeColor="rgba(255,255,255,0.2)"
+          on:click={(e) => {
+            handleAdd(e);
+          }}
+        >
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
+            ><path
+              d="M12 5V19M5 12H19"
+              stroke="white"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            ></path></svg
+          >
+        </IconButton>
+      </div>
+    </div>
+    <div class="Contents ProjectContents">
+      {#each $project_ids as child (child.id)}
+        <button
+          transition:slide={{ duration: 100 }}
+          class:MenuRow={true}
+          class:Selected={child.id == $selected_id && $selected_type === "Projects"}
+          use:ripple
+          data-id={child.id}
+          data-section="Projects"
+          on:click={(e) => select(e, child.id, "Projects")}
+        >
+          <div class:TreeLine={true} style="flex-shrink: 0"></div>
           <span
-            class="TextOverFlow"
+            class:TextOverFlow={true}
             use:tooltip={{
               color: "var(--theme-color-Main-main)",
               backgroundColor: "var(--theme-color-Sub-main)",
-              content: proj.name,
-            }}>{proj.name}</span
+              content: child.name,
+            }}>{child.name}</span
           >
           <div class="DeleteButtonContainer">
             <IconButton
-              tooltipContent="Delete this workspace project."
-              ariaLabel="Delete workspace project"
+              tooltipContent="Delete the InApp project."
+              ariaLabel="Delete the InApp project"
               style="height: 100%; margin:0; box-shadow:none;"
               normalColor="transparent"
               activeColor="rgba(255,255,255,0.2)"
-              on:click={(e) => handleDeleteWorkspaceProject(e, proj)}
+              on:click={(e) => {
+                handleDelete(e, child.id);
+              }}
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"
                 ><path
@@ -378,7 +485,7 @@
         </button>
       {/each}
     </div>
-  {/if}
+  </div>
 
   {#if menu_data}
     {#each menu_data as menu, i}
@@ -624,6 +731,29 @@
     overflow-y: auto;
     overflow-x: hidden;
   }
+  .ProjectSubsection {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    margin: 0 0 var(--sp2);
+  }
+  .ProjectSubsectionHeader {
+    display: flex;
+    align-items: center;
+    min-height: 2rem;
+    padding: 0 var(--sp2) 0 var(--sp3);
+    color: rgba(255, 255, 255, 0.78);
+    font-size: var(--font-label-md);
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+  .SubsectionLabel {
+    min-width: 0;
+    cursor: help;
+  }
+  .ProjectContents {
+    max-height: 12rem;
+  }
   .Logo {
     width: 1.25rem;
     height: 1.25rem;
@@ -645,30 +775,28 @@
     flex-direction: row;
     box-sizing: border-box;
     position: relative;
+    flex: 0 0 2rem;
+    height: 2rem;
     min-height: 2rem;
-    padding: var(--sp1) var(--sp2);
+    padding: 0 var(--sp2);
     width: 100%;
     color: white;
     align-items: center;
     cursor: pointer;
     border-radius: 0 var(--shape-sm) var(--shape-sm) 0;
     font-size: var(--font-body-sm);
+    overflow: hidden;
   }
   span {
     display: block;
   }
-  .MenuRow:hover {
-    background-color: var(--theme-color-Theme-dark);
+  .MenuRow:focus-visible {
+    outline: 2px solid var(--theme-color-Primary-main);
+    outline-offset: -2px;
+    z-index: 1;
   }
-  .MenuRow:hover::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 3px;
-    height: 100%;
-    background-color: var(--theme-color-Primary-main);
-    z-index: 99999;
+  .MenuRow:not(.Selected):hover {
+    background-color: rgba(255, 255, 255, 0.08);
   }
   button {
     border: none;
@@ -697,7 +825,8 @@
   }
   .TreeLine {
     display: block;
-    height: 100%;
+    align-self: stretch;
+    height: auto;
     width: 1rem;
     border-left: 1px solid white;
     left: -1rem;
@@ -865,6 +994,17 @@
     gap: var(--sp2);
     color: rgba(255, 255, 255, 0.55);
     cursor: default;
+  }
+  .EmptyProjectRow {
+    gap: var(--sp2);
+    color: rgba(255, 255, 255, 0.55);
+    cursor: default;
+  }
+  .EmptyProjectRow:hover {
+    background-color: transparent;
+  }
+  .EmptyProjectRow:hover::before {
+    display: none;
   }
   .EmptyTagRow:hover {
     background-color: transparent;

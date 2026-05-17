@@ -3,9 +3,10 @@
   import { table_selected_id } from "@stores";
   import { ripple, tooltip } from "@lib/actions";
   import IconButton from "@lib/primitives/IconButton.svelte";
-  import Button from "@lib/primitives/Button.svelte";
+  import SegmentedControl from "@lib/primitives/SegmentedControl.svelte";
   import Memo from "@features/memos/components/Memo.svelte";
   import Dialog from "@lib/primitives/Dialog.svelte";
+  import { normalizeMemoFormat } from "@features/memos/utils/memo_utils";
 
   export let memo = [];
   export let saveMemo;
@@ -14,20 +15,28 @@
   export let renameMemo;
   export let reorderMemo;
   export let saveMemoTags = null;
+  export let changeMemoFormat = null;
   export let allTags = [];
   export let disabled = false;
   export let isWorkspaceProject = false;
+  export let defaultMemoFormat = "quill";
   export let workspaceProjectDir = null;
   export let taskId = null;
 
   let show_confirm = false;
+  let show_format_confirm = false;
   let name_confirm = "";
+  let pendingFormat = null;
   let selectedMemoIndex = 0;
   let previousTaskId;
   let newMemoTitle = "memo";
   let inputs = Array(100).fill(null);
   let edit = false;
   const hasSelectedMemo = () => Boolean(memo[selectedMemoIndex]);
+  const memoFormatOptions = [
+    { value: "markdown", label: "Markdown", ariaLabel: "Use Markdown memo format" },
+    { value: "quill", label: "Quill", ariaLabel: "Use Quill memo format" },
+  ];
 
   const toggle_confirm = () => {
     show_confirm = !show_confirm;
@@ -38,6 +47,21 @@
       selectedMemoIndex = selectedMemoIndex == 0 ? 0 : selectedMemoIndex - 1;
       edit = false;
     }
+  };
+
+  const toggle_format_confirm = () => {
+    show_format_confirm = !show_format_confirm;
+    if (!show_format_confirm) {
+      pendingFormat = null;
+    }
+  };
+
+  const callback_format_confirm = () => {
+    const nextFormat = pendingFormat;
+    if (nextFormat && changeMemoFormat) {
+      changeMemoFormat(selectedMemoIndex, nextFormat);
+    }
+    pendingFormat = null;
   };
 
   function normalizeMemoTitle(title) {
@@ -89,14 +113,13 @@
 
   $: editedContent = memo.length > selectedMemoIndex ? memo[selectedMemoIndex].content : "";
   $: selectedMemo = memo[selectedMemoIndex];
+  $: selectedMemoFormat = normalizeMemoFormat(selectedMemo?.format, defaultMemoFormat);
   $: currentTags = selectedMemo?.tags ?? [];
   $: suggestedTags = allTags.filter((tag) => !currentTags.includes(tag));
   $: normalizedTagQuery = normalizeTagInput(tagInput);
   $: visibleSuggestedTags = suggestedTags
     .filter((tag) => !normalizedTagQuery || tag.includes(normalizedTagQuery))
     .slice(0, 8);
-  $: tagScopeLabel = isWorkspaceProject ? "Markdown" : "Quill";
-
   let tagInput = "";
   let tagInputElement;
 
@@ -139,6 +162,16 @@
         currentTags.filter((t) => t !== tag)
       );
     }
+  }
+
+  function requestMemoFormatChange(nextFormat) {
+    if (!selectedMemo || !changeMemoFormat || nextFormat === selectedMemoFormat) return;
+    pendingFormat = nextFormat;
+    show_format_confirm = true;
+  }
+
+  function handleMemoFormatChange(event) {
+    requestMemoFormatChange(event.detail.value);
   }
 
   let draggingIndex = -1;
@@ -242,7 +275,16 @@
         {/each}
       {/if}
     </div>
-    <span class="memo-type-label">{tagScopeLabel}</span>
+    <div class="memo-format-control">
+      <SegmentedControl
+        options={memoFormatOptions}
+        value={selectedMemoFormat}
+        ariaLabel="Memo format"
+        size="md"
+        disabled={disabled || !selectedMemo || !changeMemoFormat}
+        on:change={handleMemoFormatChange}
+      />
+    </div>
     <div class="memotab-control">
       <IconButton
         tooltipContent="メモを追加"
@@ -377,13 +419,14 @@
 
   <div class="memotab-content">
     {#if selectedMemo}
-      {#key `${isWorkspaceProject ? "workspace" : "projects"}:${$table_selected_id ?? "none"}:${selectedMemoIndex}`}
+      {#key `${isWorkspaceProject ? "workspace" : "projects"}:${$table_selected_id ?? "none"}:${selectedMemoIndex}:${selectedMemoFormat}`}
         <Memo
           saveMemo={(editedContent) => saveMemo(editedContent, selectedMemoIndex)}
           content={editedContent}
           memoTitles={memo.map((entry) => entry.title)}
           openMemoLink={selectMemoByTitle}
           {isWorkspaceProject}
+          format={selectedMemoFormat}
           {workspaceProjectDir}
           {taskId}
         />
@@ -401,6 +444,13 @@
   content={`Do you really delete "${name_confirm}"?`}
   callback={callback_confirm}
 />
+<Dialog
+  show={show_format_confirm}
+  toggle={toggle_format_confirm}
+  header="Memo format conversion"
+  content={`Markdown と Quill の変換では、装飾や埋め込みなど一部の情報が損なわれる可能性があります。\n変換後は元に戻す / やり直しで取り消しできます。\n\nこのメモを ${pendingFormat === "markdown" ? "Markdown" : "Quill"} に変換しますか？`}
+  callback={callback_format_confirm}
+/>
 
 <style>
   button {
@@ -413,14 +463,17 @@
 
   button:focus-visible {
     outline: 2px solid var(--theme-color-Primary-main);
-    outline-offset: 2px;
+    outline-offset: -2px;
   }
 
   .container {
     display: flex;
     flex-direction: column;
+    flex: 1 1 auto;
     height: 100%;
+    min-height: 0;
     width: 100%;
+    min-width: 0;
     box-sizing: border-box;
   }
 
@@ -442,24 +495,11 @@
     flex: 1;
   }
 
-  .memo-type-label {
-    /* Match TaskDetail's `.detail-badge` exactly so the same label looks the
-       same in both places. align-self: center prevents the flex parent from
-       stretching the badge to its full row height. */
+  .memo-format-control {
     display: inline-flex;
-    align-self: center;
     align-items: center;
-    justify-content: center;
-    margin: 0 var(--sp1);
-    padding: var(--sp1) var(--sp2);
-    border-radius: var(--shape-xs);
-    background-color: color-mix(in srgb, var(--theme-color-Info-main) 18%, transparent);
-    color: var(--theme-color-Sub-main);
-    font-size: var(--font-label-md);
-    font-weight: 500;
-    line-height: 1.2;
-    white-space: nowrap;
     flex: 0 0 auto;
+    margin: 0 var(--sp1);
   }
 
   .memotab-control {
@@ -509,7 +549,9 @@
     flex: 1;
     justify-content: center;
     align-items: center;
+    border-bottom: 0.2rem solid transparent;
     color: var(--theme-color-Sub-main);
+    overflow: hidden;
   }
 
   span.memotab-item {
@@ -527,7 +569,7 @@
   }
 
   .selected {
-    border-bottom: 0.2rem solid var(--theme-color-Primary-main);
+    border-bottom-color: var(--theme-color-Primary-main);
     color: var(--theme-color-Primary-main);
     font-weight: 500;
   }
@@ -735,6 +777,7 @@
     display: flex;
     box-sizing: border-box;
     flex: 1;
+    min-height: 0;
     overflow: hidden;
   }
 
@@ -742,6 +785,8 @@
     height: 100%;
     width: 100%;
     flex: 1;
+    min-height: 0;
     resize: none;
+    overflow: auto;
   }
 </style>

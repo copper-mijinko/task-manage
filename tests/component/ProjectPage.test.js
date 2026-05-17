@@ -210,6 +210,37 @@ describe("ProjectPage", () => {
     expect(screen.getByTestId("task-detail-stub")).toBeInTheDocument();
   });
 
+  test("bulk converts current project memos to Markdown after confirmation", async () => {
+    const data = createProjectData();
+    data.data.children[0].data.memo = [
+      {
+        id: "memo-quill",
+        title: "Quill memo",
+        content: { ops: [{ insert: "launch\n" }] },
+        tags: [],
+        format: "quill",
+      },
+    ];
+    tree_data.set(data);
+
+    render(ProjectPage);
+
+    await fireEvent.click(screen.getByRole("button", { name: "全メモをMarkdownへ変換" }));
+    expect(screen.getByText("Memos to convert (1)")).toBeInTheDocument();
+    expect(screen.getByText("First Task / Quill memo")).toBeInTheDocument();
+    expect(screen.getByText(/情報が損なわれる可能性/)).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Convert" }));
+    await tick();
+
+    const memo = get(tree_data).data.children[0].data.memo[0];
+    expect(memo.format).toBe("markdown");
+    expect(memo.content).toBe("launch");
+    expect(screen.getByText("Converted (1)")).toBeInTheDocument();
+    expect(screen.getByText(/OK: First Task \/ Quill memo/)).toBeInTheDocument();
+    expect(screen.getByText("Conversion completed.")).toBeInTheDocument();
+  });
+
   test("closes the right detail pane while the gantt panel remains visible", async () => {
     ganttVisible.set(true);
 

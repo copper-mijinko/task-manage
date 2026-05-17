@@ -137,12 +137,18 @@ export interface ElectronAPI {
   ) => Promise<{ success: boolean; error?: string }>;
   wsSelectDirectory: () => Promise<string | null>;
   wsGetLegacyProjects: () => Promise<{ id: string; name: string; taskCount: number }[]>;
-  wsExportLegacyProjects: (workspacePath: string) => Promise<{
+  wsExportLegacyProjects: (
+    workspacePath: string,
+    options?: { memoFormat?: "preserve" | "markdown" }
+  ) => Promise<{
     success: boolean;
     migrated: { name: string; count: number }[];
     errors: { name: string; error: string }[];
   }>;
-  wsMigrateProjects: (workspacePath: string) => Promise<{
+  wsMigrateProjects: (
+    workspacePath: string,
+    options?: { memoFormat?: "preserve" | "markdown" }
+  ) => Promise<{
     success: boolean;
     migrated: { name: string; count: number }[];
     errors: { name: string; error: string }[];

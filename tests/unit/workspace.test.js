@@ -376,6 +376,40 @@ describe("file system operations", () => {
     expect(loaded.memos[0].tags).toEqual(["design", "frontend"]);
   });
 
+  it("writeTask + readProject round-trips a Quill memo in markdown file JSON", () => {
+    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
+    const taskDirs = new Map([["root-id", "_project"]]);
+    const delta = { ops: [{ insert: "Rich memo\n", attributes: { bold: true } }] };
+    const task = {
+      id: "task-quill",
+      name: "Quill Task",
+      status: "Open",
+      parents: ["root-id"],
+      memos: [
+        {
+          id: "memo-quill",
+          title: "Quill",
+          content: delta,
+          tags: ["rich"],
+          format: "quill",
+        },
+      ],
+      createdAt: "2026-04-24",
+    };
+
+    writeTask(projectDir, task, taskDirs);
+
+    const memoFile = fs.readFileSync(path.join(projectDir, "task-quill", "memo-quill.md"), "utf8");
+    expect(memoFile).toContain("format: quill");
+    expect(memoFile).toContain("```json");
+    expect(memoFile).toContain('"ops"');
+
+    const { tasks } = readProject(projectDir);
+    const loaded = tasks.get("task-quill");
+    expect(loaded.memos[0].format).toBe("quill");
+    expect(loaded.memos[0].content).toEqual(delta);
+  });
+
   it("memo tags default to empty array when absent from frontmatter", () => {
     const { projectDir } = createProject(tmpDir, "Proj", "root-id");
     const taskDirs = new Map([["root-id", "_project"]]);
@@ -781,7 +815,9 @@ describe("migrateProjectData", () => {
     const { tasks } = readProject(projectDir);
 
     expect(tasks.size).toBe(1);
-    const root = tasks.get("root-1");
+    expect(tasks.has("root-1")).toBe(false);
+    const root = Array.from(tasks.values()).find((task) => task.parents.length === 0);
+    expect(root.id).not.toBe("root-1");
     expect(root.name).toBe("My Project");
     expect(root.parents).toEqual([]);
   });
@@ -827,8 +863,11 @@ describe("migrateProjectData", () => {
     const { tasks } = readProject(projectDir);
 
     expect(tasks.size).toBe(4);
-    expect(tasks.get("child-a").parents).toEqual(["root-2"]);
-    expect(tasks.get("child-b").parents).toEqual(["root-2"]);
+    expect(tasks.has("root-2")).toBe(false);
+    const root = Array.from(tasks.values()).find((task) => task.parents.length === 0);
+    expect(root.id).not.toBe("root-2");
+    expect(tasks.get("child-a").parents).toEqual([root.id]);
+    expect(tasks.get("child-b").parents).toEqual([root.id]);
     expect(tasks.get("grandchild").parents).toEqual(["child-b"]);
     expect(tasks.get("child-a").startDate).toBe("2026-04-20");
     expect(tasks.get("child-a").dueDate).toBe("2026-05-01");
@@ -864,20 +903,62 @@ describe("migrateProjectData", () => {
     };
     const before = JSON.stringify(projectData);
 
-    exportProjectData(tmpDir, projectData);
+    exportProjectData(tmpDir, projectData, { memoFormat: "markdown" });
 
     expect(JSON.stringify(projectData)).toBe(before);
 
     const entries = fs.readdirSync(tmpDir, { withFileTypes: true });
     const projectDir = path.join(tmpDir, entries.find((e) => e.isDirectory()).name);
-    const memoFile = fs.readFileSync(path.join(projectDir, "delta-memo.md"), "utf8");
+    const memoFiles = fs
+      .readdirSync(projectDir)
+      .filter((entry) => entry.endsWith(".md") && entry !== "_project.md");
+    expect(memoFiles).toHaveLength(1);
+    expect(memoFiles[0]).not.toBe("delta-memo.md");
+    const memoFile = fs.readFileSync(path.join(projectDir, memoFiles[0]), "utf8");
+    const { data: memoData } = parseFrontmatter(memoFile);
 
+    expect(memoData.id).not.toBe("delta-memo");
     expect(memoFile).toContain("# Title");
     expect(memoFile).toContain("**bold**");
     expect(memoFile).toContain("[link](https://example.com)");
     expect(memoFile).toMatch(/-\s+item/);
     expect(memoFile).toContain("![](data:image/png;base64,abc)");
     expect(memoFile).not.toContain('"ops"');
+  });
+
+  it("exports memo format unchanged by default", () => {
+    const delta = { ops: [{ insert: "Keep rich\n", attributes: { italic: true } }] };
+    const projectData = {
+      headers: [],
+      data: {
+        id: "root-preserve",
+        data: {
+          name: "Project Preserve",
+          status: "Open",
+          "due date": undefined,
+          memo: [{ id: "preserve-memo", title: "Preserve", content: delta }],
+        },
+        children: [],
+      },
+    };
+
+    exportProjectData(tmpDir, projectData);
+
+    const entries = fs.readdirSync(tmpDir, { withFileTypes: true });
+    const projectDir = path.join(tmpDir, entries.find((e) => e.isDirectory()).name);
+    const memoFiles = fs
+      .readdirSync(projectDir)
+      .filter((entry) => entry.endsWith(".md") && entry !== "_project.md");
+    expect(memoFiles).toHaveLength(1);
+    expect(memoFiles[0]).not.toBe("preserve-memo.md");
+    const memoFile = fs.readFileSync(path.join(projectDir, memoFiles[0]), "utf8");
+    const { data: memoData } = parseFrontmatter(memoFile);
+
+    expect(memoData.id).not.toBe("preserve-memo");
+    expect(memoFile).toContain("format: quill");
+    expect(memoFile).toContain("```json");
+    expect(memoFile).toContain('"ops"');
+    expect(memoFile).toContain("Keep rich");
   });
 
   it("falls back to a JSON fenced block for unknown legacy memo objects", () => {

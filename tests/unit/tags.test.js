@@ -43,7 +43,7 @@ describe("tag stores", () => {
     expect(get(tag_index).get("design")).toEqual(new Set(["task-1"]));
   });
 
-  test("clears the active tag when switching between Quill and Markdown scopes", () => {
+  test("clears the active tag when switching between project storage scopes", () => {
     active_tag.set("design");
 
     selected_type.set("WorkspaceProject");

@@ -1,6 +1,7 @@
 ﻿<script>
   import { clickOutside } from "@lib/actions";
   import Card from "@lib/primitives/Card.svelte";
+  import { onDestroy } from "svelte";
   export let show = true;
   export let toggle;
   export let width = "90%";
@@ -27,13 +28,21 @@
     return mask;
   };
 
-  $: if (show) {
-    mask = add();
-  } else {
+  const removeMask = () => {
     if (mask) {
       mask.remove();
+      mask = undefined;
     }
+  };
+
+  $: if (show && !mask) {
+    mask = add();
   }
+  $: if (!show) {
+    removeMask();
+  }
+
+  onDestroy(removeMask);
 
   function handleKeydown(e) {
     if (show && e.key === "Escape") {
@@ -53,6 +62,7 @@
   style="--width: {width}; --height: {height};"
   role="dialog"
   aria-modal={show ? "true" : undefined}
+  aria-hidden={show ? undefined : "true"}
   aria-label={label}
   aria-labelledby={labelledBy}
   use:clickOutside
