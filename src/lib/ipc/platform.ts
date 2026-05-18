@@ -273,8 +273,13 @@ export function wsResolveConflict(
   );
 }
 
-export function wsSelectDirectory(): Promise<string | null> {
-  return api()?.wsSelectDirectory?.() ?? Promise.resolve(null);
+export interface WsSelectDirectoryResult {
+  path: string | null;
+  error?: string;
+}
+
+export function wsSelectDirectory(): Promise<WsSelectDirectoryResult> {
+  return api()?.wsSelectDirectory?.() ?? Promise.resolve({ path: null });
 }
 
 export function wsGetLegacyProjects(): Promise<{ id: string; name: string; taskCount: number }[]> {

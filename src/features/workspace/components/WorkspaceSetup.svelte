@@ -14,11 +14,15 @@
 
   async function handleSelectDirectory() {
     errorMessage = "";
-    const path = await workspace_store.selectDirectory();
-    if (path) {
-      pendingPath = path;
+    const result = await workspace_store.selectDirectory();
+    if (result.error) {
+      errorMessage = result.error;
+      return;
+    }
+    if (result.path) {
+      pendingPath = result.path;
       if (!pendingLabel) {
-        pendingLabel = path.split(/[/\\]/).pop() ?? "";
+        pendingLabel = result.path.split(/[/\\]/).pop() ?? "";
       }
     }
   }
