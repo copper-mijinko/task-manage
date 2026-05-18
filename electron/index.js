@@ -765,7 +765,31 @@ app.on("ready", () => {
       properties: ["openDirectory"],
       title: "Select workspace folder",
     });
-    return result.canceled ? null : (result.filePaths[0] ?? null);
+    if (result.canceled || !result.filePaths[0]) return { path: null };
+
+    const selected = result.filePaths[0];
+    let entries;
+    try {
+      entries = fs.readdirSync(selected, { withFileTypes: true });
+    } catch (err) {
+      log.error("ws:select-directory readdir error:", err.message);
+      return {
+        path: null,
+        error: `フォルダの読み取りに失敗しました: ${err.message}`,
+      };
+    }
+
+    const isEmpty = entries.length === 0;
+    const hasProjects = workspace.listProjects(selected).length > 0;
+
+    if (!isEmpty && !hasProjects) {
+      return {
+        path: null,
+        error:
+          "選択したフォルダは空でも既存のワークスペースでもありません。空のフォルダ、または _project.md を含むプロジェクトフォルダがあるディレクトリを選択してください。",
+      };
+    }
+    return { path: selected };
   });
 
   ipcMain.handle("ws:create-project", async (event, { workspacePath, name, id }) => {

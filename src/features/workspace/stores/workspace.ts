@@ -14,7 +14,7 @@ export interface WorkspaceState {
 
 export interface WorkspaceStore extends Writable<WorkspaceState> {
   init: () => void;
-  selectDirectory: () => Promise<string | null>;
+  selectDirectory: () => Promise<platform.WsSelectDirectoryResult>;
   addWorkspace: (path: string, label: string) => void;
   removeWorkspace: (path: string) => void;
   setActive: (path: string) => Promise<void>;
@@ -68,7 +68,7 @@ function createWorkspaceStore(): WorkspaceStore {
       })();
     },
 
-    selectDirectory(): Promise<string | null> {
+    selectDirectory(): Promise<platform.WsSelectDirectoryResult> {
       return platform.wsSelectDirectory();
     },
 
