@@ -2,9 +2,18 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const { pathToFileURL } = require("url");
-const { QuillDeltaToHtmlConverter } = require("quill-delta-to-html");
-const TurndownService = require("turndown");
-const { gfm } = require("turndown-plugin-gfm");
+const { marked } = require("marked");
+
+// marked: gfm + 標準仕様(breaks:false) + 行頭4-space を code block 扱いしない。
+marked.use({
+  gfm: true,
+  breaks: false,
+  tokenizer: {
+    code() {
+      return undefined;
+    },
+  },
+});
 
 /** Convert a human name to a filesystem-safe slug. */
 function slugify(name) {
@@ -52,27 +61,150 @@ function isQuillDelta(value) {
   return value && typeof value === "object" && Array.isArray(value.ops);
 }
 
-function createTurndownService() {
-  const turndownService = new TurndownService({
-    codeBlockStyle: "fenced",
-    headingStyle: "atx",
-    bulletListMarker: "-",
-  });
+function wrapLinkMd(inner, href) {
+  const leadingMatch = /^[ \t]+/.exec(inner);
+  const trailingMatch = /[ \t]+$/.exec(inner);
+  const leading = leadingMatch ? leadingMatch[0] : "";
+  const trailing = trailingMatch ? trailingMatch[0] : "";
+  const core = inner.slice(leading.length, inner.length - trailing.length);
+  if (!core) return inner;
+  return `${leading}[${core}](${href})${trailing}`;
+}
 
-  turndownService.use(gfm);
-  turndownService.keep(["span", "u"]);
+function wrapInlineMd(text, attrs) {
+  if (!text || !attrs) return text;
+  if (attrs.code) {
+    const r = "`" + text + "`";
+    return attrs.link ? wrapLinkMd(r, attrs.link) : r;
+  }
+  let r = text;
+  if (attrs.bold && attrs.italic) r = `***${r}***`;
+  else if (attrs.bold) r = `**${r}**`;
+  else if (attrs.italic) r = `*${r}*`;
+  if (attrs.strike) r = `~~${r}~~`;
+  if (attrs.underline) r = `<u>${r}</u>`;
+  if (attrs.link) r = wrapLinkMd(r, attrs.link);
+  return r;
+}
 
-  return turndownService;
+function deltaToLines(ops) {
+  const lines = [];
+  let currentInline = "";
+  for (const op of ops) {
+    if (op.insert == null) continue;
+    if (typeof op.insert === "object") {
+      if (typeof op.insert.image === "string") currentInline += `![](${op.insert.image})`;
+      continue;
+    }
+    if (typeof op.insert !== "string") continue;
+    const text = op.insert;
+    const inlineAttrs = op.attributes;
+    let i = 0;
+    while (i < text.length) {
+      const nl = text.indexOf("\n", i);
+      if (nl === -1) {
+        currentInline += wrapInlineMd(text.slice(i), inlineAttrs);
+        break;
+      }
+      if (nl > i) currentInline += wrapInlineMd(text.slice(i, nl), inlineAttrs);
+      lines.push({ inline: currentInline, blockAttrs: inlineAttrs || {} });
+      currentInline = "";
+      i = nl + 1;
+    }
+  }
+  if (currentInline) lines.push({ inline: currentInline, blockAttrs: {} });
+  return lines;
+}
+
+const BLOCK_ATTR_KEYS = new Set([
+  "header",
+  "list",
+  "blockquote",
+  "code-block",
+  "indent",
+  "align",
+  "direction",
+]);
+
+function pickBlockAttrs(attrs) {
+  const out = {};
+  for (const k of Object.keys(attrs || {})) if (BLOCK_ATTR_KEYS.has(k)) out[k] = attrs[k];
+  return out;
+}
+
+function getBlockType(attrs) {
+  if (attrs["code-block"]) return "code-block";
+  if (attrs.list) return "list";
+  if (attrs.blockquote) return "blockquote";
+  if (typeof attrs.header === "number") return "heading";
+  return "paragraph";
+}
+
+function shouldGroupAdjacent(type) {
+  return type === "list" || type === "blockquote" || type === "code-block";
+}
+
+function groupBlocks(lines) {
+  const blocks = [];
+  for (const line of lines) {
+    const attrs = pickBlockAttrs(line.blockAttrs);
+    const type = getBlockType(attrs);
+    const last = blocks[blocks.length - 1];
+    if (last && last.type === type && shouldGroupAdjacent(type)) {
+      last.lines.push({ inline: line.inline, attrs });
+    } else {
+      blocks.push({ type, lines: [{ inline: line.inline, attrs }] });
+    }
+  }
+  return blocks;
+}
+
+function renderListBlock(block) {
+  return block.lines
+    .map(({ inline, attrs }) => {
+      const indent = typeof attrs.indent === "number" ? attrs.indent : 0;
+      const listIndent = "  ".repeat(indent);
+      let marker = "- ";
+      if (attrs.list === "ordered") marker = "1. ";
+      else if (attrs.list === "checked") marker = "- [x] ";
+      else if (attrs.list === "unchecked") marker = "- [ ] ";
+      return `${listIndent}${marker}${inline}`;
+    })
+    .join("\n");
+}
+
+function renderBlock(block) {
+  switch (block.type) {
+    case "heading": {
+      const { inline, attrs } = block.lines[0];
+      const level = Math.max(1, Math.min(6, attrs.header || 1));
+      return `${"#".repeat(level)} ${inline}`;
+    }
+    case "list":
+      return renderListBlock(block);
+    case "blockquote":
+      return block.lines.map(({ inline }) => `> ${inline}`).join("\n");
+    case "code-block":
+      return "```\n" + block.lines.map((l) => l.inline).join("\n") + "\n```";
+    case "paragraph":
+    default:
+      // 仕様: リスト外の Quill indent は Md に出力しない(諦める)。
+      return block.lines[0].inline;
+  }
 }
 
 function quillDeltaToMarkdown(delta) {
-  const converter = new QuillDeltaToHtmlConverter(delta.ops, {
-    inlineStyles: true,
-    paragraphTag: "p",
-  });
-  const html = converter.convert();
-  const markdown = createTurndownService().turndown(html).trim();
-  return markdown;
+  if (!delta || !Array.isArray(delta.ops) || delta.ops.length === 0) return "";
+  const lines = deltaToLines(delta.ops);
+  const blocks = groupBlocks(lines);
+  while (
+    blocks.length > 0 &&
+    blocks[blocks.length - 1].type === "paragraph" &&
+    blocks[blocks.length - 1].lines.every((l) => l.inline === "")
+  ) {
+    blocks.pop();
+  }
+  return blocks.map(renderBlock).join("\n\n");
 }
 
 function legacyMemoContentToMarkdown(content, title = "Memo") {
@@ -99,15 +231,226 @@ function normalizeMemoFormat(value, fallback = "markdown") {
   return value === "quill" || value === "markdown" ? value : fallback;
 }
 
+function decodeMdEntities(text) {
+  return String(text || "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
+function pushDeltaText(ops, text, attrs) {
+  if (!text) return;
+  const hasAttrs = attrs && Object.keys(attrs).length > 0;
+  ops.push(hasAttrs ? { insert: text, attributes: { ...attrs } } : { insert: text });
+}
+
+// marked は <u>text</u> を「<u>」「text」「</u>」の3つの inline html token に分解する。
+// 走査時に open/close を見て underline 属性 stack を管理する。
+function appendInlineMdTokens(ops, tokens, attrs) {
+  if (!tokens) return;
+  let active = { ...attrs };
+  const stack = [];
+  for (const token of tokens) {
+    if (token.type === "html") {
+      const raw = String(token.raw || "").trim();
+      if (/^<u>$/i.test(raw)) {
+        stack.push(active);
+        active = { ...active, underline: true };
+        continue;
+      }
+      if (/^<\/u>$/i.test(raw)) {
+        active = stack.pop() || { ...attrs };
+        continue;
+      }
+    }
+    appendInlineMdToken(ops, token, active);
+  }
+}
+
+function appendInlineMdToken(ops, token, attrs) {
+  switch (token.type) {
+    case "text":
+      if (token.tokens && token.tokens.length > 0) {
+        appendInlineMdTokens(ops, token.tokens, attrs);
+      } else {
+        // CommonMark soft break: paragraph内に残る \n は空白扱い(breaks:false)。
+        pushDeltaText(ops, decodeMdEntities(token.text || "").replace(/\n/g, " "), attrs);
+      }
+      return;
+    case "escape":
+      pushDeltaText(ops, token.text, attrs);
+      return;
+    case "strong":
+      appendInlineMdTokens(ops, token.tokens, { ...attrs, bold: true });
+      return;
+    case "em":
+      appendInlineMdTokens(ops, token.tokens, { ...attrs, italic: true });
+      return;
+    case "del":
+      appendInlineMdTokens(ops, token.tokens, { ...attrs, strike: true });
+      return;
+    case "codespan":
+      pushDeltaText(ops, decodeMdEntities(token.text), { ...attrs, code: true });
+      return;
+    case "link":
+      appendInlineMdTokens(ops, token.tokens, { ...attrs, link: token.href });
+      return;
+    case "image":
+      ops.push({ insert: { image: token.href } });
+      return;
+    case "br":
+      ops.push({ insert: "\n" });
+      return;
+    case "html": {
+      const raw = token.raw || "";
+      const uMatch = /^<u>([\s\S]*?)<\/u>$/i.exec(raw.trim());
+      if (uMatch) {
+        pushDeltaText(ops, decodeMdEntities(uMatch[1]), { ...attrs, underline: true });
+        return;
+      }
+      pushDeltaText(ops, decodeMdEntities(raw), attrs);
+      return;
+    }
+    default:
+      if (typeof token.text === "string") pushDeltaText(ops, decodeMdEntities(token.text), attrs);
+  }
+}
+
+function endsWithNl(ops) {
+  if (ops.length === 0) return false;
+  const last = ops[ops.length - 1];
+  return typeof last.insert === "string" && last.insert.endsWith("\n");
+}
+
+function appendListToken(ops, list, level) {
+  for (const item of list.items) {
+    const itemTokens = item.tokens || [];
+    const itemOps = [];
+    const nested = [];
+    for (const sub of itemTokens) {
+      if (sub.type === "list") {
+        nested.push(sub);
+      } else if (sub.type === "text") {
+        appendInlineMdTokens(itemOps, sub.tokens, {});
+      } else if (sub.type === "paragraph") {
+        appendInlineMdTokens(itemOps, sub.tokens, {});
+      } else {
+        appendBlockToken(itemOps, sub);
+      }
+    }
+    const listKind = list.ordered
+      ? "ordered"
+      : item.task
+        ? item.checked
+          ? "checked"
+          : "unchecked"
+        : "bullet";
+    const lineAttrs = level > 0 ? { list: listKind, indent: level } : { list: listKind };
+    if (itemOps.length > 0 && itemOps[itemOps.length - 1].insert === "\n") {
+      itemOps[itemOps.length - 1] = {
+        insert: "\n",
+        attributes: { ...(itemOps[itemOps.length - 1].attributes || {}), ...lineAttrs },
+      };
+    } else {
+      itemOps.push({ insert: "\n", attributes: lineAttrs });
+    }
+    ops.push(...itemOps);
+    for (const child of nested) appendListToken(ops, child, level + 1);
+  }
+}
+
+function appendBlockToken(ops, token) {
+  switch (token.type) {
+    case "heading":
+      appendInlineMdTokens(ops, token.tokens, {});
+      ops.push({ insert: "\n", attributes: { header: token.depth } });
+      return;
+    case "paragraph":
+      appendInlineMdTokens(ops, token.tokens, {});
+      ops.push({ insert: "\n" });
+      return;
+    case "code": {
+      const lines = String(token.text || "").split("\n");
+      for (const line of lines) {
+        if (line) pushDeltaText(ops, line, {});
+        ops.push({ insert: "\n", attributes: { "code-block": true } });
+      }
+      return;
+    }
+    case "blockquote": {
+      const inner = [];
+      for (const sub of token.tokens || []) appendBlockToken(inner, sub);
+      for (const op of inner) {
+        if (typeof op.insert === "string" && op.insert === "\n") {
+          op.attributes = { ...(op.attributes || {}), blockquote: true };
+        }
+      }
+      ops.push(...inner);
+      return;
+    }
+    case "list":
+      appendListToken(ops, token, 0);
+      return;
+    case "html": {
+      const raw = token.raw || "";
+      pushDeltaText(ops, decodeMdEntities(raw), {});
+      if (!endsWithNl(ops)) ops.push({ insert: "\n" });
+      return;
+    }
+    case "space":
+      // Markdown の空行はブロック区切りの意味だけなので、Quill 側に空 paragraph を生成しない。
+      return;
+    case "hr":
+      ops.push({ insert: "\n" });
+      return;
+    default:
+      if (typeof token.text === "string" && token.text) {
+        pushDeltaText(ops, decodeMdEntities(token.text), {});
+        if (!endsWithNl(ops)) ops.push({ insert: "\n" });
+      }
+  }
+}
+
+function normalizeOps(ops) {
+  const out = [];
+  for (const op of ops) {
+    const last = out[out.length - 1];
+    const lastAttrs = JSON.stringify(last && last.attributes ? last.attributes : null);
+    const curAttrs = JSON.stringify(op.attributes || null);
+    if (
+      last &&
+      typeof last.insert === "string" &&
+      typeof op.insert === "string" &&
+      lastAttrs === curAttrs
+    ) {
+      last.insert += op.insert;
+    } else {
+      out.push({ ...op });
+    }
+  }
+  return out;
+}
+
 function markdownToQuillDelta(value) {
   const text = typeof value === "string" ? value : legacyMemoContentToMarkdown(value);
-  return {
-    ops: [
-      {
-        insert: text.endsWith("\n") ? text : `${text}\n`,
-      },
-    ],
-  };
+  if (!text) return { ops: [{ insert: "\n" }] };
+
+  let tokens;
+  try {
+    tokens = marked.lexer(text);
+  } catch {
+    return { ops: [{ insert: text.endsWith("\n") ? text : `${text}\n` }] };
+  }
+
+  const ops = [];
+  for (const token of tokens) appendBlockToken(ops, token);
+
+  if (ops.length === 0) return { ops: [{ insert: "\n" }] };
+  if (!endsWithNl(ops)) ops.push({ insert: "\n" });
+  return { ops: normalizeOps(ops) };
 }
 
 function memoContentToQuillDelta(content) {
