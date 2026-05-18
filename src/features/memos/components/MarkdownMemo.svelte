@@ -377,7 +377,7 @@
     const sequence = ++renderSequence;
     const baseHtml = marked.parse(preprocessWikiLinks(markdownText), {
       gfm: true,
-      breaks: true,
+      breaks: false,
     }) as string;
     renderedHtml = baseHtml;
     await tick();
