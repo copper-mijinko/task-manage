@@ -27,6 +27,17 @@ export function workspaceToProjectData(
     }
   }
 
+  for (const children of childrenMap.values()) {
+    children.sort((a, b) => {
+      const aOrder = tasks[a]?.order;
+      const bOrder = tasks[b]?.order;
+      if (aOrder === undefined && bOrder === undefined) return 0;
+      if (aOrder === undefined) return 1;
+      if (bOrder === undefined) return -1;
+      return aOrder - bOrder;
+    });
+  }
+
   const visited = new Set<string>();
 
   function buildNode(id: string): TreeData {
@@ -83,7 +94,7 @@ export function projectDataToWorkspaceTasks(
   const result: WorkspaceTask[] = [];
   const today = new Date().toISOString().slice(0, 10);
 
-  function traverse(node: TreeData, parentIds: string[]) {
+  function traverse(node: TreeData, parentIds: string[], siblingIndex: number) {
     const existing = existingTasks[node.id];
     result.push({
       id: node.id,
@@ -103,14 +114,15 @@ export function projectDataToWorkspaceTasks(
         };
       }),
       createdAt: existing?.createdAt || today,
+      order: siblingIndex,
     });
-    for (const child of node.children || []) {
-      traverse(child, [node.id]);
+    for (const [index, child] of (node.children || []).entries()) {
+      traverse(child, [node.id], index);
     }
   }
 
   if (projectData.data) {
-    traverse(projectData.data, []);
+    traverse(projectData.data, [], 0);
   }
   return result;
 }

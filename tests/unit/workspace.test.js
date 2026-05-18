@@ -346,6 +346,45 @@ describe("file system operations", () => {
     expect(loaded.memos[0].title).toBe("Notes");
   });
 
+  it("writeTask + readProject round-trips order field", () => {
+    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
+    const taskDirs = new Map([["root-id", "_project"]]);
+    const task = {
+      id: "task-order",
+      name: "Ordered Task",
+      status: "Open",
+      parents: ["root-id"],
+      memos: [],
+      createdAt: "2026-04-24",
+      order: 2,
+    };
+    writeTask(projectDir, task, taskDirs);
+
+    const { tasks } = readProject(projectDir);
+    const loaded = tasks.get("task-order");
+    expect(loaded).toBeDefined();
+    expect(loaded.order).toBe(2);
+  });
+
+  it("writeTask + readProject: task without order reads as undefined", () => {
+    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
+    const taskDirs = new Map([["root-id", "_project"]]);
+    const task = {
+      id: "task-no-order",
+      name: "No Order Task",
+      status: "Open",
+      parents: ["root-id"],
+      memos: [],
+      createdAt: "2026-04-24",
+    };
+    writeTask(projectDir, task, taskDirs);
+
+    const { tasks } = readProject(projectDir);
+    const loaded = tasks.get("task-no-order");
+    expect(loaded).toBeDefined();
+    expect(loaded.order).toBeUndefined();
+  });
+
   it("writeTask + readProject round-trips memo tags", () => {
     const { projectDir } = createProject(tmpDir, "Proj", "root-id");
     const taskDirs = new Map([["root-id", "_project"]]);
@@ -872,6 +911,9 @@ describe("migrateProjectData", () => {
     expect(tasks.get("child-a").startDate).toBe("2026-04-20");
     expect(tasks.get("child-a").dueDate).toBe("2026-05-01");
     expect(tasks.get("child-b").status).toBe("Completed");
+    expect(tasks.get("child-a").order).toBe(0);
+    expect(tasks.get("child-b").order).toBe(1);
+    expect(tasks.get("grandchild").order).toBe(0);
   });
 
   it("exports Quill Delta memo content to Markdown without mutating source data", () => {

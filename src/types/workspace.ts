@@ -20,6 +20,7 @@ export interface WorkspaceTask {
   parents: string[];
   memos: WorkspaceMemo[];
   createdAt: string; // YYYY-MM-DD
+  order?: number;
 }
 
 export interface WorkspaceInfo {
