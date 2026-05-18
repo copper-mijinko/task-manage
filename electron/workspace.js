@@ -599,6 +599,7 @@ function taskFrontmatterData(task) {
   if (task.startDate) data.start = task.startDate;
   if (task.dueDate) data.due = task.dueDate;
   if (task.parents?.length > 0) data.parents = task.parents;
+  if (typeof task.order === "number") data.order = task.order;
   data.created = task.createdAt || new Date().toISOString().slice(0, 10);
   return data;
 }
@@ -646,6 +647,8 @@ function readRootTask(projectDir) {
     parents: [],
     memos: readMemos(projectDir, ["_project.md"]),
     createdAt: data.created || "",
+    order:
+      data.order != null && Number.isFinite(Number(data.order)) ? Number(data.order) : undefined,
   };
 }
 
@@ -663,6 +666,8 @@ function readTaskDir(taskDir) {
     parents,
     memos: readMemos(taskDir),
     createdAt: data.created || "",
+    order:
+      data.order != null && Number.isFinite(Number(data.order)) ? Number(data.order) : undefined,
   };
 }
 
@@ -1060,7 +1065,7 @@ function exportProjectData(workspacePath, projectData, options = {}) {
   const exportMemoFormat = options.memoFormat === "markdown" ? "markdown" : "preserve";
   const exportedProjectId = crypto.randomUUID();
 
-  function traverse(node, parentIds) {
+  function traverse(node, parentIds, siblingIndex) {
     const memos = (node.data.memo || []).map((m) => {
       const title = String(m.title || "Memo");
       const sourceFormat = normalizeMemoFormat(m.format, "quill");
@@ -1087,15 +1092,16 @@ function exportProjectData(workspacePath, projectData, options = {}) {
       parents: [...parentIds],
       memos,
       createdAt: today,
+      order: siblingIndex,
     });
 
-    for (const child of node.children || []) {
-      traverse(child, [exportedTaskId]);
+    for (const [index, child] of (node.children || []).entries()) {
+      traverse(child, [exportedTaskId], index);
     }
   }
 
   if (!projectData || !projectData.data) throw new Error("Invalid project data");
-  traverse(projectData.data, []);
+  traverse(projectData.data, [], 0);
 
   const rootName = tasks[0].name || "project";
   const dirName = uniqueName(workspacePath, slugify(rootName) || "project");
