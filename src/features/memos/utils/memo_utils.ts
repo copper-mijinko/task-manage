@@ -212,7 +212,11 @@ function decodeEntities(text: string): string {
 
 // marked は <u>text</u> のような inline HTML を「<u>」「text」「</u>」の3トークンに分解する。
 // 走査時に open/close を見て underline 属性 stack を管理する。
-function appendInlineTokens(ops: QuillOp[], tokens: Tokens.Generic[] | undefined, attrs: QuillAttrs): void {
+function appendInlineTokens(
+  ops: QuillOp[],
+  tokens: Tokens.Generic[] | undefined,
+  attrs: QuillAttrs
+): void {
   if (!tokens) return;
   let active = { ...attrs };
   const stack: QuillAttrs[] = [];
