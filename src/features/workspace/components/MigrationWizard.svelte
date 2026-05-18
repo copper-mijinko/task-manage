@@ -41,9 +41,13 @@
   }
 
   async function handleSelectCustom() {
-    const p = await workspace_store.selectDirectory();
-    if (p) {
-      customPath = p;
+    const result = await workspace_store.selectDirectory();
+    if (result.error) {
+      loadError = result.error;
+      return;
+    }
+    if (result.path) {
+      customPath = result.path;
       useCustom = true;
     }
   }

@@ -22,10 +22,7 @@ describe("Markdown ↔ Quill Delta — heading", () => {
     it(`H${n}`, () => {
       const md = `${"#".repeat(n)} Hello`;
       const d = markdownToQuillDelta(md);
-      expect(ops(d)).toEqual([
-        { insert: "Hello" },
-        { insert: "\n", attributes: { header: n } },
-      ]);
+      expect(ops(d)).toEqual([{ insert: "Hello" }, { insert: "\n", attributes: { header: n } }]);
       expect(quillDeltaToMarkdown(d)).toBe(md);
     });
   }
@@ -72,20 +69,14 @@ describe("Markdown ↔ Quill Delta — inline formatting", () => {
   it("bold", () => {
     const md = "**bold**";
     const d = markdownToQuillDelta(md);
-    expect(ops(d)).toEqual([
-      { insert: "bold", attributes: { bold: true } },
-      { insert: "\n" },
-    ]);
+    expect(ops(d)).toEqual([{ insert: "bold", attributes: { bold: true } }, { insert: "\n" }]);
     expect(quillDeltaToMarkdown(d)).toBe(md);
   });
 
   it("italic with *", () => {
     const md = "*italic*";
     const d = markdownToQuillDelta(md);
-    expect(ops(d)).toEqual([
-      { insert: "italic", attributes: { italic: true } },
-      { insert: "\n" },
-    ]);
+    expect(ops(d)).toEqual([{ insert: "italic", attributes: { italic: true } }, { insert: "\n" }]);
     expect(quillDeltaToMarkdown(d)).toBe(md);
   });
 
@@ -93,30 +84,26 @@ describe("Markdown ↔ Quill Delta — inline formatting", () => {
     const md = "***both***";
     const d = markdownToQuillDelta(md);
     // markedのトークン化は順序が異なる場合があるので個別検証
-    expect(ops(d).some((op) => {
-      const a = op.attributes as Record<string, unknown> | undefined;
-      return a?.bold === true && a?.italic === true && op.insert === "both";
-    })).toBe(true);
+    expect(
+      ops(d).some((op) => {
+        const a = op.attributes as Record<string, unknown> | undefined;
+        return a?.bold === true && a?.italic === true && op.insert === "both";
+      })
+    ).toBe(true);
     expect(quillDeltaToMarkdown(d)).toBe(md);
   });
 
   it("strikethrough (GFM)", () => {
     const md = "~~gone~~";
     const d = markdownToQuillDelta(md);
-    expect(ops(d)).toEqual([
-      { insert: "gone", attributes: { strike: true } },
-      { insert: "\n" },
-    ]);
+    expect(ops(d)).toEqual([{ insert: "gone", attributes: { strike: true } }, { insert: "\n" }]);
     expect(quillDeltaToMarkdown(d)).toBe(md);
   });
 
   it("inline code", () => {
     const md = "`code`";
     const d = markdownToQuillDelta(md);
-    expect(ops(d)).toEqual([
-      { insert: "code", attributes: { code: true } },
-      { insert: "\n" },
-    ]);
+    expect(ops(d)).toEqual([{ insert: "code", attributes: { code: true } }, { insert: "\n" }]);
     expect(quillDeltaToMarkdown(d)).toBe(md);
   });
 
@@ -313,10 +300,7 @@ describe("Quill→Md→Quill round trip", () => {
 
   it("bold + italic combined", () => {
     const original: QuillDelta = {
-      ops: [
-        { insert: "x", attributes: { bold: true, italic: true } },
-        { insert: "\n" },
-      ],
+      ops: [{ insert: "x", attributes: { bold: true, italic: true } }, { insert: "\n" }],
     };
     expect(roundTripDelta(original)).toEqual(original);
   });
@@ -337,10 +321,7 @@ describe("Quill→Md→Quill round trip", () => {
 
   it("link", () => {
     const original: QuillDelta = {
-      ops: [
-        { insert: "site", attributes: { link: "https://example.com" } },
-        { insert: "\n" },
-      ],
+      ops: [{ insert: "site", attributes: { link: "https://example.com" } }, { insert: "\n" }],
     };
     expect(roundTripDelta(original)).toEqual(original);
   });
@@ -478,10 +459,7 @@ describe("Markdown ↔ Quill Delta — edge cases", () => {
 
   it("Quill independent attributes (color/font) are dropped on Md output", () => {
     const d: QuillDelta = {
-      ops: [
-        { insert: "x", attributes: { color: "#f00", bold: true } },
-        { insert: "\n" },
-      ],
+      ops: [{ insert: "x", attributes: { color: "#f00", bold: true } }, { insert: "\n" }],
     };
     expect(quillDeltaToMarkdown(d)).toBe("**x**");
   });
