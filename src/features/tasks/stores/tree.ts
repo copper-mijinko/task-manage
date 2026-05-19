@@ -29,6 +29,7 @@ import type { WorkspaceProjectListItem, WorkspaceTask } from "@app-types/workspa
 export interface TreeDataStore extends Writable<ProjectData | undefined> {
   init: () => void;
   setFromSource: (value: ProjectData | undefined) => void;
+  resetForLoad: () => void;
   flushPendingPersist: () => void;
 }
 
@@ -108,6 +109,7 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
   const { subscribe, set, update } = writable<ProjectData | undefined>(initialValue);
   let previousData: ProjectData | null = null;
   let skipPersistOnce = false;
+  let suppressInitialLoadOnce = false;
   let syncListenerRegistered = false;
 
   const findRemovedNodeIds = (
@@ -219,6 +221,11 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
       skipPersistOnce = true;
       set(value);
     },
+    resetForLoad: () => {
+      suppressInitialLoadOnce = true;
+      skipPersistOnce = true;
+      set(undefined);
+    },
     flushPendingPersist: () => {
       persistTreeData.flush();
     },
@@ -294,7 +301,9 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
         const workspaceState = get(workspace_store);
 
         if (current === undefined) {
-          if (pendingTaskDetailSelection?.projectId) {
+          if (suppressInitialLoadOnce) {
+            suppressInitialLoadOnce = false;
+          } else if (pendingTaskDetailSelection?.projectId) {
             selected_type.set("Projects");
             selected_id.set(pendingTaskDetailSelection.projectId);
             if (pendingTaskDetailSelection.taskId) {

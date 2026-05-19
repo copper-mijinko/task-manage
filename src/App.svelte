@@ -11,6 +11,7 @@
     undoHistory,
     redoHistory,
     saveStatus,
+    projectLoading,
   } from "@stores";
   import { onMount, onDestroy } from "svelte";
   import * as platform from "@lib/ipc/platform";
@@ -242,7 +243,11 @@
             No data.
           </h1>
         {/if}
-        {#if $selected_type == "Projects" || $selected_type == "WorkspaceProject"}
+        {#if ($selected_type == "Projects" || $selected_type == "WorkspaceProject") && $projectLoading}
+          <h1 style="color:var(--theme-color-Sub-main); display:flex; justify-content:center">
+            Loading...
+          </h1>
+        {:else if $selected_type == "Projects" || $selected_type == "WorkspaceProject"}
           <ProjectPage />
         {/if}
         {#if $selected_type == "Info"}

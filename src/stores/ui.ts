@@ -54,6 +54,8 @@ function collectNodeAndDescendantIds(node: TreeData | undefined): string[] {
   return ids;
 }
 
+export const projectLoading = writable(false);
+
 function createSelectedID(initialValue: string | undefined): SelectedIdStore {
   const { subscribe, set, update } = writable<string | undefined>(initialValue);
 
@@ -72,53 +74,102 @@ function createSelectedID(initialValue: string | undefined): SelectedIdStore {
           loadQueued = false;
           const current = get({ subscribe } as SelectedIdStore);
           const currentSelectedType = get(selected_type);
-          if (!current) return;
+          const version = ++loadVersion;
+          if (!current) {
+            projectLoading.set(false);
+            return;
+          }
 
           tree_data.flushPendingPersist();
           table_selected_id.set(undefined);
-          const version = ++loadVersion;
           if (currentSelectedType === "Projects") {
+            projectLoading.set(true);
+            tree_data.resetForLoad();
             loadProjectsData(current, version);
           } else if (currentSelectedType === "WorkspaceProject") {
+            projectLoading.set(true);
+            tree_data.resetForLoad();
             loadWorkspaceData(current, version);
+          } else {
+            projectLoading.set(false);
           }
         });
       }
 
+      function finishLoad(version: number) {
+        if (version === loadVersion) {
+          projectLoading.set(false);
+        }
+      }
+
       function loadProjectsData(current: string, version: number) {
         clearHistory();
-        platform.getTreeData(current).then((result) => {
-          if (version !== loadVersion) return;
-          tree_data.setFromSource(result);
+        platform
+          .getTreeData(current)
+          .then((result) => {
+            if (version !== loadVersion) return;
+            if (!result) {
+              tree_data.resetForLoad();
+              table_selected_id.set(undefined);
+              finishLoad(version);
+              return;
+            }
+            tree_data.setFromSource(result);
 
-          if (
-            pendingTaskDetailSelection?.projectId === current &&
-            pendingTaskDetailSelection.taskId
-          ) {
-            if (result?.data && getNode(pendingTaskDetailSelection.taskId, result.data)) {
-              table_selected_id.set(pendingTaskDetailSelection.taskId);
+            if (
+              pendingTaskDetailSelection?.projectId === current &&
+              pendingTaskDetailSelection.taskId
+            ) {
+              if (getNode(pendingTaskDetailSelection.taskId, result.data)) {
+                table_selected_id.set(pendingTaskDetailSelection.taskId);
+              } else {
+                clearPendingTaskDetailSelection();
+                table_selected_id.set(undefined);
+              }
             } else {
-              clearPendingTaskDetailSelection();
               table_selected_id.set(undefined);
             }
-          } else {
-            table_selected_id.set(undefined);
-          }
-        });
+            finishLoad(version);
+          }, () => {
+            if (version === loadVersion) {
+              tree_data.resetForLoad();
+              table_selected_id.set(undefined);
+            }
+            finishLoad(version);
+          });
       }
 
       function loadWorkspaceData(current: string, version: number) {
         clearHistory();
         const { activeProjectDir } = get(workspace_store);
-        if (!activeProjectDir) return;
-        platform.wsReadProject(activeProjectDir).then((result) => {
-          if (version !== loadVersion) return;
-          if (!result) return;
-          workspace_tasks_cache.set(result.tasks);
-          const converted = workspaceToProjectData(result.tasks, current);
-          tree_data.setFromSource(converted);
+        if (!activeProjectDir) {
+          tree_data.resetForLoad();
           table_selected_id.set(undefined);
-        });
+          finishLoad(version);
+          return;
+        }
+        platform
+          .wsReadProject(activeProjectDir)
+          .then((result) => {
+            if (version !== loadVersion) return;
+            if (!result) {
+              tree_data.resetForLoad();
+              table_selected_id.set(undefined);
+              finishLoad(version);
+              return;
+            }
+            workspace_tasks_cache.set(result.tasks);
+            const converted = workspaceToProjectData(result.tasks, current);
+            tree_data.setFromSource(converted);
+            table_selected_id.set(undefined);
+            finishLoad(version);
+          }, () => {
+            if (version === loadVersion) {
+              tree_data.resetForLoad();
+              table_selected_id.set(undefined);
+            }
+            finishLoad(version);
+          });
       }
 
       subscribe(() => {
