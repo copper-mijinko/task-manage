@@ -29,6 +29,7 @@
 
   async function addWorkspaceProject(e) {
     e.stopPropagation();
+    workspaceProjectsExpanded = true;
     const project = getDefaultProject();
     const result = await workspace_store.createProject(project.data.data.name, project.data.id);
     if (result.success && result.projectDir) {
@@ -60,6 +61,8 @@
   };
 
   let show_workspace_setup = false;
+  let workspaceProjectsExpanded = true;
+  let inAppProjectsExpanded = true;
   let tagsExpanded = true;
 
   // Dialog
@@ -100,6 +103,7 @@
   // Add
   const handleAdd = (e) => {
     e.stopPropagation();
+    inAppProjectsExpanded = true;
     project_ids.addProject();
   };
   // Delete
@@ -356,18 +360,44 @@
     >
     <span class:TextOverFlow={true}>Projects</span>
   </div>
-  <div class="ProjectSubsection">
+  <div class="ProjectSubsection" class:Expanded={workspaceProjectsExpanded}>
     <div class="ProjectSubsectionHeader">
-      <span
-        class="SubsectionLabel TextOverFlow"
+      <button
+        class="ProjectSubsectionToggle"
+        type="button"
+        aria-expanded={workspaceProjectsExpanded}
+        aria-controls="workspace-project-list"
+        aria-label={workspaceProjectsExpanded
+          ? "Workspace Projectsを折りたたむ"
+          : "Workspace Projectsを展開"}
         use:tooltip={{
           color: "var(--on-theme-tooltip-fg)",
           backgroundColor: "var(--on-theme-tooltip-bg)",
           content:
             "Workspaceフォルダに保存されるプロジェクトです。メモはWorkspaceファイルとして管理されます。",
           force: true,
-        }}>Workspace Projects</span
+        }}
+        on:click={() => (workspaceProjectsExpanded = !workspaceProjectsExpanded)}
       >
+        <svg
+          class="Chevron"
+          class:Collapsed={!workspaceProjectsExpanded}
+          viewBox="0 0 24 24"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          aria-hidden="true"
+        >
+          <path
+            d="M6 9L12 15L18 9"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+        <span class="SubsectionLabel TextOverFlow">Workspace Projects</span>
+        <span class="SubsectionCount">{$workspace_store.projects.length}</span>
+      </button>
       <div class="AddButtonContainer">
         {#if $workspace_store.activeWorkspacePath}
           <IconButton
@@ -390,67 +420,93 @@
         {/if}
       </div>
     </div>
-    <div class="Contents ProjectContents">
-      {#if $workspace_store.projects.length > 0}
-        {#each $workspace_store.projects as proj (proj.rootId)}
-          <button
-            class="MenuRow"
-            class:Selected={proj.rootId === $selected_id && $selected_type === "WorkspaceProject"}
-            use:ripple
-            data-id={proj.rootId}
-            data-section="WorkspaceProject"
-            on:click={() => selectWorkspaceProject(proj)}
-          >
-            <div class="TreeLine" style="flex-shrink: 0"></div>
-            <span
-              class="TextOverFlow"
-              use:tooltip={{
-                color: "var(--on-theme-tooltip-fg)",
-                backgroundColor: "var(--on-theme-tooltip-bg)",
-                content: proj.name,
-              }}>{proj.name}</span
+    {#if workspaceProjectsExpanded}
+      <div id="workspace-project-list" class="Contents ProjectContents">
+        {#if $workspace_store.projects.length > 0}
+          {#each $workspace_store.projects as proj (proj.rootId)}
+            <button
+              class="MenuRow"
+              class:Selected={proj.rootId === $selected_id && $selected_type === "WorkspaceProject"}
+              use:ripple
+              data-id={proj.rootId}
+              data-section="WorkspaceProject"
+              on:click={() => selectWorkspaceProject(proj)}
             >
-            <div class="DeleteButtonContainer">
-              <IconButton
-                tooltipContent="Delete this workspace project."
-                ariaLabel="Delete workspace project"
-                style="height: 100%; margin:0; box-shadow:none;"
-                normalColor="transparent"
-                activeColor="rgba(255,255,255,0.2)"
-                on:click={(e) => handleDeleteWorkspaceProject(e, proj)}
+              <div class="TreeLine" style="flex-shrink: 0"></div>
+              <span
+                class="TextOverFlow"
+                use:tooltip={{
+                  color: "var(--on-theme-tooltip-fg)",
+                  backgroundColor: "var(--on-theme-tooltip-bg)",
+                  content: proj.name,
+                }}>{proj.name}</span
               >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"
-                  ><path
-                    fill="white"
-                    d="M13.05 42q-1.25 0-2.125-.875T10.05 39V10.5H8v-3h9.4V6h13.2v1.5H40v3h-2.05V39q0 1.2-.9 2.1-.9.9-2.1.9Zm21.9-31.5h-21.9V39h21.9Zm-16.6 24.2h3V14.75h-3Zm8.3 0h3V14.75h-3Zm-13.6-24.2V39Z"
-                  /></svg
+              <div class="DeleteButtonContainer">
+                <IconButton
+                  tooltipContent="Delete this workspace project."
+                  ariaLabel="Delete workspace project"
+                  style="height: 100%; margin:0; box-shadow:none;"
+                  normalColor="transparent"
+                  activeColor="rgba(255,255,255,0.2)"
+                  on:click={(e) => handleDeleteWorkspaceProject(e, proj)}
                 >
-              </IconButton>
-            </div>
-          </button>
-        {/each}
-      {:else}
-        <div class="MenuRow EmptyProjectRow">
-          <div class="TreeLine" style="flex-shrink: 0"></div>
-          <span class="TextOverFlow">
-            {$workspace_store.activeWorkspacePath ? "No workspace projects" : "Workspace未設定"}
-          </span>
-        </div>
-      {/if}
-    </div>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"
+                    ><path
+                      fill="white"
+                      d="M13.05 42q-1.25 0-2.125-.875T10.05 39V10.5H8v-3h9.4V6h13.2v1.5H40v3h-2.05V39q0 1.2-.9 2.1-.9.9-2.1.9Zm21.9-31.5h-21.9V39h21.9Zm-16.6 24.2h3V14.75h-3Zm8.3 0h3V14.75h-3Zm-13.6-24.2V39Z"
+                    /></svg
+                  >
+                </IconButton>
+              </div>
+            </button>
+          {/each}
+        {:else}
+          <div class="MenuRow EmptyProjectRow">
+            <div class="TreeLine" style="flex-shrink: 0"></div>
+            <span class="TextOverFlow">
+              {$workspace_store.activeWorkspacePath ? "No workspace projects" : "Workspace未設定"}
+            </span>
+          </div>
+        {/if}
+      </div>
+    {/if}
   </div>
-  <div class="ProjectSubsection">
+  <div class="ProjectSubsection" class:Expanded={inAppProjectsExpanded}>
     <div class="ProjectSubsectionHeader">
-      <span
-        class="SubsectionLabel TextOverFlow"
+      <button
+        class="ProjectSubsectionToggle"
+        type="button"
+        aria-expanded={inAppProjectsExpanded}
+        aria-controls="in-app-project-list"
+        aria-label={inAppProjectsExpanded ? "InApp Projectsを折りたたむ" : "InApp Projectsを展開"}
         use:tooltip={{
           color: "var(--on-theme-tooltip-fg)",
           backgroundColor: "var(--on-theme-tooltip-bg)",
           content:
             "従来のdb.jsonに保存されるアプリ内プロジェクトです。db.jsonは将来的に非推奨予定です。",
           force: true,
-        }}>InApp Projects (db.json)</span
+        }}
+        on:click={() => (inAppProjectsExpanded = !inAppProjectsExpanded)}
       >
+        <svg
+          class="Chevron"
+          class:Collapsed={!inAppProjectsExpanded}
+          viewBox="0 0 24 24"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          aria-hidden="true"
+        >
+          <path
+            d="M6 9L12 15L18 9"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+        <span class="SubsectionLabel TextOverFlow">InApp Projects (db.json)</span>
+        <span class="SubsectionCount">{$project_ids?.length ?? 0}</span>
+      </button>
       <div class="AddButtonContainer">
         <IconButton
           tooltipContent="Add an InApp project."
@@ -473,48 +529,50 @@
         </IconButton>
       </div>
     </div>
-    <div class="Contents ProjectContents">
-      {#each $project_ids as child (child.id)}
-        <button
-          transition:slide={{ duration: 100 }}
-          class:MenuRow={true}
-          class:Selected={child.id == $selected_id && $selected_type === "Projects"}
-          use:ripple
-          data-id={child.id}
-          data-section="Projects"
-          on:click={(e) => select(e, child.id, "Projects")}
-        >
-          <div class:TreeLine={true} style="flex-shrink: 0"></div>
-          <span
-            class:TextOverFlow={true}
-            use:tooltip={{
-              color: "var(--on-theme-tooltip-fg)",
-              backgroundColor: "var(--on-theme-tooltip-bg)",
-              content: child.name,
-            }}>{child.name}</span
+    {#if inAppProjectsExpanded}
+      <div id="in-app-project-list" class="Contents ProjectContents">
+        {#each $project_ids ?? [] as child (child.id)}
+          <button
+            transition:slide={{ duration: 100 }}
+            class:MenuRow={true}
+            class:Selected={child.id == $selected_id && $selected_type === "Projects"}
+            use:ripple
+            data-id={child.id}
+            data-section="Projects"
+            on:click={(e) => select(e, child.id, "Projects")}
           >
-          <div class="DeleteButtonContainer">
-            <IconButton
-              tooltipContent="Delete the InApp project."
-              ariaLabel="Delete the InApp project"
-              style="height: 100%; margin:0; box-shadow:none;"
-              normalColor="transparent"
-              activeColor="rgba(255,255,255,0.2)"
-              on:click={(e) => {
-                handleDelete(e, child.id);
-              }}
+            <div class:TreeLine={true} style="flex-shrink: 0"></div>
+            <span
+              class:TextOverFlow={true}
+              use:tooltip={{
+                color: "var(--on-theme-tooltip-fg)",
+                backgroundColor: "var(--on-theme-tooltip-bg)",
+                content: child.name,
+              }}>{child.name}</span
             >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"
-                ><path
-                  fill="white"
-                  d="M13.05 42q-1.25 0-2.125-.875T10.05 39V10.5H8v-3h9.4V6h13.2v1.5H40v3h-2.05V39q0 1.2-.9 2.1-.9.9-2.1.9Zm21.9-31.5h-21.9V39h21.9Zm-16.6 24.2h3V14.75h-3Zm8.3 0h3V14.75h-3Zm-13.6-24.2V39Z"
-                /></svg
+            <div class="DeleteButtonContainer">
+              <IconButton
+                tooltipContent="Delete the InApp project."
+                ariaLabel="Delete the InApp project"
+                style="height: 100%; margin:0; box-shadow:none;"
+                normalColor="transparent"
+                activeColor="rgba(255,255,255,0.2)"
+                on:click={(e) => {
+                  handleDelete(e, child.id);
+                }}
               >
-            </IconButton>
-          </div>
-        </button>
-      {/each}
-    </div>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"
+                  ><path
+                    fill="white"
+                    d="M13.05 42q-1.25 0-2.125-.875T10.05 39V10.5H8v-3h9.4V6h13.2v1.5H40v3h-2.05V39q0 1.2-.9 2.1-.9.9-2.1.9Zm21.9-31.5h-21.9V39h21.9Zm-16.6 24.2h3V14.75h-3Zm8.3 0h3V14.75h-3Zm-13.6-24.2V39Z"
+                  /></svg
+                >
+              </IconButton>
+            </div>
+          </button>
+        {/each}
+      </div>
+    {/if}
   </div>
 
   {#if menu_data}
@@ -764,25 +822,77 @@
   .ProjectSubsection {
     display: flex;
     flex-direction: column;
+    flex: 0 0 auto;
     min-height: 0;
     margin: 0 0 var(--sp2);
+  }
+  .ProjectSubsection.Expanded {
+    flex: 0 1 auto;
   }
   .ProjectSubsectionHeader {
     display: flex;
     align-items: center;
+    gap: var(--sp1);
     min-height: 2rem;
-    padding: 0 var(--sp2) 0 var(--sp3);
+    padding: 0 var(--sp1) 0 var(--sp2);
     color: rgba(255, 255, 255, 0.78);
     font-size: var(--font-label-md);
     font-weight: 700;
     letter-spacing: 0.02em;
   }
-  .SubsectionLabel {
+  .ProjectSubsectionToggle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp1);
+    flex: 1 1 auto;
     min-width: 0;
-    cursor: help;
+    height: 1.75rem;
+    padding: 0 var(--sp1);
+    border-radius: var(--shape-xs);
+    color: inherit;
+    font: inherit;
+    letter-spacing: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .ProjectSubsectionToggle:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+  }
+  .ProjectSubsectionToggle:focus-visible {
+    outline: 2px solid var(--on-theme-primary);
+    outline-offset: -2px;
+  }
+  .Chevron {
+    width: 1rem;
+    height: 1rem;
+    flex-shrink: 0;
+    transition: transform 0.12s ease;
+  }
+  .Chevron.Collapsed {
+    transform: rotate(-90deg);
+  }
+  .SubsectionLabel {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+  .SubsectionCount {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    min-width: 1.35rem;
+    height: 1.1rem;
+    margin-left: var(--sp1);
+    padding: 0 var(--sp1);
+    border-radius: var(--shape-pill);
+    color: rgba(255, 255, 255, 0.72);
+    background-color: rgba(255, 255, 255, 0.09);
+    font-size: var(--font-label-sm);
+    font-weight: 700;
   }
   .ProjectContents {
-    max-height: 12rem;
+    max-height: none;
+    overflow-y: visible;
   }
   .Logo {
     width: 1.25rem;
