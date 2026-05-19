@@ -294,6 +294,7 @@
     height: auto;
     min-height: 0;
     overflow-y: auto;
+    padding: var(--sp3) var(--sp4);
     color: var(--theme-color-Sub-light);
     font-size: var(--font-body-md);
     line-height: 1.7;
