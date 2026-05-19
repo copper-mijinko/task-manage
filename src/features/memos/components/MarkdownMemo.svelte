@@ -752,8 +752,69 @@
     }
   });
 
+  // ソースの「N 番目の GFM task list item」のチェック状態を反転する。
+  // インデックスはプレビュー DOM 上の `.task-list-item input` 出現順と
+  // 一致させており、marked が task list を順序通りに出力することに依存している。
+  const TASK_LIST_LINE_REGEX = /^(\s*[-*+]\s+\[)([ xX])(\])/;
+
+  function toggleTaskInSource(source: string, index: number): string | null {
+    const lines = source.split("\n");
+    let count = 0;
+    for (let i = 0; i < lines.length; i++) {
+      const match = TASK_LIST_LINE_REGEX.exec(lines[i]);
+      if (!match) continue;
+      if (count === index) {
+        const next = match[2].toLowerCase() === "x" ? " " : "x";
+        lines[i] = lines[i].replace(TASK_LIST_LINE_REGEX, `$1${next}$3`);
+        return lines.join("\n");
+      }
+      count++;
+    }
+    return null;
+  }
+
+  function handleChecklistClick(target: Element): boolean {
+    if (readOnly) return false;
+    if (!(target instanceof HTMLInputElement)) return false;
+    if (target.type !== "checkbox") return false;
+    if (!target.closest(".task-list-item")) return false;
+
+    const root = target.closest(".preview");
+    if (!root) return false;
+    const all = Array.from(
+      root.querySelectorAll<HTMLInputElement>(".task-list-item > input[type='checkbox']")
+    );
+    const index = all.indexOf(target);
+    if (index < 0) return false;
+
+    const nextContent = toggleTaskInSource(currentContent, index);
+    if (nextContent === null || nextContent === currentContent) return false;
+
+    currentContent = nextContent;
+
+    if (view) {
+      // エディタが開いている (edit mode): カーソル位置を保ったままドキュメントを置換。
+      // 同一行内 1 文字の差分しか無いので selection は安全に再利用できる。
+      const oldSelection = view.state.selection;
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: nextContent },
+        selection: oldSelection,
+      });
+      // updateListener が 500ms 後に save を予約しているのを上書きして即時保存。
+      clearTimeout(saveTimer);
+    } else {
+      void updateRenderedHtml(nextContent);
+    }
+    flushSave(nextContent);
+    return true;
+  }
+
   function handlePreviewClick(e: MouseEvent | KeyboardEvent) {
-    const link = (e.target as Element).closest("a") as HTMLAnchorElement | null;
+    const target = e.target as Element | null;
+    if (target && handleChecklistClick(target)) {
+      return;
+    }
+    const link = target?.closest("a") as HTMLAnchorElement | null;
     if (link?.dataset.memoLink) {
       e.preventDefault();
       openMemoLink?.(link.dataset.memoLink);
@@ -944,7 +1005,13 @@
           on:pointerdown={startSplitResize}
           on:keydown={handleSplitKeydown}
         ></div>
-        <div class="live-preview" aria-label="Markdown preview">
+        <!-- svelte-ignore a11y-no-static-element-interactions -->
+        <div
+          class="live-preview"
+          aria-label="Markdown preview"
+          on:click={handlePreviewClick}
+          on:keydown={handlePreviewKeydown}
+        >
           {#if currentContent.trim()}
             <!-- eslint-disable-next-line svelte/no-at-html-tags -->
             <div class="preview" bind:this={livePreviewEl}>{@html renderedHtml}</div>
@@ -1545,7 +1612,7 @@
   .preview :global(.task-list-item input[type="checkbox"]) {
     margin-top: var(--sp1);
     accent-color: var(--theme-color-Primary-main);
-    pointer-events: none;
+    cursor: pointer;
   }
 
   .preview :global(hr) {

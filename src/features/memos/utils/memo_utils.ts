@@ -26,6 +26,15 @@ marked.use(
         return undefined;
       },
     },
+    renderer: {
+      // GFM のデフォルトは disabled 属性付き checkbox を出力するため、プレビュー上で
+      // ユーザーがクリックしてもチェック状態を切り替えられない。disabled を外して
+      // MarkdownMemo 側の click ハンドラがソース行 (`- [ ]` / `- [x]`) を直接編集
+      // できるようにする。
+      checkbox({ checked }) {
+        return `<input type="checkbox"${checked ? " checked" : ""}>`;
+      },
+    },
   }
 );
 
