@@ -114,7 +114,7 @@ export function projectDataToWorkspaceTasks(
         };
       }),
       createdAt: existing?.createdAt || today,
-      order: siblingIndex,
+      order: parentIds.length === 0 ? existing?.order : siblingIndex,
     });
     for (const [index, child] of (node.children || []).entries()) {
       traverse(child, [node.id], index);

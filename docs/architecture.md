@@ -343,6 +343,8 @@ import LocalComponent from "./LocalComponent.svelte";
 
 メモリ上の `tree_data` を単一の真実とし、main プロセスが非同期にディスクへ反映する。renderer は保存完了を待たず（fire-and-forget）、状態は main からの IPC push で更新する。
 
+この原則はタスク本体だけでなく、Workspace プロジェクトのサイドバー summary にも適用する。root task 名、rootId、並び順など、現在の `tree_data` または `workspace_store.projects` から決まる値は renderer の store で派生更新し、通常の編集後にディスクを読み直して UI を正す実装にしない。ディスクから store へ取り込む経路は、起動・workspace 切替・project 選択・migration/export 後の明示 refresh・外部更新リコンサイル・競合 reload の境界に限定する。
+
 ```
 [ renderer ]
   tree_data (Svelte store)

@@ -188,6 +188,16 @@ export function wsListProjects(workspacePath: string): Promise<WorkspaceProjectL
   return api()?.wsListProjects?.(workspacePath) ?? Promise.resolve([]);
 }
 
+export function wsSetProjectOrder(
+  workspacePath: string,
+  projects: WorkspaceProjectListItem[]
+): Promise<{ success: boolean; projects?: WorkspaceProjectListItem[]; error?: string }> {
+  return (
+    api()?.wsSetProjectOrder?.(workspacePath, projects) ??
+    Promise.resolve({ success: false, error: "API unavailable" })
+  );
+}
+
 export function wsReadProject(projectDir: string): Promise<WorkspaceProject | undefined> {
   return api()?.wsReadProject?.(projectDir) ?? Promise.resolve(undefined);
 }
@@ -248,10 +258,11 @@ export function wsDeleteTask(
 export function wsCreateProject(
   workspacePath: string,
   name: string,
-  id: string
+  id: string,
+  order?: number
 ): Promise<{ success: boolean; projectDir?: string; dirName?: string; error?: string }> {
   return (
-    api()?.wsCreateProject?.(workspacePath, name, id) ??
+    api()?.wsCreateProject?.(workspacePath, name, id, order) ??
     Promise.resolve({ success: false, error: "API unavailable" })
   );
 }
