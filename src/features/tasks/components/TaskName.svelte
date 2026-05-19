@@ -1,6 +1,5 @@
 ﻿<script>
-  import { tick, createEventDispatcher, onDestroy } from "svelte";
-  import { debounce } from "lodash";
+  import { tick, createEventDispatcher } from "svelte";
   import { ripple, tooltip } from "@lib/actions";
   import TaskMenu from "@features/tasks/components/TaskMenu.svelte";
   import { pageSearchQuery } from "@features/search/stores/search";
@@ -235,12 +234,6 @@
     dispatch("commit", { value: draftText });
   };
 
-  const debouncedCommit = debounce(dispatchCommitIfChanged, 300);
-
-  onDestroy(() => {
-    debouncedCommit.cancel();
-  });
-
   const toggle = async () => {
     isEditing = !isEditing;
     if (isEditing) {
@@ -250,7 +243,6 @@
   };
 
   const flushCommit = () => {
-    debouncedCommit.cancel();
     if (!draftText.trim()) {
       draftText = text ?? "";
       return;
@@ -259,7 +251,6 @@
   };
 
   const resetDraft = () => {
-    debouncedCommit.cancel();
     draftText = text ?? "";
   };
 
@@ -371,7 +362,6 @@
     }}
     on:input={(e) => {
       draftText = e.currentTarget.value;
-      debouncedCommit();
     }}
     on:click={(e) => {
       if (isEditing) {
