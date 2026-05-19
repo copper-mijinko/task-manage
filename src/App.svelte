@@ -80,8 +80,27 @@
     }
   }
 
+  // capture-phase で window keydown を捕まえているため、CodeMirror や Quill、
+  // ネイティブの input / textarea / contenteditable にフォーカスがある状態で
+  // Ctrl+Z / Ctrl+Y を叩くと、エディタの undo/redo より先にタスクツリー側の
+  // 履歴が動いてしまう。フォーカスがそれらの編集面の中にある間はグローバルの
+  // undo/redo をスキップし、エディタ自身のキーマップに処理を委ねる。
+  function isInsideEditableTarget(target) {
+    if (!(target instanceof Element)) return false;
+    if (target.closest(".cm-editor")) return true;
+    if (target.closest(".ql-editor")) return true;
+    if (target.closest('[contenteditable=""], [contenteditable="true"]')) return true;
+    const tag = target.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA") return true;
+    return false;
+  }
+
   function handleKeyDown(event) {
     // Ctrl+F is handled by Header.svelte (focuses the inline search input)
+
+    if (isInsideEditableTarget(event.target)) {
+      return;
+    }
 
     if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key === "z") {
       event.preventDefault();
