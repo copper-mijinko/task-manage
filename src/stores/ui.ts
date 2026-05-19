@@ -104,9 +104,8 @@ function createSelectedID(initialValue: string | undefined): SelectedIdStore {
 
       function loadProjectsData(current: string, version: number) {
         clearHistory();
-        platform
-          .getTreeData(current)
-          .then((result) => {
+        platform.getTreeData(current).then(
+          (result) => {
             if (version !== loadVersion) return;
             if (!result) {
               tree_data.resetForLoad();
@@ -130,13 +129,15 @@ function createSelectedID(initialValue: string | undefined): SelectedIdStore {
               table_selected_id.set(undefined);
             }
             finishLoad(version);
-          }, () => {
+          },
+          () => {
             if (version === loadVersion) {
               tree_data.resetForLoad();
               table_selected_id.set(undefined);
             }
             finishLoad(version);
-          });
+          }
+        );
       }
 
       function loadWorkspaceData(current: string, version: number) {
@@ -148,9 +149,8 @@ function createSelectedID(initialValue: string | undefined): SelectedIdStore {
           finishLoad(version);
           return;
         }
-        platform
-          .wsReadProject(activeProjectDir)
-          .then((result) => {
+        platform.wsReadProject(activeProjectDir).then(
+          (result) => {
             if (version !== loadVersion) return;
             if (!result) {
               tree_data.resetForLoad();
@@ -163,13 +163,15 @@ function createSelectedID(initialValue: string | undefined): SelectedIdStore {
             tree_data.setFromSource(converted);
             table_selected_id.set(undefined);
             finishLoad(version);
-          }, () => {
+          },
+          () => {
             if (version === loadVersion) {
               tree_data.resetForLoad();
               table_selected_id.set(undefined);
             }
             finishLoad(version);
-          });
+          }
+        );
       }
 
       subscribe(() => {
