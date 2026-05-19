@@ -4,6 +4,13 @@ import { tick } from "svelte";
 import TaskNameClickHarness from "../mocks/TaskNameClickHarness.svelte";
 import TaskNameCommitHarness from "../mocks/TaskNameCommitHarness.svelte";
 
+async function openRenameEditor() {
+  const menuButton = screen.getByRole("button", { name: /open task actions/i });
+  await fireEvent.click(menuButton);
+  const renameItem = await screen.findByRole("menuitem", { name: /rename/i });
+  await fireEvent.click(renameItem);
+}
+
 describe("TaskName", () => {
   test("keeps the task name disabled until editing while row clicks still select", async () => {
     render(TaskNameClickHarness);
@@ -71,6 +78,47 @@ describe("TaskName", () => {
       const input = screen.getByDisplayValue("Original");
       await fireEvent.input(input, { target: { value: "Updated" } });
       await fireEvent.blur(input);
+
+      expect(screen.getByTestId("committed-count")).toHaveTextContent("1");
+      expect(screen.getByTestId("last-committed")).toHaveTextContent("Updated");
+    });
+  });
+
+  describe("no auto-commit while typing", () => {
+    // Regression: previously typing into the input fired a debounced commit
+    // (~300ms after the last keystroke), so a pause in typing committed the
+    // partial value before the user pressed Enter. The fix removes the
+    // debounced commit entirely; commit only happens on Enter or blur.
+
+    test("typing alone does not fire commit, even after a pause", async () => {
+      vi.useFakeTimers();
+      try {
+        render(TaskNameCommitHarness, { initialText: "Original" });
+        await openRenameEditor();
+
+        const input = screen.getByDisplayValue("Original");
+        await fireEvent.input(input, { target: { value: "U" } });
+        await fireEvent.input(input, { target: { value: "Up" } });
+        await fireEvent.input(input, { target: { value: "Updat" } });
+
+        // Advance far past any plausible debounce window.
+        vi.advanceTimersByTime(5000);
+        await tick();
+
+        expect(screen.getByTestId("committed-count")).toHaveTextContent("0");
+        expect(screen.getByTestId("current-text")).toHaveTextContent("Original");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    test("Enter commits the typed value", async () => {
+      render(TaskNameCommitHarness, { initialText: "Original" });
+      await openRenameEditor();
+
+      const input = screen.getByDisplayValue("Original");
+      await fireEvent.input(input, { target: { value: "Updated" } });
+      await fireEvent.keyDown(input, { key: "Enter" });
 
       expect(screen.getByTestId("committed-count")).toHaveTextContent("1");
       expect(screen.getByTestId("last-committed")).toHaveTextContent("Updated");

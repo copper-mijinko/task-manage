@@ -3,8 +3,6 @@ const fs = require("fs");
 const path = require("path");
 const chokidar = require("chokidar");
 
-const RECENT_WRITE_TTL_MS = 5000;
-
 function hashBuffer(buffer) {
   return crypto.createHash("sha256").update(buffer).digest("hex");
 }
@@ -50,6 +48,43 @@ async function collectFileHashes(rootDir) {
   return result;
 }
 
+function collectFileHashesSync(rootDir) {
+  const result = new Map();
+
+  function walk(dir) {
+    let entries = [];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(fullPath);
+      } else if (entry.isFile() && !entry.name.includes(".tmp")) {
+        try {
+          result.set(fullPath, hashBuffer(fs.readFileSync(fullPath)));
+        } catch {
+          // Ignore files that disappear during a scan.
+        }
+      }
+    }
+  }
+
+  walk(rootDir);
+  return result;
+}
+
+function isFileWithinDir(filePath, dirPath) {
+  const dir = path.resolve(dirPath);
+  const file = path.resolve(filePath);
+  if (file === dir) return false;
+  const rel = path.relative(dir, file);
+  return Boolean(rel) && !rel.startsWith("..") && !path.isAbsolute(rel);
+}
+
 class WorkspaceReconciler {
   constructor({
     readProject,
@@ -71,7 +106,12 @@ class WorkspaceReconciler {
     this.onNotice = onNotice;
     this.stateRootDir = stateRootDir;
     this.watchFactory = watchFactory;
-    this.recentlyWritten = new Map();
+    // Persistent file -> sha256 map. Updated whenever WE write to a file or
+    // accept an external update; never expires by time alone. A file event
+    // whose content hash matches the stored value is treated as a no-op
+    // (e.g. OneDrive re-touching files after sync), avoiding spurious
+    // "external update" / "conflict" notifications.
+    this.knownFileHashes = new Map();
     this.projectTimers = new Map();
     this.workspacePath = null;
     this.watcher = null;
@@ -82,6 +122,10 @@ class WorkspaceReconciler {
     if (!workspacePath) return;
 
     this.workspacePath = workspacePath;
+    // Treat the current disk state as the baseline. Any change while the app
+    // was closed is implicitly accepted; subsequent divergence will be
+    // detected by hash mismatch.
+    await this.rebuildKnownHashesFromDisk(workspacePath);
     await this.writeSnapshot();
 
     this.watcher = this.watchFactory(workspacePath, {
@@ -109,16 +153,30 @@ class WorkspaceReconciler {
     this.workspacePath = null;
   }
 
+  async rebuildKnownHashesFromDisk(rootDir) {
+    const hashes = await collectFileHashes(rootDir);
+    this.knownFileHashes = new Map();
+    for (const [filePath, hash] of hashes) {
+      this.knownFileHashes.set(path.resolve(filePath), hash);
+    }
+  }
+
   async markProjectWritten(projectDir) {
     const hashes = await collectFileHashes(projectDir);
-    const now = Date.now();
-    for (const [filePath, hash] of hashes) {
-      this.recentlyWritten.set(path.resolve(filePath), {
-        hash,
-        expiresAt: now + RECENT_WRITE_TTL_MS,
-      });
+    const resolvedProject = path.resolve(projectDir);
+
+    // Remove stale entries: files that used to be in this project but no
+    // longer exist (e.g. task deleted).
+    for (const filePath of [...this.knownFileHashes.keys()]) {
+      if (isFileWithinDir(filePath, resolvedProject) && !hashes.has(filePath)) {
+        this.knownFileHashes.delete(filePath);
+      }
     }
-    this.cleanupRecentlyWritten(now);
+
+    for (const [filePath, hash] of hashes) {
+      this.knownFileHashes.set(path.resolve(filePath), hash);
+    }
+
     await this.writeSnapshot();
   }
 
@@ -135,17 +193,20 @@ class WorkspaceReconciler {
       return;
     }
 
-    if (eventName !== "unlink") {
+    if (eventName === "unlink") {
+      // If we don't know this file, we've already accepted the deletion
+      // (either we deleted it, or it was never tracked).
+      if (!this.knownFileHashes.has(resolvedPath)) return;
+    } else {
       let fileHash;
       try {
         fileHash = await hashFile(resolvedPath);
       } catch {
         return;
       }
-
-      if (this.isRecentlyWritten(resolvedPath, fileHash)) {
-        return;
-      }
+      // No content change since we last saw it — likely a sync-driven touch
+      // (e.g. OneDrive). Suppress.
+      if (this.knownFileHashes.get(resolvedPath) === fileHash) return;
     }
 
     const projectDir = this.resolveProjectDir(resolvedPath);
@@ -169,6 +230,15 @@ class WorkspaceReconciler {
   }
 
   async reconcileProject(projectDir) {
+    // Re-check at reconcile time: if everything matches knownFileHashes by
+    // now, the triggering event was stale (e.g. raced with our own write
+    // batch that has since completed and called markProjectWritten). This
+    // check is intentionally synchronous so the subsequent side effects
+    // (onConflict / onProjectUpdated) run before any await yields control.
+    if (this.projectMatchesKnown(projectDir)) {
+      return;
+    }
+
     if (this.hasPendingWrite(projectDir)) {
       const event = {
         projectDir,
@@ -191,7 +261,8 @@ class WorkspaceReconciler {
         projectDir,
         message: "Workspace updated on disk.",
       });
-      await this.writeSnapshot();
+      // Adopt the new disk state as the new baseline.
+      await this.markProjectWritten(projectDir);
     } catch (err) {
       this.onNotice({
         kind: "error",
@@ -199,6 +270,35 @@ class WorkspaceReconciler {
         message: err.message,
       });
     }
+  }
+
+  projectMatchesKnown(projectDir) {
+    const resolvedProject = path.resolve(projectDir);
+    let currentHashes;
+    try {
+      currentHashes = collectFileHashesSync(projectDir);
+    } catch {
+      return false;
+    }
+
+    if (currentHashes.size !== this.countKnownFilesIn(resolvedProject)) {
+      return false;
+    }
+
+    for (const [filePath, hash] of currentHashes) {
+      if (this.knownFileHashes.get(path.resolve(filePath)) !== hash) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  countKnownFilesIn(resolvedProjectDir) {
+    let count = 0;
+    for (const filePath of this.knownFileHashes.keys()) {
+      if (isFileWithinDir(filePath, resolvedProjectDir)) count += 1;
+    }
+    return count;
   }
 
   resolveProjectDir(filePath) {
@@ -217,27 +317,13 @@ class WorkspaceReconciler {
     return projectDir;
   }
 
-  isRecentlyWritten(filePath, fileHash) {
-    const now = Date.now();
-    this.cleanupRecentlyWritten(now);
-    const entry = this.recentlyWritten.get(path.resolve(filePath));
-    return Boolean(entry && entry.hash === fileHash);
-  }
-
-  cleanupRecentlyWritten(now = Date.now()) {
-    for (const [filePath, entry] of this.recentlyWritten) {
-      if (entry.expiresAt <= now) {
-        this.recentlyWritten.delete(filePath);
-      }
-    }
-  }
-
   async writeSnapshot() {
     if (!this.workspacePath || !this.stateRootDir) return;
-    const hashes = await collectFileHashes(this.workspacePath);
     const files = {};
-    for (const [filePath, hash] of hashes) {
-      files[path.relative(this.workspacePath, filePath)] = hash;
+    for (const [filePath, hash] of this.knownFileHashes) {
+      if (isFileWithinDir(filePath, this.workspacePath)) {
+        files[path.relative(this.workspacePath, filePath)] = hash;
+      }
     }
 
     await fs.promises.mkdir(this.stateRootDir, { recursive: true });
