@@ -220,16 +220,7 @@
         <MenuList />
       </aside>
     {/if}
-    <div
-      class="Main"
-      class:DetailWindowMain={isTaskDetailWindow}
-      on:pointerdown={() => {
-        if (!isTaskDetailWindow && !$sidebarCollapsed) {
-          $sidebarCollapsed = true;
-        }
-      }}
-      role="presentation"
-    >
+    <div class="Main" class:DetailWindowMain={isTaskDetailWindow}>
       {#if isTaskDetailWindow}
         <TaskDetailWindow
           initialTaskName={detailWindowTaskName}
@@ -272,6 +263,18 @@
             {/each}
           </div>
         {/if}
+      {/if}
+      {#if !isTaskDetailWindow && !$sidebarCollapsed}
+        <!-- Drawer 風マスク: サイドバー表示中はメイン領域への操作を遮断し、
+             クリックでサイドバーを閉じる。これがないと SplitPane のリサイザを
+             掴んだ瞬間にサイドバーが閉じて Main 幅が変わり、リサイザの初期計算
+             がずれてしまう。 -->
+        <button
+          type="button"
+          class="SidebarMask"
+          aria-label="サイドバーを閉じる"
+          on:click={() => ($sidebarCollapsed = true)}
+        ></button>
       {/if}
     </div>
   </div>
@@ -353,10 +356,27 @@
     flex: 1 1 auto;
     min-width: 0;
     height: 100%;
+    position: relative;
   }
   div.Main.DetailWindowMain {
     height: 100%;
     flex: 1;
+  }
+  /* SplitPanes 内の Resizer は z-index: 999。マスクはそれより上に置く。 */
+  .SidebarMask {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background-color: rgba(0, 0, 0, 0.35);
+    cursor: pointer;
+    z-index: 1000;
+  }
+  .SidebarMask:focus {
+    outline: none;
   }
   .save-error-banner {
     display: flex;
