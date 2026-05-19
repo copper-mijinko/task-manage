@@ -96,6 +96,8 @@ const electronAPI = {
   wsGetWorkspaces: () => ipcRenderer.invoke("ws:get-workspaces"),
   wsSetWorkspaces: (config) => ipcRenderer.send("ws:set-workspaces", config),
   wsListProjects: (workspacePath) => ipcRenderer.invoke("ws:list-projects", { workspacePath }),
+  wsSetProjectOrder: (workspacePath, projects) =>
+    ipcRenderer.invoke("ws:set-project-order", { workspacePath, projects }),
   wsReadProject: (projectDir) => ipcRenderer.invoke("ws:read-project", { projectDir }),
   wsWriteTask: (projectDir, task) => ipcRenderer.invoke("ws:write-task", { projectDir, task }),
   wsSaveMemoImage: (projectDir, taskId, bytes, mimeType) =>
@@ -106,8 +108,8 @@ const electronAPI = {
     ipcRenderer.invoke("ws:write-project", { projectDir, tasks }),
   wsDeleteTask: (projectDir, taskId) =>
     ipcRenderer.invoke("ws:delete-task", { projectDir, taskId }),
-  wsCreateProject: (workspacePath, name, id) =>
-    ipcRenderer.invoke("ws:create-project", { workspacePath, name, id }),
+  wsCreateProject: (workspacePath, name, id, order) =>
+    ipcRenderer.invoke("ws:create-project", { workspacePath, name, id, order }),
   wsDeleteProject: (projectDir) => ipcRenderer.invoke("ws:delete-project", { projectDir }),
   wsResolveConflict: (projectDir, action) =>
     ipcRenderer.invoke("ws:resolve-conflict", { projectDir, action }),

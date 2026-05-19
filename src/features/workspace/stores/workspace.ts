@@ -19,6 +19,13 @@ export interface WorkspaceStore extends Writable<WorkspaceState> {
   removeWorkspace: (path: string) => void;
   setActive: (path: string) => Promise<void>;
   refreshProjects: () => Promise<void>;
+  setProjectOrder: (
+    projects: WorkspaceProjectListItem[]
+  ) => Promise<{ success: boolean; error?: string }>;
+  syncProjectListItem: (
+    projectDir: string,
+    summary: { rootId?: string; name?: string; order?: number }
+  ) => void;
   setActiveProject: (projectDir: string) => void;
   createProject: (
     name: string,
@@ -48,6 +55,17 @@ function createWorkspaceStore(): WorkspaceStore {
     } catch {
       return [];
     }
+  }
+
+  function nextProjectOrder(projects: WorkspaceProjectListItem[]) {
+    const ordered = projects
+      .map((project) => project.order)
+      .filter((order): order is number => typeof order === "number" && Number.isFinite(order));
+    return ordered.length > 0 ? Math.max(...ordered) + 1 : projects.length;
+  }
+
+  function withSequentialProjectOrder(projects: WorkspaceProjectListItem[]) {
+    return projects.map((project, index) => ({ ...project, order: index }));
   }
 
   return {
@@ -110,25 +128,71 @@ function createWorkspaceStore(): WorkspaceStore {
       update((s) => ({ ...s, projects }));
     },
 
-    setActiveProject(projectDir: string) {
-      update((s) => ({ ...s, activeProjectDir: projectDir }));
-    },
-
-    async createProject(name: string, id: string) {
+    async setProjectOrder(projects: WorkspaceProjectListItem[]) {
       const { activeWorkspacePath } = get({ subscribe } as WorkspaceStore);
       if (!activeWorkspacePath) {
         return { success: false, error: "No active workspace" };
       }
 
-      const result = await platform.wsCreateProject(activeWorkspacePath, name, id);
+      const orderedProjects = withSequentialProjectOrder(projects);
+      update((s) => ({ ...s, projects: orderedProjects }));
+      let result: { success: boolean; projects?: WorkspaceProjectListItem[]; error?: string };
+      try {
+        result = await platform.wsSetProjectOrder(activeWorkspacePath, orderedProjects);
+      } catch {
+        return { success: false, error: "Failed to save project order" };
+      }
+      if (!result?.success) {
+        return { success: false, error: result?.error ?? "Failed to save project order" };
+      }
+
+      return { success: true };
+    },
+
+    syncProjectListItem(projectDir, summary) {
+      update((state) => ({
+        ...state,
+        projects: state.projects.map((project) => {
+          const matchesProject =
+            project.projectDir === projectDir ||
+            (Boolean(summary.rootId) && project.rootId === summary.rootId);
+          if (!matchesProject) return project;
+          return {
+            ...project,
+            rootId: summary.rootId ?? project.rootId,
+            name: summary.name ?? project.name,
+            order: summary.order ?? project.order,
+          };
+        }),
+      }));
+    },
+
+    setActiveProject(projectDir: string) {
+      update((s) => ({ ...s, activeProjectDir: projectDir }));
+    },
+
+    async createProject(name: string, id: string) {
+      const { activeWorkspacePath, projects } = get({ subscribe } as WorkspaceStore);
+      if (!activeWorkspacePath) {
+        return { success: false, error: "No active workspace" };
+      }
+
+      const order = nextProjectOrder(projects);
+      const result = await platform.wsCreateProject(activeWorkspacePath, name, id, order);
       if (!result?.success || !result.projectDir) {
         return { success: false, error: result?.error ?? "Failed to create workspace project" };
       }
 
-      const projects = await loadProjects(activeWorkspacePath);
+      const project: WorkspaceProjectListItem = {
+        name,
+        rootId: id,
+        dirName: result.dirName ?? result.projectDir.split(/[/\\]/).pop() ?? name,
+        projectDir: result.projectDir,
+        order,
+      };
       update((s) => ({
         ...s,
-        projects,
+        projects: [...s.projects.filter((item) => item.projectDir !== project.projectDir), project],
         activeProjectDir: result.projectDir ?? s.activeProjectDir,
       }));
       return { success: true, projectDir: result.projectDir };
@@ -139,13 +203,12 @@ function createWorkspaceStore(): WorkspaceStore {
       if (!result?.success) {
         return { success: false, error: result?.error ?? "Failed to delete workspace project" };
       }
-      const { activeWorkspacePath, activeProjectDir } = get({
+      const { activeProjectDir } = get({
         subscribe,
       } as WorkspaceStore);
-      const projects = activeWorkspacePath ? await loadProjects(activeWorkspacePath) : [];
       update((s) => ({
         ...s,
-        projects,
+        projects: s.projects.filter((project) => project.projectDir !== projectDir),
         activeProjectDir: activeProjectDir === projectDir ? null : activeProjectDir,
       }));
       return { success: true };

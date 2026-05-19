@@ -18,9 +18,13 @@ import {
   clearPendingTaskDetailSelection,
   saveStatus,
 } from "@stores/ui";
-import { workspace_store, workspace_tasks_cache } from "@features/workspace/stores/workspace";
+import {
+  workspace_store,
+  workspace_tasks_cache,
+  type WorkspaceState,
+} from "@features/workspace/stores/workspace";
 import type { SelectedType } from "@app-types/app";
-import type { WorkspaceTask } from "@app-types/workspace";
+import type { WorkspaceProjectListItem, WorkspaceTask } from "@app-types/workspace";
 
 export interface TreeDataStore extends Writable<ProjectData | undefined> {
   init: () => void;
@@ -32,6 +36,7 @@ interface PersistContext {
   selectedType: SelectedType;
   selectedId: string | undefined;
   activeProjectDir: string | null;
+  activeWorkspaceProject: WorkspaceProjectListItem | undefined;
   cachedWorkspaceTasks: Record<string, WorkspaceTask>;
 }
 
@@ -55,6 +60,48 @@ export function clearHistory() {
   undoStack = [];
   redoStack = [];
   skipSnapshot = true;
+}
+
+function getWorkspaceRootTask(tasks: WorkspaceTask[]): WorkspaceTask | undefined {
+  return tasks.find((task) => task.parents.length === 0);
+}
+
+function getWorkspaceRootTaskFromRecord(
+  tasks: Record<string, WorkspaceTask>
+): WorkspaceTask | undefined {
+  return Object.values(tasks).find((task) => task.parents.length === 0);
+}
+
+function getActiveWorkspaceProject(
+  projects: WorkspaceProjectListItem[],
+  activeProjectDir: string | null,
+  selectedId: string | undefined
+): WorkspaceProjectListItem | undefined {
+  return projects.find(
+    (project) => project.projectDir === activeProjectDir || project.rootId === selectedId
+  );
+}
+
+function syncWorkspaceProjectSummaryFromTree(
+  current: ProjectData | undefined,
+  selectedType: SelectedType,
+  selectedId: string | undefined,
+  workspaceState: WorkspaceState
+) {
+  if (selectedType !== "WorkspaceProject" || !workspaceState.activeProjectDir || !current?.data) {
+    return;
+  }
+
+  const activeProject = getActiveWorkspaceProject(
+    workspaceState.projects,
+    workspaceState.activeProjectDir,
+    selectedId
+  );
+  workspace_store.syncProjectListItem(workspaceState.activeProjectDir, {
+    rootId: current.data.id,
+    name: current.data.data.name,
+    order: activeProject?.order,
+  });
 }
 
 function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
@@ -130,6 +177,10 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
         if (!activeProjectDir) return;
         const cachedTasks = context.cachedWorkspaceTasks;
         const tasks = projectDataToWorkspaceTasks(current, cachedTasks);
+        const rootTask = getWorkspaceRootTask(tasks);
+        if (rootTask && typeof context.activeWorkspaceProject?.order === "number") {
+          rootTask.order = context.activeWorkspaceProject.order;
+        }
         try {
           platform
             .wsWriteProject(activeProjectDir, tasks)
@@ -181,6 +232,15 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
           }
         });
         platform.onWorkspaceProjectUpdated((event) => {
+          const rootTask = getWorkspaceRootTaskFromRecord(event.tasks);
+          if (rootTask) {
+            workspace_store.syncProjectListItem(event.projectDir, {
+              rootId: rootTask.id,
+              name: rootTask.name,
+              order: rootTask.order,
+            });
+          }
+
           const currentSelectedType = get(selected_type);
           const currentSelectedId = get(selected_id);
           const activeProjectDir = get(workspace_store).activeProjectDir;
@@ -229,6 +289,10 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
       }
 
       subscribe((current) => {
+        const currentSelectedType = get(selected_type);
+        const currentSelectedId = get(selected_id);
+        const workspaceState = get(workspace_store);
+
         if (current === undefined) {
           if (pendingTaskDetailSelection?.projectId) {
             selected_type.set("Projects");
@@ -245,6 +309,13 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
             });
           }
         }
+
+        syncWorkspaceProjectSummaryFromTree(
+          current,
+          currentSelectedType,
+          currentSelectedId,
+          workspaceState
+        );
 
         if (skipPersistOnce) {
           skipPersistOnce = false;
@@ -276,9 +347,14 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
           saveStatus.set("idle");
         }
         persistTreeData(current, {
-          selectedType: get(selected_type),
-          selectedId: get(selected_id),
-          activeProjectDir: get(workspace_store).activeProjectDir,
+          selectedType: currentSelectedType,
+          selectedId: currentSelectedId,
+          activeProjectDir: workspaceState.activeProjectDir,
+          activeWorkspaceProject: getActiveWorkspaceProject(
+            workspaceState.projects,
+            workspaceState.activeProjectDir,
+            currentSelectedId
+          ),
           cachedWorkspaceTasks: get(workspace_tasks_cache),
         });
       });

@@ -26,6 +26,7 @@ import {
   deleteProject,
   deleteProjectAsync,
   listProjects,
+  setProjectOrderAsync,
   exportProjectData,
   legacyMemoContentToMarkdown,
   migrateProjectData,
@@ -236,6 +237,36 @@ describe("file system operations", () => {
     const projects = listProjects(tmpDir);
     expect(projects).toHaveLength(2);
     expect(projects.map((p) => p.name)).toEqual(expect.arrayContaining(["Alpha", "Beta"]));
+  });
+
+  it("setProjectOrderAsync persists workspace project order in root frontmatter", async () => {
+    createProject(tmpDir, "Alpha", "alpha-id");
+    createProject(tmpDir, "Beta", "beta-id");
+    createProject(tmpDir, "Gamma", "gamma-id");
+    const initial = listProjects(tmpDir);
+
+    const result = await setProjectOrderAsync(tmpDir, [
+      initial.find((p) => p.rootId === "gamma-id"),
+      initial.find((p) => p.rootId === "alpha-id"),
+      initial.find((p) => p.rootId === "beta-id"),
+    ]);
+
+    expect(result.changedProjectDirs).toHaveLength(3);
+    expect(listProjects(tmpDir).map((p) => p.rootId)).toEqual(["gamma-id", "alpha-id", "beta-id"]);
+
+    const gamma = listProjects(tmpDir).find((p) => p.rootId === "gamma-id");
+    const gammaProject = fs.readFileSync(path.join(gamma.projectDir, "_project.md"), "utf8");
+    expect(parseFrontmatter(gammaProject).data.order).toBe("0");
+  });
+
+  it("setProjectOrderAsync keeps unknown or newly discovered projects after the saved order", async () => {
+    createProject(tmpDir, "Alpha", "alpha-id");
+    createProject(tmpDir, "Beta", "beta-id");
+    createProject(tmpDir, "Gamma", "gamma-id");
+
+    await setProjectOrderAsync(tmpDir, [{ rootId: "beta-id" }, { rootId: "missing-id" }]);
+
+    expect(listProjects(tmpDir).map((p) => p.rootId)).toEqual(["beta-id", "alpha-id", "gamma-id"]);
   });
 
   it("deleteProject removes the project directory recursively", () => {

@@ -635,6 +635,10 @@ function readMemos(taskDir, reservedFiles = ["_index.md"]) {
 }
 
 /** Read the root task from _project.md inside projectDir. */
+function parseOrderValue(value) {
+  return value != null && Number.isFinite(Number(value)) ? Number(value) : undefined;
+}
+
 function readRootTask(projectDir) {
   const content = fs.readFileSync(path.join(projectDir, "_project.md"), "utf8");
   const { data } = parseFrontmatter(content);
@@ -647,8 +651,7 @@ function readRootTask(projectDir) {
     parents: [],
     memos: readMemos(projectDir, ["_project.md"]),
     createdAt: data.created || "",
-    order:
-      data.order != null && Number.isFinite(Number(data.order)) ? Number(data.order) : undefined,
+    order: parseOrderValue(data.order),
   };
 }
 
@@ -666,8 +669,7 @@ function readTaskDir(taskDir) {
     parents,
     memos: readMemos(taskDir),
     createdAt: data.created || "",
-    order:
-      data.order != null && Number.isFinite(Number(data.order)) ? Number(data.order) : undefined,
+    order: parseOrderValue(data.order),
   };
 }
 
@@ -937,16 +939,24 @@ async function writeProjectAsync(projectDir, tasks) {
  * Create a new project directory with a root _project.md.
  * Returns { dirName, projectDir }.
  */
-function createProject(workspacePath, name, id) {
+function createProject(workspacePath, name, id, order) {
   const dirName = uniqueName(workspacePath, slugify(name) || "project");
   const projectDir = path.join(workspacePath, dirName);
   fs.mkdirSync(projectDir, { recursive: true });
   const today = new Date().toISOString().slice(0, 10);
-  writeRootTask(projectDir, { id, name, status: "Open", parents: [], memos: [], createdAt: today });
+  writeRootTask(projectDir, {
+    id,
+    name,
+    status: "Open",
+    parents: [],
+    memos: [],
+    createdAt: today,
+    order,
+  });
   return { dirName, projectDir };
 }
 
-async function createProjectAsync(workspacePath, name, id) {
+async function createProjectAsync(workspacePath, name, id, order) {
   const dirName = uniqueName(workspacePath, slugify(name) || "project");
   const projectDir = path.join(workspacePath, dirName);
   await fs.promises.mkdir(projectDir, { recursive: true });
@@ -958,6 +968,7 @@ async function createProjectAsync(workspacePath, name, id) {
     parents: [],
     memos: [],
     createdAt: today,
+    order,
   });
   return { dirName, projectDir };
 }
@@ -966,6 +977,18 @@ async function createProjectAsync(workspacePath, name, id) {
  * List all projects (directories containing _project.md) inside a workspace.
  * Returns WorkspaceProjectListItem[].
  */
+function compareProjectListItems(a, b) {
+  const aHasOrder = typeof a.order === "number";
+  const bHasOrder = typeof b.order === "number";
+  if (aHasOrder && bHasOrder && a.order !== b.order) return a.order - b.order;
+  if (aHasOrder && !bHasOrder) return -1;
+  if (!aHasOrder && bHasOrder) return 1;
+  return String(a.name || a.dirName).localeCompare(String(b.name || b.dirName), undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
+}
+
 function listProjects(workspacePath) {
   if (!fs.existsSync(workspacePath)) return [];
   const entries = fs.readdirSync(workspacePath, { withFileTypes: true });
@@ -982,12 +1005,77 @@ function listProjects(workspacePath) {
         rootId: data.id,
         dirName: entry.name,
         projectDir: path.join(workspacePath, entry.name),
+        order: parseOrderValue(data.order),
       });
     } catch {
       // Ignore malformed project entries
     }
   }
-  return projects;
+  return projects.sort(compareProjectListItems);
+}
+
+function projectListIdentity(project) {
+  return project?.rootId || project?.id || project?.dirName || project?.projectDir || null;
+}
+
+function projectListIdentities(project) {
+  return [project?.rootId, project?.id, project?.dirName, project?.projectDir].filter(Boolean);
+}
+
+async function writeProjectRootOrder(projectDir, order) {
+  const projectFile = path.join(projectDir, "_project.md");
+  const content = await fs.promises.readFile(projectFile, "utf8");
+  const { data, body } = parseFrontmatter(content);
+  if (parseOrderValue(data.order) === order) {
+    return false;
+  }
+  return writeFileIfChanged(projectFile, stringifyFrontmatter({ ...data, order }, body), "utf8");
+}
+
+async function setProjectOrderAsync(workspacePath, orderedProjects) {
+  if (!workspacePath || typeof workspacePath !== "string") {
+    throw new Error("Invalid workspacePath");
+  }
+  if (!fs.existsSync(workspacePath)) {
+    throw new Error("workspacePath does not exist");
+  }
+
+  const currentProjects = listProjects(workspacePath);
+  const currentByIdentity = new Map();
+  for (const project of currentProjects) {
+    for (const identity of projectListIdentities(project)) {
+      currentByIdentity.set(identity, project);
+    }
+  }
+
+  const nextProjects = [];
+  const seen = new Set();
+  for (const project of Array.isArray(orderedProjects) ? orderedProjects : []) {
+    const identity = projectListIdentity(project);
+    const current = identity ? currentByIdentity.get(identity) : null;
+    const currentIdentity = projectListIdentity(current);
+    if (!current || !currentIdentity || seen.has(currentIdentity)) continue;
+    nextProjects.push(current);
+    seen.add(currentIdentity);
+  }
+
+  for (const project of currentProjects) {
+    const identity = projectListIdentity(project);
+    if (!identity || seen.has(identity)) continue;
+    nextProjects.push(project);
+    seen.add(identity);
+  }
+
+  const changedProjectDirs = [];
+  for (const [index, project] of nextProjects.entries()) {
+    const changed = await writeProjectRootOrder(project.projectDir, index);
+    project.order = index;
+    if (changed) {
+      changedProjectDirs.push(project.projectDir);
+    }
+  }
+
+  return { projects: nextProjects, changedProjectDirs };
 }
 
 /**
@@ -1175,6 +1263,7 @@ module.exports = {
   deleteProject,
   deleteProjectAsync,
   listProjects,
+  setProjectOrderAsync,
   wouldCreateCycle,
   bfsFromRoot,
   exportProjectData,

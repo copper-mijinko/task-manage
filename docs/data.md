@@ -149,6 +149,14 @@
 
 ### 4.1 永続化の挙動
 
+Workspace の通常編集では、renderer 側の Svelte store を単一の信頼元とする。
+
+- `tree_data` は現在開いている Workspace プロジェクトのタスクツリー本体であり、保存処理はこのメモリスナップショットを main プロセスへ渡して非同期にディスクへ反映する
+- `workspace_store.projects` はサイドバー用のプロジェクト summary であり、root task 名や並び順など `tree_data` から派生できる情報はメモリ上で同期する。通常操作の直後に `ws:list-projects` でディスクを読み直して UI を補正してはならない
+- `workspace_tasks_cache` は保存時に `createdAt` など tree 表現に含まれないメタデータを保つ補助キャッシュであり、summary 側から task cache へ逆流させない
+- ディスクから renderer のメモリへ取り込むのは、起動、workspace 切替、project 選択、migration/export 後の明示 refresh、外部更新リコンサイル、ユーザーが競合解決で reload を選んだ場合に限る
+- 書込失敗時もディスクを読み戻してメモリ状態を勝手に巻き戻さない。エラー状態を通知し、ユーザー操作または明示的な reload で解決する
+
 ワークスペース保存は、メモリ上の `tree_data` を唯一の正として、main プロセスが非同期にディスクへ反映する形をとる。renderer は保存完了を待たず（fire-and-forget）、状態は main からの IPC push で更新する。
 
 - **増分書込**: `electron/workspace.js` の `writeFileIfChanged` が既存ファイルとバイト比較し、内容に差がなければ書込をスキップする。OneDrive 等の同期フォルダで、変更のないタスク/メモが無用にアップロードされない

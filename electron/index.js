@@ -604,6 +604,19 @@ app.on("ready", () => {
     }
   });
 
+  ipcMain.handle("ws:set-project-order", async (event, { workspacePath, projects }) => {
+    try {
+      const result = await workspace.setProjectOrderAsync(workspacePath, projects);
+      for (const projectDir of result.changedProjectDirs) {
+        await workspaceReconciler.markProjectWritten(projectDir);
+      }
+      return { success: true, projects: result.projects };
+    } catch (err) {
+      log.error("ws:set-project-order error:", err.message);
+      return { success: false, error: err.message };
+    }
+  });
+
   ipcMain.handle("ws:read-project", async (event, { projectDir }) => {
     try {
       const { tasks, taskDirs } = workspace.readProject(projectDir);
@@ -792,9 +805,9 @@ app.on("ready", () => {
     return { path: selected };
   });
 
-  ipcMain.handle("ws:create-project", async (event, { workspacePath, name, id }) => {
+  ipcMain.handle("ws:create-project", async (event, { workspacePath, name, id, order }) => {
     try {
-      const result = await workspace.createProjectAsync(workspacePath, name, id);
+      const result = await workspace.createProjectAsync(workspacePath, name, id, order);
       return { success: true, ...result };
     } catch (err) {
       log.error("ws:create-project error:", err.message);

@@ -101,6 +101,10 @@ export interface ElectronAPI {
   wsGetWorkspaces: () => Promise<{ workspaces: WorkspaceInfo[]; activeWorkspace: string | null }>;
   wsSetWorkspaces: (config: { workspaces: WorkspaceInfo[]; activeWorkspace?: string }) => void;
   wsListProjects: (workspacePath: string) => Promise<WorkspaceProjectListItem[]>;
+  wsSetProjectOrder: (
+    workspacePath: string,
+    projects: WorkspaceProjectListItem[]
+  ) => Promise<{ success: boolean; projects?: WorkspaceProjectListItem[]; error?: string }>;
   wsReadProject: (projectDir: string) => Promise<WorkspaceProject>;
   wsWriteTask: (
     projectDir: string,
@@ -128,7 +132,8 @@ export interface ElectronAPI {
   wsCreateProject: (
     workspacePath: string,
     name: string,
-    id: string
+    id: string,
+    order?: number
   ) => Promise<{ success: boolean; projectDir?: string; dirName?: string; error?: string }>;
   wsDeleteProject: (projectDir: string) => Promise<{ success: boolean; error?: string }>;
   wsResolveConflict: (

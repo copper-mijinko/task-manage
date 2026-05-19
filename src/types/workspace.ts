@@ -33,6 +33,7 @@ export interface WorkspaceProjectListItem {
   rootId: string;
   dirName: string;
   projectDir: string;
+  order?: number;
 }
 
 export interface WorkspaceProject {

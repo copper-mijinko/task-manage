@@ -1,5 +1,6 @@
 ﻿<script context="module">
   let dragged_id; // Project ID being dragged
+  let dragged_section; // Sidebar project section being dragged
 </script>
 
 <script>
@@ -112,16 +113,42 @@
   // Drag and drop
   let dragOverTarget;
   let dragOverType;
+  const reorderSections = new Set(["Projects", "WorkspaceProject"]);
+
+  function canReorderSection(section) {
+    return reorderSections.has(section);
+  }
 
   // Function to get the list of projects
   function getProjectElements() {
-    return document.querySelectorAll('.MenuRow[data-section="Projects"]');
+    return document.querySelectorAll(
+      '.MenuRow[data-section="Projects"], .MenuRow[data-section="WorkspaceProject"]'
+    );
+  }
+
+  function getProjectsForSection(section) {
+    return section === "WorkspaceProject"
+      ? ($workspace_store.projects ?? [])
+      : ($project_ids ?? []);
+  }
+
+  function getProjectId(project, section) {
+    return section === "WorkspaceProject" ? project.rootId : project.id;
+  }
+
+  function saveProjectOrder(section, projects) {
+    if (section === "WorkspaceProject") {
+      workspace_store.setProjectOrder(projects);
+      return;
+    }
+    project_ids.update(() => projects);
+    project_ids.setProjectOrder(projects);
   }
 
   // Drag start
   function dragStart(e) {
     const el = e.currentTarget;
-    if (el.dataset.section !== "Projects") return;
+    if (!canReorderSection(el.dataset.section)) return;
 
     el.classList.add("Dragging");
 
@@ -135,6 +162,7 @@
     e.dataTransfer.setDragImage(name_tag, -rem, -rem);
 
     dragged_id = el.dataset.id;
+    dragged_section = el.dataset.section;
   }
 
   // Drag end
@@ -142,6 +170,8 @@
     const el = e.currentTarget;
     dragOverType = undefined;
     dragOverTarget = undefined;
+    dragged_id = undefined;
+    dragged_section = undefined;
     el.classList.remove("Dragging");
     const nameTag = document.querySelector(".NameTag");
     if (nameTag) nameTag.remove();
@@ -152,8 +182,7 @@
     e.preventDefault();
     const el = e.currentTarget;
 
-    // Only the project section can be reordered
-    if (el.dataset.section !== "Projects") return;
+    if (!canReorderSection(el.dataset.section) || el.dataset.section !== dragged_section) return;
 
     // If not the dragging item itself or the currently dragged item
     if (!el.classList.contains("Dragging") && el.dataset.id !== dragged_id) {
@@ -186,14 +215,16 @@
   // Drop
   function dragDrop(e) {
     const el = e.currentTarget;
-    if (el.dataset.section !== "Projects" || !dragOverType) return;
+    const section = el.dataset.section;
+    if (!canReorderSection(section) || section !== dragged_section || !dragOverType) return;
 
-    const draggedIndex = $project_ids.findIndex((p) => p.id === dragged_id);
-    const targetIndex = $project_ids.findIndex((p) => p.id === el.dataset.id);
+    const projects = getProjectsForSection(section);
+    const draggedIndex = projects.findIndex((p) => getProjectId(p, section) === dragged_id);
+    const targetIndex = projects.findIndex((p) => getProjectId(p, section) === el.dataset.id);
 
     if (draggedIndex !== -1 && targetIndex !== -1) {
       // Clone the project array
-      const newProjects = [...$project_ids];
+      const newProjects = [...projects];
 
       // Remove the dragged item
       const [draggedProject] = newProjects.splice(draggedIndex, 1);
@@ -209,11 +240,7 @@
       // Reinsert into the array
       newProjects.splice(Math.max(0, insertAt), 0, draggedProject);
 
-      // Update the store
-      project_ids.update(() => newProjects);
-
-      // Save the new order to backend
-      project_ids.setProjectOrder(newProjects);
+      saveProjectOrder(section, newProjects);
     }
 
     // Reset
@@ -221,6 +248,7 @@
     el.classList.remove("DragOverBottom");
     dragOverType = undefined;
     dragged_id = undefined;
+    dragged_section = undefined;
   }
 
   // Add cleanup function to prevent duplicate event listeners
