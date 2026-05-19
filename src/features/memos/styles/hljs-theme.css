@@ -1,0 +1,80 @@
+/* highlight.js theme mapped to project theme variables.
+   Works for both dark and light themes via --theme-color-* variables,
+   which are dynamically set on documentElement by the theme store. */
+
+.hljs {
+  color: var(--theme-color-Sub-light);
+  background: transparent;
+}
+
+.hljs-comment,
+.hljs-quote {
+  color: var(--theme-color-Sub-main);
+  font-style: italic;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-section,
+.hljs-link,
+.hljs-doctag {
+  color: var(--theme-color-Primary-main);
+}
+
+.hljs-function .hljs-keyword,
+.hljs-class .hljs-keyword,
+.hljs-meta .hljs-keyword {
+  color: var(--theme-color-Primary-light);
+}
+
+.hljs-string,
+.hljs-attr,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-addition,
+.hljs-template-tag {
+  color: var(--theme-color-Accent-light);
+}
+
+.hljs-number,
+.hljs-meta,
+.hljs-built_in,
+.hljs-builtin-name,
+.hljs-params {
+  color: var(--theme-color-Accent-main);
+}
+
+.hljs-title,
+.hljs-title.class_,
+.hljs-title.function_,
+.hljs-class .hljs-title,
+.hljs-type,
+.hljs-name {
+  color: var(--theme-color-Primary-main);
+  font-weight: 600;
+}
+
+.hljs-variable,
+.hljs-template-variable,
+.hljs-attribute,
+.hljs-tag,
+.hljs-regexp,
+.hljs-selector-id,
+.hljs-selector-class,
+.hljs-selector-attr,
+.hljs-selector-pseudo {
+  color: var(--theme-color-Sub-light);
+}
+
+.hljs-deletion {
+  color: var(--theme-color-Error-main);
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-strong {
+  font-weight: 700;
+}

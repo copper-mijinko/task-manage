@@ -7,3 +7,5 @@ declare module "*.svelte" {
     Record<string, unknown>
   > {}
 }
+
+declare module "*.css";

@@ -1,6 +1,6 @@
 ﻿<script lang="ts">
   import { tick, onDestroy } from "svelte";
-  import { EditorView, keymap } from "@codemirror/view";
+  import { EditorView, keymap, lineNumbers } from "@codemirror/view";
   import { EditorState } from "@codemirror/state";
   import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
   import { syntaxHighlighting, HighlightStyle } from "@codemirror/language";
@@ -9,10 +9,13 @@
   import { history, defaultKeymap, historyKeymap } from "@codemirror/commands";
   import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
   import { marked } from "marked";
+  import mermaid from "mermaid";
   import quillIcons from "quill/ui/icons.js";
   import { toMarkdown } from "@features/memos/utils/memo_utils";
   import SegmentedControl from "@lib/primitives/SegmentedControl.svelte";
   import * as platform from "@lib/ipc/platform";
+  import { theme } from "@stores/theme";
+  import "@features/memos/styles/hljs-theme.css";
 
   export let saveMemo: (content: string) => void;
   export let content: unknown = "";
@@ -42,6 +45,15 @@
   const SPLIT_KEY_STEP = 5;
 
   const EXTERNAL_LINK_PATTERN = /^(https?:\/\/|mailto:|file:\/\/)/i;
+  // Quill 標準の `code` と `code-block` は同じ SVG (`<>`) で視覚的に区別できないため、
+  // インラインは Quill 提供の `<>`、ブロックはフレーム付きの独自 SVG に差し替える。
+  // ストローク/フィルのクラス指定は他の Quill アイコンに合わせる。
+  const codeBlockIconSvg =
+    '<svg viewbox="0 0 18 18">' +
+    '<rect class="ql-stroke" x="2.5" y="3.5" width="13" height="11" rx="1.5" ry="1.5" fill="none"/>' +
+    '<polyline class="ql-even ql-stroke" points="7 8 5.5 9.5 7 11"/>' +
+    '<polyline class="ql-even ql-stroke" points="11 8 12.5 9.5 11 11"/>' +
+    "</svg>";
   const toolbarIcons = {
     bold: quillIcons.bold,
     italic: quillIcons.italic,
@@ -53,7 +65,7 @@
     bulletList: quillIcons.list.bullet,
     checklist: quillIcons.list.check,
     quote: quillIcons.blockquote,
-    codeBlock: quillIcons["code-block"],
+    codeBlock: codeBlockIconSvg,
   };
   const memoModeOptions = [
     { value: "read", label: "Read", className: "read-mode-btn" },
@@ -350,9 +362,23 @@
   function injectCopyButtons(root: HTMLElement | null) {
     if (!root) return;
     root.querySelectorAll("pre").forEach((pre) => {
-      if (pre.querySelector(".copy-btn")) return;
       const code = pre.querySelector("code");
       if (!code) return;
+
+      // marked-highlight が付与する "language-<lang>" クラスから言語ラベルを抽出し、
+      // pre[data-lang] として保持。CSS の擬似要素で右上にバッジ表示する。
+      const langClass = Array.from(code.classList).find((c) => c.startsWith("language-"));
+      const lang = langClass ? langClass.slice("language-".length) : "";
+
+      // mermaid は別途 SVG レンダリングするので、言語バッジも Copy ボタンも不要。
+      // (この pre は renderMermaidBlocks で別要素に置換される)
+      if (lang === "mermaid") return;
+
+      if (lang && lang !== "plaintext") {
+        pre.setAttribute("data-lang", lang);
+      }
+
+      if (pre.querySelector(".copy-btn")) return;
       const btn = document.createElement("button");
       btn.className = "copy-btn";
       btn.textContent = "Copy";
@@ -373,6 +399,53 @@
     });
   }
 
+  // mermaid の初期化はテーマに依存する。最初の renderMermaidBlocks 呼び出し
+  // および theme 変更時に setupMermaidTheme で再初期化する。
+  let mermaidThemeApplied: "dark" | "default" | null = null;
+  let mermaidIdCounter = 0;
+
+  function setupMermaidTheme(themeName: "dark" | "light" | undefined) {
+    const next: "dark" | "default" = themeName === "dark" ? "dark" : "default";
+    if (next === mermaidThemeApplied) return false;
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: "strict",
+      theme: next,
+      fontFamily: "inherit",
+    });
+    mermaidThemeApplied = next;
+    return true;
+  }
+
+  async function renderMermaidBlocks(root: HTMLElement | null) {
+    if (!root) return;
+    const codeBlocks = Array.from(
+      root.querySelectorAll<HTMLElement>("pre > code.language-mermaid")
+    );
+    if (codeBlocks.length === 0) return;
+
+    setupMermaidTheme($theme);
+
+    for (const code of codeBlocks) {
+      const pre = code.parentElement;
+      if (!pre) continue;
+      const source = (code.textContent ?? "").trim();
+      const container = document.createElement("div");
+      container.className = "mermaid-block";
+      const id = `mermaid-${++mermaidIdCounter}`;
+      try {
+        const { svg, bindFunctions } = await mermaid.render(id, source);
+        container.innerHTML = svg;
+        bindFunctions?.(container);
+      } catch (error) {
+        container.classList.add("mermaid-error");
+        const msg = error instanceof Error ? error.message : String(error);
+        container.textContent = `Mermaid: ${msg}`;
+      }
+      pre.replaceWith(container);
+    }
+  }
+
   async function updateRenderedHtml(markdownText: string) {
     const sequence = ++renderSequence;
     const baseHtml = marked.parse(preprocessWikiLinks(markdownText), {
@@ -383,6 +456,8 @@
     await tick();
     injectCopyButtons(previewEl);
     injectCopyButtons(livePreviewEl);
+    await renderMermaidBlocks(previewEl);
+    await renderMermaidBlocks(livePreviewEl);
 
     const nextHtml = await resolveImageSources(baseHtml);
     if (sequence === renderSequence) {
@@ -390,6 +465,8 @@
       await tick();
       injectCopyButtons(previewEl);
       injectCopyButtons(livePreviewEl);
+      await renderMermaidBlocks(previewEl);
+      await renderMermaidBlocks(livePreviewEl);
     }
   }
 
@@ -461,11 +538,11 @@
     ".cm-scroller": {
       overflow: "auto",
       fontFamily: "inherit",
-      fontSize: "0.9rem",
+      fontSize: "var(--font-body-md)",
       lineHeight: "1.7",
     },
     ".cm-content": {
-      padding: "1rem",
+      padding: "var(--sp3) var(--sp4)",
       caretColor: "var(--theme-color-Sub-light)",
       minHeight: "100%",
     },
@@ -482,34 +559,51 @@
     ".cm-activeLine": {
       backgroundColor: "rgba(255, 255, 255, 0.02)",
     },
-    ".cm-gutters": { display: "none" },
+    ".cm-gutters": {
+      backgroundColor: "var(--theme-color-Main-light)",
+      color: "color-mix(in srgb, var(--theme-color-Sub-main) 70%, transparent)",
+      borderRight: "1px solid color-mix(in srgb, var(--theme-color-Sub-dark) 25%, transparent)",
+      userSelect: "none",
+    },
+    ".cm-lineNumbers .cm-gutterElement": {
+      padding: "0 var(--sp2) 0 var(--sp3)",
+      minWidth: "2.25rem",
+      fontVariantNumeric: "tabular-nums",
+    },
+    ".cm-activeLineGutter": {
+      backgroundColor: "color-mix(in srgb, var(--theme-color-Primary-main) 12%, transparent)",
+      color: "var(--theme-color-Sub-light)",
+    },
   });
 
   // テーマ非依存の Markdown 用シンタックスハイライト。defaultHighlightStyle は
   // 白背景前提の固定色 (#708, #a11, #940 など) を使うため、Dark テーマの
   // 暗い背景 (Main-light = #394249) で見えなくなる。base color は editorTheme
-  // の color (Sub-light) を継承させ、トークンには太字/斜体/テーマ追従の
-  // accent 色のみを乗せて両テーマで可読性を確保する。
+  // の color (Sub-light) を継承させ、トークンにはテーマ追従の色・装飾のみを
+  // 乗せて両テーマで可読性を確保する。見出しは em 指定で本文サイズに追従。
   const markdownHighlightStyle = HighlightStyle.define([
-    { tag: t.heading, fontWeight: "bold" },
-    { tag: t.heading1, fontWeight: "bold" },
-    { tag: t.heading2, fontWeight: "bold" },
-    { tag: t.heading3, fontWeight: "bold" },
-    { tag: t.heading4, fontWeight: "bold" },
-    { tag: t.heading5, fontWeight: "bold" },
-    { tag: t.heading6, fontWeight: "bold" },
-    { tag: t.strong, fontWeight: "bold" },
-    { tag: t.emphasis, fontStyle: "italic" },
-    { tag: t.link, color: "var(--theme-color-Primary-main)", textDecoration: "underline" },
-    { tag: t.url, color: "var(--theme-color-Primary-main)" },
+    {
+      tag: t.heading1,
+      fontWeight: "700",
+      fontSize: "1.45em",
+      color: "var(--theme-color-Sub-light)",
+    },
+    { tag: t.heading2, fontWeight: "700", fontSize: "1.25em" },
+    { tag: t.heading3, fontWeight: "700", fontSize: "1.1em" },
+    { tag: [t.heading4, t.heading5, t.heading6], fontWeight: "700" },
+    { tag: t.strong, fontWeight: "700", color: "var(--theme-color-Accent-light)" },
+    { tag: t.emphasis, fontStyle: "italic", color: "var(--theme-color-Accent-light)" },
+    { tag: [t.link, t.url], color: "var(--theme-color-Primary-main)", textDecoration: "underline" },
     { tag: t.monospace, color: "var(--theme-color-Accent-main)" },
-    { tag: t.quote, opacity: "0.78" },
+    { tag: t.quote, color: "var(--theme-color-Sub-main)", fontStyle: "italic" },
+    { tag: t.list, color: "var(--theme-color-Primary-main)" },
     { tag: t.meta, opacity: "0.55" },
   ]);
 
   function buildExtensions() {
     return [
       editorTheme,
+      lineNumbers(),
       markdown({ base: markdownLanguage, codeLanguages: languages }),
       syntaxHighlighting(markdownHighlightStyle),
       highlightSelectionMatches(),
@@ -687,6 +781,12 @@
   }
   $: if (!isEditing) {
     void updateRenderedHtml(currentContent || "");
+  }
+  // テーマが切り替わったら mermaid を再初期化し、既存ブロックを再レンダリング。
+  // setupMermaidTheme は変更が無ければ no-op なので、初回マウントと
+  // 切替時のみ updateRenderedHtml が走る。
+  $: if ($theme && setupMermaidTheme($theme) && currentContent.trim()) {
+    void updateRenderedHtml(currentContent);
   }
 </script>
 
@@ -881,8 +981,8 @@
   .wrapper {
     --memo-quill-button-color: var(--theme-color-Sub-light);
     --memo-quill-button-active-color: #06c;
-    --memo-quill-button-height: 24px;
-    --memo-quill-button-width: 28px;
+    --memo-quill-button-height: 28px;
+    --memo-quill-button-width: 30px;
 
     display: flex;
     flex-direction: column;
@@ -936,43 +1036,45 @@
     flex: 0 0 auto;
     height: var(--memo-quill-button-height);
     width: auto;
-    padding: var(--sp1) var(--sp2);
+    padding: var(--sp1) calc(var(--sp2) + 2px);
     margin: 0;
     font-size: var(--font-label-md);
     background: none;
     border: none;
-    border-radius: 0;
+    border-radius: var(--shape-xs);
     color: var(--memo-quill-button-color);
     cursor: pointer;
     line-height: 1;
     min-width: var(--memo-quill-button-width);
     text-align: center;
-    transition: color 0.1s ease;
+    transition:
+      color 0.1s ease,
+      background-color 0.1s ease;
   }
 
   .tool-btn:hover,
   .tool-btn:focus-visible {
-    background: none;
+    background-color: color-mix(in srgb, var(--theme-color-Sub-light) 10%, transparent);
     color: var(--memo-quill-button-active-color);
   }
 
   .tool-btn:active {
-    background: none;
+    background-color: color-mix(in srgb, var(--theme-color-Sub-light) 16%, transparent);
   }
 
   .tool-icon {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 18px;
-    height: 18px;
+    width: 20px;
+    height: 20px;
     pointer-events: none;
   }
 
   .tool-icon :global(svg) {
     display: block;
-    width: 18px;
-    height: 18px;
+    width: 20px;
+    height: 20px;
   }
 
   .tool-icon :global(.ql-stroke) {
@@ -1152,7 +1254,7 @@
     min-width: 0;
     min-height: 0;
     overflow: auto;
-    background-color: color-mix(in srgb, var(--theme-color-Main-light) 92%, black);
+    background-color: var(--theme-color-Main-light);
   }
 
   .preview-mode {
@@ -1225,22 +1327,30 @@
   .preview :global(h2),
   .preview :global(h3),
   .preview :global(h4) {
-    margin: 0.75em 0 0.4em;
-    font-weight: bold;
+    margin: 0.85em 0 0.4em;
+    font-weight: 700;
     line-height: 1.3;
     color: var(--theme-color-Sub-light);
   }
 
   .preview :global(h1) {
-    font-size: 1.5rem;
+    font-size: 1.75rem;
+    padding-bottom: var(--sp1);
+    border-bottom: 1px solid color-mix(in srgb, var(--theme-color-Sub-dark) 50%, transparent);
   }
 
   .preview :global(h2) {
-    font-size: 1.25rem;
+    font-size: 1.4rem;
+    padding-bottom: var(--sp1);
+    border-bottom: 1px solid color-mix(in srgb, var(--theme-color-Sub-dark) 30%, transparent);
   }
 
   .preview :global(h3) {
-    font-size: 1.1rem;
+    font-size: 1.15rem;
+  }
+
+  .preview :global(h4) {
+    font-size: 1.05rem;
   }
 
   .preview :global(p) {
@@ -1304,11 +1414,32 @@
   .preview :global(pre) {
     background-color: var(--theme-color-Main-dark);
     padding: var(--sp3) var(--sp4);
-    border-radius: var(--shape-xs);
+    border-radius: var(--shape-sm);
     overflow-x: auto;
-    margin: 0.5em 0;
+    margin: 0.75em 0;
     border: 1px solid color-mix(in srgb, var(--theme-color-Sub-dark) 25%, transparent);
     position: relative;
+  }
+
+  .preview :global(pre[data-lang]) {
+    padding-top: calc(var(--sp3) + var(--sp4));
+  }
+
+  .preview :global(pre[data-lang])::before {
+    content: attr(data-lang);
+    position: absolute;
+    top: var(--sp1);
+    left: var(--sp2);
+    padding: 0 var(--sp2);
+    font-size: var(--font-label-sm);
+    font-family: inherit;
+    color: var(--theme-color-Sub-main);
+    background-color: color-mix(in srgb, var(--theme-color-Main-light) 60%, transparent);
+    border-radius: var(--shape-xs);
+    border: 1px solid color-mix(in srgb, var(--theme-color-Sub-dark) 30%, transparent);
+    text-transform: lowercase;
+    line-height: 1.5;
+    pointer-events: none;
   }
 
   .preview :global(pre code) {
@@ -1330,7 +1461,7 @@
     border-radius: var(--shape-xs);
     color: var(--theme-color-Sub-main);
     cursor: pointer;
-    opacity: 0;
+    opacity: 0.45;
     transition:
       opacity 0.15s ease,
       background-color 0.1s ease;
@@ -1338,7 +1469,8 @@
     user-select: none;
   }
 
-  .preview :global(pre:hover .copy-btn) {
+  .preview :global(pre:hover .copy-btn),
+  .preview :global(pre .copy-btn:focus-visible) {
     opacity: 1;
   }
 
@@ -1352,6 +1484,33 @@
     color: var(--theme-color-Success-main);
     border-color: var(--theme-color-Success-dark);
     opacity: 1;
+  }
+
+  .preview :global(.mermaid-block) {
+    display: flex;
+    justify-content: center;
+    margin: 0.75em 0;
+    padding: var(--sp3);
+    background-color: var(--theme-color-Main-dark);
+    border: 1px solid color-mix(in srgb, var(--theme-color-Sub-dark) 25%, transparent);
+    border-radius: var(--shape-sm);
+    overflow-x: auto;
+  }
+
+  .preview :global(.mermaid-block svg) {
+    max-width: 100%;
+    height: auto;
+  }
+
+  .preview :global(.mermaid-block.mermaid-error) {
+    justify-content: flex-start;
+    padding: var(--sp3) var(--sp4);
+    color: var(--theme-color-Error-main);
+    background-color: color-mix(in srgb, var(--theme-color-Error-main) 8%, transparent);
+    border-color: color-mix(in srgb, var(--theme-color-Error-main) 35%, transparent);
+    font-family: monospace;
+    font-size: var(--font-body-sm);
+    white-space: pre-wrap;
   }
 
   .preview :global(blockquote) {
