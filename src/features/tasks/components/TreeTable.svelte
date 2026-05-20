@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import TreeTableHeader from "@features/tasks/components/TreeTableHeader.svelte";
   import TreeTableRow from "@features/tasks/components/TreeTableRow.svelte";
+  import BulkActionBar from "@features/tasks/components/BulkActionBar.svelte";
   import Dialog from "@lib/primitives/Dialog.svelte";
   import {
     tree_data,
@@ -29,8 +30,30 @@
     indentNode,
     outdentNode,
     cloneWithNewIds,
+    bulkUpdateNodeData,
+    bulkRemoveNodes,
+    bulkMoveUp,
+    bulkMoveDown,
+    bulkIndent,
+    bulkOutdent,
+    bulkAddNodes,
+    bulkDuplicate,
+    areAllSiblings,
+    isContiguousSiblingBlock,
+    getTopLevelSelection,
   } from "@features/tasks/utils/tree_control";
-  import { copied_task } from "@stores/ui";
+  import {
+    copied_task,
+    copied_tasks,
+    selected_ids,
+    selection_anchor_id,
+    clearSelection,
+    selectOnly,
+    toggleSelection,
+    selectRange,
+    selectAll,
+    pruneSelection,
+  } from "@stores/ui";
 
   let table_root; // Bind
 
@@ -138,6 +161,55 @@
   let showDeleteConfirm = false;
   let deleteTargetId;
   let deleteTargetName = "";
+  let bulkDeleteCount = 0;
+  let bulkDeleteIsBulk = false;
+
+  // Visible row ids excluding the project root (root is not selectable).
+  $: visibleSelectableIds = rows.filter((r) => r.id !== $tree_data?.data?.id).map((r) => r.id);
+  $: anchorRowExists = $selection_anchor_id !== undefined;
+  $: selectionSet = $selected_ids;
+  $: selectionSize = selectionSet.size;
+  $: canSiblingMove = selectionSize > 0 && isContiguousSiblingBlock($tree_data?.data, selectionSet);
+  $: canTreeOp = selectionSize > 0 && areAllSiblings($tree_data?.data, selectionSet);
+  // Outdent is permitted iff the shared parent has its own parent.
+  $: canBulkOutdent = (() => {
+    if (!canTreeOp || !$tree_data?.data) return false;
+    const anyId = selectionSet.values().next().value;
+    if (!anyId) return false;
+    const parent = getParent(anyId, $tree_data.data);
+    if (!parent) return false;
+    return !!getParent(parent.id, $tree_data.data);
+  })();
+  $: selectableCount = visibleSelectableIds.length;
+  $: selectedCount = selectionSize;
+
+  // Filter or tree-shape changes can hide previously selected rows. Prune the
+  // multi-selection by what survives the current filter (independent of expand /
+  // collapse, which we want to preserve). This also handles "node deleted from
+  // another window / undo of add" because the deleted id is no longer in the
+  // filtered tree.
+  function collectAllFilteredIds(node) {
+    if (!node) return new Set();
+    const out = new Set();
+    function visit(n) {
+      out.add(n.id);
+      for (const c of n.children ?? []) visit(c);
+    }
+    visit(node);
+    return out;
+  }
+  let lastFilterKey = "";
+  $: filteredIds = collectAllFilteredIds($filtered_data);
+  $: {
+    // Stringify the id set as a cheap change key; only re-prune when it changes.
+    const key = Array.from(filteredIds).sort().join("|");
+    if (key !== lastFilterKey) {
+      lastFilterKey = key;
+      if (selectionSize > 0) {
+        pruneSelection(filteredIds);
+      }
+    }
+  }
 
   onMount(() => {
     let domHeaders, data_rows;
@@ -428,7 +500,44 @@
   };
 
   function handleSelectRow(event) {
-    $table_selected_id = event.detail.id;
+    const { id, shiftKey, ctrlKey } = event.detail;
+    if (shiftKey && $selection_anchor_id) {
+      selectRange(
+        id,
+        rows.map((r) => r.id)
+      );
+    } else if (ctrlKey) {
+      toggleSelection(id);
+    } else {
+      selectOnly(id);
+    }
+  }
+
+  function handleToggleCheckbox(event) {
+    const { id, shiftKey, ctrlKey } = event.detail;
+    if (shiftKey && $selection_anchor_id) {
+      selectRange(
+        id,
+        rows.map((r) => r.id)
+      );
+    } else if (ctrlKey) {
+      toggleSelection(id);
+    } else {
+      // Checkbox click is always additive — never collapses the selection.
+      toggleSelection(id);
+    }
+  }
+
+  function handleHeaderSelectAll() {
+    selectAll(visibleSelectableIds);
+  }
+
+  function handleHeaderClearSelection() {
+    clearSelection();
+  }
+
+  function handleBackgroundClick() {
+    if (selectionSize > 0) clearSelection();
   }
 
   function handleScroll(event) {
@@ -468,17 +577,46 @@
   }
 
   function handleReorder(event) {
-    const { draggedId, targetId, mode } = event.detail;
-    if (!canDropTarget(draggedId, targetId)) {
+    const { draggedIds, targetId, mode } = event.detail;
+    if (!draggedIds || draggedIds.length === 0) return;
+    if (!$tree_data?.data) return;
+
+    // Reject if any dragged id can't drop on target.
+    if (!draggedIds.every((id) => canDropTarget(id, targetId))) {
       return;
     }
 
-    const data = reorderTree(draggedId, targetId, $tree_data.data, mode);
-    $tree_data = { ...$tree_data, data };
+    if (draggedIds.length === 1) {
+      const data = reorderTree(draggedIds[0], targetId, $tree_data.data, mode);
+      $tree_data = { ...$tree_data, data };
+    } else {
+      // Multi-row D&D: collapse to top-level ancestors, capture node references,
+      // remove them from the tree, then insert at target in original DFS order.
+      const topLevelIds = getTopLevelSelection($tree_data.data, new Set(draggedIds));
+      const draggedNodes = topLevelIds.map((id) => getNode(id, $tree_data.data)).filter((n) => n);
+      if (draggedNodes.length === 0) return;
+
+      let data = bulkRemoveNodes($tree_data.data, new Set(topLevelIds));
+      if (!data) return;
+      data = bulkAddNodes(draggedNodes, targetId, data, mode);
+      $tree_data = { ...$tree_data, data };
+    }
+
+    if (mode === "append" && $closed_node_ids.has(targetId)) {
+      closed_node_ids.delete(targetId);
+    }
+  }
+
+  function isInMultiSelection(id) {
+    return selectionSize > 1 && $selected_ids.has(id);
   }
 
   function handleMoveUp(event) {
     const { id } = event.detail;
+    if (isInMultiSelection(id)) {
+      handleBulkMoveUp();
+      return;
+    }
     const row = rows.find((item) => item.id === id);
     if (!row?.canMoveUp) {
       return;
@@ -490,6 +628,10 @@
 
   function handleMoveDown(event) {
     const { id } = event.detail;
+    if (isInMultiSelection(id)) {
+      handleBulkMoveDown();
+      return;
+    }
     const row = rows.find((item) => item.id === id);
     if (!row?.canMoveDown) {
       return;
@@ -501,6 +643,10 @@
 
   function handleIndentTask(event) {
     const { id } = event.detail;
+    if (isInMultiSelection(id)) {
+      handleBulkIndent();
+      return;
+    }
     const row = rows.find((item) => item.id === id);
     const parentNode = getParent(id, $tree_data.data);
     const currentIndex = parentNode?.children.findIndex((child) => child.id === id) ?? -1;
@@ -520,6 +666,10 @@
 
   function handleOutdentTask(event) {
     const { id } = event.detail;
+    if (isInMultiSelection(id)) {
+      handleBulkOutdent();
+      return;
+    }
     const row = rows.find((item) => item.id === id);
     if (!row?.canOutdent) {
       return;
@@ -581,18 +731,115 @@
   function handleCopyTask(event) {
     const { id } = event.detail;
     if (!id || !$tree_data?.data) return;
+    if (isInMultiSelection(id)) {
+      const topIds = getTopLevelSelection($tree_data.data, selectionSet);
+      const topNodes = topIds.map((tid) => getNode(tid, $tree_data.data)).filter((n) => n);
+      $copied_tasks = topNodes;
+      $copied_task = topNodes[0] ?? null;
+      return;
+    }
     const node = getNode(id, $tree_data.data);
-    if (node) $copied_task = node;
+    if (node) {
+      $copied_task = node;
+      $copied_tasks = [node];
+    }
   }
 
   function handlePasteTask(event) {
     const { id } = event.detail;
-    if (!id || !$tree_data?.data || !$copied_task) return;
-    const cloned = cloneWithNewIds($copied_task);
+    if (!id || !$tree_data?.data) return;
+    if ($copied_tasks && $copied_tasks.length > 1) {
+      const cloned = $copied_tasks.map((n) => cloneWithNewIds(n));
+      const data = bulkAddNodes(cloned, id, $tree_data.data, "append");
+      $tree_data = { ...$tree_data, data };
+      if ($closed_node_ids.has(id)) closed_node_ids.delete(id);
+      if (cloned[0]) focusNewNode(cloned[0].id);
+      return;
+    }
+    const source = $copied_task ?? $copied_tasks?.[0] ?? null;
+    if (!source) return;
+    const cloned = cloneWithNewIds(source);
     const data = addNode(cloned, id, $tree_data.data, "append");
     $tree_data = { ...$tree_data, data };
     if ($closed_node_ids.has(id)) closed_node_ids.delete(id);
     focusNewNode(cloned.id);
+  }
+
+  // --- Bulk operation handlers ---------------------------------------------
+
+  function handleBulkStatus(event) {
+    if (!$tree_data?.data || selectionSize === 0) return;
+    const { value } = event.detail;
+    const data = bulkUpdateNodeData($tree_data.data, selectionSet, { status: value });
+    if (data && data !== $tree_data.data) {
+      $tree_data = { ...$tree_data, data };
+    }
+  }
+
+  function handleBulkSetDate(event) {
+    if (!$tree_data?.data || selectionSize === 0) return;
+    const { key, value } = event.detail;
+    const data = bulkUpdateNodeData($tree_data.data, selectionSet, { [key]: value });
+    if (data && data !== $tree_data.data) {
+      $tree_data = { ...$tree_data, data };
+    }
+  }
+
+  function handleBulkClearDate(event) {
+    if (!$tree_data?.data || selectionSize === 0) return;
+    const { key } = event.detail;
+    const data = bulkUpdateNodeData($tree_data.data, selectionSet, { [key]: undefined });
+    if (data && data !== $tree_data.data) {
+      $tree_data = { ...$tree_data, data };
+    }
+  }
+
+  function handleBulkMoveUp() {
+    if (!$tree_data?.data || !canSiblingMove) return;
+    const data = bulkMoveUp(selectionSet, $tree_data.data);
+    $tree_data = { ...$tree_data, data };
+  }
+
+  function handleBulkMoveDown() {
+    if (!$tree_data?.data || !canSiblingMove) return;
+    const data = bulkMoveDown(selectionSet, $tree_data.data);
+    $tree_data = { ...$tree_data, data };
+  }
+
+  function handleBulkIndent() {
+    if (!$tree_data?.data || !canTreeOp) return;
+    const { tree_data: data, new_parent_ids } = bulkIndent(selectionSet, $tree_data.data);
+    $tree_data = { ...$tree_data, data };
+    for (const pid of new_parent_ids) {
+      if ($closed_node_ids.has(pid)) closed_node_ids.delete(pid);
+    }
+  }
+
+  function handleBulkOutdent() {
+    if (!$tree_data?.data || !canTreeOp || !canBulkOutdent) return;
+    const data = bulkOutdent(selectionSet, $tree_data.data);
+    $tree_data = { ...$tree_data, data };
+  }
+
+  function handleBulkDuplicate() {
+    if (!$tree_data?.data || selectionSize === 0) return;
+    const topLevelIds = getTopLevelSelection($tree_data.data, selectionSet);
+    const topNodes = topLevelIds.map((id) => getNode(id, $tree_data.data)).filter((n) => n);
+    if (topNodes.length === 0) return;
+    $copied_tasks = topNodes;
+    $copied_task = topNodes[0] ?? null;
+  }
+
+  function handleBulkDelete() {
+    if (!$tree_data?.data || selectionSize === 0) return;
+    const rootId = $tree_data.data.id;
+    const targetIds = Array.from(selectionSet).filter((id) => id !== rootId);
+    if (targetIds.length === 0) return;
+    bulkDeleteCount = targetIds.length;
+    bulkDeleteIsBulk = true;
+    deleteTargetId = undefined;
+    deleteTargetName = "";
+    showDeleteConfirm = true;
   }
 
   function isEditingText() {
@@ -601,11 +848,37 @@
   }
 
   function handleGlobalKeydown(e) {
-    if (!$table_selected_id || isEditingText()) return;
-    if ((e.ctrlKey || e.metaKey) && e.key === "c") {
+    if (isEditingText()) return;
+    // Selection-aware shortcuts (Esc / Ctrl+A / Delete) act on the multi-selection.
+    if (e.key === "Escape") {
+      if (selectionSize > 0) {
+        e.preventDefault();
+        clearSelection();
+      }
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && (e.key === "a" || e.key === "A")) {
       e.preventDefault();
-      handleCopyTask({ detail: { id: $table_selected_id } });
-    } else if ((e.ctrlKey || e.metaKey) && e.key === "v") {
+      selectAll(visibleSelectableIds);
+      return;
+    }
+    if ((e.key === "Delete" || e.key === "Backspace") && selectionSize > 0) {
+      e.preventDefault();
+      handleBulkDelete();
+      return;
+    }
+    if (!$table_selected_id) return;
+    if ((e.ctrlKey || e.metaKey) && (e.key === "c" || e.key === "C")) {
+      e.preventDefault();
+      if (selectionSize > 1 && $tree_data?.data) {
+        const topLevelIds = getTopLevelSelection($tree_data.data, selectionSet);
+        const topNodes = topLevelIds.map((id) => getNode(id, $tree_data.data)).filter((n) => n);
+        $copied_tasks = topNodes;
+        $copied_task = topNodes[0] ?? null;
+      } else {
+        handleCopyTask({ detail: { id: $table_selected_id } });
+      }
+    } else if ((e.ctrlKey || e.metaKey) && (e.key === "v" || e.key === "V")) {
       e.preventDefault();
       handlePasteTask({ detail: { id: $table_selected_id } });
     }
@@ -613,6 +886,10 @@
 
   function requestDelete(event) {
     const { id } = event.detail;
+    if (isInMultiSelection(id)) {
+      handleBulkDelete();
+      return;
+    }
     const node = getNode(id, $tree_data.data);
     if (!node || node.id === $tree_data.data.id) {
       return;
@@ -620,14 +897,34 @@
 
     deleteTargetId = id;
     deleteTargetName = node.data.name;
+    bulkDeleteIsBulk = false;
+    bulkDeleteCount = 0;
     showDeleteConfirm = true;
   }
 
   function toggleDeleteConfirm() {
     showDeleteConfirm = !showDeleteConfirm;
+    if (!showDeleteConfirm) {
+      bulkDeleteIsBulk = false;
+      bulkDeleteCount = 0;
+    }
   }
 
   function confirmDelete() {
+    if (bulkDeleteIsBulk) {
+      if (!$tree_data?.data || selectionSize === 0) return;
+      const rootId = $tree_data.data.id;
+      const targets = new Set(Array.from(selectionSet).filter((id) => id !== rootId));
+      if (targets.size === 0) return;
+      const data = bulkRemoveNodes($tree_data.data, targets);
+      if (data && data !== $tree_data.data) {
+        $tree_data = { ...$tree_data, data };
+      }
+      clearSelection();
+      bulkDeleteIsBulk = false;
+      bulkDeleteCount = 0;
+      return;
+    }
     if (!deleteTargetId) {
       return;
     }
@@ -650,9 +947,22 @@
   style="--minWidth: {minWidth}"
   role="treegrid"
   aria-label="Task tree"
+  aria-multiselectable="true"
+  tabindex="-1"
   on:scroll={handleScroll}
+  on:click|self={handleBackgroundClick}
+  on:keydown|self={(e) => {
+    if (e.key === "Escape") handleBackgroundClick();
+  }}
 >
-  <TreeTableHeader headers={visibleHeaders} {allHeaders} />
+  <TreeTableHeader
+    headers={visibleHeaders}
+    {allHeaders}
+    {selectedCount}
+    {selectableCount}
+    on:selectAll={handleHeaderSelectAll}
+    on:clearSelection={handleHeaderClearSelection}
+  />
   {#if stickyTrail.length > 0}
     <div class="StickyTrail" aria-hidden="true">
       <div class="StickyTrailContent">
@@ -675,16 +985,22 @@
       <TreeTableRow
         {row}
         headers={visibleHeaders}
-        selected={$table_selected_id === row.id}
+        selected={$selected_ids.has(row.id)}
+        isAnchor={$selection_anchor_id === row.id}
+        anyMultiSelected={selectionSize > 1}
         {isDark}
         canDrop={canDropTarget}
         canMoveUp={row.canMoveUp}
         canMoveDown={row.canMoveDown}
         canIndent={row.canIndent}
         canOutdent={row.canOutdent}
+        bulkCanMove={canSiblingMove}
+        bulkCanTreeOp={canTreeOp}
+        bulkCanOutdent={canBulkOutdent}
         inheritedDueDate={inheritedDueDateMap.get(row.id) ?? ""}
         nodePath={nodePathMap.get(row.id) ?? ""}
         on:select={handleSelectRow}
+        on:toggleCheckbox={handleToggleCheckbox}
         on:toggle={handleToggleRow}
         on:commit={handleCommit}
         on:reorder={handleReorder}
@@ -740,8 +1056,19 @@
   show={showDeleteConfirm}
   toggle={toggleDeleteConfirm}
   header="Confirm."
-  content={`Do you really delete "${deleteTargetName}"?\nThis may delete child nodes.`}
+  content={bulkDeleteIsBulk
+    ? `選択中の ${bulkDeleteCount} 件を削除しますか？\n子タスクも一緒に削除されます。`
+    : `Do you really delete "${deleteTargetName}"?\nThis may delete child nodes.`}
   callback={confirmDelete}
+/>
+
+<BulkActionBar
+  count={selectionSize}
+  on:bulkStatus={handleBulkStatus}
+  on:bulkSetDate={handleBulkSetDate}
+  on:bulkClearDate={handleBulkClearDate}
+  on:bulkCopy={handleBulkDuplicate}
+  on:clearSelection={() => clearSelection()}
 />
 
 <style>

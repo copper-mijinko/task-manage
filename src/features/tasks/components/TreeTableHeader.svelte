@@ -17,8 +17,32 @@
   import NameFilterPanel from "@features/search/components/NameFilterPanel.svelte";
   import StatusFilterPanel from "@features/search/components/StatusFilterPanel.svelte";
 
+  import { createEventDispatcher } from "svelte";
+  const headerSelectionDispatch = createEventDispatcher();
+
   export let headers;
   export let allHeaders = [];
+  /** Number of selected rows. Drives header checkbox state (unchecked / indeterminate / checked). */
+  export let selectedCount = 0;
+  /** Number of selectable visible rows (excluding root). */
+  export let selectableCount = 0;
+
+  $: headerChecked = selectableCount > 0 && selectedCount >= selectableCount;
+  $: headerIndeterminate = selectedCount > 0 && selectedCount < selectableCount;
+  $: headerCheckboxLabel = headerChecked || headerIndeterminate ? "選択を解除" : "すべて選択";
+
+  let headerCheckboxEl;
+  $: if (headerCheckboxEl) headerCheckboxEl.indeterminate = headerIndeterminate;
+
+  function onHeaderCheckboxClick(e) {
+    e.stopPropagation();
+    // unchecked → select all; indeterminate or checked → clear.
+    if (headerChecked || headerIndeterminate) {
+      headerSelectionDispatch("clearSelection");
+    } else {
+      headerSelectionDispatch("selectAll");
+    }
+  }
 
   const STATUS_OPTIONS = ["Open", "Pending", "In Progress", "Completed", "Canceled"];
   const EMPTY_FILTER_LABEL = "No filter";
@@ -266,6 +290,17 @@
 </script>
 
 <div class:TableRow={true} role="row">
+  <div class="CheckboxHeaderCell" role="columnheader">
+    <input
+      bind:this={headerCheckboxEl}
+      type="checkbox"
+      class="HeaderCheckbox"
+      checked={headerChecked}
+      aria-label={headerCheckboxLabel}
+      title={headerCheckboxLabel}
+      on:click={onHeaderCheckboxClick}
+    />
+  </div>
   {#each headers as header}
     <div class:TableHeader={true} role="columnheader">
       <div class="HeaderLabelRow" class:sortActive={$sort_state?.column === header.name}>
@@ -792,6 +827,24 @@
   }
   .TableHeader:first-of-type {
     border-left: 0;
+  }
+  .CheckboxHeaderCell {
+    flex: 0 0 1.75rem;
+    width: 1.75rem;
+    height: 3rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--header-bg);
+    border-right: 1px solid var(--header-border);
+    border-bottom: 1px solid var(--header-border);
+  }
+  .HeaderCheckbox {
+    width: 0.95rem;
+    height: 0.95rem;
+    margin: 0;
+    cursor: pointer;
+    accent-color: var(--theme-color-Primary-dark);
   }
   .TextOverFlow {
     text-overflow: ellipsis;

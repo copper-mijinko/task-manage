@@ -17,6 +17,8 @@ import {
   pendingTaskDetailSelection,
   clearPendingTaskDetailSelection,
   saveStatus,
+  selected_ids,
+  selection_anchor_id,
 } from "@stores/ui";
 import {
   workspace_store,
@@ -168,6 +170,37 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
               return newState;
             });
           }
+
+          // Prune multi-selection when nodes disappear (delete, undo of add, etc.).
+          const removedSet = new Set(removedIds);
+          selected_ids.update((currentState) => {
+            if (currentState.size === 0) return currentState;
+            let changed = false;
+            const newState = new Set<string>();
+            for (const id of currentState) {
+              if (removedSet.has(id)) {
+                changed = true;
+              } else {
+                newState.add(id);
+              }
+            }
+            if (!changed) return currentState;
+            // If anchor is gone, re-pick from remaining or clear.
+            const currentAnchor = get(selection_anchor_id);
+            if (currentAnchor !== undefined && removedSet.has(currentAnchor)) {
+              const first = newState.values().next();
+              selection_anchor_id.set(first.done ? undefined : (first.value as string));
+            }
+            if (newState.size === 0) {
+              table_selected_id.set(undefined);
+            } else if (newState.size === 1) {
+              table_selected_id.set(newState.values().next().value as string);
+            } else {
+              const anchor = get(selection_anchor_id);
+              if (anchor !== undefined) table_selected_id.set(anchor);
+            }
+            return newState;
+          });
         }
       }
 

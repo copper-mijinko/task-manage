@@ -1,10 +1,16 @@
 ﻿<script context="module">
-  let dragged_id;
+  // Multi-id drag payload. For a single-row drag this contains exactly one id;
+  // for a multi-select drag it contains the top-level selected ancestors in DFS
+  // order. Shared module state so dragOver/drop can see what's being dragged.
+  let dragged_ids = [];
 </script>
 
 <script>
   import { createEventDispatcher } from "svelte";
   import { selected_id } from "@stores";
+  import { selected_ids } from "@stores/ui";
+  import { tree_data } from "@features/tasks/stores/tree";
+  import { getNode, getTopLevelSelection } from "@features/tasks/utils/tree_control";
   import { ripple } from "@lib/actions";
   import * as platform from "@lib/ipc/platform";
   import TaskName from "@features/tasks/components/TaskName.svelte";
@@ -14,6 +20,8 @@
   export let row;
   export let headers = [];
   export let selected = false;
+  export let isAnchor = false;
+  export let anyMultiSelected = false;
   export let isDark = false;
   export let canDrop = () => false;
   export let canMoveUp = false;
@@ -22,6 +30,10 @@
   export let canOutdent = false;
   export let inheritedDueDate = "";
   export let nodePath = "";
+  // Capabilities for bulk operations (used when this row is part of multi-selection).
+  export let bulkCanMove = false;
+  export let bulkCanTreeOp = false;
+  export let bulkCanOutdent = false;
 
   const dispatch = createEventDispatcher();
   let taskName;
@@ -32,6 +44,16 @@
   $: data = node.data;
   $: hasChildren = row.hasChildren;
   $: expanded = row.expanded;
+
+  // When this row is part of an active multi-selection, the right-click menu
+  // routes actions to the bulk handlers. Use bulk capability flags so the menu
+  // accurately reflects what the bulk handler can actually do.
+  $: inMulti = selected && anyMultiSelected;
+  $: effectiveCanMoveUp = inMulti ? bulkCanMove : canMoveUp;
+  $: effectiveCanMoveDown = inMulti ? bulkCanMove : canMoveDown;
+  $: effectiveCanIndent = inMulti ? bulkCanTreeOp : canIndent;
+  $: effectiveCanOutdent = inMulti ? bulkCanTreeOp && bulkCanOutdent : canOutdent;
+  $: selectionCountForMenu = inMulti ? $selected_ids.size : 1;
 
   let dragOverType;
   let isDragging = false;
@@ -52,7 +74,20 @@
 
   function select(e) {
     e.stopPropagation();
-    dispatch("select", { id });
+    dispatch("select", {
+      id,
+      shiftKey: !!e.shiftKey,
+      ctrlKey: !!(e.ctrlKey || e.metaKey),
+    });
+  }
+
+  function toggleCheckbox(e) {
+    e.stopPropagation();
+    dispatch("toggleCheckbox", {
+      id,
+      shiftKey: !!e.shiftKey,
+      ctrlKey: !!(e.ctrlKey || e.metaKey),
+    });
   }
 
   function toggle(e) {
@@ -80,15 +115,22 @@
   function dragStart(e) {
     isDragging = true;
 
+    // Multi-row drag: only when this row is part of an existing multi-selection.
+    // Otherwise it's a single-row drag (and the selection is left alone).
+    const treeRoot = $tree_data?.data;
+    if (treeRoot && $selected_ids.has(id) && $selected_ids.size > 1) {
+      dragged_ids = getTopLevelSelection(treeRoot, $selected_ids);
+    } else {
+      dragged_ids = [id];
+    }
+
     const name_tag = document.createElement("div");
     name_tag.classList.add("NameTag");
-    name_tag.innerText = data.name;
+    name_tag.innerText = dragged_ids.length > 1 ? `${dragged_ids.length}件のタスク` : data.name;
     document.body.appendChild(name_tag);
 
     const rem = parseFloat(window.getComputedStyle(document.documentElement).fontSize);
     e.dataTransfer.setDragImage(name_tag, -rem, -rem);
-
-    dragged_id = id;
   }
 
   function dragEnd() {
@@ -100,7 +142,7 @@
   function dragOver(e) {
     e.preventDefault();
 
-    if (!canDrop(dragged_id, id)) {
+    if (dragged_ids.length === 0 || !dragged_ids.every((did) => canDrop(did, id))) {
       dragOverType = undefined;
       return;
     }
@@ -126,7 +168,7 @@
   }
 
   function dragDrop() {
-    if (!dragged_id || !dragOverType) {
+    if (dragged_ids.length === 0 || !dragOverType) {
       return;
     }
 
@@ -136,19 +178,23 @@
     else mode = "append";
 
     dispatch("reorder", {
-      draggedId: dragged_id,
+      draggedIds: [...dragged_ids],
       targetId: id,
       mode,
     });
 
     dragOverType = undefined;
-    dragged_id = undefined;
+    dragged_ids = [];
   }
 
   function openContextMenu(e) {
     e.preventDefault();
     e.stopPropagation();
-    select(e);
+    // If this row is part of an existing multi-selection, keep the selection
+    // intact and let the menu act on the whole set. Otherwise reduce to this row.
+    if (!$selected_ids.has(id)) {
+      dispatch("select", { id, shiftKey: false, ctrlKey: false });
+    }
     taskName?.openMenuAt({
       x: e.clientX,
       y: e.clientY,
@@ -161,6 +207,7 @@
   role="row"
   class:TableRow={true}
   class:Selected={selected}
+  class:Anchor={isAnchor && anyMultiSelected}
   class:Dragging={isDragging}
   class:MenuOpen={isMenuOpen}
   class:DragOverTop={dragOverType === "DragOverTop"}
@@ -188,6 +235,28 @@
   on:drop={dragDrop}
   on:contextmenu={openContextMenu}
 >
+  <div
+    class="CheckboxCell"
+    class:Visible={selected || anyMultiSelected}
+    role="gridcell"
+    tabindex="-1"
+    draggable="false"
+    on:click|stopPropagation
+    on:keydown|stopPropagation
+    on:dragstart|preventDefault|stopPropagation
+  >
+    {#if depth > 0}
+      <input
+        type="checkbox"
+        class="RowCheckbox"
+        checked={selected}
+        aria-label="タスクを選択"
+        tabindex="-1"
+        on:click={toggleCheckbox}
+        on:keydown|stopPropagation
+      />
+    {/if}
+  </div>
   {#each headers as header, i}
     <div class:TableData={true} role="gridcell" style:z-index={i + 100}>
       {#if header.name == "name"}
@@ -226,10 +295,11 @@
           {hasChildren}
           {expanded}
           isRoot={depth === 0}
-          {canMoveUp}
-          {canMoveDown}
-          {canIndent}
-          {canOutdent}
+          canMoveUp={effectiveCanMoveUp}
+          canMoveDown={effectiveCanMoveDown}
+          canIndent={effectiveCanIndent}
+          canOutdent={effectiveCanOutdent}
+          selectionCount={selectionCountForMenu}
           {nodePath}
           on:commit={(e) => {
             commitData("name", e.detail.value);
@@ -446,6 +516,32 @@
     background-color: var(--theme-color-Primary-main);
     z-index: 999;
     pointer-events: none;
+  }
+  .TableRow.Anchor::after {
+    background-color: var(--theme-color-Primary-dark);
+    width: 0.3rem;
+  }
+  .CheckboxCell {
+    flex: 0 0 1.75rem;
+    width: 1.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    visibility: hidden;
+    background-color: var(--backgroundColor);
+    border-right: 1px solid var(--theme-color-Main-dark);
+  }
+  .TableRow:hover .CheckboxCell,
+  .CheckboxCell.Visible {
+    visibility: visible;
+  }
+  .RowCheckbox {
+    width: 0.95rem;
+    height: 0.95rem;
+    margin: 0;
+    cursor: pointer;
+    accent-color: var(--theme-color-Primary-dark);
   }
   .TableData {
     display: flex;

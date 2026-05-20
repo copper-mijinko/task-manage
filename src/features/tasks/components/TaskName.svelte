@@ -3,7 +3,7 @@
   import { ripple, tooltip } from "@lib/actions";
   import TaskMenu from "@features/tasks/components/TaskMenu.svelte";
   import { pageSearchQuery } from "@features/search/stores/search";
-  import { copied_task } from "@stores/ui";
+  import { copied_task, copied_tasks } from "@stores/ui";
   import { activePanelId } from "@stores/panel_coordinator";
 
   export let text;
@@ -17,6 +17,9 @@
   export let canIndent = false;
   export let canOutdent = false;
   export let nodePath = "";
+  /** When >1, the menu acts on the whole multi-selection (label gets count prefix). */
+  export let selectionCount = 1;
+  $: countPrefix = selectionCount > 1 ? `${selectionCount}件 ` : "";
   let draftText = text ?? "";
   let input;
   let isEditing = false;
@@ -35,25 +38,29 @@
     return result;
   }
 
+  $: isMulti = selectionCount > 1;
+
   $: menuItems = withSeparators([
-    // 1. Rename
+    // 1. Rename — anchor-only; disabled in multi-select.
     [
       {
         title: "rename",
         action: "rename",
+        disabled: isMulti,
         icon: {
           viewBox: "-4 -4 32 32",
           path: "M18.111,2.293,9.384,11.021a.977.977,0,0,0-.241.39L8.052,14.684A1,1,0,0,0,9,16a.987.987,0,0,0,.316-.052l3.273-1.091a.977.977,0,0,0,.39-.241l8.728-8.727a1,1,0,0,0,0-1.414L19.525,2.293A1,1,0,0,0,18.111,2.293Z",
         },
       },
     ],
-    // 2. Add
+    // 2. Add — anchor-only; disabled in multi-select.
     [
       ...(!isRoot
         ? [
             {
               title: "add task below",
               action: "addBelow",
+              disabled: isMulti,
               icon: {
                 viewBox: "0 0 24 24",
                 path: "M12 5V19M5 12H19",
@@ -64,18 +71,20 @@
       {
         title: "add child task",
         action: "addChild",
+        disabled: isMulti,
         icon: {
           viewBox: "0 0 24 24",
           path: "M5 5V14H15M11 10L15 14L11 18M19 5V9M17 7H21",
         },
       },
     ],
-    // 3. Clipboard
+    // 3. Clipboard — copy is bulk-aware; paste pastes the clipboard at the
+    // clicked row (works for both single and multi clipboards).
     [
       ...(!isRoot
         ? [
             {
-              title: "copy",
+              title: isMulti ? `${countPrefix}コピー` : "copy",
               action: "copyTask",
               icon: {
                 viewBox: "0 0 24 24",
@@ -87,19 +96,20 @@
       {
         title: "paste as child",
         action: "pasteTask",
-        disabled: $copied_task === null,
+        disabled: $copied_task === null && $copied_tasks.length === 0,
         icon: {
           viewBox: "0 0 24 24",
           path: "M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2",
         },
       },
     ],
-    // 4. Expand/collapse
+    // 4. Expand/collapse — single-row only; disabled in multi.
     hasChildren
       ? [
           {
             title: expanded ? "collapse" : "expand",
             action: "toggleExpand",
+            disabled: isMulti,
             icon: {
               viewBox: "0 0 24 24",
               path: expanded ? "M6 9L12 15L18 9" : "M9 6L15 12L9 18",
@@ -107,10 +117,10 @@
           },
         ]
       : [],
-    // 5. Move
+    // 5. Move — bulk-aware when the row is part of the multi-selection.
     [
       {
-        title: "move up",
+        title: `${countPrefix}move up`,
         action: "moveUp",
         disabled: !canMoveUp,
         icon: {
@@ -119,7 +129,7 @@
         },
       },
       {
-        title: "move down",
+        title: `${countPrefix}move down`,
         action: "moveDown",
         disabled: !canMoveDown,
         icon: {
@@ -128,7 +138,7 @@
         },
       },
       {
-        title: "move right",
+        title: `${countPrefix}move right`,
         action: "indentTask",
         disabled: !canIndent,
         icon: {
@@ -137,7 +147,7 @@
         },
       },
       {
-        title: "move left",
+        title: `${countPrefix}move left`,
         action: "outdentTask",
         disabled: !canOutdent,
         icon: {
@@ -146,22 +156,23 @@
         },
       },
     ],
-    // 6. Detail
+    // 6. Detail — anchor-only; disabled in multi.
     [
       {
         title: "show details",
         action: "openTaskDetailWindow",
+        disabled: isMulti,
         icon: {
           viewBox: "0 0 24 24",
           path: "M12 4C7 4 2.73 7.11 1 12c1.73 4.89 6 8 11 8s9.27-3.11 11-8c-1.73-4.89-6-8-11-8Zm0 13a5 5 0 1 1 0-10 5 5 0 0 1 0 10Zm0-8.2A3.2 3.2 0 1 0 12 15.2 3.2 3.2 0 0 0 12 8.8Z",
         },
       },
     ],
-    // 7. Delete
+    // 7. Delete — bulk-aware when the row is part of the multi-selection.
     !isRoot
       ? [
           {
-            title: "delete task",
+            title: `${countPrefix}delete`,
             action: "deleteTask",
             icon: {
               viewBox: "0 0 48 48",
@@ -430,6 +441,8 @@
     on:outdentTask={handleMenuAction}
     on:openTaskDetailWindow={handleMenuAction}
     on:deleteTask={handleMenuAction}
+    on:copyTask={handleMenuAction}
+    on:pasteTask={handleMenuAction}
     on:close={closeMenu}
   />
 </div>
