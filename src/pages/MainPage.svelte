@@ -27,9 +27,17 @@
     moveNodeDown,
     indentNode,
     outdentNode,
+    bulkRemoveNodes,
+    bulkMoveUp,
+    bulkMoveDown,
+    bulkIndent,
+    bulkOutdent,
+    areAllSiblings,
+    isContiguousSiblingBlock,
   } from "@features/tasks/utils/tree_control";
   import { getDefaultNode } from "@features/tasks/utils/tree_control";
   import { undoHistory, redoHistory } from "@features/tasks/stores/tree";
+  import { selected_ids, clearSelection } from "@stores/ui";
 
   // ページ内検索はstoresから共有
 
@@ -37,12 +45,47 @@
   let show_confirm = false;
   const toggle_confirm = () => {
     show_confirm = !show_confirm;
+    if (!show_confirm) {
+      is_bulk_confirm = false;
+      bulk_confirm_count = 0;
+    }
   };
   let name_confirm = "";
+  let is_bulk_confirm = false;
+  let bulk_confirm_count = 0;
   const callback_confirm = () => {
+    if (is_bulk_confirm) {
+      if (!$tree_data?.data) return;
+      const rootId = $tree_data.data.id;
+      const targets = new Set(Array.from($selected_ids).filter((id) => id !== rootId));
+      if (targets.size === 0) return;
+      const data = bulkRemoveNodes($tree_data.data, targets);
+      if (data && data !== $tree_data.data) {
+        $tree_data = { ...$tree_data, data };
+      }
+      clearSelection();
+      is_bulk_confirm = false;
+      bulk_confirm_count = 0;
+      return;
+    }
     $tree_data.data = rmNode($table_selected_id, $tree_data.data);
     $table_selected_id = undefined;
   };
+
+  // Reactive bulk-capability flags for the toolbar buttons.
+  $: selectionSize = $selected_ids.size;
+  $: isMultiSelect = selectionSize > 1;
+  $: canMultiSiblingMove =
+    isMultiSelect && isContiguousSiblingBlock($tree_data?.data, $selected_ids);
+  $: canMultiTreeOp = isMultiSelect && areAllSiblings($tree_data?.data, $selected_ids);
+  $: canMultiOutdent = (() => {
+    if (!canMultiTreeOp || !$tree_data?.data) return false;
+    const anyId = $selected_ids.values().next().value;
+    if (!anyId) return false;
+    const parent = getParent(anyId, $tree_data.data);
+    if (!parent) return false;
+    return !!getParent(parent.id, $tree_data.data);
+  })();
 
   let show_alert = false;
   let alert_content = "Cannot delete the root node.";
@@ -249,9 +292,24 @@
     }
   }
 
-  // Remove
+  // Remove — routes to bulk delete when multiple rows are selected.
   export function handleRemove(e) {
     e.stopPropagation();
+    if (!$tree_data?.data) return;
+    if (isMultiSelect) {
+      const rootId = $tree_data.data.id;
+      const targets = Array.from($selected_ids).filter((id) => id !== rootId);
+      if (targets.length === 0) {
+        alert_content = "Cannot delete the root node.";
+        show_alert = true;
+        return;
+      }
+      is_bulk_confirm = true;
+      bulk_confirm_count = targets.length;
+      name_confirm = "";
+      show_confirm = true;
+      return;
+    }
     if ($table_selected_id) {
       const node = getNode($table_selected_id, $tree_data.data);
       if (node && node.id == $tree_data.data.id) {
@@ -260,6 +318,8 @@
         return;
       }
       if (node) {
+        is_bulk_confirm = false;
+        bulk_confirm_count = 0;
         show_confirm = true;
         name_confirm = node.data.name;
       }
@@ -275,21 +335,55 @@
     updater(target, $tree_data.data);
     $tree_data = { ...$tree_data, data: $tree_data.data };
   }
+  // Bulk dispatcher for the move/indent/outdent toolbar buttons.
+  // When multiple rows are selected, route to the bulk helper; otherwise
+  // fall back to the single-row helper acting on $table_selected_id.
+  function runBulkOrSingle({ bulk, single, gate }) {
+    if (!$tree_data?.data) return;
+    if (isMultiSelect) {
+      if (gate && !gate()) return;
+      bulk($selected_ids, $tree_data.data);
+      $tree_data = { ...$tree_data, data: $tree_data.data };
+      return;
+    }
+    withSelectedNode(single);
+  }
   const handleMoveUp = (e) => {
     e?.stopPropagation?.();
-    withSelectedNode(moveNodeUp);
+    runBulkOrSingle({
+      bulk: bulkMoveUp,
+      single: moveNodeUp,
+      gate: () => canMultiSiblingMove,
+    });
   };
   const handleMoveDown = (e) => {
     e?.stopPropagation?.();
-    withSelectedNode(moveNodeDown);
+    runBulkOrSingle({
+      bulk: bulkMoveDown,
+      single: moveNodeDown,
+      gate: () => canMultiSiblingMove,
+    });
   };
   const handleIndent = (e) => {
     e?.stopPropagation?.();
+    if (isMultiSelect) {
+      if (!canMultiTreeOp || !$tree_data?.data) return;
+      const { new_parent_ids } = bulkIndent($selected_ids, $tree_data.data);
+      $tree_data = { ...$tree_data, data: $tree_data.data };
+      for (const pid of new_parent_ids) {
+        if ($closed_node_ids.has(pid)) closed_node_ids.delete(pid);
+      }
+      return;
+    }
     withSelectedNode(indentNode);
   };
   const handleOutdent = (e) => {
     e?.stopPropagation?.();
-    withSelectedNode(outdentNode);
+    runBulkOrSingle({
+      bulk: bulkOutdent,
+      single: outdentNode,
+      gate: () => canMultiTreeOp && canMultiOutdent,
+    });
   };
   const handleExpandAll = () => closed_node_ids.expandAll();
   const handleCollapseAll = () => closed_node_ids.collapseAll();
@@ -352,8 +446,8 @@
                 </svg>
               </IconButton>
               <IconButton
-                tooltipContent="削除"
-                ariaLabel="削除"
+                tooltipContent={isMultiSelect ? `${selectionSize}件削除` : "削除"}
+                ariaLabel={isMultiSelect ? `${selectionSize}件削除` : "削除"}
                 variant="text"
                 activeColor={"var(--theme-color-Error-main)"}
                 normalColor={"var(--theme-color-Error-main)"}
@@ -375,11 +469,16 @@
             <!-- Group 2: Move / Indent -->
             <div class="TbGroup">
               <IconButton
-                tooltipContent="上に移動 (Alt+↑)"
-                ariaLabel="上に移動"
+                tooltipContent={isMultiSelect
+                  ? canMultiSiblingMove
+                    ? `${selectionSize}件 上に移動`
+                    : "同じ親の連続した兄弟のみ移動できます"
+                  : "上に移動 (Alt+↑)"}
+                ariaLabel={isMultiSelect ? `${selectionSize}件 上に移動` : "上に移動"}
                 variant="text"
                 normalColor={"var(--theme-color-Sub-main)"}
                 activeColor={"var(--theme-color-Primary-main)"}
+                disabled={isMultiSelect && !canMultiSiblingMove}
                 on:click={handleMoveUp}
               >
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -393,11 +492,16 @@
                 </svg>
               </IconButton>
               <IconButton
-                tooltipContent="下に移動 (Alt+↓)"
-                ariaLabel="下に移動"
+                tooltipContent={isMultiSelect
+                  ? canMultiSiblingMove
+                    ? `${selectionSize}件 下に移動`
+                    : "同じ親の連続した兄弟のみ移動できます"
+                  : "下に移動 (Alt+↓)"}
+                ariaLabel={isMultiSelect ? `${selectionSize}件 下に移動` : "下に移動"}
                 variant="text"
                 normalColor={"var(--theme-color-Sub-main)"}
                 activeColor={"var(--theme-color-Primary-main)"}
+                disabled={isMultiSelect && !canMultiSiblingMove}
                 on:click={handleMoveDown}
               >
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -411,11 +515,18 @@
                 </svg>
               </IconButton>
               <IconButton
-                tooltipContent="アウトデント (Shift+Tab)"
-                ariaLabel="アウトデント"
+                tooltipContent={isMultiSelect
+                  ? canMultiTreeOp && canMultiOutdent
+                    ? `${selectionSize}件 アウトデント`
+                    : canMultiTreeOp
+                      ? "これ以上アウトデントできません"
+                      : "同じ親の兄弟のみアウトデントできます"
+                  : "アウトデント (Shift+Tab)"}
+                ariaLabel={isMultiSelect ? `${selectionSize}件 アウトデント` : "アウトデント"}
                 variant="text"
                 normalColor={"var(--theme-color-Sub-main)"}
                 activeColor={"var(--theme-color-Primary-main)"}
+                disabled={isMultiSelect && (!canMultiTreeOp || !canMultiOutdent)}
                 on:click={handleOutdent}
               >
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -429,11 +540,16 @@
                 </svg>
               </IconButton>
               <IconButton
-                tooltipContent="インデント (Tab)"
-                ariaLabel="インデント"
+                tooltipContent={isMultiSelect
+                  ? canMultiTreeOp
+                    ? `${selectionSize}件 インデント`
+                    : "同じ親の兄弟のみインデントできます"
+                  : "インデント (Tab)"}
+                ariaLabel={isMultiSelect ? `${selectionSize}件 インデント` : "インデント"}
                 variant="text"
                 normalColor={"var(--theme-color-Sub-main)"}
                 activeColor={"var(--theme-color-Primary-main)"}
+                disabled={isMultiSelect && !canMultiTreeOp}
                 on:click={handleIndent}
               >
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -660,7 +776,9 @@
     show={show_confirm}
     toggle={toggle_confirm}
     header="Confirm."
-    content={`Do you really delete "${name_confirm}"?\nThis may delete child nodes.`}
+    content={is_bulk_confirm
+      ? `選択中の ${bulk_confirm_count} 件を削除しますか？\n子タスクも一緒に削除されます。`
+      : `Do you really delete "${name_confirm}"?\nThis may delete child nodes.`}
     callback={callback_confirm}
   />
   <Dialog

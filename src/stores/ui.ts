@@ -81,7 +81,8 @@ function createSelectedID(initialValue: string | undefined): SelectedIdStore {
           }
 
           tree_data.flushPendingPersist();
-          table_selected_id.set(undefined);
+          clearSelection();
+          copied_tasks.set([]);
           if (currentSelectedType === "Projects") {
             projectLoading.set(true);
             tree_data.resetForLoad();
@@ -314,6 +315,114 @@ export let closed_node_ids: ClosedNodeIdsStore = createClosedNodeIds(new Set<str
 // eslint-disable-next-line prefer-const
 export let selected_id: SelectedIdStore = createSelectedID(undefined);
 
+// Multi-select state for the task tree.
+// `selected_ids` holds the live set; `selection_anchor_id` is the pivot used
+// for Shift-range expansion. `table_selected_id` continues to act as the
+// "primary" / focused row (used by TaskDetail, MemoTab, paste-after target).
+export const selected_ids: Writable<Set<string>> = writable<Set<string>>(new Set<string>());
+export const selection_anchor_id: Writable<string | undefined> = writable<string | undefined>(
+  undefined
+);
+
+function mirrorTableSelected(ids: Set<string>, anchor: string | undefined) {
+  if (ids.size === 0) {
+    table_selected_id.set(undefined);
+  } else if (ids.size === 1) {
+    const only = ids.values().next().value as string;
+    table_selected_id.set(only);
+  } else if (anchor !== undefined) {
+    table_selected_id.set(anchor);
+  }
+}
+
+export function clearSelection() {
+  selected_ids.set(new Set<string>());
+  selection_anchor_id.set(undefined);
+  table_selected_id.set(undefined);
+}
+
+export function selectOnly(id: string) {
+  const next = new Set<string>([id]);
+  selected_ids.set(next);
+  selection_anchor_id.set(id);
+  mirrorTableSelected(next, id);
+}
+
+export function toggleSelection(id: string) {
+  selected_ids.update((current) => {
+    const next = new Set(current);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    // Anchor follows the most recent toggle.
+    if (next.has(id)) {
+      selection_anchor_id.set(id);
+    } else {
+      // If we removed the previous anchor, pick any remaining as the new anchor.
+      const currentAnchor = get(selection_anchor_id);
+      if (currentAnchor === id) {
+        const first = next.values().next();
+        selection_anchor_id.set(first.done ? undefined : (first.value as string));
+      }
+    }
+    mirrorTableSelected(next, get(selection_anchor_id));
+    return next;
+  });
+}
+
+export function selectRange(targetId: string, visibleRowIds: string[]) {
+  const anchor = get(selection_anchor_id);
+  if (!anchor || !visibleRowIds.includes(anchor) || !visibleRowIds.includes(targetId)) {
+    // No valid anchor: fall back to single-select.
+    selectOnly(targetId);
+    return;
+  }
+  const a = visibleRowIds.indexOf(anchor);
+  const b = visibleRowIds.indexOf(targetId);
+  const [lo, hi] = a <= b ? [a, b] : [b, a];
+  const next = new Set<string>(visibleRowIds.slice(lo, hi + 1));
+  selected_ids.set(next);
+  // anchor remains unchanged
+  mirrorTableSelected(next, anchor);
+}
+
+export function selectAll(visibleRowIds: string[]) {
+  if (visibleRowIds.length === 0) {
+    clearSelection();
+    return;
+  }
+  const next = new Set<string>(visibleRowIds);
+  selected_ids.set(next);
+  selection_anchor_id.set(visibleRowIds[0]);
+  mirrorTableSelected(next, visibleRowIds[0]);
+}
+
+// Prune ids that no longer exist (used after tree mutations from other windows / undo).
+export function pruneSelection(existingIds: Set<string>) {
+  selected_ids.update((current) => {
+    if (current.size === 0) return current;
+    let removed = false;
+    const next = new Set<string>();
+    for (const id of current) {
+      if (existingIds.has(id)) {
+        next.add(id);
+      } else {
+        removed = true;
+      }
+    }
+    if (!removed) return current;
+    const anchor = get(selection_anchor_id);
+    if (anchor !== undefined && !existingIds.has(anchor)) {
+      const first = next.values().next();
+      selection_anchor_id.set(first.done ? undefined : (first.value as string));
+    }
+    mirrorTableSelected(next, get(selection_anchor_id));
+    return next;
+  });
+}
+
 export function setTaskDetailWindowTarget(projectId: string, taskId: string) {
   if (!projectId || !taskId) {
     pendingTaskDetailSelection = undefined;
@@ -330,6 +439,10 @@ export const showPageSearch = writable(false);
 export const saveStatus = writable<SaveStatus>("idle");
 
 export const copied_task = writable<TreeData | null>(null);
+
+// Multi-selection clipboard. When non-empty, takes precedence over `copied_task`.
+// Each entry is a freshly cloned-with-new-ids subtree, ready to paste.
+export const copied_tasks = writable<TreeData[]>([]);
 
 /**
  * The left navigation sidebar always starts hidden on launch. Per UX

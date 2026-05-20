@@ -653,3 +653,266 @@ export function outdentNode(target: string, tree_data: TreeData): TreeData {
 
   return tree_data;
 }
+
+// --- Bulk operations for multi-select -----------------------------------
+
+export function bulkUpdateNodeData(
+  tree_data: TreeData | undefined,
+  ids: Set<string>,
+  patch: Partial<TreeData["data"]>
+): TreeData | undefined {
+  if (!tree_data || ids.size === 0) {
+    return tree_data;
+  }
+
+  const patchKeys = Object.keys(patch);
+  if (patchKeys.length === 0) {
+    return tree_data;
+  }
+
+  function isNoopFor(node: TreeData): boolean {
+    for (const key of patchKeys) {
+      const newVal = (patch as Record<string, unknown>)[key];
+      const curVal = (node.data as Record<string, unknown>)[key];
+      // Treat null/undefined uniformly so "clear date" on already-empty fields is a no-op.
+      if (newVal == null && curVal == null) continue;
+      if (newVal !== curVal) return false;
+    }
+    return true;
+  }
+
+  function visit(node: TreeData): TreeData {
+    let nextNode = node;
+    if (ids.has(node.id) && !isNoopFor(node)) {
+      nextNode = { ...node, data: { ...node.data, ...patch } };
+    }
+
+    if (!nextNode.children || nextNode.children.length === 0) {
+      return nextNode;
+    }
+
+    let childChanged = false;
+    const updatedChildren = nextNode.children.map((child) => {
+      const next = visit(child);
+      if (next !== child) childChanged = true;
+      return next;
+    });
+
+    if (!childChanged && nextNode === node) {
+      return node;
+    }
+    if (!childChanged) {
+      return nextNode;
+    }
+    return { ...nextNode, children: updatedChildren };
+  }
+
+  return visit(tree_data);
+}
+
+export function bulkRemoveNodes(
+  tree_data: TreeData | undefined,
+  ids: Set<string>
+): TreeData | undefined {
+  if (!tree_data || ids.size === 0) {
+    return tree_data;
+  }
+  // Never remove the root.
+  if (ids.has(tree_data.id) && ids.size === 1) {
+    return tree_data;
+  }
+
+  function visit(node: TreeData): TreeData {
+    if (!node.children || node.children.length === 0) {
+      return node;
+    }
+    const kept = node.children.filter((c) => !ids.has(c.id));
+    const visited = kept.map((c) => visit(c));
+
+    const sameLength = kept.length === node.children.length;
+    const sameRefs = sameLength && visited.every((c, i) => c === node.children[i]);
+    if (sameRefs) {
+      return node;
+    }
+    return { ...node, children: visited };
+  }
+
+  return visit(tree_data);
+}
+
+export function areAllSiblings(tree_data: TreeData | undefined, ids: Set<string>): boolean {
+  if (!tree_data || ids.size === 0) {
+    return false;
+  }
+  let parentId: string | undefined;
+  for (const id of ids) {
+    if (id === tree_data.id) return false;
+    const parent = getParent(id, tree_data);
+    if (!parent) return false;
+    if (parentId === undefined) {
+      parentId = parent.id;
+    } else if (parent.id !== parentId) {
+      return false;
+    }
+  }
+  return parentId !== undefined;
+}
+
+export function isContiguousSiblingBlock(
+  tree_data: TreeData | undefined,
+  ids: Set<string>
+): boolean {
+  if (!areAllSiblings(tree_data, ids)) return false;
+  const anyId = ids.values().next().value as string;
+  const parent = getParent(anyId, tree_data!);
+  if (!parent) return false;
+  const indices: number[] = [];
+  parent.children.forEach((c, i) => {
+    if (ids.has(c.id)) indices.push(i);
+  });
+  if (indices.length !== ids.size) return false;
+  indices.sort((a, b) => a - b);
+  for (let i = 1; i < indices.length; i++) {
+    if (indices[i] !== indices[i - 1] + 1) return false;
+  }
+  return true;
+}
+
+export function getTopLevelSelection(tree_data: TreeData | undefined, ids: Set<string>): string[] {
+  if (!tree_data || ids.size === 0) return [];
+  const result: string[] = [];
+  function visit(node: TreeData) {
+    if (ids.has(node.id)) {
+      result.push(node.id);
+      return; // descendants of a top-level selected node are skipped
+    }
+    for (const child of node.children) visit(child);
+  }
+  visit(tree_data);
+  return result;
+}
+
+export function bulkMoveUp(target_ids: Set<string>, tree_data: TreeData): TreeData {
+  if (!isContiguousSiblingBlock(tree_data, target_ids)) return tree_data;
+  const anyId = target_ids.values().next().value as string;
+  const parent = getParent(anyId, tree_data);
+  if (!parent) return tree_data;
+  const indices: number[] = [];
+  parent.children.forEach((c, i) => {
+    if (target_ids.has(c.id)) indices.push(i);
+  });
+  indices.sort((a, b) => a - b);
+  const start = indices[0];
+  if (start === 0) return tree_data;
+  const block = parent.children.splice(start, indices.length);
+  parent.children.splice(start - 1, 0, ...block);
+  return tree_data;
+}
+
+export function bulkMoveDown(target_ids: Set<string>, tree_data: TreeData): TreeData {
+  if (!isContiguousSiblingBlock(tree_data, target_ids)) return tree_data;
+  const anyId = target_ids.values().next().value as string;
+  const parent = getParent(anyId, tree_data);
+  if (!parent) return tree_data;
+  const indices: number[] = [];
+  parent.children.forEach((c, i) => {
+    if (target_ids.has(c.id)) indices.push(i);
+  });
+  indices.sort((a, b) => a - b);
+  const end = indices[indices.length - 1];
+  if (end >= parent.children.length - 1) return tree_data;
+  const start = indices[0];
+  const block = parent.children.splice(start, indices.length);
+  parent.children.splice(start + 1, 0, ...block);
+  return tree_data;
+}
+
+export interface BulkIndentResult {
+  tree_data: TreeData;
+  new_parent_ids: string[];
+}
+
+export function bulkIndent(target_ids: Set<string>, tree_data: TreeData): BulkIndentResult {
+  if (!areAllSiblings(tree_data, target_ids)) {
+    return { tree_data, new_parent_ids: [] };
+  }
+  const anyId = target_ids.values().next().value as string;
+  const parent = getParent(anyId, tree_data);
+  if (!parent) return { tree_data, new_parent_ids: [] };
+
+  const selectedInOrder = parent.children
+    .map((c, i) => ({ c, i }))
+    .filter(({ c }) => target_ids.has(c.id))
+    .sort((a, b) => a.i - b.i);
+
+  const newParentIds: string[] = [];
+  for (const { c } of selectedInOrder) {
+    const currentIndex = parent.children.findIndex((child) => child.id === c.id);
+    if (currentIndex <= 0) continue;
+    const predecessor = parent.children[currentIndex - 1];
+    parent.children.splice(currentIndex, 1);
+    predecessor.children.push(c);
+    if (!newParentIds.includes(predecessor.id)) newParentIds.push(predecessor.id);
+  }
+  return { tree_data, new_parent_ids: newParentIds };
+}
+
+export function bulkOutdent(target_ids: Set<string>, tree_data: TreeData): TreeData {
+  if (!areAllSiblings(tree_data, target_ids)) return tree_data;
+  const anyId = target_ids.values().next().value as string;
+  const parent = getParent(anyId, tree_data);
+  if (!parent) return tree_data;
+  const grandParent = getParent(parent.id, tree_data);
+  if (!grandParent) return tree_data;
+
+  const selectedInOrder = parent.children
+    .map((c, i) => ({ c, i }))
+    .filter(({ c }) => target_ids.has(c.id))
+    .sort((a, b) => b.i - a.i); // right-to-left
+
+  for (const { c } of selectedInOrder) {
+    const currentIndex = parent.children.findIndex((child) => child.id === c.id);
+    if (currentIndex < 0) continue;
+    parent.children.splice(currentIndex, 1);
+    const parentIndex = grandParent.children.findIndex((child) => child.id === parent.id);
+    grandParent.children.splice(parentIndex + 1, 0, c);
+  }
+  return tree_data;
+}
+
+export function bulkAddNodes(
+  nodes: TreeData[],
+  base: string,
+  tree_data: TreeData,
+  action: "insert" | "insert_after" | "append"
+): TreeData {
+  if (nodes.length === 0) return tree_data;
+  switch (action) {
+    case "insert":
+    case "insert_after": {
+      const baseParent = getParent(base, tree_data);
+      if (!baseParent) return tree_data;
+      let index = -1;
+      for (let i = 0; i < baseParent.children.length; i++) {
+        if (baseParent.children[i].id === base) {
+          index = action === "insert" ? i : i + 1;
+          break;
+        }
+      }
+      if (index < 0) return tree_data;
+      baseParent.children.splice(index, 0, ...nodes);
+      break;
+    }
+    case "append": {
+      const baseNode = getNode(base, tree_data);
+      if (!baseNode) return tree_data;
+      baseNode.children.push(...nodes);
+      break;
+    }
+  }
+  return tree_data;
+}
+
+export function bulkDuplicate(nodes: TreeData[]): TreeData[] {
+  return nodes.map((n) => cloneWithNewIds(n));
+}

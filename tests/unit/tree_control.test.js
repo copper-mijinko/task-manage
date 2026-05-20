@@ -1,5 +1,14 @@
 ﻿import {
   addNode,
+  areAllSiblings,
+  bulkAddNodes,
+  bulkDuplicate,
+  bulkIndent,
+  bulkMoveDown,
+  bulkMoveUp,
+  bulkOutdent,
+  bulkRemoveNodes,
+  bulkUpdateNodeData,
   canIndentNode,
   canMoveNodeDown,
   canMoveNodeUp,
@@ -8,7 +17,9 @@
   filterTree,
   flattenVisibleTree,
   getNode,
+  getTopLevelSelection,
   indentNode,
+  isContiguousSiblingBlock,
   moveNodeDown,
   moveNodeUp,
   outdentNode,
@@ -388,5 +399,244 @@ describe("cloneWithNewIds", () => {
     const cloned = cloneWithNewIds(node);
     cloned.data.memo.push({ text: "world" });
     expect(node.data.memo.length).toBe(1);
+  });
+});
+
+function createFlatTree() {
+  // root -> [A, B, C, D]
+  return {
+    id: "root",
+    data: {
+      name: "root",
+      status: "Open",
+      "start date": undefined,
+      "due date": undefined,
+      memo: [],
+    },
+    children: ["A", "B", "C", "D"].map((id) => ({
+      id,
+      data: {
+        name: id,
+        status: "Open",
+        "start date": undefined,
+        "due date": undefined,
+        memo: [],
+      },
+      children: [],
+    })),
+  };
+}
+
+describe("bulk operations", () => {
+  test("bulkUpdateNodeData patches multiple ids and skips non-selected", () => {
+    const tree = createFlatTree();
+    const updated = bulkUpdateNodeData(tree, new Set(["A", "C"]), { status: "Completed" });
+
+    expect(getNode("A", updated).data.status).toBe("Completed");
+    expect(getNode("B", updated).data.status).toBe("Open");
+    expect(getNode("C", updated).data.status).toBe("Completed");
+    expect(getNode("D", updated).data.status).toBe("Open");
+    expect(updated).not.toBe(tree);
+  });
+
+  test("bulkUpdateNodeData is a no-op when no patched field would change", () => {
+    const tree = createFlatTree();
+    const updated = bulkUpdateNodeData(tree, new Set(["A"]), { status: "Open" });
+    expect(updated).toBe(tree);
+  });
+
+  test("bulkUpdateNodeData skips clearing fields already empty", () => {
+    const tree = createFlatTree();
+    const updated = bulkUpdateNodeData(tree, new Set(["A", "B"]), { "due date": undefined });
+    expect(updated).toBe(tree);
+  });
+
+  test("bulkUpdateNodeData applies clear when at least one node has a value", () => {
+    const tree = createFlatTree();
+    tree.children[0].data["due date"] = "2026-05-01";
+
+    const updated = bulkUpdateNodeData(tree, new Set(["A", "B"]), { "due date": undefined });
+    expect(getNode("A", updated).data["due date"]).toBeUndefined();
+    // B is still no-op but the operation as a whole produced a new tree.
+    expect(updated).not.toBe(tree);
+  });
+
+  test("bulkRemoveNodes removes multiple siblings in one traversal", () => {
+    const tree = createFlatTree();
+    const updated = bulkRemoveNodes(tree, new Set(["B", "D"]));
+    expect(updated.children.map((c) => c.id)).toEqual(["A", "C"]);
+  });
+
+  test("bulkRemoveNodes silently skips when only root is requested", () => {
+    const tree = createFlatTree();
+    const updated = bulkRemoveNodes(tree, new Set(["root"]));
+    expect(updated).toBe(tree);
+  });
+
+  test("bulkRemoveNodes removes selected but never the root, even if root id is included", () => {
+    const tree = createFlatTree();
+    const updated = bulkRemoveNodes(tree, new Set(["root", "B"]));
+    // root must survive at the top; B should be removed.
+    expect(updated.id).toBe("root");
+    expect(updated.children.map((c) => c.id)).toEqual(["A", "C", "D"]);
+  });
+
+  test("areAllSiblings is true for same-parent ids and false otherwise", () => {
+    const tree = createFlatTree();
+    expect(areAllSiblings(tree, new Set(["A", "B"]))).toBe(true);
+    expect(areAllSiblings(tree, new Set(["A"]))).toBe(true);
+    expect(areAllSiblings(tree, new Set(["A", "root"]))).toBe(false);
+    expect(areAllSiblings(tree, new Set())).toBe(false);
+  });
+
+  test("isContiguousSiblingBlock detects contiguous runs", () => {
+    const tree = createFlatTree();
+    expect(isContiguousSiblingBlock(tree, new Set(["A", "B"]))).toBe(true);
+    expect(isContiguousSiblingBlock(tree, new Set(["B", "C", "D"]))).toBe(true);
+    expect(isContiguousSiblingBlock(tree, new Set(["A", "C"]))).toBe(false);
+    expect(isContiguousSiblingBlock(tree, new Set(["A", "D"]))).toBe(false);
+  });
+
+  test("getTopLevelSelection drops descendants whose ancestor is also selected", () => {
+    const tree = createTree();
+    const top = getTopLevelSelection(tree, new Set(["task-2", "task-2-1"]));
+    expect(top).toEqual(["task-2"]);
+  });
+
+  test("getTopLevelSelection preserves DFS order across separate subtrees", () => {
+    const tree = createTree();
+    const top = getTopLevelSelection(tree, new Set(["task-2-1", "task-1"]));
+    expect(top).toEqual(["task-1", "task-2-1"]);
+  });
+
+  test("bulkMoveUp shifts a contiguous block up by one position", () => {
+    const tree = createFlatTree();
+    bulkMoveUp(new Set(["B", "C"]), tree);
+    expect(tree.children.map((c) => c.id)).toEqual(["B", "C", "A", "D"]);
+  });
+
+  test("bulkMoveUp is a no-op when the block starts at index 0", () => {
+    const tree = createFlatTree();
+    bulkMoveUp(new Set(["A", "B"]), tree);
+    expect(tree.children.map((c) => c.id)).toEqual(["A", "B", "C", "D"]);
+  });
+
+  test("bulkMoveUp is a no-op for non-contiguous selection", () => {
+    const tree = createFlatTree();
+    bulkMoveUp(new Set(["A", "C"]), tree);
+    expect(tree.children.map((c) => c.id)).toEqual(["A", "B", "C", "D"]);
+  });
+
+  test("bulkMoveDown shifts a contiguous block down by one position", () => {
+    const tree = createFlatTree();
+    bulkMoveDown(new Set(["A", "B"]), tree);
+    expect(tree.children.map((c) => c.id)).toEqual(["C", "A", "B", "D"]);
+  });
+
+  test("bulkMoveDown is a no-op when the block ends at the last index", () => {
+    const tree = createFlatTree();
+    bulkMoveDown(new Set(["C", "D"]), tree);
+    expect(tree.children.map((c) => c.id)).toEqual(["A", "B", "C", "D"]);
+  });
+
+  test("bulkIndent left-to-right nests selected siblings under non-selected predecessor", () => {
+    const tree = createFlatTree();
+    const { new_parent_ids } = bulkIndent(new Set(["B", "D"]), tree);
+
+    expect(tree.children.map((c) => c.id)).toEqual(["A", "C"]);
+    expect(getNode("A", tree).children.map((c) => c.id)).toEqual(["B"]);
+    expect(getNode("C", tree).children.map((c) => c.id)).toEqual(["D"]);
+    expect(new_parent_ids).toEqual(["A", "C"]);
+  });
+
+  test("bulkIndent skips the first selected sibling when no predecessor exists", () => {
+    const tree = createFlatTree();
+    const { new_parent_ids } = bulkIndent(new Set(["A", "B"]), tree);
+    // A has no predecessor; B becomes a child of A. C and D are untouched.
+    expect(tree.children.map((c) => c.id)).toEqual(["A", "C", "D"]);
+    expect(getNode("A", tree).children.map((c) => c.id)).toEqual(["B"]);
+    expect(new_parent_ids).toEqual(["A"]);
+  });
+
+  test("bulkIndent is a no-op when selection is not all siblings", () => {
+    const tree = createTree();
+    const { tree_data, new_parent_ids } = bulkIndent(new Set(["task-1", "task-2-1"]), tree);
+    expect(tree_data).toBe(tree);
+    expect(new_parent_ids).toEqual([]);
+  });
+
+  test("bulkOutdent right-to-left preserves order in grandparent", () => {
+    const tree = createTree();
+    // Build a parent with three children, all selected for outdent
+    tree.children[1].children.push(
+      {
+        id: "task-2-2",
+        data: { name: "B", status: "Open", "due date": undefined, memo: [] },
+        children: [],
+      },
+      {
+        id: "task-2-3",
+        data: { name: "C", status: "Open", "due date": undefined, memo: [] },
+        children: [],
+      }
+    );
+    // task-2 children = [task-2-1, task-2-2, task-2-3]; outdent all 3 to root.
+    bulkOutdent(new Set(["task-2-1", "task-2-2", "task-2-3"]), tree);
+    // After outdent, root.children should contain task-1, task-2 (now empty), then the outdented trio in order.
+    expect(tree.children.map((c) => c.id)).toEqual([
+      "task-1",
+      "task-2",
+      "task-2-1",
+      "task-2-2",
+      "task-2-3",
+    ]);
+    expect(tree.children[1].children).toHaveLength(0);
+  });
+
+  test("bulkOutdent is a no-op when shared parent is root (no grandparent)", () => {
+    const tree = createFlatTree();
+    const result = bulkOutdent(new Set(["A", "B"]), tree);
+    expect(result).toBe(tree);
+    expect(tree.children.map((c) => c.id)).toEqual(["A", "B", "C", "D"]);
+  });
+
+  test("bulkAddNodes inserts the array in DFS order at target", () => {
+    const tree = createFlatTree();
+    const extras = [
+      {
+        id: "X",
+        data: { name: "X", status: "Open", "due date": undefined, memo: [] },
+        children: [],
+      },
+      {
+        id: "Y",
+        data: { name: "Y", status: "Open", "due date": undefined, memo: [] },
+        children: [],
+      },
+    ];
+    bulkAddNodes(extras, "B", tree, "insert_after");
+    expect(tree.children.map((c) => c.id)).toEqual(["A", "B", "X", "Y", "C", "D"]);
+  });
+
+  test("bulkAddNodes append target = node id, pushes into target.children", () => {
+    const tree = createFlatTree();
+    const extras = [
+      {
+        id: "X",
+        data: { name: "X", status: "Open", "due date": undefined, memo: [] },
+        children: [],
+      },
+    ];
+    bulkAddNodes(extras, "A", tree, "append");
+    expect(getNode("A", tree).children.map((c) => c.id)).toEqual(["X"]);
+  });
+
+  test("bulkDuplicate clones each node with fresh ids", () => {
+    const tree = createTree();
+    const dup = bulkDuplicate([getNode("task-2", tree)]);
+    expect(dup).toHaveLength(1);
+    expect(dup[0].id).not.toBe("task-2");
+    expect(dup[0].children[0].id).not.toBe("task-2-1");
+    expect(dup[0].data.name).toBe("Ship release");
   });
 });

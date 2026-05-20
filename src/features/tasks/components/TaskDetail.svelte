@@ -11,6 +11,7 @@
     tag_index,
     theme,
   } from "@stores";
+  import { selected_ids } from "@stores/ui";
   import { debounce } from "lodash";
   import { onDestroy } from "svelte";
   import { get } from "svelte/store";
@@ -31,6 +32,7 @@
    */
   export let hideDetailTitle = false;
 
+  $: extraSelectedCount = Math.max(0, $selected_ids.size - 1);
   $: is_selected = $table_selected_id ? true : false;
   $: node =
     $table_selected_id && $tree_data ? getNode($table_selected_id, $tree_data.data) : undefined;
@@ -416,6 +418,11 @@
     padded={false}
     style={"height: 100%; width: 100%; overflow: hidden;"}
   >
+    {#if extraSelectedCount > 0}
+      <div class="multi-select-indicator" role="status" aria-live="polite">
+        他 {extraSelectedCount} 件選択中（一括操作はバーから行えます）
+      </div>
+    {/if}
     <div
       class="task-detail-card-body"
       class:detail-mini={splitState === "detail-mini"}
@@ -547,6 +554,14 @@
     width: 100%;
     height: 100%;
     overflow: hidden;
+  }
+  .multi-select-indicator {
+    padding: var(--sp1) var(--sp3);
+    background-color: color-mix(in srgb, var(--theme-color-Primary-main) 14%, transparent);
+    color: var(--theme-color-Primary-dark);
+    font-size: var(--font-label-md);
+    font-weight: 600;
+    border-bottom: 1px solid color-mix(in srgb, var(--theme-color-Primary-main) 30%, transparent);
   }
   .detail-pane {
     flex: 0 0 var(--detail-pane-size);
