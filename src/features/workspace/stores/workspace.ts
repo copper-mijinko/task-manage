@@ -79,10 +79,11 @@ function createWorkspaceStore(): WorkspaceStore {
       (async () => {
         const { workspaces, activeWorkspace } = await platform.wsGetWorkspaces();
         const projects = activeWorkspace ? await loadProjects(activeWorkspace) : [];
+        const current = get({ subscribe } as WorkspaceStore);
         set({
           workspaces: workspaces ?? [],
           activeWorkspacePath: activeWorkspace,
-          activeProjectDir: null,
+          activeProjectDir: current.activeProjectDir,
           projects,
         });
       })();

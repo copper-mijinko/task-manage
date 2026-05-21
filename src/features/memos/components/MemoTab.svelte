@@ -429,6 +429,7 @@
           saveMemo={(editedContent) => saveMemo(editedContent, selectedMemoIndex)}
           content={editedContent}
           memoTitles={memo.map((entry) => entry.title)}
+          currentMemoTitle={selectedMemo?.title ?? ""}
           openMemoLink={selectMemoByTitle}
           {isWorkspaceProject}
           format={selectedMemoFormat}

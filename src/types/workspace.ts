@@ -8,6 +8,7 @@ export interface WorkspaceMemo {
   content: unknown;
   tags: string[];
   format?: MemoFormat;
+  order?: number;
 }
 
 export interface WorkspaceTask {

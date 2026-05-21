@@ -12,9 +12,12 @@
     redoHistory,
     saveStatus,
     projectLoading,
+    workspace_store,
+    workspace_tasks_cache,
   } from "@stores";
   import { onMount, onDestroy } from "svelte";
   import * as platform from "@lib/ipc/platform";
+  import { workspaceToProjectData } from "@features/workspace/utils/workspace_tree";
   import ProjectPage from "@pages/MainPage.svelte";
   import Header from "@features/navigation/components/Header.svelte";
   import MenuList from "@features/navigation/components/MenuList.svelte";
@@ -47,13 +50,51 @@
   let detailWindowProjectId = currentSearch.get("projectId") || "";
   let detailWindowTaskId = currentSearch.get("taskId") || "";
   let detailWindowTaskName = currentSearch.get("taskName") || "Task Detail";
+  let detailWindowSelectedType =
+    currentSearch.get("selectedType") === "WorkspaceProject" ? "WorkspaceProject" : "Projects";
+  let detailWindowProjectDir = currentSearch.get("projectDir") || "";
 
   async function initTaskDetailWindow() {
     try {
       if (!detailWindowProjectId || !detailWindowTaskId) return;
 
       document.title = `${detailWindowTaskName} | Task Detail`;
-      setTaskDetailWindowTarget(detailWindowProjectId, detailWindowTaskId);
+      setTaskDetailWindowTarget(detailWindowProjectId, detailWindowTaskId, {
+        selectedType: detailWindowSelectedType,
+        projectDir: detailWindowProjectDir || null,
+      });
+
+      if (detailWindowSelectedType === "WorkspaceProject") {
+        if (!detailWindowProjectDir) return;
+
+        workspace_store.update((state) => ({
+          ...state,
+          activeProjectDir: detailWindowProjectDir,
+          projects: state.projects.some((project) => project.projectDir === detailWindowProjectDir)
+            ? state.projects
+            : [
+                ...state.projects,
+                {
+                  name: detailWindowTaskName,
+                  rootId: detailWindowProjectId,
+                  dirName: detailWindowProjectDir.split(/[/\\]/).pop() || detailWindowTaskName,
+                  projectDir: detailWindowProjectDir,
+                },
+              ],
+        }));
+
+        const workspaceProject = await platform.wsReadProject(detailWindowProjectDir);
+        if (workspaceProject) {
+          workspace_tasks_cache.set(workspaceProject.tasks);
+          tree_data.setFromSource(
+            workspaceToProjectData(workspaceProject.tasks, detailWindowProjectId)
+          );
+          selected_type.set("WorkspaceProject");
+          selected_id.set(detailWindowProjectId);
+          table_selected_id.set(detailWindowTaskId);
+        }
+        return;
+      }
 
       const result = await platform.getTreeData(detailWindowProjectId);
       if (result) {

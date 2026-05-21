@@ -23,6 +23,8 @@ export interface ProjectListItem {
 export interface PendingTaskDetailSelection {
   projectId: string;
   taskId: string;
+  selectedType?: "Projects" | "WorkspaceProject";
+  projectDir?: string | null;
 }
 
 export interface TaskDetailWindowData extends PendingTaskDetailSelection {

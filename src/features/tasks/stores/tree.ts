@@ -310,6 +310,7 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
           const shouldSyncCurrentProject =
             currentSelectedType === "Projects" && currentSelectedId === nextTreeData.data?.id;
           const shouldSyncTaskDetailWindow =
+            pendingTaskDetailSelection?.selectedType !== "WorkspaceProject" &&
             pendingTaskDetailSelection?.projectId === nextTreeData.data?.id;
 
           if (!shouldSyncCurrentProject && !shouldSyncTaskDetailWindow) {
@@ -339,7 +340,7 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
           if (suppressInitialLoadOnce) {
             suppressInitialLoadOnce = false;
           } else if (pendingTaskDetailSelection?.projectId) {
-            selected_type.set("Projects");
+            selected_type.set(pendingTaskDetailSelection.selectedType ?? "Projects");
             selected_id.set(pendingTaskDetailSelection.projectId);
             if (pendingTaskDetailSelection.taskId) {
               table_selected_id.set(pendingTaskDetailSelection.taskId);

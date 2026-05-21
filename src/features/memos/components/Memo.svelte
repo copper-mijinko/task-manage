@@ -7,6 +7,7 @@
   export let content: unknown = "";
   export let readOnly = false;
   export let memoTitles: string[] = [];
+  export let currentMemoTitle = "";
   export let openMemoLink: ((title: string) => void) | undefined = undefined;
   export let workspaceProjectDir: string | null = null;
   export let taskId: string | null = null;
@@ -27,6 +28,7 @@
       {content}
       {readOnly}
       {memoTitles}
+      {currentMemoTitle}
       {openMemoLink}
       {workspaceProjectDir}
       {taskId}

@@ -21,6 +21,7 @@ vi.mock("@lib/primitives/Dialog.svelte", async () => {
 import TreeTable from "@features/tasks/components/TreeTable.svelte";
 import {
   closed_node_ids,
+  column_settings,
   filtered_data,
   selected_id,
   selected_type,
@@ -28,6 +29,7 @@ import {
   theme,
   tree_data,
 } from "@stores";
+import { clearSelection, selected_ids } from "@stores/ui";
 import { workspace_store } from "@features/workspace/stores/workspace";
 
 function createProjectData() {
@@ -74,8 +76,11 @@ function createProjectData() {
 }
 
 describe("TreeTable", () => {
+  let originalGetBoundingClientRect;
+
   beforeEach(() => {
     const projectData = createProjectData();
+    originalGetBoundingClientRect = Element.prototype.getBoundingClientRect;
 
     if (!globalThis.ResizeObserver) {
       globalThis.ResizeObserver = class {
@@ -94,9 +99,17 @@ describe("TreeTable", () => {
     tree_data.set(projectData);
     filtered_data.set(projectData.data);
     selected_id.set("project-1");
+    clearSelection();
     selected_type.set("Projects");
     table_selected_id.set(undefined);
     closed_node_ids.set(new Set());
+    column_settings.set([
+      { id: "name", label: "タスク名", visible: true },
+      { id: "status", label: "ステータス", visible: true },
+      { id: "start date", label: "開始日", visible: true },
+      { id: "due date", label: "期限日", visible: true },
+      { id: "memo", label: "メモ数", visible: true },
+    ]);
     theme.set("dark");
     workspace_store.set({
       workspaces: [],
@@ -106,6 +119,10 @@ describe("TreeTable", () => {
     });
   });
 
+  afterEach(() => {
+    Element.prototype.getBoundingClientRect = originalGetBoundingClientRect;
+  });
+
   test("selects a row and reflects the selected state", async () => {
     render(TreeTable);
 
@@ -113,6 +130,20 @@ describe("TreeTable", () => {
     await tick();
 
     expect(get(table_selected_id)).toBe("task-1");
+    expect(screen.getByTestId("row-task-1")).toHaveAttribute("data-selected", "true");
+  });
+
+  test("keeps the current row selected when the tree background is clicked", async () => {
+    const { container } = render(TreeTable);
+
+    await fireEvent.click(screen.getByTestId("select-task-1"));
+    await tick();
+
+    await fireEvent.click(container.querySelector(".TableRoot"));
+    await tick();
+
+    expect(get(table_selected_id)).toBe("task-1");
+    expect(get(selected_ids)).toEqual(new Set(["task-1"]));
     expect(screen.getByTestId("row-task-1")).toHaveAttribute("data-selected", "true");
   });
 
@@ -155,5 +186,61 @@ describe("TreeTable", () => {
     await fireEvent.click(screen.getByTestId("open-folder-task-1"));
 
     expect(wsOpenTaskFolder).toHaveBeenCalledWith("C:/workspace/project", "task-1");
+  });
+
+  test("positions resizers after the selection checkbox column", async () => {
+    const rect = (width, height = 40) => ({
+      x: 0,
+      y: 0,
+      top: 0,
+      left: 0,
+      right: width,
+      bottom: height,
+      width,
+      height,
+      toJSON: () => ({}),
+    });
+
+    Element.prototype.getBoundingClientRect = function () {
+      if (this.classList.contains("TableRoot") || this.classList.contains("TableRow")) {
+        return rect(1000, this.classList.contains("TableRow") ? 40 : 300);
+      }
+      if (
+        this.classList.contains("CheckboxHeaderCell") ||
+        this.classList.contains("CheckboxCell")
+      ) {
+        return rect(28, 40);
+      }
+      if (this.classList.contains("TableHeader") || this.classList.contains("TableData")) {
+        const width = Number.parseFloat(this.style.width.match(/([\d.]+)px/)?.[1] ?? "100");
+        return rect(width, 40);
+      }
+      return originalGetBoundingClientRect.call(this);
+    };
+
+    const { container } = render(TreeTable);
+    await tick();
+
+    const firstResizer = container.querySelector(".Resizer");
+    const nameRatio = 10;
+    const ratioSum = 10 + 4 + 3 + 4 + 2;
+    const checkboxWidth = 28;
+    const expectedNameWidth = ((1000 - checkboxWidth) * nameRatio) / ratioSum;
+
+    expect(firstResizer).toBeInTheDocument();
+    expect(Number.parseFloat(firstResizer.style.left)).toBeCloseTo(
+      checkboxWidth + expectedNameWidth - 3,
+      3
+    );
+
+    await fireEvent.mouseDown(firstResizer, { clientX: 500 });
+    await fireEvent.mouseMove(document, { clientX: 510 });
+
+    expect(Number.parseFloat(firstResizer.style.left)).toBeCloseTo(
+      checkboxWidth + expectedNameWidth + 10 - 3,
+      3
+    );
+
+    await fireEvent.mouseUp(document);
   });
 });

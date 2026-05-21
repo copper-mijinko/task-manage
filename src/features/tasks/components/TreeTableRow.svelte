@@ -7,8 +7,9 @@
 
 <script>
   import { createEventDispatcher } from "svelte";
-  import { selected_id } from "@stores";
+  import { selected_id, selected_type } from "@stores";
   import { selected_ids } from "@stores/ui";
+  import { workspace_store } from "@features/workspace/stores/workspace";
   import { tree_data } from "@features/tasks/stores/tree";
   import { getNode, getTopLevelSelection } from "@features/tasks/utils/tree_control";
   import { ripple } from "@lib/actions";
@@ -110,6 +111,9 @@
       projectId: $selected_id,
       taskId: id,
       taskName: taskText,
+      selectedType: $selected_type === "WorkspaceProject" ? "WorkspaceProject" : "Projects",
+      projectDir:
+        $selected_type === "WorkspaceProject" ? $workspace_store.activeProjectDir : undefined,
     });
   }
 
@@ -476,17 +480,17 @@
   .TableRow.MenuOpen {
     z-index: 9999;
   }
-  .TableRow :global(*) {
+  .TableRow {
     --backgroundColor: var(--theme-color-Main-light);
   }
-  .TableRow.OverdueRow :global(*) {
+  .TableRow.OverdueRow {
     --backgroundColor: color-mix(
       in srgb,
       var(--theme-color-Error-main) 10%,
       var(--theme-color-Main-light)
     );
   }
-  .TableRow.DueSoonRow :global(*) {
+  .TableRow.DueSoonRow {
     --backgroundColor: color-mix(
       in srgb,
       var(--theme-color-Warning-main) 10%,
@@ -498,10 +502,10 @@
     outline-offset: 2px;
     z-index: 999;
   }
-  .TableRow:hover :global(*) {
+  .TableRow:hover {
     --backgroundColor: var(--theme-color-Main-main);
   }
-  .TableRow.Selected :global(*) {
+  .TableRow.Selected {
     --backgroundColor: color-mix(
       in srgb,
       var(--theme-color-Primary-main) 14%,

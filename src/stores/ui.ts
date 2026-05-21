@@ -14,10 +14,18 @@ const currentSearch =
 const isTaskDetailWindow = currentHash === "#task-detail-window";
 const detailProjectId = currentSearch.get("projectId") || undefined;
 const detailTaskId = currentSearch.get("taskId") || undefined;
+const detailSelectedType =
+  currentSearch.get("selectedType") === "WorkspaceProject" ? "WorkspaceProject" : "Projects";
+const detailProjectDir = currentSearch.get("projectDir") || undefined;
 
 export let pendingTaskDetailSelection: PendingTaskDetailSelection | undefined =
   isTaskDetailWindow && detailProjectId && detailTaskId
-    ? { projectId: detailProjectId, taskId: detailTaskId }
+    ? {
+        projectId: detailProjectId,
+        taskId: detailTaskId,
+        selectedType: detailSelectedType,
+        projectDir: detailProjectDir,
+      }
     : undefined;
 
 export function clearPendingTaskDetailSelection() {
@@ -162,7 +170,18 @@ function createSelectedID(initialValue: string | undefined): SelectedIdStore {
             workspace_tasks_cache.set(result.tasks);
             const converted = workspaceToProjectData(result.tasks, current);
             tree_data.setFromSource(converted);
-            table_selected_id.set(undefined);
+            if (
+              pendingTaskDetailSelection?.selectedType === "WorkspaceProject" &&
+              pendingTaskDetailSelection.projectId === current &&
+              (!pendingTaskDetailSelection.projectDir ||
+                pendingTaskDetailSelection.projectDir === activeProjectDir) &&
+              pendingTaskDetailSelection.taskId &&
+              getNode(pendingTaskDetailSelection.taskId, converted.data)
+            ) {
+              table_selected_id.set(pendingTaskDetailSelection.taskId);
+            } else {
+              table_selected_id.set(undefined);
+            }
             finishLoad(version);
           },
           () => {
@@ -423,14 +442,24 @@ export function pruneSelection(existingIds: Set<string>) {
   });
 }
 
-export function setTaskDetailWindowTarget(projectId: string, taskId: string) {
+export function setTaskDetailWindowTarget(
+  projectId: string,
+  taskId: string,
+  options: { selectedType?: "Projects" | "WorkspaceProject"; projectDir?: string | null } = {}
+) {
   if (!projectId || !taskId) {
     pendingTaskDetailSelection = undefined;
     return;
   }
 
-  pendingTaskDetailSelection = { projectId, taskId };
-  selected_type.set("Projects");
+  const selectedType = options.selectedType ?? "Projects";
+  pendingTaskDetailSelection = {
+    projectId,
+    taskId,
+    selectedType,
+    projectDir: options.projectDir ?? null,
+  };
+  selected_type.set(selectedType);
   selected_id.set(projectId);
 }
 

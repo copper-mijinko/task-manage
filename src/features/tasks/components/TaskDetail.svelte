@@ -17,8 +17,10 @@
   import { get } from "svelte/store";
   import MemoTab from "@features/memos/components/MemoTab.svelte";
   import Card from "@lib/primitives/Card.svelte";
+  import IconButton from "@lib/primitives/IconButton.svelte";
   import StatusSelect from "@features/tasks/components/StatusSelect.svelte";
   import DateInput from "@lib/primitives/DateInput.svelte";
+  import * as platform from "@lib/ipc/platform";
   import {
     convertMemoContent,
     isQuillDelta,
@@ -156,6 +158,9 @@
 
   const addMemo = (newMemoTitle) => {
     if (newMemoTitle) {
+      const editContext = getEditContext();
+      const liveNode = getLiveNode(editContext);
+      if (!liveNode) return false;
       let newMemo = {
         id: uuidV4(),
         title: newMemoTitle,
@@ -163,15 +168,19 @@
         tags: [],
         format: defaultMemoFormat,
       };
-      changeData(node, "memo", [...node.data.memo, newMemo]);
+      changeData(liveNode, "memo", [...(liveNode.data.memo ?? []), newMemo], editContext);
       return true;
     }
   };
   const deleteMemo = (index) => {
+    const editContext = getEditContext();
+    const liveNode = getLiveNode(editContext);
+    if (!liveNode) return false;
     changeData(
-      node,
+      liveNode,
       "memo",
-      node.data.memo.filter((_, i) => i !== index)
+      (liveNode.data.memo ?? []).filter((_, i) => i !== index),
+      editContext
     );
     return true;
   };
@@ -200,10 +209,16 @@
     }
   };
   const reorderMemo = (fromIndex, toIndex) => {
-    const updatedMemo = [...node.data["memo"]];
+    const editContext = getEditContext();
+    const liveNode = getLiveNode(editContext);
+    if (!liveNode) return false;
+    const updatedMemo = [...(liveNode.data["memo"] ?? [])];
+    if (fromIndex < 0 || fromIndex >= updatedMemo.length) return false;
+    if (toIndex < 0 || toIndex >= updatedMemo.length) return false;
     const [moved] = updatedMemo.splice(fromIndex, 1);
     updatedMemo.splice(toIndex, 0, moved);
-    changeData(node, "memo", updatedMemo);
+    changeData(liveNode, "memo", updatedMemo, editContext);
+    return true;
   };
   const saveMemoTags = (selectedMemoIndex, tags) => {
     const editContext = getEditContext();
@@ -410,6 +425,18 @@
         break;
     }
   }
+
+  function openTaskDetailInWindow() {
+    if (!node || !$selected_id || !$table_selected_id) return;
+
+    platform.openTaskDetailWindow({
+      projectId: $selected_id,
+      taskId: node.id,
+      taskName: name,
+      selectedType: isWorkspaceProject ? "WorkspaceProject" : "Projects",
+      projectDir: isWorkspaceProject ? ($workspace_store.activeProjectDir ?? undefined) : undefined,
+    });
+  }
 </script>
 
 {#if is_selected && node}
@@ -418,6 +445,28 @@
     padded={false}
     style={"height: 100%; width: 100%; overflow: hidden;"}
   >
+    {#if !hideDetailTitle}
+      <IconButton
+        slot="header-actions"
+        variant="text"
+        normalColor="var(--theme-color-Sub-main)"
+        activeColor="var(--theme-color-Primary-main)"
+        ariaLabel="タスク詳細を別ウィンドウで開く"
+        tooltipContent="別ウィンドウで開く"
+        style="margin: 0; width: 1.75rem; height: 1.75rem; box-shadow: none;"
+        on:click={openTaskDetailInWindow}
+      >
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+          <path
+            d="M15 3H21V9M14 10L21 3M21 14V19C21 20.1 20.1 21 19 21H5C3.9 21 3 20.1 3 19V5C3 3.9 3.9 3 5 3H10"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+      </IconButton>
+    {/if}
     {#if extraSelectedCount > 0}
       <div class="multi-select-indicator" role="status" aria-live="polite">
         他 {extraSelectedCount} 件選択中（一括操作はバーから行えます）
