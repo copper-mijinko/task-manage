@@ -3,9 +3,15 @@
   import IconButton from "@lib/primitives/IconButton.svelte";
   import MigrationWizard from "@features/workspace/components/MigrationWizard.svelte";
   import { workspace_store } from "@features/workspace/stores/workspace";
+  import { workspace_conflict_policy } from "@features/workspace/stores/policy";
+  import type { WorkspaceConflictPolicy } from "@app-types/app";
 
   export let show = false;
   export let toggle: () => void;
+
+  function setPolicy(next: WorkspaceConflictPolicy) {
+    workspace_conflict_policy.set(next);
+  }
 
   let pendingPath: string | null = null;
   let pendingLabel = "";
@@ -113,6 +119,42 @@
       {#if errorMessage}
         <p class="error">{errorMessage}</p>
       {/if}
+
+      <!-- Conflict policy -->
+      <p class="section-label">外部変更との競合時の挙動</p>
+      <div class="policy-area">
+        <label class="policy-option">
+          <input
+            type="radio"
+            name="conflictPolicy"
+            value="ask"
+            checked={$workspace_conflict_policy === "ask"}
+            on:change={() => setPolicy("ask")}
+          />
+          <span class="policy-text">
+            <strong>ユーザに確認する</strong>
+            <span class="policy-note"
+              >外部で変更が検出された場合、上書きするか再読込するかをバナーで確認します。</span
+            >
+          </span>
+        </label>
+        <label class="policy-option">
+          <input
+            type="radio"
+            name="conflictPolicy"
+            value="prefer-memory"
+            checked={$workspace_conflict_policy === "prefer-memory"}
+            on:change={() => setPolicy("prefer-memory")}
+          />
+          <span class="policy-text">
+            <strong>画面のメモリ表示を優先する（自動上書き）</strong>
+            <span class="policy-note"
+              >競合時の確認バナーは出さず、画面に表示中の内容で上書きします。書込失敗時は内部で最大
+              5 回まで自動リトライします。</span
+            >
+          </span>
+        </label>
+      </div>
 
       <!-- Migration -->
       <p class="section-label">移行</p>
@@ -321,5 +363,37 @@
   }
   .migrate-link-btn:hover {
     opacity: 0.75;
+  }
+  .policy-area {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp2);
+  }
+  .policy-option {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--sp2);
+    cursor: pointer;
+    padding: var(--sp2);
+    border-radius: var(--shape-xs);
+  }
+  .policy-option:hover {
+    background-color: color-mix(in srgb, var(--theme-color-Sub-main) 6%, transparent);
+  }
+  .policy-option input[type="radio"] {
+    margin-top: 0.25rem;
+    flex-shrink: 0;
+  }
+  .policy-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    font-size: var(--font-body-md);
+    color: var(--theme-color-Sub-main);
+  }
+  .policy-note {
+    font-size: var(--font-body-sm);
+    color: var(--theme-color-Sub-dark);
+    opacity: 0.85;
   }
 </style>

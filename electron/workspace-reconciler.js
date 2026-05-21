@@ -89,6 +89,7 @@ class WorkspaceReconciler {
   constructor({
     readProject,
     hasPendingWrite = () => false,
+    getActiveOptions = () => null,
     onProjectUpdated = () => {},
     onConflict = () => {},
     onNotice = () => {},
@@ -101,6 +102,7 @@ class WorkspaceReconciler {
 
     this.readProject = readProject;
     this.hasPendingWrite = hasPendingWrite;
+    this.getActiveOptions = getActiveOptions;
     this.onProjectUpdated = onProjectUpdated;
     this.onConflict = onConflict;
     this.onNotice = onNotice;
@@ -161,20 +163,65 @@ class WorkspaceReconciler {
     }
   }
 
-  async markProjectWritten(projectDir) {
-    const hashes = await collectFileHashes(projectDir);
-    const resolvedProject = path.resolve(projectDir);
+  /**
+   * Synchronously update knownFileHashes for one file we just wrote.
+   * Intended to be plumbed as the `onWritten` callback of `atomicWriteFile`
+   * so that chokidar events arriving 150ms later (after awaitWriteFinish)
+   * find an up-to-date hash and short-circuit as our own write.
+   *
+   * Accepts either a Buffer/string (the data that was written) or a
+   * pre-computed hex SHA-256 string.
+   */
+  recordWrite(filePath, dataOrHash) {
+    let hash;
+    if (typeof dataOrHash === "string" && /^[a-f0-9]{64}$/i.test(dataOrHash)) {
+      hash = dataOrHash;
+    } else {
+      const buffer = Buffer.isBuffer(dataOrHash) ? dataOrHash : Buffer.from(String(dataOrHash));
+      hash = hashBuffer(buffer);
+    }
+    this.knownFileHashes.set(path.resolve(filePath), hash);
+  }
 
-    // Remove stale entries: files that used to be in this project but no
-    // longer exist (e.g. task deleted).
-    for (const filePath of [...this.knownFileHashes.keys()]) {
-      if (isFileWithinDir(filePath, resolvedProject) && !hashes.has(filePath)) {
-        this.knownFileHashes.delete(filePath);
-      }
+  /**
+   * Drop knownFileHashes entries for files that no longer exist inside
+   * `projectDir`, and persist the snapshot. Per-file hash updates are done
+   * by `recordWrite`; this is the cleanup pass that runs at the end of each
+   * project write batch.
+   */
+  async markProjectWritten(projectDir) {
+    const resolvedProject = path.resolve(projectDir);
+    let existing;
+    try {
+      existing = await fs.promises.readdir(resolvedProject, { withFileTypes: true });
+    } catch {
+      existing = null;
     }
 
-    for (const [filePath, hash] of hashes) {
-      this.knownFileHashes.set(path.resolve(filePath), hash);
+    if (existing === null) {
+      // Project dir is gone (e.g. deletion path). Drop all known files
+      // under it.
+      for (const filePath of [...this.knownFileHashes.keys()]) {
+        if (isFileWithinDir(filePath, resolvedProject)) {
+          this.knownFileHashes.delete(filePath);
+        }
+      }
+    } else {
+      const presentFiles = await collectFileHashes(resolvedProject);
+      for (const filePath of [...this.knownFileHashes.keys()]) {
+        if (isFileWithinDir(filePath, resolvedProject) && !presentFiles.has(filePath)) {
+          this.knownFileHashes.delete(filePath);
+        }
+      }
+      // Fill in any files we did NOT write through recordWrite (e.g. files
+      // that exist on disk but were never touched in this session). This
+      // keeps the snapshot consistent with disk for the cleanup boundary.
+      for (const [filePath, hash] of presentFiles) {
+        const resolved = path.resolve(filePath);
+        if (!this.knownFileHashes.has(resolved)) {
+          this.knownFileHashes.set(resolved, hash);
+        }
+      }
     }
 
     await this.writeSnapshot();
@@ -240,6 +287,19 @@ class WorkspaceReconciler {
     }
 
     if (this.hasPendingWrite(projectDir)) {
+      const activeOptions = this.getActiveOptions(projectDir);
+      if (activeOptions && activeOptions.forceLocal) {
+        // forceLocal: skip the modal "merge or reload?" prompt. Tell the
+        // user (informationally) that an external change was detected and
+        // will be overwritten by the in-memory snapshot.
+        this.onNotice({
+          kind: "overwritten-external",
+          projectDir,
+          message:
+            "Workspace changed on disk; overwriting with in-memory state (memory-priority mode).",
+        });
+        return;
+      }
       const event = {
         projectDir,
         message: "Workspace changed on disk while local changes are waiting to save.",

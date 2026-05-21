@@ -62,11 +62,21 @@ export interface WorkspaceConflictEvent {
 }
 
 export interface WorkspaceNoticeEvent {
-  kind: "workspace-updated" | "conflicted-copy" | "error";
+  kind: "workspace-updated" | "conflicted-copy" | "overwritten-external" | "error";
   projectDir?: string;
   path?: string;
   message: string;
 }
+
+export interface WorkspaceFlushStartEvent {
+  reason?: string;
+}
+
+export interface WorkspaceFlushCompleteEvent {
+  forced?: boolean;
+}
+
+export type WorkspaceConflictPolicy = "ask" | "prefer-memory";
 
 export interface ElectronAPI {
   setTreeData: (treeData: ProjectData) => void;
@@ -95,6 +105,8 @@ export interface ElectronAPI {
   onWorkspaceProjectUpdated: (callback: (event: WorkspaceProjectUpdatedEvent) => void) => void;
   onWorkspaceConflict: (callback: (event: WorkspaceConflictEvent) => void) => void;
   onWorkspaceNotice: (callback: (event: WorkspaceNoticeEvent) => void) => void;
+  onWorkspaceFlushStart: (callback: (event: WorkspaceFlushStartEvent) => void) => void;
+  onWorkspaceFlushComplete: (callback: (event: WorkspaceFlushCompleteEvent) => void) => void;
   getCurrentTheme: () => Promise<ThemeName>;
 
   // Workspace API
@@ -123,7 +135,8 @@ export interface ElectronAPI {
   ) => Promise<{ success: boolean; url?: string; error?: string }>;
   wsWriteProject: (
     projectDir: string,
-    tasks: WorkspaceTask[]
+    tasks: WorkspaceTask[],
+    options?: { forceLocal?: boolean }
   ) => Promise<{ success: boolean; queued?: boolean; error?: string }>;
   wsDeleteTask: (
     projectDir: string,

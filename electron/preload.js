@@ -87,6 +87,16 @@ const electronAPI = {
       callback(payload);
     });
   },
+  onWorkspaceFlushStart: (callback) => {
+    ipcRenderer.on("workspace-flush-start", (event, payload) => {
+      callback(payload);
+    });
+  },
+  onWorkspaceFlushComplete: (callback) => {
+    ipcRenderer.on("workspace-flush-complete", (event, payload) => {
+      callback(payload);
+    });
+  },
   // 現在のテーマを取得する
   getCurrentTheme: () => {
     return ipcRenderer.invoke("get-current-theme");
@@ -104,8 +114,8 @@ const electronAPI = {
     ipcRenderer.invoke("ws:save-memo-image", { projectDir, taskId, bytes, mimeType }),
   wsResolveMemoAsset: (projectDir, taskId, assetPath) =>
     ipcRenderer.invoke("ws:resolve-memo-asset", { projectDir, taskId, assetPath }),
-  wsWriteProject: (projectDir, tasks) =>
-    ipcRenderer.invoke("ws:write-project", { projectDir, tasks }),
+  wsWriteProject: (projectDir, tasks, options) =>
+    ipcRenderer.invoke("ws:write-project", { projectDir, tasks, options }),
   wsDeleteTask: (projectDir, taskId) =>
     ipcRenderer.invoke("ws:delete-task", { projectDir, taskId }),
   wsCreateProject: (workspacePath, name, id, order) =>

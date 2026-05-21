@@ -564,7 +564,7 @@ function tempPathFor(filePath) {
   return path.join(dir, `.${base}.${process.pid}.${Date.now()}.${crypto.randomUUID()}.tmp`);
 }
 
-async function atomicWriteFile(filePath, data, options) {
+async function atomicWriteFile(filePath, data, options, onWritten) {
   await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
   const tmpPath = tempPathFor(filePath);
   try {
@@ -578,19 +578,37 @@ async function atomicWriteFile(filePath, data, options) {
     }
     throw err;
   }
+  if (typeof onWritten === "function") {
+    try {
+      onWritten(filePath, data);
+    } catch {
+      // onWritten is a best-effort sync hook for the reconciler; never let
+      // its errors fail an otherwise-successful write.
+    }
+  }
 }
 
-async function writeFileIfChanged(filePath, data, options) {
+async function writeFileIfChanged(filePath, data, options, onWritten) {
   const nextBuffer = Buffer.isBuffer(data) ? data : Buffer.from(String(data));
   try {
     const currentBuffer = await fs.promises.readFile(filePath);
     if (Buffer.compare(currentBuffer, nextBuffer) === 0) {
+      // No write needed; the on-disk content already matches. Still call
+      // onWritten so the reconciler can register the hash even if this is
+      // the first time we've touched this file in the session.
+      if (typeof onWritten === "function") {
+        try {
+          onWritten(filePath, nextBuffer);
+        } catch {
+          // ignore
+        }
+      }
       return false;
     }
   } catch (err) {
     if (err.code !== "ENOENT") throw err;
   }
-  await atomicWriteFile(filePath, data, options);
+  await atomicWriteFile(filePath, nextBuffer, options, onWritten);
   return true;
 }
 
@@ -724,7 +742,7 @@ function writeMemoFiles(taskDir, indexFileName, memos) {
   }
 }
 
-async function writeMemoFilesAsync(taskDir, indexFileName, memos) {
+async function writeMemoFilesAsync(taskDir, indexFileName, memos, onWritten) {
   const existing = (await fs.promises.readdir(taskDir)).filter(
     (f) => f.endsWith(".md") && f !== indexFileName
   );
@@ -738,7 +756,9 @@ async function writeMemoFilesAsync(taskDir, indexFileName, memos) {
       stringifyFrontmatter(
         { id, title: memo.title, tags: memo.tags ?? [], format: normalizeMemoFormat(memo.format) },
         serializeMemoBody(memo)
-      )
+      ),
+      undefined,
+      onWritten
     );
   }
 
@@ -760,13 +780,15 @@ function writeRootTask(projectDir, task) {
 }
 
 /** Write root task to _project.md using atomic async file writes. */
-async function writeRootTaskAsync(projectDir, task) {
+async function writeRootTaskAsync(projectDir, task, onWritten) {
   await fs.promises.mkdir(projectDir, { recursive: true });
   await writeFileIfChanged(
     path.join(projectDir, "_project.md"),
-    stringifyFrontmatter(taskFrontmatterData(task))
+    stringifyFrontmatter(taskFrontmatterData(task)),
+    undefined,
+    onWritten
   );
-  await writeMemoFilesAsync(projectDir, "_project.md", task.memos);
+  await writeMemoFilesAsync(projectDir, "_project.md", task.memos, onWritten);
 }
 
 /**
@@ -800,9 +822,9 @@ function writeTask(projectDir, task, taskDirs) {
  * Async atomic variant for the interactive save path. The synchronous
  * writeTask stays available for export/migrate batch operations.
  */
-async function writeTaskAsync(projectDir, task, taskDirs) {
+async function writeTaskAsync(projectDir, task, taskDirs, onWritten) {
   if (!task.parents || task.parents.length === 0) {
-    await writeRootTaskAsync(projectDir, task);
+    await writeRootTaskAsync(projectDir, task, onWritten);
     if (!taskDirs.has(task.id)) taskDirs.set(task.id, "_project");
     return;
   }
@@ -817,10 +839,12 @@ async function writeTaskAsync(projectDir, task, taskDirs) {
 
   await writeFileIfChanged(
     path.join(taskDir, "_index.md"),
-    stringifyFrontmatter(taskFrontmatterData(task))
+    stringifyFrontmatter(taskFrontmatterData(task)),
+    undefined,
+    onWritten
   );
 
-  await writeMemoFilesAsync(taskDir, "_index.md", task.memos);
+  await writeMemoFilesAsync(taskDir, "_index.md", task.memos, onWritten);
 }
 
 function saveMemoImage(projectDir, taskDirs, taskId, bytes, mimeType) {
@@ -847,7 +871,7 @@ function saveMemoImage(projectDir, taskDirs, taskId, bytes, mimeType) {
   };
 }
 
-async function saveMemoImageAsync(projectDir, taskDirs, taskId, bytes, mimeType) {
+async function saveMemoImageAsync(projectDir, taskDirs, taskId, bytes, mimeType, onWritten) {
   const dirName = taskDirs.get(taskId);
   if (!dirName) {
     throw new Error("Task directory was not found");
@@ -862,7 +886,7 @@ async function saveMemoImageAsync(projectDir, taskDirs, taskId, bytes, mimeType)
   const assetPath = path.join(assetsDir, fileName);
   const buffer = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
 
-  await atomicWriteFile(assetPath, buffer);
+  await atomicWriteFile(assetPath, buffer, undefined, onWritten);
 
   return {
     fileName,
@@ -915,7 +939,8 @@ async function deleteTaskDirAsync(projectDir, taskDirs, taskId) {
   taskDirs.delete(taskId);
 }
 
-async function writeProjectAsync(projectDir, tasks) {
+async function writeProjectAsync(projectDir, tasks, options = {}) {
+  const { onWritten } = options;
   const { taskDirs } = readProject(projectDir);
   const nextTaskIds = new Set(tasks.map((task) => task.id));
 
@@ -926,7 +951,7 @@ async function writeProjectAsync(projectDir, tasks) {
   }
 
   for (const task of tasks) {
-    await writeTaskAsync(projectDir, task, taskDirs);
+    await writeTaskAsync(projectDir, task, taskDirs, onWritten);
   }
 
   return {
@@ -956,20 +981,25 @@ function createProject(workspacePath, name, id, order) {
   return { dirName, projectDir };
 }
 
-async function createProjectAsync(workspacePath, name, id, order) {
+async function createProjectAsync(workspacePath, name, id, order, options = {}) {
+  const { onWritten } = options;
   const dirName = uniqueName(workspacePath, slugify(name) || "project");
   const projectDir = path.join(workspacePath, dirName);
   await fs.promises.mkdir(projectDir, { recursive: true });
   const today = new Date().toISOString().slice(0, 10);
-  await writeRootTaskAsync(projectDir, {
-    id,
-    name,
-    status: "Open",
-    parents: [],
-    memos: [],
-    createdAt: today,
-    order,
-  });
+  await writeRootTaskAsync(
+    projectDir,
+    {
+      id,
+      name,
+      status: "Open",
+      parents: [],
+      memos: [],
+      createdAt: today,
+      order,
+    },
+    onWritten
+  );
   return { dirName, projectDir };
 }
 
@@ -1022,17 +1052,23 @@ function projectListIdentities(project) {
   return [project?.rootId, project?.id, project?.dirName, project?.projectDir].filter(Boolean);
 }
 
-async function writeProjectRootOrder(projectDir, order) {
+async function writeProjectRootOrder(projectDir, order, onWritten) {
   const projectFile = path.join(projectDir, "_project.md");
   const content = await fs.promises.readFile(projectFile, "utf8");
   const { data, body } = parseFrontmatter(content);
   if (parseOrderValue(data.order) === order) {
     return false;
   }
-  return writeFileIfChanged(projectFile, stringifyFrontmatter({ ...data, order }, body), "utf8");
+  return writeFileIfChanged(
+    projectFile,
+    stringifyFrontmatter({ ...data, order }, body),
+    "utf8",
+    onWritten
+  );
 }
 
-async function setProjectOrderAsync(workspacePath, orderedProjects) {
+async function setProjectOrderAsync(workspacePath, orderedProjects, options = {}) {
+  const { onWritten } = options;
   if (!workspacePath || typeof workspacePath !== "string") {
     throw new Error("Invalid workspacePath");
   }
@@ -1068,7 +1104,7 @@ async function setProjectOrderAsync(workspacePath, orderedProjects) {
 
   const changedProjectDirs = [];
   for (const [index, project] of nextProjects.entries()) {
-    const changed = await writeProjectRootOrder(project.projectDir, index);
+    const changed = await writeProjectRootOrder(project.projectDir, index, onWritten);
     project.order = index;
     if (changed) {
       changedProjectDirs.push(project.projectDir);
