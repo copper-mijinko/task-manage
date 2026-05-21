@@ -76,6 +76,11 @@ export interface WorkspaceFlushCompleteEvent {
   forced?: boolean;
 }
 
+export interface WindowState {
+  isMaximized: boolean;
+  isFullScreen: boolean;
+}
+
 export type WorkspaceConflictPolicy = "ask" | "prefer-memory";
 
 export interface ElectronAPI {
@@ -108,6 +113,13 @@ export interface ElectronAPI {
   onWorkspaceFlushStart: (callback: (event: WorkspaceFlushStartEvent) => void) => void;
   onWorkspaceFlushComplete: (callback: (event: WorkspaceFlushCompleteEvent) => void) => void;
   getCurrentTheme: () => Promise<ThemeName>;
+
+  // Window controls
+  windowMinimize: () => void;
+  windowToggleMaximize: () => void;
+  windowClose: () => void;
+  windowGetState: () => Promise<WindowState>;
+  onWindowStateChanged: (callback: (state: WindowState) => void) => void;
 
   // Workspace API
   wsGetWorkspaces: () => Promise<{ workspaces: WorkspaceInfo[]; activeWorkspace: string | null }>;
