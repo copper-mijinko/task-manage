@@ -2,6 +2,12 @@
   import { tick, onDestroy } from "svelte";
   import { EditorView, keymap, lineNumbers } from "@codemirror/view";
   import { EditorState } from "@codemirror/state";
+  import {
+    autocompletion,
+    completionKeymap,
+    type CompletionContext,
+    type CompletionResult,
+  } from "@codemirror/autocomplete";
   import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
   import { syntaxHighlighting, HighlightStyle } from "@codemirror/language";
   import { tags as t } from "@lezer/highlight";
@@ -21,6 +27,7 @@
   export let content: unknown = "";
   export let readOnly = false;
   export let memoTitles: string[] = [];
+  export let currentMemoTitle = "";
   export let openMemoLink: ((title: string) => void) | undefined = undefined;
   export let workspaceProjectDir: string | null = null;
   export let taskId: string | null = null;
@@ -71,6 +78,39 @@
     { value: "read", label: "Read", className: "read-mode-btn" },
     { value: "edit", label: "Edit", className: "edit-mode-btn" },
   ];
+
+  function memoLinkCompletion(context: CompletionContext): CompletionResult | null {
+    const line = context.state.doc.lineAt(context.pos);
+    const textBefore = line.text.slice(0, context.pos - line.from);
+    const match = /\[\[([^\]\n|]*)$/.exec(textBefore);
+    if (!match) return null;
+
+    const query = normalizeMemoTitle(match[1]);
+    const normalizedCurrentTitle = normalizeMemoTitle(currentMemoTitle);
+    const options = memoTitles
+      .map((title) => {
+        const label = String(title || "").trim();
+        return { label, normalized: normalizeMemoTitle(label) };
+      })
+      .filter(({ label, normalized }) => {
+        if (!label || normalized === normalizedCurrentTitle) return false;
+        return !query || normalized.includes(query);
+      })
+      .map((title) => ({
+        label: title.label,
+        type: "text",
+        apply: title.label,
+        detail: "memo",
+      }));
+
+    if (options.length === 0 && !context.explicit) return null;
+
+    return {
+      from: context.pos - match[1].length,
+      options,
+      validFor: /^[^\]\n|]*$/,
+    };
+  }
 
   function normalizeMemoTitle(title: string): string {
     return title.trim().toLocaleLowerCase();
@@ -605,6 +645,10 @@
       editorTheme,
       lineNumbers(),
       markdown({ base: markdownLanguage, codeLanguages: languages }),
+      autocompletion({
+        override: [memoLinkCompletion],
+        activateOnTyping: true,
+      }),
       syntaxHighlighting(markdownHighlightStyle),
       highlightSelectionMatches(),
       keymap.of([
@@ -629,6 +673,7 @@
             return true;
           },
         },
+        ...completionKeymap,
         ...defaultKeymap,
         ...searchKeymap,
         {
@@ -834,6 +879,7 @@
   }
 
   $: normalizedContent = toMarkdown(content);
+  $: hasRenderedContent = Boolean(currentContent.trim());
   $: if (!isEditing && normalizedContent !== currentContent) {
     currentContent = normalizedContent;
   }
@@ -1012,7 +1058,7 @@
           on:click={handlePreviewClick}
           on:keydown={handlePreviewKeydown}
         >
-          {#if currentContent.trim()}
+          {#if hasRenderedContent}
             <!-- eslint-disable-next-line svelte/no-at-html-tags -->
             <div class="preview" bind:this={livePreviewEl}>{@html renderedHtml}</div>
           {:else}
@@ -1023,7 +1069,12 @@
     </div>
   {:else}
     <!-- svelte-ignore a11y-no-static-element-interactions -->
-    <div class="preview-mode" on:click={handlePreviewClick} on:keydown={handlePreviewKeydown}>
+    <div
+      class="preview-mode"
+      class:emptyContent={!hasRenderedContent}
+      on:click={handlePreviewClick}
+      on:keydown={handlePreviewKeydown}
+    >
       {#if !readOnly}
         <div class="preview-bar">
           <SegmentedControl
@@ -1034,7 +1085,7 @@
           />
         </div>
       {/if}
-      {#if currentContent.trim()}
+      {#if hasRenderedContent}
         <!-- eslint-disable-next-line svelte/no-at-html-tags -->
         <div class="preview" bind:this={previewEl}>{@html renderedHtml}</div>
       {:else if !readOnly}
@@ -1058,6 +1109,19 @@
     min-height: 0;
     overflow: hidden;
     background-color: var(--theme-color-Main-light);
+    border: 1px solid color-mix(in srgb, var(--theme-color-Sub-dark) 45%, transparent);
+    box-sizing: border-box;
+  }
+
+  .wrapper :global(.cm-tooltip-autocomplete) {
+    background-color: var(--theme-color-Main-main);
+    border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 28%, transparent);
+    color: var(--theme-color-Sub-main);
+  }
+
+  .wrapper :global(.cm-tooltip-autocomplete ul li[aria-selected]) {
+    background-color: color-mix(in srgb, var(--theme-color-Primary-main) 18%, transparent);
+    color: var(--theme-color-Sub-light);
   }
 
   .edit-mode {
@@ -1333,6 +1397,10 @@
     overflow: auto;
   }
 
+  .preview-mode.emptyContent {
+    overflow: hidden;
+  }
+
   .preview-bar {
     position: sticky;
     top: 0;
@@ -1382,12 +1450,16 @@
 
   .placeholder {
     flex: 1 1 auto;
-    min-height: 100%;
+    min-height: 0;
     box-sizing: border-box;
     padding: var(--sp4);
     color: var(--theme-color-Sub-main);
     font-size: var(--font-body-md);
     font-style: italic;
+  }
+
+  .live-preview .placeholder {
+    min-height: 100%;
   }
 
   .preview :global(h1),

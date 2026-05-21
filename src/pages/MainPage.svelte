@@ -37,7 +37,7 @@
   } from "@features/tasks/utils/tree_control";
   import { getDefaultNode } from "@features/tasks/utils/tree_control";
   import { undoHistory, redoHistory } from "@features/tasks/stores/tree";
-  import { selected_ids, clearSelection } from "@stores/ui";
+  import { selected_ids, clearSelection, selectOnly } from "@stores/ui";
 
   // ページ内検索はstoresから共有
 
@@ -69,7 +69,7 @@
       return;
     }
     $tree_data.data = rmNode($table_selected_id, $tree_data.data);
-    $table_selected_id = undefined;
+    clearSelection();
   };
 
   // Reactive bulk-capability flags for the toolbar buttons.
@@ -282,7 +282,7 @@
       }
 
       // 新しいノードを選択状態にしてDOMの更新を待つ
-      $table_selected_id = new_node.id;
+      selectOnly(new_node.id);
       await tick();
 
       const newRow = document.getElementById(new_node.id);

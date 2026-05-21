@@ -25,6 +25,7 @@ vi.mock("@features/gantt/components/GanttPanel.svelte", async () => {
 
 import ProjectPage from "@pages/MainPage.svelte";
 import { closed_node_ids, ganttVisible, selected_id, table_selected_id, tree_data } from "@stores";
+import { clearSelection, selected_ids } from "@stores/ui";
 
 function createProjectData() {
   return {
@@ -69,6 +70,7 @@ describe("ProjectPage", () => {
     });
     tree_data.set(createProjectData());
     selected_id.set("project-1");
+    clearSelection();
     table_selected_id.set("task-1");
     closed_node_ids.set(new Set());
     ganttVisible.set(false);
@@ -90,6 +92,7 @@ describe("ProjectPage", () => {
     expect(get(tree_data).data.children).toHaveLength(2);
     expect(get(tree_data).data.children[1].data.name).toBe("new_task");
     expect(get(table_selected_id)).toBe(get(tree_data).data.children[1].id);
+    expect(get(selected_ids)).toEqual(new Set([get(tree_data).data.children[1].id]));
   });
 
   test("adds the first task under the project root when nothing is selected", async () => {

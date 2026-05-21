@@ -27,6 +27,7 @@
   data-can-outdent={canOutdent ? "true" : "false"}
   data-selected={selected ? "true" : "false"}
 >
+  <div class="CheckboxCell" style="width: 28px;"></div>
   {#each headers as header}
     <div class="TableData" style="width: 100px;">
       {#if header.name === "name"}

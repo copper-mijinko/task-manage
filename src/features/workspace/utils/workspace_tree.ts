@@ -57,6 +57,7 @@ export function workspaceToProjectData(
           content: m.content,
           tags: m.tags,
           format: normalizeMemoFormat(m.format, "markdown"),
+          order: m.order,
         })),
       },
       children: childIds.map((cid) => buildNode(cid)),
@@ -103,7 +104,7 @@ export function projectDataToWorkspaceTasks(
       startDate: node.data["start date"] || undefined,
       dueDate: node.data["due date"] || undefined,
       parents: parentIds,
-      memos: (node.data.memo || []).map((m) => {
+      memos: (node.data.memo || []).map((m, index) => {
         const format = normalizeMemoFormat(m.format, "markdown");
         return {
           id: m.id || "",
@@ -111,6 +112,7 @@ export function projectDataToWorkspaceTasks(
           content: format === "markdown" ? toMarkdown(m.content) : m.content,
           tags: Array.isArray(m.tags) ? m.tags : [],
           format,
+          order: index,
         };
       }),
       createdAt: existing?.createdAt || today,

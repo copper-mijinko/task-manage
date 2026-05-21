@@ -1,6 +1,8 @@
 ﻿import { fireEvent, render, waitFor } from "@testing-library/svelte";
 import { tick } from "svelte";
 import { vi } from "vitest";
+import { startCompletion } from "@codemirror/autocomplete";
+import { EditorView } from "@codemirror/view";
 
 const quillInstances = [];
 
@@ -143,6 +145,7 @@ describe("Markdown Memo - view mode", () => {
   test("shows placeholder when content is empty", () => {
     renderMarkdownMemo({ saveMemo, content: "" });
     expect(document.querySelector(".placeholder")).toBeInTheDocument();
+    expect(document.querySelector(".preview-mode")).toHaveClass("emptyContent");
   });
 
   test("renders markdown content as HTML in view mode", () => {
@@ -198,6 +201,7 @@ describe("Markdown Memo - view mode", () => {
   test("readOnly: no placeholder shown when empty", () => {
     renderMarkdownMemo({ saveMemo, content: "", readOnly: true });
     expect(document.querySelector(".placeholder")).not.toBeInTheDocument();
+    expect(document.querySelector(".preview-mode")).toHaveClass("emptyContent");
   });
 });
 
@@ -219,6 +223,60 @@ describe("Markdown Memo - edit mode", () => {
     await fireEvent.click(document.querySelector(".edit-mode-btn"));
     await waitFor(() => {
       expect(document.querySelector(".cm-editor")).toBeInTheDocument();
+    });
+  });
+
+  test("suggests memo titles after a wiki-link opener", async () => {
+    renderMarkdownMemo({
+      saveMemo,
+      content: "",
+      memoTitles: ["Daily Notes", "Research Log"],
+    });
+    await fireEvent.click(document.querySelector(".edit-mode-btn"));
+    await waitFor(() => {
+      expect(document.querySelector(".cm-editor")).toBeInTheDocument();
+    });
+
+    const view = EditorView.findFromDOM(document.querySelector(".cm-editor"));
+    view.focus();
+    view.dispatch({
+      changes: { from: 0, insert: "[[" },
+      selection: { anchor: 2 },
+      userEvent: "input.type",
+    });
+    startCompletion(view);
+
+    await waitFor(() => {
+      expect(document.querySelector(".cm-tooltip-autocomplete")).toHaveTextContent("Daily Notes");
+      expect(document.querySelector(".cm-tooltip-autocomplete")).toHaveTextContent("Research Log");
+    });
+  });
+
+  test("does not suggest the current memo title after a wiki-link opener", async () => {
+    renderMarkdownMemo({
+      saveMemo,
+      content: "",
+      memoTitles: ["Daily Notes", "Research Log"],
+      currentMemoTitle: "Daily Notes",
+    });
+    await fireEvent.click(document.querySelector(".edit-mode-btn"));
+    await waitFor(() => {
+      expect(document.querySelector(".cm-editor")).toBeInTheDocument();
+    });
+
+    const view = EditorView.findFromDOM(document.querySelector(".cm-editor"));
+    view.focus();
+    view.dispatch({
+      changes: { from: 0, insert: "[[" },
+      selection: { anchor: 2 },
+      userEvent: "input.type",
+    });
+    startCompletion(view);
+
+    await waitFor(() => {
+      const tooltip = document.querySelector(".cm-tooltip-autocomplete");
+      expect(tooltip).toHaveTextContent("Research Log");
+      expect(tooltip).not.toHaveTextContent("Daily Notes");
     });
   });
 

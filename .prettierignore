@@ -3,4 +3,5 @@ renderer/
 node_modules/
 package-lock.json
 .claude/
+electron/workspace-state/
 docs/

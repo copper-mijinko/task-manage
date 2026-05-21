@@ -481,6 +481,10 @@
     padding: var(--sp4);
   }
 
+  .SplitPaneRoot > :global(.Pane.PaneMini > :not(.PaneMiniPlaceholder)) {
+    display: none !important;
+  }
+
   /* Blank Card placeholder injected when a pane enters mini state.
      Styled as a Card header bar — the entire strip gets the CardHeader
      blue-tinted background so it reads as "a collapsed card".

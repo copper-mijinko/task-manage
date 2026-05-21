@@ -835,14 +835,19 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    box-sizing: border-box;
+    line-height: 0;
     background-color: var(--header-bg);
     border-right: 1px solid var(--header-border);
     border-bottom: 1px solid var(--header-border);
   }
   .HeaderCheckbox {
+    display: block;
+    flex: 0 0 0.95rem;
     width: 0.95rem;
     height: 0.95rem;
     margin: 0;
+    line-height: 1;
     cursor: pointer;
     accent-color: var(--theme-color-Primary-dark);
   }
@@ -1011,7 +1016,7 @@
     cursor: pointer;
     user-select: none;
   }
-  input[type="checkbox"] {
+  .SettingsRow input[type="checkbox"] {
     width: 0.9rem;
     height: 0.9rem;
     flex-shrink: 0;

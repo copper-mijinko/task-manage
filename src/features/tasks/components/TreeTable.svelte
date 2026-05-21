@@ -293,13 +293,20 @@
       }
     });
 
+    const getLeadingColumnWidth = () =>
+      tableRows[0]?.querySelector(".CheckboxHeaderCell")?.getBoundingClientRect().width ?? 0;
+
     // Set width
     if (is_default) {
       const default_ratio_sum = currentHeaders.reduce(
         (partialSum, header) => partialSum + header.default_ratio,
         0
       );
-      const default_root_width = tableRows[0].getBoundingClientRect().width;
+      const leadingColumnWidth = getLeadingColumnWidth();
+      const default_root_width = Math.max(
+        0,
+        tableRows[0].getBoundingClientRect().width - leadingColumnWidth
+      );
       const default_data_widths = currentHeaders.map(
         (header) => (default_root_width * header.default_ratio) / default_ratio_sum
       );
@@ -311,7 +318,7 @@
       });
 
       // Create resizer elements
-      let left = 0;
+      let left = leadingColumnWidth;
       domHeaders.forEach((header, index) => {
         if (index === 0) {
           left += default_data_widths[index];
@@ -358,10 +365,11 @@
     function fitNameColumn() {
       if (domHeaders.length === 0) return;
       const tableWidth = table_root.getBoundingClientRect().width;
+      const leadingColumnWidth = getLeadingColumnWidth();
       const widths = domHeaders.map((h) => h.getBoundingClientRect().width);
       const fixedTotal = widths.slice(1).reduce((s, w) => s + w, 0);
       const nameMin = parseFloat(window.getComputedStyle(domHeaders[0]).minWidth) || 0;
-      const nameWidth = Math.max(nameMin, tableWidth - fixedTotal);
+      const nameWidth = Math.max(nameMin, tableWidth - leadingColumnWidth - fixedTotal);
 
       domHeaders[0].style.width = `${nameWidth}px`;
       data_rows.forEach((data_row) => {
@@ -371,7 +379,7 @@
       // Every resizer sits between two columns; since column 0 changed,
       // ALL resizer left positions shift by the delta. Re-place them
       // using the new Name width followed by each fixed downstream width.
-      let left = nameWidth;
+      let left = leadingColumnWidth + nameWidth;
       existingResizers.forEach((resizer, idx) => {
         resizer.style.left = `${left - 3}px`;
         left += widths[idx + 1] ?? 0;
@@ -398,7 +406,9 @@
         });
       });
 
-      let left = 0;
+      const leadingColumnWidth =
+        table_root?.querySelector(".CheckboxHeaderCell")?.getBoundingClientRect().width ?? 0;
+      let left = leadingColumnWidth;
       resizers.forEach((columnResizer, index) => {
         left += widths[index];
         columnResizer.style.left = `${left - 3}px`;
@@ -545,7 +555,7 @@
   }
 
   function handleBackgroundClick() {
-    if (selectionSize > 0) clearSelection();
+    table_root?.focus?.();
   }
 
   function handleScroll(event) {
@@ -689,7 +699,7 @@
 
   function focusNewNode(newNodeId) {
     setTimeout(() => {
-      $table_selected_id = newNodeId;
+      selectOnly(newNodeId);
 
       setTimeout(() => {
         const newRow = document.getElementById(newNodeId);
@@ -956,7 +966,7 @@
     const data = rmNode(deleteTargetId, $tree_data.data);
     $tree_data = { ...$tree_data, data };
     if ($table_selected_id === deleteTargetId) {
-      $table_selected_id = undefined;
+      clearSelection();
     }
     deleteTargetId = undefined;
     deleteTargetName = "";

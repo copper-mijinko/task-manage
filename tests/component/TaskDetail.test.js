@@ -17,6 +17,7 @@ import {
   tree_data,
   workspace_store,
 } from "@stores";
+import { clearSelection } from "@stores/ui";
 
 function createProjectData() {
   return {
@@ -72,11 +73,13 @@ describe("TaskDetail", () => {
       projects: [],
     });
     tree_data.set(createProjectData());
+    clearSelection();
     table_selected_id.set(undefined);
   });
 
   afterEach(() => {
     delete window.__memoStubSaveOnDestroy;
+    delete window.electronAPI;
   });
 
   test("shows a placeholder when no task is selected", () => {
@@ -94,6 +97,33 @@ describe("TaskDetail", () => {
     expect(screen.getByRole("button", { name: "メモを追加" })).toBeInTheDocument();
     expect(screen.getByText("First Task")).toBeInTheDocument();
     expect(screen.queryByLabelText("Storage mode")).not.toBeInTheDocument();
+  });
+
+  test("opens the selected task detail from the card header action", async () => {
+    window.electronAPI = { openTaskDetailWindow: vi.fn() };
+    workspace_store.set({
+      workspaces: [],
+      activeWorkspacePath: "C:\\workspace",
+      activeProjectDir: "C:\\workspace\\project-1",
+      projects: [],
+    });
+    selected_type.set("WorkspaceProject");
+    table_selected_id.set("task-2");
+
+    render(TaskDetail);
+
+    await fireEvent.click(screen.getByRole("button", { name: "タスク詳細を別ウィンドウで開く" }));
+    await tick();
+
+    expect(window.electronAPI.openTaskDetailWindow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId: "project-1",
+        taskId: "task-2",
+        taskName: "Second Task",
+        selectedType: "WorkspaceProject",
+        projectDir: "C:\\workspace\\project-1",
+      })
+    );
   });
 
   test("edits task detail fields independent of visible table columns", async () => {
@@ -168,6 +198,38 @@ describe("TaskDetail", () => {
     expect(screen.getByRole("button", { name: "Select memo memo" })).toHaveClass("selected");
     expect(get(tree_data).data.children[0].data.memo).toEqual([
       expect.objectContaining({ title: "memo", content: "" }),
+    ]);
+  });
+
+  test("reorders memo tabs and writes the new order into task data", async () => {
+    const project = createProjectData();
+    project.data.children[0].data.memo = [
+      { id: "memo-first", title: "first", content: "" },
+      { id: "memo-second", title: "second", content: "" },
+    ];
+    tree_data.set(project);
+    table_selected_id.set("task-1");
+
+    render(TaskDetail);
+
+    const firstTab = screen.getByRole("button", { name: "Select memo first" });
+    const secondTab = screen.getByRole("button", { name: "Select memo second" });
+    const dataTransfer = { effectAllowed: "", dropEffect: "" };
+    const dragStart = new Event("dragstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(dragStart, "dataTransfer", { value: dataTransfer });
+    const drop = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperties(drop, {
+      dataTransfer: { value: dataTransfer },
+      clientX: { value: 0 },
+    });
+
+    secondTab.dispatchEvent(dragStart);
+    firstTab.dispatchEvent(drop);
+    await tick();
+
+    expect(get(tree_data).data.children[0].data.memo.map((memo) => memo.id)).toEqual([
+      "memo-second",
+      "memo-first",
     ]);
   });
 

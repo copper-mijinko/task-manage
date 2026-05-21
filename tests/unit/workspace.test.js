@@ -344,6 +344,38 @@ describe("file system operations", () => {
     expect(loaded.memos[0].content).toContain("Stored here");
   });
 
+  it("writeTask + readProject preserves memo order independently of filenames", () => {
+    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
+    const taskDirs = new Map([["root-id", "_project"]]);
+    const task = {
+      id: "task-memo-order",
+      name: "Memo Order",
+      status: "Open",
+      parents: ["root-id"],
+      memos: [
+        { id: "z-memo", title: "First", content: "First content" },
+        { id: "a-memo", title: "Second", content: "Second content" },
+      ],
+      createdAt: "2026-04-24",
+    };
+
+    writeTask(projectDir, task, taskDirs);
+
+    const firstFile = fs.readFileSync(
+      path.join(projectDir, "task-memo-order", "z-memo.md"),
+      "utf8"
+    );
+    const secondFile = fs.readFileSync(
+      path.join(projectDir, "task-memo-order", "a-memo.md"),
+      "utf8"
+    );
+    expect(firstFile).toContain("order: 0");
+    expect(secondFile).toContain("order: 1");
+
+    const { tasks } = readProject(projectDir);
+    expect(tasks.get("task-memo-order").memos.map((memo) => memo.id)).toEqual(["z-memo", "a-memo"]);
+  });
+
   it("writeTask + readProject round-trips a regular task", () => {
     const { projectDir } = createProject(tmpDir, "Proj", "root-id");
     const taskDirs = new Map([["root-id", "_project"]]);

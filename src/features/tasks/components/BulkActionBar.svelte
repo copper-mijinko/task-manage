@@ -118,7 +118,7 @@
 
 <svelte:window on:click={handleWindowClick} on:keydown={handleKeydown} />
 
-{#if count > 0}
+{#if count > 1}
   <div
     class="BulkBar"
     role="toolbar"

@@ -630,7 +630,7 @@ function readMemos(taskDir, reservedFiles = ["_index.md"]) {
     .readdirSync(taskDir)
     .filter((f) => f.endsWith(".md") && !reserved.has(f))
     .sort();
-  for (const file of files) {
+  files.forEach((file, fileIndex) => {
     const raw = fs.readFileSync(path.join(taskDir, file), "utf8");
     const { data, body } = parseFrontmatter(raw);
     const id = data.id || crypto.randomUUID();
@@ -647,9 +647,17 @@ function readMemos(taskDir, reservedFiles = ["_index.md"]) {
     const tags = Array.isArray(data.tags) ? data.tags.map(String) : [];
     const format = normalizeMemoFormat(data.format, "markdown");
     const content = format === "quill" ? parseQuillMemoBody(body) : body.trim();
-    memos.push({ id, title, content, tags, format });
-  }
-  return memos;
+    memos.push({ id, title, content, tags, format, order: parseOrderValue(data.order), fileIndex });
+  });
+  return memos
+    .sort((a, b) => {
+      const aHasOrder = typeof a.order === "number";
+      const bHasOrder = typeof b.order === "number";
+      if (aHasOrder && bHasOrder && a.order !== b.order) return a.order - b.order;
+      if (aHasOrder !== bHasOrder) return aHasOrder ? -1 : 1;
+      return a.fileIndex - b.fileIndex;
+    })
+    .map(({ fileIndex, ...memo }) => memo);
 }
 
 /** Read the root task from _project.md inside projectDir. */
@@ -730,12 +738,18 @@ function readProject(projectDir) {
 function writeMemoFiles(taskDir, indexFileName, memos) {
   const existing = fs.readdirSync(taskDir).filter((f) => f.endsWith(".md") && f !== indexFileName);
   for (const f of existing) fs.unlinkSync(path.join(taskDir, f));
-  for (const memo of memos || []) {
+  for (const [index, memo] of (memos || []).entries()) {
     const id = memo.id || crypto.randomUUID();
     fs.writeFileSync(
       path.join(taskDir, `${id}.md`),
       stringifyFrontmatter(
-        { id, title: memo.title, tags: memo.tags ?? [], format: normalizeMemoFormat(memo.format) },
+        {
+          id,
+          title: memo.title,
+          tags: memo.tags ?? [],
+          format: normalizeMemoFormat(memo.format),
+          order: index,
+        },
         serializeMemoBody(memo)
       )
     );
@@ -748,13 +762,19 @@ async function writeMemoFilesAsync(taskDir, indexFileName, memos, onWritten) {
   );
   const nextFiles = new Set();
 
-  for (const memo of memos || []) {
+  for (const [index, memo] of (memos || []).entries()) {
     const id = memo.id || crypto.randomUUID();
     nextFiles.add(`${id}.md`);
     await writeFileIfChanged(
       path.join(taskDir, `${id}.md`),
       stringifyFrontmatter(
-        { id, title: memo.title, tags: memo.tags ?? [], format: normalizeMemoFormat(memo.format) },
+        {
+          id,
+          title: memo.title,
+          tags: memo.tags ?? [],
+          format: normalizeMemoFormat(memo.format),
+          order: index,
+        },
         serializeMemoBody(memo)
       ),
       undefined,

@@ -619,9 +619,17 @@ app.on("ready", () => {
         projectId: detailData?.projectId ? String(detailData.projectId) : "",
         taskId: detailData?.taskId ? String(detailData.taskId) : "",
         taskName: detailData?.taskName ? String(detailData.taskName) : "Task Detail",
+        selectedType:
+          detailData?.selectedType === "WorkspaceProject" ? "WorkspaceProject" : "Projects",
+        projectDir: detailData?.projectDir ? String(detailData.projectDir) : "",
       };
 
-      const existing = taskDetailWindows.get(safeDetailData.taskId);
+      const windowKey = [
+        safeDetailData.selectedType,
+        safeDetailData.projectDir || safeDetailData.projectId,
+        safeDetailData.taskId,
+      ].join(":");
+      const existing = taskDetailWindows.get(windowKey);
       if (existing && !existing.isDestroyed()) {
         existing.focus();
         return existing;
@@ -654,6 +662,8 @@ app.on("ready", () => {
             projectId: safeDetailData.projectId,
             taskId: safeDetailData.taskId,
             taskName: safeDetailData.taskName,
+            selectedType: safeDetailData.selectedType,
+            projectDir: safeDetailData.projectDir,
           },
         });
       }
@@ -663,10 +673,10 @@ app.on("ready", () => {
       win.on("unmaximize", () => sendWindowState(win));
       win.on("enter-full-screen", () => sendWindowState(win));
       win.on("leave-full-screen", () => sendWindowState(win));
-      taskDetailWindows.set(safeDetailData.taskId, win);
+      taskDetailWindows.set(windowKey, win);
 
       win.on("closed", () => {
-        taskDetailWindows.delete(safeDetailData.taskId);
+        taskDetailWindows.delete(windowKey);
       });
 
       log.info(`Task detail window created for task: ${safeDetailData.taskId}`);

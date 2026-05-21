@@ -5,6 +5,7 @@
   export let saveMemo = undefined;
   export let memoIndex = 0;
   export let format = undefined;
+  export let currentMemoTitle = "";
 
   onDestroy(() => {
     if (window.__memoStubSaveOnDestroy) {
@@ -17,6 +18,7 @@
   data-testid="memo-stub"
   data-memo-index={memoIndex}
   data-format={format}
+  data-current-memo-title={currentMemoTitle}
   data-has-save={saveMemo ? "true" : "false"}
 >
   {typeof content === "string" ? content : "memo-content"}
