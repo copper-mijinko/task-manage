@@ -25,6 +25,7 @@ import {
   workspace_tasks_cache,
   type WorkspaceState,
 } from "@features/workspace/stores/workspace";
+import { isPreferMemoryActive } from "@features/workspace/stores/policy";
 import type { SelectedType } from "@app-types/app";
 import type { WorkspaceProjectListItem, WorkspaceTask } from "@app-types/workspace";
 
@@ -217,8 +218,9 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
           rootTask.order = context.activeWorkspaceProject.order;
         }
         try {
+          const forceLocal = isPreferMemoryActive();
           platform
-            .wsWriteProject(activeProjectDir, tasks)
+            .wsWriteProject(activeProjectDir, tasks, forceLocal ? { forceLocal: true } : undefined)
             .then((result) => {
               if (!result?.success) {
                 saveStatus.set("error");

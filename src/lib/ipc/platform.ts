@@ -5,6 +5,8 @@
   TaskDetailWindowData,
   ThemeName,
   WorkspaceConflictEvent,
+  WorkspaceFlushCompleteEvent,
+  WorkspaceFlushStartEvent,
   WorkspaceNoticeEvent,
   WorkspaceProjectUpdatedEvent,
   WorkspaceSaveStatusEvent,
@@ -162,6 +164,16 @@ export function onWorkspaceNotice(callback: (event: WorkspaceNoticeEvent) => voi
   api()?.onWorkspaceNotice?.(callback);
 }
 
+export function onWorkspaceFlushStart(callback: (event: WorkspaceFlushStartEvent) => void): void {
+  api()?.onWorkspaceFlushStart?.(callback);
+}
+
+export function onWorkspaceFlushComplete(
+  callback: (event: WorkspaceFlushCompleteEvent) => void
+): void {
+  api()?.onWorkspaceFlushComplete?.(callback);
+}
+
 export function onSearchResultUpdated(callback: (result: FindInPageResult) => void): void {
   api()?.onSearchResultUpdated?.(callback);
 }
@@ -237,10 +249,11 @@ export function wsResolveMemoAsset(
 
 export function wsWriteProject(
   projectDir: string,
-  tasks: WorkspaceTask[]
+  tasks: WorkspaceTask[],
+  options?: { forceLocal?: boolean }
 ): Promise<{ success: boolean; queued?: boolean; error?: string }> {
   return (
-    api()?.wsWriteProject?.(projectDir, tasks) ??
+    api()?.wsWriteProject?.(projectDir, tasks, options) ??
     Promise.resolve({ success: false, error: "API unavailable" })
   );
 }

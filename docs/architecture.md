@@ -351,38 +351,43 @@ import LocalComponent from "./LocalComponent.svelte";
         │  ws:write-project（fire-and-forget）
         ▼
 [ main ]
-  WorkspaceWriteQueue ─ atomicWriteFile (tmp → rename) ─► disk
-        │                                                  │
-        │                                          (chokidar watch)
-        ▼                                                  ▼
-  recentlyWritten                                  WorkspaceReconciler
-  （5 秒間の自前書込ログ） ◄─────────────────────────────┘
-                                                           │
-                                  ┌────────────────────────┤
-                                  ▼                        ▼
-                          自前書込なら無視        外部書込として取り込み
-                                                  または conflict 通知
+  WorkspaceWriteQueue ─ writeProjectAsync ─► atomicWriteFile (tmp → rename) ─► disk
+        │                       │                                              │
+        │                       │  onWritten(path, buffer)              (chokidar watch)
+        │                       ▼                                              ▼
+        │             WorkspaceReconciler.recordWrite     WorkspaceReconciler.handleFileEvent
+        │              （knownFileHashes 同期更新）       （ハッシュ一致なら自前書込として suppress）
+        ▼                                                                      │
+  saveStatus push                                  ┌────────────────────────────┤
+                                                  ▼                            ▼
+                                          外部書込として取り込み      conflict 通知
+                                                                    （forceLocal 時は通知格下げ）
 ```
 
 #### 構成要素
 
-| 要素                 | 配置                                                 | 主要 API                                                                                 |
-| -------------------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| 原子的・増分書込     | `electron/workspace.js`                              | `atomicWriteFile` / `writeFileIfChanged` / `retryFileOperation` / `writeProjectAsync` 等 |
-| 直列ライトキュー     | `electron/workspace-write-queue.js`                  | `WorkspaceWriteQueue`（`enqueue` / `flush` / `hasPending` / `isWriting` / `discard`）    |
-| 外部書込リコンサイラ | `electron/workspace-reconciler.js`                   | `WorkspaceReconciler`（`start` / `stop` / `markProjectWritten`）+ `isConflictCopy` 判定  |
-| 状態スナップショット | `<TASK_MANAGE_DATA_DIR>/workspace-state/<hash>.json` | 配下ファイルの SHA-256 ハッシュ表                                                        |
+| 要素                 | 配置                                                 | 主要 API                                                                                                                              |
+| -------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| 原子的・増分書込     | `electron/workspace.js`                              | `atomicWriteFile` / `writeFileIfChanged` / `retryFileOperation` / `writeProjectAsync` 等。書込成功直後に `onWritten(filePath, buffer)` を発火 |
+| 直列ライトキュー     | `electron/workspace-write-queue.js`                  | `WorkspaceWriteQueue`（`enqueue(projectDir, tasks, { forceLocal })` / `flush` / `hasPending` / `isWriting` / `discard` / `getActiveOptions`） |
+| 外部書込リコンサイラ | `electron/workspace-reconciler.js`                   | `WorkspaceReconciler`（`start` / `stop` / `recordWrite(filePath, buffer)` / `markProjectWritten(projectDir)`）+ `isConflictCopy` 判定 |
+| 状態スナップショット | `<TASK_MANAGE_DATA_DIR>/workspace-state/<hash>.json` | 配下ファイルの SHA-256 ハッシュ表                                                                                                     |
 
 #### main → renderer の IPC イベント
 
-| チャネル                    | ペイロード                              | 用途                                                     |
-| --------------------------- | --------------------------------------- | -------------------------------------------------------- |
-| `workspace-save-status`     | `{ projectDir, status, message? }`      | キュー進行状態の楽観 UI 用 push                          |
-| `workspace-project-updated` | `{ projectDir, tasks, reason }`         | 外部書込・コンフリクト解決後の再読込通知                 |
-| `workspace-conflict`        | `{ projectDir, message }`               | ローカルにペンディング書込ありの外部編集検知             |
-| `workspace-notice`          | `{ kind, projectDir?, path?, message }` | `workspace-updated` / `conflicted-copy` / `error` の通知 |
+| チャネル                    | ペイロード                              | 用途                                                                                                                   |
+| --------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `workspace-save-status`     | `{ projectDir, status, message? }`      | キュー進行状態の楽観 UI 用 push                                                                                        |
+| `workspace-project-updated` | `{ projectDir, tasks, reason }`         | 外部書込・コンフリクト解決後の再読込通知                                                                               |
+| `workspace-conflict`        | `{ projectDir, message }`               | ローカルにペンディング書込ありの外部編集検知（`forceLocal` 中は発火せず `workspace-notice (kind: "overwritten-external")` に格下げ） |
+| `workspace-notice`          | `{ kind, projectDir?, path?, message }` | `workspace-updated` / `conflicted-copy` / `overwritten-external` / `error` の通知                                      |
+| `workspace-flush-start`     | `{ projectDir? }`                       | アプリ終了処理開始の通知。renderer はブロッキングオーバーレイを表示する                                                |
+| `workspace-flush-complete`  | `{}`                                    | flush 完了の通知。オーバーレイを閉じる前提（通常はそのままウィンドウ destroy）                                         |
 
-renderer → main の追加 IPC は `ws:resolve-conflict (action: "keep-local" | "reload")`。
+renderer → main の追加 IPC：
+
+- `ws:resolve-conflict (action: "keep-local" | "reload")`
+- `ws:write-project(projectDir, tasks, { forceLocal? })` — `forceLocal` は省略可（既定 `false`）
 
 #### SaveStatus 状態遷移
 
@@ -391,17 +396,48 @@ renderer → main の追加 IPC は `ws:resolve-conflict (action: "keep-local" |
 renderer の `saveStatus` ストアは:
 
 - 通常: `idle → queued → writing → saved`
-- リトライ発生時: `… → retrying → saved`
+- リトライ発生時（書込エラーかつ `forceLocal` 有効）: `… → writing → error → retrying → writing → saved`（最大 N 回。N を超えたら `error` 確定）
 - 失敗時: `… → error`
-- 外部書込との衝突時: `… → conflict`（`ws:resolve-conflict` 後に `saved` / `queued` へ復帰）
+- 外部書込との衝突時: `… → conflict`（`ws:resolve-conflict` 後に `saved` / `queued` へ復帰。`forceLocal` 中は `conflict` 状態には遷移しない）
 
-#### 自前書込フィルタ（`recentlyWritten`）
+#### 自前書込フィルタ（per-file `recordWrite`）
 
-WriteQueue で書き込んだ直後、対象ファイルの SHA-256 と TTL（5 秒）を `recentlyWritten: Map<absPath, { hash, expiresAt }>` に登録する。Reconciler は chokidar イベントを受けたとき、ディスクの SHA-256 が記録と一致すれば「自分の書込」として無視する。これにより `chokidar` 監視と自前書込の二重反映を防ぐ。
+`atomicWriteFile` は成功直後（rename 完了後）に optional コールバック `onWritten(filePath, buffer)` を発火する。queue 経由の書込パスでは、このコールバックを `reconciler.recordWrite(filePath, buffer)` に紐づけ、書込みごとに **同期的に** `knownFileHashes` をその場で最新ハッシュへ更新する。
 
-#### 終了時 flush
+これにより：
 
-`app.on("before-quit")` を拡張し、`workspaceWriteQueue.hasPending()` が真なら `event.preventDefault()` → `flush()` 完了 → `reconciler.stop()` → `app.quit()` の順で終了する。これにより未書出データを失わない。
+- chokidar の `awaitWriteFinish: 150ms` を経て発火する個別 change イベントが `handleFileEvent` に届いたとき、`knownFileHashes.get(path) === hashFile(path)` がほぼ確実に成立し、reconcile スケジュールに進まずに suppress される
+- 大規模プロジェクトでバッチが長時間化しても、書込み済みファイルが「未知のハッシュ」と判定される偽陽性が発生しない
+- `markProjectWritten(projectDir)` は **削除されたファイルの `knownFileHashes` エントリ整理と snapshot 書出しのみ** を担う。全ファイルの再ハッシュは行わない（書込み済み分は `recordWrite` で同期済み）
+
+直接 `atomicWriteFile` を呼ぶ箇所（`saveMemoImageAsync` 等）と、`writeFileIfChanged` 経由の箇所のいずれも `onWritten` をバケツリレーで受け取る。queue を経由しない単発 IPC（`ws:write-task`, `ws:save-memo-image`, `ws:set-project-order`）でも、main 側の IPC ハンドラが `reconciler.recordWrite` を `onWritten` として渡す。
+
+#### `forceLocal` フラグ（メモリ優先保存）
+
+`WorkspaceWriteQueue.enqueue(projectDir, tasks, { forceLocal })` で 1 件のジョブに `forceLocal: true` を付けると、以下のセマンティクスを持つ：
+
+1. **conflict 通知の格下げ**：書込み中に reconciler が外部書込を検知しても `workspace-conflict` を発火せず、`workspace-notice (kind: "overwritten-external")` のみ流す。saveStatus は `conflict` に遷移しない。
+2. **書込エラー時の内部リトライ**：`writeProjectAsync` が throw した場合（OneDrive ロック等、`atomicWriteFile` の retryFileOperation でも回復しなかったケース）、`processLoop` が指数バックオフ（初期 200ms、最大 5 回）で同 payload を再エンキューする。各リトライ前に `saveStatus: "retrying"` を発火。N 回超過で `saveStatus: "error"` 確定。
+
+renderer 側は `meta.json` の `workspaceConflictPolicy` に応じて `wsWriteProject` 呼出に `forceLocal` を自動付与する：
+
+- `"ask"`（既定）: `forceLocal: false`。conflict バナーで「維持 / 再読込」を選ばせる
+- `"prefer-memory"`: `forceLocal: true`。conflict バナーは出ず、`overwritten-external` 通知のみ
+
+#### 終了時 flush — ウィンドウを閉じずに待機
+
+`mainWindow.on("close", ...)` で介入する。`workspaceWriteQueue.hasPending()` が真なら：
+
+1. `event.preventDefault()` でウィンドウ destroy を抑止
+2. `workspace-flush-start` IPC を renderer に送り、renderer は操作不能なオーバーレイを表示（保存中... の表示でユーザに待機を促す）
+3. `dbWriter.flush()` / `dbMetaWriter.flush()`（同期）を実行
+4. `workspaceWriteQueue.flush()` を await
+5. `reconciler.stop()` を await
+6. `mainWindow.removeAllListeners("close")` してから `mainWindow.destroy()`（再帰防止）
+
+タイムアウト：30 秒経過しても flush が完了しない場合、renderer に「強制終了 / 継続」を選ばせるダイアログを表示。「強制終了」が選ばれた場合のみ未保存データを諦めて destroy する。
+
+`app.on("before-quit")` は programmatic quit（Cmd+Q 等）からのフォールバックとして残し、close intercept と同じ flush フローを再利用する。`mainWindow` が既に destroy 済みの場合は同期 flush（`dbWriter` / `dbMetaWriter`）のみ実行する。
 
 ### 8.10 メモフォーマットの責務分離
 

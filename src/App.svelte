@@ -29,6 +29,7 @@
   let saveErrorMessage = null;
   let workspaceConflict = null;
   let workspaceNoticeMessage = null;
+  let flushingOnShutdown = false;
 
   const currentHash = typeof window !== "undefined" ? window.location.hash : "";
   const currentSearch =
@@ -189,6 +190,18 @@
       }, 4000);
     });
 
+    platform.onWorkspaceFlushStart(() => {
+      flushingOnShutdown = true;
+    });
+
+    platform.onWorkspaceFlushComplete(() => {
+      // The main process destroys the window shortly after this fires; the
+      // overlay being removed here is a no-op in the normal path. Resetting
+      // it covers the (rare) case where force-quit was chosen and the
+      // window survived for any reason.
+      flushingOnShutdown = false;
+    });
+
     // Start the document-wide page-search highlighter. It watches the whole
     // document for changes and re-applies CSS Custom Highlight ranges.
     startAutoRescan();
@@ -307,6 +320,26 @@
     $showPageSearch = false;
   }}
 />
+
+{#if flushingOnShutdown}
+  <div
+    class="flush-overlay"
+    role="alertdialog"
+    aria-modal="true"
+    aria-live="assertive"
+    aria-label="保存中"
+  >
+    <div class="flush-overlay-card">
+      <div class="flush-spinner" aria-hidden="true"></div>
+      <div class="flush-overlay-text">
+        <strong>保存中…</strong>
+        <span
+          >ワークスペースを安全に書き出しています。このウィンドウは保存完了後に自動で閉じます。</span
+        >
+      </div>
+    </div>
+  </div>
+{/if}
 
 <style>
   :global(html) {
@@ -448,5 +481,50 @@
     cursor: pointer;
     font-size: var(--font-body-sm);
     padding: 0 var(--sp2);
+  }
+  .flush-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2147483647;
+    pointer-events: all;
+  }
+  .flush-overlay-card {
+    display: flex;
+    align-items: center;
+    gap: var(--sp3);
+    padding: var(--sp4) var(--sp4);
+    border-radius: var(--shape-sm);
+    background: var(--theme-color-Theme-main);
+    color: #fff;
+    box-shadow: var(--elevation-2);
+    max-width: 32rem;
+    min-width: 22rem;
+  }
+  .flush-overlay-text {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp1);
+    font-size: var(--font-body-sm);
+  }
+  .flush-overlay-text strong {
+    font-size: var(--font-body-md);
+  }
+  .flush-spinner {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    border: 3px solid rgba(255, 255, 255, 0.25);
+    border-top-color: #fff;
+    animation: flush-spin 0.9s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes flush-spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
 </style>

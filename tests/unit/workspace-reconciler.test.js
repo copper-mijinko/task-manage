@@ -88,6 +88,34 @@ describe("WorkspaceReconciler", () => {
     await reconciler.stop();
   });
 
+  test("suppresses conflict and emits overwritten-external notice when forceLocal active", async () => {
+    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
+    const projectFile = path.join(projectDir, "_project.md");
+    const conflicts = [];
+    const notices = [];
+    const reconciler = new WorkspaceReconciler({
+      readProject: () => {
+        throw new Error("should not read while pending");
+      },
+      hasPendingWrite: () => true,
+      getActiveOptions: () => ({ forceLocal: true }),
+      onConflict: (event) => conflicts.push(event),
+      onNotice: (event) => notices.push(event),
+      stateRootDir: stateDir,
+      watchFactory: () => makeWatcher(),
+    });
+    await reconciler.start(tmpDir);
+
+    modifyProjectFile(projectFile, "External");
+
+    await reconciler.handleFileEvent("change", projectFile);
+    await vi.runAllTimersAsync();
+
+    expect(conflicts).toEqual([]);
+    expect(notices.map((event) => event.kind)).toContain("overwritten-external");
+    await reconciler.stop();
+  });
+
   test("reports a conflict when a local write is pending", async () => {
     const { projectDir } = createProject(tmpDir, "Proj", "root-id");
     const projectFile = path.join(projectDir, "_project.md");
@@ -169,11 +197,11 @@ describe("WorkspaceReconciler", () => {
     await reconciler.stop();
   });
 
-  test("skips reconcile when disk matches known by the time the timer fires", async () => {
+  test("skips reconcile when our write recorded the new hash before reconcile fires", async () => {
     // Race scenario: chokidar fires a "change" event during our own batched
-    // write; by the time the 100ms reconcile timer fires, markProjectWritten
-    // has caught up and the disk state equals knownFileHashes. We must not
-    // call readProject in that case.
+    // write. With per-file recordWrite plumbed through atomicWriteFile, the
+    // hash for the changed file is already in knownFileHashes by the time
+    // handleFileEvent runs, so no reconcile should even be scheduled.
     const { projectDir } = createProject(tmpDir, "Proj", "root-id");
     const projectFile = path.join(projectDir, "_project.md");
     const updates = [];
@@ -190,14 +218,15 @@ describe("WorkspaceReconciler", () => {
     });
     await reconciler.start(tmpDir);
 
-    // Stage real divergence — this would normally trigger a reconcile.
-    modifyProjectFile(projectFile, "Updated");
+    // Simulate the writer chain: write the file and synchronously inform the
+    // reconciler of the new hash (this is what atomicWriteFile's onWritten
+    // hook does in production).
+    const updated = stringifyFrontmatter({ id: "root-id", name: "Updated" });
+    fs.writeFileSync(projectFile, updated);
+    reconciler.recordWrite(projectFile, updated);
+
     await reconciler.handleFileEvent("change", projectFile);
-
-    // Before the reconcile timer fires, our own write completes and resyncs
-    // knownFileHashes to the current disk state.
     await reconciler.markProjectWritten(projectDir);
-
     await vi.runAllTimersAsync();
 
     expect(updates).toEqual([]);
@@ -226,6 +255,102 @@ describe("WorkspaceReconciler", () => {
 
     expect(reconciler.knownFileHashes.has(path.resolve(extraFile))).toBe(false);
     expect(reconciler.knownFileHashes.has(path.resolve(projectFile))).toBe(true);
+    await reconciler.stop();
+  });
+
+  test("recordWrite synchronously updates knownFileHashes for one file", async () => {
+    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
+    const projectFile = path.join(projectDir, "_project.md");
+
+    const updates = [];
+    const conflicts = [];
+    const reconciler = new WorkspaceReconciler({
+      readProject: () => {
+        throw new Error("should not read when recordWrite kept hashes fresh");
+      },
+      // Even when the queue is mid-write, recordWrite-updated hashes must
+      // make handleFileEvent treat our own write as a no-op.
+      hasPendingWrite: () => true,
+      onProjectUpdated: (event) => updates.push(event),
+      onConflict: (event) => conflicts.push(event),
+      stateRootDir: stateDir,
+      watchFactory: () => makeWatcher(),
+    });
+    await reconciler.start(tmpDir);
+
+    // Simulate the writer chain: modify the file on disk and tell the
+    // reconciler about the new content synchronously, before chokidar fires.
+    const newContent = stringifyFrontmatter({ id: "root-id", name: "Renamed" });
+    fs.writeFileSync(projectFile, newContent);
+    reconciler.recordWrite(projectFile, newContent);
+
+    await reconciler.handleFileEvent("change", projectFile);
+    await vi.runAllTimersAsync();
+
+    expect(updates).toEqual([]);
+    expect(conflicts).toEqual([]);
+    await reconciler.stop();
+  });
+
+  test("recordWrite still allows external divergence to be detected", async () => {
+    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
+    const projectFile = path.join(projectDir, "_project.md");
+
+    const conflicts = [];
+    const reconciler = new WorkspaceReconciler({
+      readProject: () => {
+        throw new Error("should not read");
+      },
+      hasPendingWrite: () => true,
+      onConflict: (event) => conflicts.push(event),
+      stateRootDir: stateDir,
+      watchFactory: () => makeWatcher(),
+    });
+    await reconciler.start(tmpDir);
+
+    // We claim to have written content A, but actual disk content diverges
+    // (e.g. an external editor stomped on it after our recordWrite).
+    reconciler.recordWrite(projectFile, "expected content from our memory");
+    modifyProjectFile(projectFile, "Stomped externally");
+
+    await reconciler.handleFileEvent("change", projectFile);
+    await vi.runAllTimersAsync();
+
+    expect(conflicts).toHaveLength(1);
+    expect(conflicts[0].projectDir).toBe(projectDir);
+    await reconciler.stop();
+  });
+
+  test("markProjectWritten preserves hashes recorded mid-batch and prunes deletions", async () => {
+    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
+    const projectFile = path.join(projectDir, "_project.md");
+    const strayFile = path.join(projectDir, "stray.md");
+    fs.writeFileSync(strayFile, "stray content");
+
+    const reconciler = new WorkspaceReconciler({
+      readProject,
+      stateRootDir: stateDir,
+      watchFactory: () => makeWatcher(),
+    });
+    await reconciler.start(tmpDir);
+
+    expect(reconciler.knownFileHashes.has(path.resolve(strayFile))).toBe(true);
+
+    // Simulate a project write: per-file recordWrite for the surviving file,
+    // followed by the stray file disappearing, then markProjectWritten.
+    const updated = stringifyFrontmatter({ id: "root-id", name: "Renamed" });
+    fs.writeFileSync(projectFile, updated);
+    reconciler.recordWrite(projectFile, updated);
+
+    fs.unlinkSync(strayFile);
+    await reconciler.markProjectWritten(projectDir);
+
+    expect(reconciler.knownFileHashes.has(path.resolve(strayFile))).toBe(false);
+    // The hash from recordWrite must still be the one we recorded, not the
+    // pre-existing baseline.
+    const crypto = await import("crypto");
+    const expectedHash = crypto.createHash("sha256").update(Buffer.from(updated)).digest("hex");
+    expect(reconciler.knownFileHashes.get(path.resolve(projectFile))).toBe(expectedHash);
     await reconciler.stop();
   });
 

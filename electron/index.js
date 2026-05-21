@@ -121,6 +121,7 @@ app.on("ready", () => {
   log.info(file_meta);
   const defaultDataMeta = {
     theme: "dark",
+    workspaceConflictPolicy: "ask",
   };
   const adapter_meta = new JSONFileSync(file_meta);
   const db_meta = new LowSync(adapter_meta);
@@ -170,6 +171,7 @@ app.on("ready", () => {
     readProject: workspace.readProject,
     stateRootDir: resolveAppDataPath("workspace-state"),
     hasPendingWrite: (projectDir) => workspaceWriteQueue?.hasPending(projectDir),
+    getActiveOptions: (projectDir) => workspaceWriteQueue?.getActiveOptions(projectDir) ?? null,
     onProjectUpdated: ({ projectDir, tasks, taskDirs, reason }) => {
       wsCache.set(projectDir, { tasks, taskDirs });
       sendWorkspaceProjectUpdated({
@@ -189,9 +191,13 @@ app.on("ready", () => {
     onNotice: sendWorkspaceNotice,
   });
 
+  const recordWrite = (filePath, buffer) => workspaceReconciler.recordWrite(filePath, buffer);
+
   workspaceWriteQueue = new WorkspaceWriteQueue({
     writeProject: async (projectDir, tasks) => {
-      const updated = await workspace.writeProjectAsync(projectDir, tasks);
+      const updated = await workspace.writeProjectAsync(projectDir, tasks, {
+        onWritten: recordWrite,
+      });
       await workspaceReconciler.markProjectWritten(projectDir);
       wsCache.set(projectDir, updated);
       return updated;
@@ -201,25 +207,119 @@ app.on("ready", () => {
       log.error(`workspace write failed (${projectDir}):`, error.message);
     },
   });
-  let flushingBeforeQuit = false;
+  let shutdownFlushPromise = null;
   if (db_meta.data.activeWorkspace) {
     workspaceReconciler.start(db_meta.data.activeWorkspace).catch((err) => {
       log.error("workspace watcher start error:", err.message);
     });
   }
 
-  app.on("before-quit", (event) => {
+  // How long to wait for the workspace queue to flush before asking the user
+  // whether to keep waiting or force-quit. Long enough to cover normal cloud
+  // sync stalls; short enough that the user is not stuck staring at an opaque
+  // overlay forever.
+  const FLUSH_TIMEOUT_MS = 30000;
+
+  /**
+   * Flush all writers, keep the main window visible (with a blocking overlay)
+   * while async writes drain. Returns once the queue is empty or the user
+   * chose to force-quit at the timeout prompt.
+   */
+  function performShutdownFlush(reason) {
+    if (shutdownFlushPromise) return shutdownFlushPromise;
+
     dbWriter.flush();
     dbMetaWriter.flush();
 
-    if (workspaceWriteQueue.hasPending() && !flushingBeforeQuit) {
-      event.preventDefault();
-      flushingBeforeQuit = true;
-      workspaceWriteQueue.flush().finally(() => {
-        workspaceReconciler.stop().finally(() => {});
-        app.quit();
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed()) {
+        win.webContents.send("workspace-flush-start", { reason });
+      }
+    });
+
+    shutdownFlushPromise = new Promise((resolve) => {
+      let resolved = false;
+      let timeoutHandle = null;
+
+      function finish(forced) {
+        if (resolved) return;
+        resolved = true;
+        if (timeoutHandle) clearTimeout(timeoutHandle);
+        resolve({ forced });
+      }
+
+      function scheduleTimeoutWarning() {
+        timeoutHandle = setTimeout(async () => {
+          const targetWindow = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+          try {
+            const choice = await dialog.showMessageBox(targetWindow ?? undefined, {
+              type: "warning",
+              buttons: ["継続して待機", "強制終了"],
+              defaultId: 0,
+              cancelId: 0,
+              title: "保存処理が完了していません",
+              message:
+                "ワークスペースの保存処理が完了していません。継続して待機すると未保存データを保護できます。強制終了すると未保存の変更は失われる可能性があります。",
+            });
+            if (choice.response === 1) {
+              finish(true);
+            } else {
+              scheduleTimeoutWarning();
+            }
+          } catch (err) {
+            log.error("flush timeout dialog error:", err.message);
+            scheduleTimeoutWarning();
+          }
+        }, FLUSH_TIMEOUT_MS);
+      }
+
+      if (workspaceWriteQueue.hasPending()) {
+        scheduleTimeoutWarning();
+        workspaceWriteQueue
+          .flush()
+          .catch((err) => {
+            log.error("workspace flush error:", err.message);
+          })
+          .then(() => finish(false));
+      } else {
+        // Nothing to drain; resolve on the next tick so any in-flight flush
+        // emit can still reach the renderer for consistency.
+        setImmediate(() => finish(false));
+      }
+    }).then(async (result) => {
+      try {
+        await workspaceReconciler.stop();
+      } catch (err) {
+        log.error("workspace reconciler stop error:", err.message);
+      }
+      BrowserWindow.getAllWindows().forEach((win) => {
+        if (!win.isDestroyed()) {
+          win.webContents.send("workspace-flush-complete", { forced: result.forced });
+        }
       });
+      return result;
+    });
+
+    return shutdownFlushPromise;
+  }
+
+  app.on("before-quit", (event) => {
+    if (shutdownFlushPromise) return; // already in flight
+    if (!workspaceWriteQueue.hasPending()) {
+      // Synchronously flush low-level db writers; nothing to await.
+      dbWriter.flush();
+      dbMetaWriter.flush();
+      return;
     }
+
+    event.preventDefault();
+    performShutdownFlush("before-quit").then(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.removeAllListeners("close");
+        mainWindow.destroy();
+      }
+      app.quit();
+    });
   });
 
   ////////////// IPC //////////////
@@ -558,6 +658,24 @@ app.on("ready", () => {
   if (shouldOpenDevTools()) {
     mainWindow.webContents.openDevTools();
   }
+  mainWindow.on("close", (event) => {
+    if (shutdownFlushPromise) {
+      // Already flushing — keep the window alive until the flush resolves
+      // and explicitly calls destroy(); ignore secondary close clicks.
+      event.preventDefault();
+      return;
+    }
+    if (!workspaceWriteQueue.hasPending()) return;
+
+    event.preventDefault();
+    performShutdownFlush("window-close").then(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.removeAllListeners("close");
+        mainWindow.destroy();
+      }
+    });
+  });
+
   mainWindow.on("closed", () => {
     mainWindow = null;
     for (const win of taskDetailWindows.values()) {
@@ -606,7 +724,9 @@ app.on("ready", () => {
 
   ipcMain.handle("ws:set-project-order", async (event, { workspacePath, projects }) => {
     try {
-      const result = await workspace.setProjectOrderAsync(workspacePath, projects);
+      const result = await workspace.setProjectOrderAsync(workspacePath, projects, {
+        onWritten: recordWrite,
+      });
       for (const projectDir of result.changedProjectDirs) {
         await workspaceReconciler.markProjectWritten(projectDir);
       }
@@ -649,7 +769,7 @@ app.on("ready", () => {
         }
       }
 
-      await workspace.writeTaskAsync(projectDir, task, taskDirs);
+      await workspace.writeTaskAsync(projectDir, task, taskDirs, recordWrite);
       tasks.set(task.id, task);
       return { success: true };
     } catch (err) {
@@ -674,7 +794,8 @@ app.on("ready", () => {
           cached.taskDirs,
           taskId,
           bytes,
-          mimeType
+          mimeType,
+          recordWrite
         );
         return { success: true, path: result.relativePath };
       } catch (err) {
@@ -734,9 +855,9 @@ app.on("ready", () => {
     }
   });
 
-  ipcMain.handle("ws:write-project", async (event, { projectDir, tasks }) => {
+  ipcMain.handle("ws:write-project", async (event, { projectDir, tasks, options }) => {
     try {
-      return workspaceWriteQueue.enqueue(projectDir, tasks);
+      return workspaceWriteQueue.enqueue(projectDir, tasks, options || {});
     } catch (err) {
       log.error("ws:write-project error:", err.message);
       return { success: false, error: err.message };
@@ -807,7 +928,9 @@ app.on("ready", () => {
 
   ipcMain.handle("ws:create-project", async (event, { workspacePath, name, id, order }) => {
     try {
-      const result = await workspace.createProjectAsync(workspacePath, name, id, order);
+      const result = await workspace.createProjectAsync(workspacePath, name, id, order, {
+        onWritten: recordWrite,
+      });
       return { success: true, ...result };
     } catch (err) {
       log.error("ws:create-project error:", err.message);

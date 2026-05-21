@@ -14,6 +14,7 @@ export * from "@features/tasks/stores/sort";
 export * from "@features/memos/stores/tags";
 export * from "@features/gantt/stores/gantt";
 export * from "@features/workspace/stores/workspace";
+export * from "@features/workspace/stores/policy";
 export * from "@features/projects/stores/project";
 export * from "@features/search/stores/search";
 
@@ -24,6 +25,7 @@ import { filter } from "@features/search/stores/search";
 import { theme } from "./theme";
 import { column_settings } from "@features/tasks/stores/column_settings";
 import { workspace_store } from "@features/workspace/stores/workspace";
+import { workspace_conflict_policy } from "@features/workspace/stores/policy";
 import { active_tag } from "@features/memos/stores/tags";
 import { sort_state } from "@features/tasks/stores/sort";
 
@@ -37,6 +39,7 @@ export function init_store() {
   closed_node_ids.init();
   column_settings.init();
   workspace_store.init();
+  workspace_conflict_policy.init();
 
   active_tag.subscribe((tag) => {
     filter.update((f) => {
