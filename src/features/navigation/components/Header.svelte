@@ -1,8 +1,10 @@
 <script>
+  import { onMount } from "svelte";
   import IconButton from "@lib/primitives/IconButton.svelte";
   import ToggleSwitch from "@lib/primitives/ToggleSwitch.svelte";
   import { theme, saveStatus, sidebarCollapsed } from "@stores";
   import { pageSearchQuery } from "@features/search/stores/search";
+  import * as platform from "@lib/ipc/platform";
   import {
     setQuery,
     next as nextMatch,
@@ -14,6 +16,29 @@
   export let title = "Task Manage";
   let searchInputEl;
   let queryText = "";
+  let isMaximized = false;
+
+  onMount(async () => {
+    try {
+      const state = await platform.windowGetState();
+      isMaximized = !!state?.isMaximized;
+    } catch {
+      // ignore
+    }
+    platform.onWindowStateChanged((state) => {
+      isMaximized = !!state?.isMaximized;
+    });
+  });
+
+  function handleMinimize() {
+    platform.windowMinimize();
+  }
+  function handleToggleMaximize() {
+    platform.windowToggleMaximize();
+  }
+  function handleClose() {
+    platform.windowClose();
+  }
 
   // Header search is purely an in-screen highlight (no row filtering).
   // The toolbar SearchBox handles "filter tasks", so we just feed
@@ -223,6 +248,79 @@
         }}
       />
     </div>
+
+    <div class="WindowControls">
+      <button
+        type="button"
+        class="WinCtrlBtn"
+        aria-label="最小化"
+        title="最小化"
+        on:click={handleMinimize}
+      >
+        <svg viewBox="0 0 12 12" aria-hidden="true">
+          <path d="M2 6 L10 6" stroke="currentColor" stroke-width="1.5" fill="none" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        class="WinCtrlBtn"
+        aria-label={isMaximized ? "元のサイズに戻す" : "最大化"}
+        title={isMaximized ? "元のサイズに戻す" : "最大化"}
+        on:click={handleToggleMaximize}
+      >
+        {#if isMaximized}
+          <svg viewBox="0 0 12 12" aria-hidden="true">
+            <rect
+              x="3"
+              y="1.5"
+              width="6.5"
+              height="6.5"
+              stroke="currentColor"
+              stroke-width="1.5"
+              fill="none"
+            />
+            <rect
+              x="1.5"
+              y="3"
+              width="6.5"
+              height="6.5"
+              stroke="currentColor"
+              stroke-width="1.5"
+              fill="var(--theme-color-Theme-main)"
+            />
+          </svg>
+        {:else}
+          <svg viewBox="0 0 12 12" aria-hidden="true">
+            <rect
+              x="2"
+              y="2"
+              width="8"
+              height="8"
+              stroke="currentColor"
+              stroke-width="1.5"
+              fill="none"
+            />
+          </svg>
+        {/if}
+      </button>
+      <button
+        type="button"
+        class="WinCtrlBtn Close"
+        aria-label="閉じる"
+        title="閉じる"
+        on:click={handleClose}
+      >
+        <svg viewBox="0 0 12 12" aria-hidden="true">
+          <path
+            d="M2.5 2.5 L9.5 9.5 M9.5 2.5 L2.5 9.5"
+            stroke="currentColor"
+            stroke-width="1.5"
+            fill="none"
+            stroke-linecap="round"
+          />
+        </svg>
+      </button>
+    </div>
   </div>
 </div>
 
@@ -238,7 +336,6 @@
     justify-content: left;
     align-items: center;
     gap: var(--sp3);
-    padding-right: var(--sp4);
     box-shadow: var(--elevation-2);
     width: 100%;
     height: 100%;
@@ -247,6 +344,17 @@
     position: sticky;
     top: 0;
     z-index: 999;
+    -webkit-app-region: drag;
+  }
+  /* インタラクティブ要素はドラッグ対象から除外 */
+  .Container :global(button),
+  .Container :global(a),
+  .Container :global(input),
+  .Container :global(label),
+  .Container :global(select),
+  .Container :global(textarea),
+  .Container :global(.ToggleSwitchContainer) {
+    -webkit-app-region: no-drag;
   }
   .Menu {
     flex-shrink: 0;
@@ -396,6 +504,49 @@
   }
   .ToggleSwitchContainer {
     flex-shrink: 0;
+  }
+
+  /* Window controls (frameless window) */
+  .WindowControls {
+    display: flex;
+    align-items: stretch;
+    height: 100%;
+    margin-left: var(--sp2);
+    flex-shrink: 0;
+    -webkit-app-region: no-drag;
+  }
+  .WinCtrlBtn {
+    width: 2.75rem;
+    height: 100%;
+    min-height: 2.5rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    margin: 0;
+    border: none;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.92);
+    cursor: pointer;
+    transition: background-color 0.12s ease;
+  }
+  .WinCtrlBtn:hover {
+    background-color: rgba(255, 255, 255, 0.12);
+  }
+  .WinCtrlBtn:active {
+    background-color: rgba(255, 255, 255, 0.18);
+  }
+  .WinCtrlBtn.Close:hover {
+    background-color: #e81123;
+    color: #ffffff;
+  }
+  .WinCtrlBtn.Close:active {
+    background-color: #c4101f;
+  }
+  .WinCtrlBtn svg {
+    width: 1.15rem;
+    height: 1.15rem;
+    fill: none;
   }
   @media (max-width: 700px) {
     .SearchField {

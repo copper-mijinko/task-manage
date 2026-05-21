@@ -102,8 +102,22 @@ app.on("ready", () => {
     height: 800,
     minWidth: 700,
     minHeight: 700,
+    frame: false,
+    titleBarStyle: "hidden",
   });
   log.info(`[perf] BrowserWindow created: ${Date.now() - t0}ms`);
+
+  function sendWindowState(win) {
+    if (!win || win.isDestroyed()) return;
+    win.webContents.send("window-state-changed", {
+      isMaximized: win.isMaximized(),
+      isFullScreen: win.isFullScreen(),
+    });
+  }
+  mainWindow.on("maximize", () => sendWindowState(mainWindow));
+  mainWindow.on("unmaximize", () => sendWindowState(mainWindow));
+  mainWindow.on("enter-full-screen", () => sendWindowState(mainWindow));
+  mainWindow.on("leave-full-screen", () => sendWindowState(mainWindow));
 
   ////////////// Low //////////////
   // init low db. read after.
@@ -617,6 +631,10 @@ app.on("ready", () => {
       }
 
       bindFindInPageEvents(win.webContents);
+      win.on("maximize", () => sendWindowState(win));
+      win.on("unmaximize", () => sendWindowState(win));
+      win.on("enter-full-screen", () => sendWindowState(win));
+      win.on("leave-full-screen", () => sendWindowState(win));
       taskDetailWindows.set(safeDetailData.taskId, win);
 
       win.on("closed", () => {
@@ -686,6 +704,35 @@ app.on("ready", () => {
 
   ipcMain.handle("get-current-theme", async () => {
     return db_meta.data.theme || "dark";
+  });
+
+  ////////////// Window Controls //////////////
+  function targetWindow(event) {
+    return BrowserWindow.fromWebContents(event.sender);
+  }
+  ipcMain.on("window:minimize", (event) => {
+    const win = targetWindow(event);
+    if (win && !win.isDestroyed()) win.minimize();
+  });
+  ipcMain.on("window:toggle-maximize", (event) => {
+    const win = targetWindow(event);
+    if (!win || win.isDestroyed()) return;
+    if (win.isMaximized()) {
+      win.unmaximize();
+    } else {
+      win.maximize();
+    }
+  });
+  ipcMain.on("window:close", (event) => {
+    const win = targetWindow(event);
+    if (win && !win.isDestroyed()) win.close();
+  });
+  ipcMain.handle("window:get-state", (event) => {
+    const win = targetWindow(event);
+    if (!win || win.isDestroyed()) {
+      return { isMaximized: false, isFullScreen: false };
+    }
+    return { isMaximized: win.isMaximized(), isFullScreen: win.isFullScreen() };
   });
 
   ////////////// Workspace IPC //////////////

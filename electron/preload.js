@@ -102,6 +102,17 @@ const electronAPI = {
     return ipcRenderer.invoke("get-current-theme");
   },
 
+  // ウィンドウ制御
+  windowMinimize: () => ipcRenderer.send("window:minimize"),
+  windowToggleMaximize: () => ipcRenderer.send("window:toggle-maximize"),
+  windowClose: () => ipcRenderer.send("window:close"),
+  windowGetState: () => ipcRenderer.invoke("window:get-state"),
+  onWindowStateChanged: (callback) => {
+    ipcRenderer.on("window-state-changed", (event, state) => {
+      callback(state);
+    });
+  },
+
   // ワークスペース操作
   wsGetWorkspaces: () => ipcRenderer.invoke("ws:get-workspaces"),
   wsSetWorkspaces: (config) => ipcRenderer.send("ws:set-workspaces", config),

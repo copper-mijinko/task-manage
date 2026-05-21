@@ -4,6 +4,7 @@
   ProjectListItem,
   TaskDetailWindowData,
   ThemeName,
+  WindowState,
   WorkspaceConflictEvent,
   WorkspaceFlushCompleteEvent,
   WorkspaceFlushStartEvent,
@@ -93,6 +94,30 @@ export function openExternalLink(url: string): void {
 
 export function openTaskDetailWindow(detailData: TaskDetailWindowData): void {
   api()?.openTaskDetailWindow?.(detailData);
+}
+
+// ---------------------------------------------------------------------------
+// Window controls
+// ---------------------------------------------------------------------------
+
+export function windowMinimize(): void {
+  api()?.windowMinimize?.();
+}
+
+export function windowToggleMaximize(): void {
+  api()?.windowToggleMaximize?.();
+}
+
+export function windowClose(): void {
+  api()?.windowClose?.();
+}
+
+export function windowGetState(): Promise<WindowState> {
+  return api()?.windowGetState?.() ?? Promise.resolve({ isMaximized: false, isFullScreen: false });
+}
+
+export function onWindowStateChanged(callback: (state: WindowState) => void): void {
+  api()?.onWindowStateChanged?.(callback);
 }
 
 // ---------------------------------------------------------------------------
