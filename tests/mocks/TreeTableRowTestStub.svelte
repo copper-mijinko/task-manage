@@ -10,6 +10,7 @@
   export let canMoveDown = false;
   export let canIndent = false;
   export let canOutdent = false;
+  export let canOpenTaskFolder = false;
 
   const dispatch = createEventDispatcher();
 </script>
@@ -48,6 +49,17 @@
             }}
           >
             {row.expanded ? "collapse" : "expand"}
+          </button>
+        {/if}
+        {#if canOpenTaskFolder}
+          <button
+            type="button"
+            data-testid={"open-folder-" + row.id}
+            on:click={() => {
+              dispatch("openTaskFolder", { id: row.id });
+            }}
+          >
+            open folder
           </button>
         {/if}
       {/if}

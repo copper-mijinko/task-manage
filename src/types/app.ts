@@ -165,6 +165,11 @@ export interface ElectronAPI {
     projectDir: string,
     action: "reload" | "keep-local"
   ) => Promise<{ success: boolean; error?: string }>;
+  wsOpenWorkspace: (workspacePath: string) => Promise<{ success: boolean; error?: string }>;
+  wsOpenTaskFolder: (
+    projectDir: string,
+    taskId: string
+  ) => Promise<{ success: boolean; error?: string }>;
   wsSelectDirectory: () => Promise<{ path: string | null; error?: string }>;
   wsGetLegacyProjects: () => Promise<{ id: string; name: string; taskCount: number }[]>;
   wsExportLegacyProjects: (

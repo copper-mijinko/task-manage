@@ -16,6 +16,7 @@
   export let canMoveDown = false;
   export let canIndent = false;
   export let canOutdent = false;
+  export let canOpenTaskFolder = false;
   export let nodePath = "";
   /** When >1, the menu acts on the whole multi-selection (label gets count prefix). */
   export let selectionCount = 1;
@@ -158,6 +159,19 @@
     ],
     // 6. Detail — anchor-only; disabled in multi.
     [
+      ...(canOpenTaskFolder
+        ? [
+            {
+              title: "open folder",
+              action: "openTaskFolder",
+              disabled: isMulti,
+              icon: {
+                viewBox: "0 0 24 24",
+                path: "M3 7.5C3 6.4 3.9 5.5 5 5.5H9.4L11.2 7.3H19C20.1 7.3 21 8.2 21 9.3V10.5M3.4 10.5H20.6L18.8 18.5C18.6 19.4 17.8 20 16.9 20H5.5C4.6 20 3.8 19.4 3.6 18.5L2.3 12C2.1 11.2 2.7 10.5 3.4 10.5Z",
+              },
+            },
+          ]
+        : []),
       {
         title: "show details",
         action: "openTaskDetailWindow",
@@ -343,6 +357,8 @@
       toggle();
     } else if (data && data.action === "openTaskDetailWindow") {
       dispatch("openTaskDetailWindow", { text: text ?? draftText });
+    } else if (data && data.action === "openTaskFolder") {
+      dispatch("openTaskFolder");
     } else if (data?.action) {
       dispatch(data.action, data);
     }
@@ -440,6 +456,7 @@
     on:indentTask={handleMenuAction}
     on:outdentTask={handleMenuAction}
     on:openTaskDetailWindow={handleMenuAction}
+    on:openTaskFolder={handleMenuAction}
     on:deleteTask={handleMenuAction}
     on:copyTask={handleMenuAction}
     on:pasteTask={handleMenuAction}

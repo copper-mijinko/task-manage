@@ -4,7 +4,7 @@
 </script>
 
 <script>
-  import { onMount, afterUpdate } from "svelte";
+  import { onMount, afterUpdate, onDestroy } from "svelte";
   import { slide } from "svelte/transition";
   import IconButton from "@lib/primitives/IconButton.svelte";
   import Dialog from "@lib/primitives/Dialog.svelte";
@@ -61,9 +61,24 @@
   };
 
   let show_workspace_setup = false;
+  let workspace_open_error = "";
+  let workspace_open_error_timer;
   let workspaceProjectsExpanded = true;
   let inAppProjectsExpanded = true;
   let tagsExpanded = true;
+
+  async function handleOpenActiveWorkspace(e) {
+    e.stopPropagation();
+    workspace_open_error = "";
+    const result = await workspace_store.openActiveWorkspace();
+    if (!result?.success) {
+      workspace_open_error = result?.error ?? "Workspaceを開けませんでした";
+      if (workspace_open_error_timer) clearTimeout(workspace_open_error_timer);
+      workspace_open_error_timer = setTimeout(() => {
+        workspace_open_error = "";
+      }, 4000);
+    }
+  }
 
   // Dialog
   let show_confirm = false;
@@ -289,6 +304,10 @@
     setDND();
   });
 
+  onDestroy(() => {
+    if (workspace_open_error_timer) clearTimeout(workspace_open_error_timer);
+  });
+
   afterUpdate(() => {
     // Update drag & drop settings when project list changes
     setDND();
@@ -328,6 +347,36 @@
     {:else}
       <span class="NoWorkspaceHint TextOverFlow">ワークスペース未設定</span>
     {/if}
+    {#if $workspace_store.activeWorkspacePath}
+      <button
+        class="WorkspaceIconBtn"
+        type="button"
+        on:click={handleOpenActiveWorkspace}
+        aria-label="Workspaceをファイルエクスプローラーで開く"
+        use:tooltip={{
+          color: "var(--on-theme-tooltip-fg)",
+          backgroundColor: "var(--on-theme-tooltip-bg)",
+          content: "Workspaceをファイルエクスプローラーで開く",
+          force: true,
+        }}
+      >
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <path
+            d="M3 7.5C3 6.4 3.9 5.5 5 5.5H9.4L11.2 7.3H19C20.1 7.3 21 8.2 21 9.3V10.5"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+          <path
+            d="M3.4 10.5H20.6L18.8 18.5C18.6 19.4 17.8 20 16.9 20H5.5C4.6 20 3.8 19.4 3.6 18.5L2.3 12C2.1 11.2 2.7 10.5 3.4 10.5Z"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linejoin="round"
+          />
+        </svg>
+      </button>
+    {/if}
     <button
       class="WorkspaceManageBtn"
       on:click={() => {
@@ -347,6 +396,9 @@
       <span>管理</span>
     </button>
   </div>
+  {#if workspace_open_error}
+    <div class="WorkspaceOpenError" role="alert">{workspace_open_error}</div>
+  {/if}
   <br />
   <div class:Section={true}>
     <svg class="Logo" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" mirror-in-rtl="true"
@@ -1031,11 +1083,10 @@
     color: rgba(255, 255, 255, 0.5);
     font-style: italic;
   }
+  .WorkspaceIconBtn,
   .WorkspaceManageBtn {
     display: inline-flex;
     align-items: center;
-    gap: var(--sp1);
-    padding: 0.2rem var(--sp2);
     border: 1px solid rgba(255, 255, 255, 0.32);
     border-radius: var(--shape-xs);
     background-color: rgba(255, 255, 255, 0.08);
@@ -1048,14 +1099,31 @@
       background-color 0.12s ease,
       border-color 0.12s ease;
   }
+  .WorkspaceIconBtn {
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    padding: 0;
+  }
+  .WorkspaceManageBtn {
+    gap: var(--sp1);
+    padding: 0.2rem var(--sp2);
+  }
+  .WorkspaceIconBtn:hover,
   .WorkspaceManageBtn:hover {
     background-color: rgba(255, 255, 255, 0.18);
     border-color: rgba(255, 255, 255, 0.5);
   }
+  .WorkspaceIconBtn svg,
   .WorkspaceManageBtn svg {
     width: 0.9rem;
     height: 0.9rem;
     flex-shrink: 0;
+  }
+  .WorkspaceOpenError {
+    padding: 0 var(--sp2) var(--sp2) var(--sp4);
+    color: var(--theme-color-Error-light, #ffb4ab);
+    font-size: var(--font-label-md);
   }
   .TagRowMark {
     display: inline-flex;

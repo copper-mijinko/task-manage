@@ -27,6 +27,8 @@ export interface WorkspaceStore extends Writable<WorkspaceState> {
     summary: { rootId?: string; name?: string; order?: number }
   ) => void;
   setActiveProject: (projectDir: string) => void;
+  openActiveWorkspace: () => Promise<{ success: boolean; error?: string }>;
+  openTaskFolder: (taskId: string) => Promise<{ success: boolean; error?: string }>;
   createProject: (
     name: string,
     id: string
@@ -169,6 +171,22 @@ function createWorkspaceStore(): WorkspaceStore {
 
     setActiveProject(projectDir: string) {
       update((s) => ({ ...s, activeProjectDir: projectDir }));
+    },
+
+    async openActiveWorkspace() {
+      const { activeWorkspacePath } = get({ subscribe } as WorkspaceStore);
+      if (!activeWorkspacePath) {
+        return { success: false, error: "No active workspace" };
+      }
+      return platform.wsOpenWorkspace(activeWorkspacePath);
+    },
+
+    async openTaskFolder(taskId: string) {
+      const { activeProjectDir } = get({ subscribe } as WorkspaceStore);
+      if (!activeProjectDir) {
+        return { success: false, error: "No active workspace project" };
+      }
+      return platform.wsOpenTaskFolder(activeProjectDir, taskId);
     },
 
     async createProject(name: string, id: string) {

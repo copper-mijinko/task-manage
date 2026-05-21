@@ -28,6 +28,7 @@
   export let canMoveDown = false;
   export let canIndent = false;
   export let canOutdent = false;
+  export let canOpenTaskFolder = false;
   export let inheritedDueDate = "";
   export let nodePath = "";
   // Capabilities for bulk operations (used when this row is part of multi-selection).
@@ -299,6 +300,7 @@
           canMoveDown={effectiveCanMoveDown}
           canIndent={effectiveCanIndent}
           canOutdent={effectiveCanOutdent}
+          {canOpenTaskFolder}
           selectionCount={selectionCountForMenu}
           {nodePath}
           on:commit={(e) => {
@@ -339,6 +341,9 @@
           }}
           on:openTaskDetailWindow={({ detail }) => {
             openTaskDetailInWindow(detail.text);
+          }}
+          on:openTaskFolder={() => {
+            dispatch("openTaskFolder", { id });
           }}
         />
       {:else if header.name == "status"}
