@@ -119,4 +119,60 @@ describe("workspace_store", () => {
       "Gamma",
     ]);
   });
+
+  it("opens the active workspace through the platform API", async () => {
+    const wsOpenWorkspace = vi.fn().mockResolvedValue({ success: true });
+    testWindow.electronAPI = { wsOpenWorkspace };
+    workspace_store.set({
+      workspaces: [{ path: "C:/workspace", label: "Workspace" }],
+      activeWorkspacePath: "C:/workspace",
+      activeProjectDir: null,
+      projects: [],
+    });
+
+    const result = await workspace_store.openActiveWorkspace();
+
+    expect(result.success).toBe(true);
+    expect(wsOpenWorkspace).toHaveBeenCalledWith("C:/workspace");
+  });
+
+  it("does not open a workspace when none is active", async () => {
+    const wsOpenWorkspace = vi.fn().mockResolvedValue({ success: true });
+    testWindow.electronAPI = { wsOpenWorkspace };
+    workspace_store.set(emptyState);
+
+    const result = await workspace_store.openActiveWorkspace();
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("No active workspace");
+    expect(wsOpenWorkspace).not.toHaveBeenCalled();
+  });
+
+  it("opens a task folder through the active workspace project", async () => {
+    const wsOpenTaskFolder = vi.fn().mockResolvedValue({ success: true });
+    testWindow.electronAPI = { wsOpenTaskFolder };
+    workspace_store.set({
+      workspaces: [{ path: "C:/workspace", label: "Workspace" }],
+      activeWorkspacePath: "C:/workspace",
+      activeProjectDir: "C:/workspace/project",
+      projects: [],
+    });
+
+    const result = await workspace_store.openTaskFolder("task-1");
+
+    expect(result.success).toBe(true);
+    expect(wsOpenTaskFolder).toHaveBeenCalledWith("C:/workspace/project", "task-1");
+  });
+
+  it("does not open a task folder when no workspace project is active", async () => {
+    const wsOpenTaskFolder = vi.fn().mockResolvedValue({ success: true });
+    testWindow.electronAPI = { wsOpenTaskFolder };
+    workspace_store.set(emptyState);
+
+    const result = await workspace_store.openTaskFolder("task-1");
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("No active workspace project");
+    expect(wsOpenTaskFolder).not.toHaveBeenCalled();
+  });
 });

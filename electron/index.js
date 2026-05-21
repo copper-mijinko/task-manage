@@ -134,6 +134,34 @@ app.on("ready", () => {
   const dbMetaWriter = createAsyncWriter(db_meta, file_meta, "meta", 100);
   const wsCache = new Map();
 
+  function normalizeForCompare(value) {
+    const resolved = path.resolve(String(value));
+    return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+  }
+
+  function knownWorkspacePaths() {
+    return [
+      ...(db_meta.data.workspaces || []).map((item) => item.path).filter(Boolean),
+      db_meta.data.activeWorkspace,
+    ].filter(Boolean);
+  }
+
+  function isKnownWorkspacePath(workspacePath) {
+    const requestedPath = normalizeForCompare(workspacePath);
+    return knownWorkspacePaths().some(
+      (itemPath) => normalizeForCompare(itemPath) === requestedPath
+    );
+  }
+
+  function isInsideKnownWorkspace(targetPath) {
+    const requestedPath = normalizeForCompare(targetPath);
+    return knownWorkspacePaths().some((workspacePath) => {
+      const rootPath = normalizeForCompare(workspacePath);
+      const relativePath = path.relative(rootPath, requestedPath);
+      return relativePath && !relativePath.startsWith("..") && !path.isAbsolute(relativePath);
+    });
+  }
+
   function sendWorkspaceSaveStatus(payload) {
     BrowserWindow.getAllWindows().forEach((win) => {
       if (!win.isDestroyed()) {
@@ -719,6 +747,87 @@ app.on("ready", () => {
     } catch (err) {
       log.error("ws:list-projects error:", err.message);
       return [];
+    }
+  });
+
+  ipcMain.handle("ws:open-workspace", async (event, { workspacePath }) => {
+    try {
+      if (!workspacePath || typeof workspacePath !== "string") {
+        return { success: false, error: "No workspace is selected" };
+      }
+
+      if (!isKnownWorkspacePath(workspacePath)) {
+        return { success: false, error: "Workspace is not registered" };
+      }
+
+      const requestedPath = path.resolve(workspacePath);
+      const stats = await fs.promises.stat(requestedPath);
+      if (!stats.isDirectory()) {
+        return { success: false, error: "Workspace path is not a directory" };
+      }
+
+      const openError = await shell.openPath(requestedPath);
+      if (openError) {
+        return { success: false, error: openError };
+      }
+
+      return { success: true };
+    } catch (err) {
+      log.error("ws:open-workspace error:", err.message);
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle("ws:open-task-folder", async (event, { projectDir, taskId }) => {
+    try {
+      if (!projectDir || typeof projectDir !== "string") {
+        return { success: false, error: "No workspace project is selected" };
+      }
+      if (!taskId || typeof taskId !== "string") {
+        return { success: false, error: "No task is selected" };
+      }
+      if (!isInsideKnownWorkspace(projectDir)) {
+        return { success: false, error: "Project is not inside a registered workspace" };
+      }
+
+      if (workspaceWriteQueue.hasPending(projectDir)) {
+        await workspaceWriteQueue.flush();
+      }
+
+      let cached = wsCache.get(projectDir);
+      if (!cached || !cached.taskDirs?.has(taskId)) {
+        const { tasks, taskDirs } = workspace.readProject(projectDir);
+        cached = { tasks, taskDirs };
+        wsCache.set(projectDir, cached);
+      }
+
+      const dirName = cached.taskDirs.get(taskId);
+      if (!dirName) {
+        return { success: false, error: "Task folder was not found" };
+      }
+
+      const resolvedProjectDir = path.resolve(projectDir);
+      const targetDir =
+        dirName === "_project" ? resolvedProjectDir : path.resolve(resolvedProjectDir, dirName);
+      const relativePath = path.relative(resolvedProjectDir, targetDir);
+      if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+        return { success: false, error: "Task folder is outside the project" };
+      }
+
+      const stats = await fs.promises.stat(targetDir);
+      if (!stats.isDirectory()) {
+        return { success: false, error: "Task path is not a directory" };
+      }
+
+      const openError = await shell.openPath(targetDir);
+      if (openError) {
+        return { success: false, error: openError };
+      }
+
+      return { success: true };
+    } catch (err) {
+      log.error("ws:open-task-folder error:", err.message);
+      return { success: false, error: err.message };
     }
   });
 

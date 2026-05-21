@@ -23,10 +23,12 @@ import {
   closed_node_ids,
   filtered_data,
   selected_id,
+  selected_type,
   table_selected_id,
   theme,
   tree_data,
 } from "@stores";
+import { workspace_store } from "@features/workspace/stores/workspace";
 
 function createProjectData() {
   return {
@@ -92,9 +94,16 @@ describe("TreeTable", () => {
     tree_data.set(projectData);
     filtered_data.set(projectData.data);
     selected_id.set("project-1");
+    selected_type.set("Projects");
     table_selected_id.set(undefined);
     closed_node_ids.set(new Set());
     theme.set("dark");
+    workspace_store.set({
+      workspaces: [],
+      activeWorkspacePath: null,
+      activeProjectDir: null,
+      projects: [],
+    });
   });
 
   test("selects a row and reflects the selected state", async () => {
@@ -123,5 +132,28 @@ describe("TreeTable", () => {
 
     expect(get(closed_node_ids).has("task-1")).toBe(false);
     expect(screen.getByText("Nested Task")).toBeInTheDocument();
+  });
+
+  test("opens a workspace task folder from the row action", async () => {
+    const wsOpenTaskFolder = vi.fn().mockResolvedValue({ success: true });
+    Object.defineProperty(window, "electronAPI", {
+      configurable: true,
+      value: {
+        setMetaData: vi.fn(),
+        wsOpenTaskFolder,
+      },
+    });
+    selected_type.set("WorkspaceProject");
+    workspace_store.set({
+      workspaces: [{ path: "C:/workspace", label: "Workspace" }],
+      activeWorkspacePath: "C:/workspace",
+      activeProjectDir: "C:/workspace/project",
+      projects: [],
+    });
+    render(TreeTable);
+
+    await fireEvent.click(screen.getByTestId("open-folder-task-1"));
+
+    expect(wsOpenTaskFolder).toHaveBeenCalledWith("C:/workspace/project", "task-1");
   });
 });

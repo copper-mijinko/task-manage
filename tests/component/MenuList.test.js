@@ -50,6 +50,7 @@ describe("MenuList project subsections", () => {
     selected_id.set(undefined);
     tag_index.set(new Map());
     active_tag.set(null);
+    delete window.electronAPI;
   });
 
   test("collapses Workspace and InApp project lists independently", async () => {
@@ -82,5 +83,21 @@ describe("MenuList project subsections", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Workspace Projectsを展開" }));
     expect(screen.getByText("Workspace Alpha")).toBeInTheDocument();
     expect(screen.queryByText("InApp Alpha")).not.toBeInTheDocument();
+  });
+
+  test("opens the active workspace from the sidebar", async () => {
+    const wsOpenWorkspace = vi.fn().mockResolvedValue({ success: true });
+    Object.defineProperty(window, "electronAPI", {
+      configurable: true,
+      value: { wsOpenWorkspace },
+    });
+    seedProjects();
+    render(MenuList);
+
+    await fireEvent.click(
+      screen.getByRole("button", { name: "Workspaceをファイルエクスプローラーで開く" })
+    );
+
+    expect(wsOpenWorkspace).toHaveBeenCalledWith("C:/workspace");
   });
 });

@@ -297,6 +297,25 @@ export function wsResolveConflict(
   );
 }
 
+export function wsOpenWorkspace(
+  workspacePath: string
+): Promise<{ success: boolean; error?: string }> {
+  return (
+    api()?.wsOpenWorkspace?.(workspacePath) ??
+    Promise.resolve({ success: false, error: "API unavailable" })
+  );
+}
+
+export function wsOpenTaskFolder(
+  projectDir: string,
+  taskId: string
+): Promise<{ success: boolean; error?: string }> {
+  return (
+    api()?.wsOpenTaskFolder?.(projectDir, taskId) ??
+    Promise.resolve({ success: false, error: "API unavailable" })
+  );
+}
+
 export interface WsSelectDirectoryResult {
   path: string | null;
   error?: string;

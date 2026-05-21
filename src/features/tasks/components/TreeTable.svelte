@@ -1,11 +1,12 @@
 ﻿<script>
-  import { onMount } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import TreeTableHeader from "@features/tasks/components/TreeTableHeader.svelte";
   import TreeTableRow from "@features/tasks/components/TreeTableRow.svelte";
   import BulkActionBar from "@features/tasks/components/BulkActionBar.svelte";
   import Dialog from "@lib/primitives/Dialog.svelte";
   import {
     tree_data,
+    selected_type,
     filtered_data,
     closed_node_ids,
     table_selected_id,
@@ -13,6 +14,7 @@
     column_settings,
     ganttScrollTop,
   } from "@stores";
+  import { workspace_store } from "@features/workspace/stores/workspace";
   import {
     flattenVisibleTree,
     buildInheritedDueDateMap,
@@ -163,6 +165,8 @@
   let deleteTargetName = "";
   let bulkDeleteCount = 0;
   let bulkDeleteIsBulk = false;
+  let taskFolderOpenError = "";
+  let taskFolderOpenErrorTimer;
 
   // Visible row ids excluding the project root (root is not selectable).
   $: visibleSelectableIds = rows.filter((r) => r.id !== $tree_data?.data?.id).map((r) => r.id);
@@ -248,6 +252,10 @@
       handlers = setResizersEvents(resizers, newDomHeaders, newDataRows);
     });
     mutation_observer.observe(table_root, { subtree: true, childList: true });
+  });
+
+  onDestroy(() => {
+    if (taskFolderOpenErrorTimer) clearTimeout(taskFolderOpenErrorTimer);
   });
 
   const syncResizerBounds = (targetResizers = resizers) => {
@@ -765,6 +773,22 @@
     focusNewNode(cloned.id);
   }
 
+  function showTaskFolderOpenError(message) {
+    taskFolderOpenError = message;
+    if (taskFolderOpenErrorTimer) clearTimeout(taskFolderOpenErrorTimer);
+    taskFolderOpenErrorTimer = setTimeout(() => {
+      taskFolderOpenError = "";
+    }, 4000);
+  }
+
+  async function handleOpenTaskFolder(event) {
+    const { id } = event.detail;
+    const result = await workspace_store.openTaskFolder(id);
+    if (!result?.success) {
+      showTaskFolderOpenError(result?.error ?? "Task folderを開けませんでした");
+    }
+  }
+
   // --- Bulk operation handlers ---------------------------------------------
 
   function handleBulkStatus(event) {
@@ -955,6 +979,9 @@
     if (e.key === "Escape") handleBackgroundClick();
   }}
 >
+  {#if taskFolderOpenError}
+    <div class="TaskFolderOpenError" role="alert">{taskFolderOpenError}</div>
+  {/if}
   <TreeTableHeader
     headers={visibleHeaders}
     {allHeaders}
@@ -994,6 +1021,8 @@
         canMoveDown={row.canMoveDown}
         canIndent={row.canIndent}
         canOutdent={row.canOutdent}
+        canOpenTaskFolder={$selected_type === "WorkspaceProject" &&
+          Boolean($workspace_store.activeProjectDir)}
         bulkCanMove={canSiblingMove}
         bulkCanTreeOp={canTreeOp}
         bulkCanOutdent={canBulkOutdent}
@@ -1013,6 +1042,7 @@
         on:deleteTask={requestDelete}
         on:copyTask={handleCopyTask}
         on:pasteTask={handlePasteTask}
+        on:openTaskFolder={handleOpenTaskFolder}
       />
     {/each}
   {:else}
@@ -1142,6 +1172,19 @@
     height: 100%;
     background-color: var(--theme-color-Primary-main);
     opacity: 0.9;
+  }
+  .TaskFolderOpenError {
+    position: absolute;
+    top: var(--sp2);
+    right: var(--sp2);
+    z-index: 10001;
+    max-width: min(28rem, calc(100% - var(--sp4)));
+    padding: var(--sp1) var(--sp2);
+    border-radius: var(--shape-xs);
+    background-color: var(--theme-color-Error-main);
+    color: #fff;
+    font-size: var(--font-body-sm);
+    box-shadow: var(--elevation-1);
   }
   .EmptyState {
     display: flex;

@@ -123,6 +123,9 @@ const electronAPI = {
   wsDeleteProject: (projectDir) => ipcRenderer.invoke("ws:delete-project", { projectDir }),
   wsResolveConflict: (projectDir, action) =>
     ipcRenderer.invoke("ws:resolve-conflict", { projectDir, action }),
+  wsOpenWorkspace: (workspacePath) => ipcRenderer.invoke("ws:open-workspace", { workspacePath }),
+  wsOpenTaskFolder: (projectDir, taskId) =>
+    ipcRenderer.invoke("ws:open-task-folder", { projectDir, taskId }),
   wsSelectDirectory: () => ipcRenderer.invoke("ws:select-directory"),
   wsGetLegacyProjects: () => ipcRenderer.invoke("ws:get-legacy-projects"),
   wsExportLegacyProjects: (workspacePath, options) =>
