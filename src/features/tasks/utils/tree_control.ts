@@ -10,6 +10,7 @@ export interface MemoEntry {
   content: unknown;
   tags: string[];
   format?: MemoFormat;
+  bodyLoaded?: boolean;
 }
 
 export interface TreeNodeData {

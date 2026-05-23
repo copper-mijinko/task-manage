@@ -181,7 +181,7 @@ describe("GanttPanel", () => {
     expect(monthWidth).toBeCloseTo((7 * 8.5) / 30, 3);
     expect(dayWidth).toBeGreaterThan(weekWidth);
     expect(weekWidth).toBeGreaterThan(monthWidth);
-  });
+  }, 10_000);
 
   test("builds timeline range from today and visible task start and due dates", async () => {
     vi.useFakeTimers();

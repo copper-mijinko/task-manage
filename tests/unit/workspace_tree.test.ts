@@ -58,4 +58,53 @@ describe("workspace tree conversion", () => {
     expect(tasks.find((task) => task.id === "child-a")?.order).toBe(0);
     expect(tasks.find((task) => task.id === "child-b")?.order).toBe(1);
   });
+
+  it("preserves existing memo content when a workspace memo body is not loaded", () => {
+    const tasks = projectDataToWorkspaceTasks(
+      {
+        headers: [],
+        data: {
+          id: "root-id",
+          data: {
+            name: "Project",
+            status: "Open",
+            "start date": undefined,
+            "due date": undefined,
+            memo: [
+              {
+                id: "memo-1",
+                title: "Notes",
+                content: "",
+                tags: ["keep"],
+                format: "markdown",
+                bodyLoaded: false,
+              },
+            ],
+          },
+          children: [],
+        },
+      },
+      {
+        "root-id": {
+          id: "root-id",
+          name: "Project",
+          status: "Open",
+          parents: [],
+          memos: [
+            {
+              id: "memo-1",
+              title: "Notes",
+              content: "Existing body",
+              tags: ["keep"],
+              format: "markdown",
+            },
+          ],
+          createdAt: "2026-05-20",
+        },
+      }
+    );
+
+    expect(tasks[0].memos[0].content).toBe("Existing body");
+    expect(tasks[0].memos[0].bodyLoaded).toBe(false);
+  });
 });

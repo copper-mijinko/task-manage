@@ -15,6 +15,8 @@
   import { history, defaultKeymap, historyKeymap } from "@codemirror/commands";
   import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
   import { marked } from "marked";
+  import { markedHighlight } from "marked-highlight";
+  import hljs from "highlight.js/lib/common";
   import mermaid from "mermaid";
   import quillIcons from "quill/ui/icons.js";
   import { toMarkdown } from "@features/memos/utils/memo_utils";
@@ -22,6 +24,30 @@
   import * as platform from "@lib/ipc/platform";
   import { theme } from "@stores/theme";
   import "@features/memos/styles/hljs-theme.css";
+
+  marked.use(
+    markedHighlight({
+      langPrefix: "hljs language-",
+      highlight(code, lang) {
+        const language = lang && hljs.getLanguage(lang) ? lang : "plaintext";
+        return hljs.highlight(code, { language, ignoreIllegals: true }).value;
+      },
+    }),
+    {
+      gfm: true,
+      breaks: false,
+      tokenizer: {
+        code() {
+          return undefined;
+        },
+      },
+      renderer: {
+        checkbox({ checked }) {
+          return `<input type="checkbox"${checked ? " checked" : ""}>`;
+        },
+      },
+    }
+  );
 
   export let saveMemo: (content: string) => void;
   export let content: unknown = "";

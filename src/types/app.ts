@@ -1,6 +1,7 @@
 ﻿import type { ProjectData } from "@features/tasks/utils/tree_control";
 import type {
   WorkspaceInfo,
+  WorkspaceMemo,
   WorkspaceProject,
   WorkspaceProjectListItem,
   WorkspaceTask,
@@ -132,6 +133,13 @@ export interface ElectronAPI {
     projects: WorkspaceProjectListItem[]
   ) => Promise<{ success: boolean; projects?: WorkspaceProjectListItem[]; error?: string }>;
   wsReadProject: (projectDir: string) => Promise<WorkspaceProject>;
+  wsReadTaskMemos: (
+    projectDir: string,
+    taskId: string
+  ) => Promise<{ memos: WorkspaceMemo[]; error?: string }>;
+  wsReadProjectMemos: (
+    projectDir: string
+  ) => Promise<{ memosByTaskId: Record<string, WorkspaceMemo[]>; error?: string }>;
   wsWriteTask: (
     projectDir: string,
     task: WorkspaceTask

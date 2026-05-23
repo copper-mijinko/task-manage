@@ -1,6 +1,4 @@
 ﻿<script lang="ts">
-  import MarkdownMemo from "@features/memos/components/MarkdownMemo.svelte";
-  import QuillMemo from "@features/memos/components/QuillMemo.svelte";
   import { normalizeMemoFormat, type MemoFormat } from "@features/memos/utils/memo_utils";
 
   export let saveMemo: (content: unknown) => void;
@@ -18,23 +16,53 @@
     saveMemo(nextContent);
   }
 
+  let MarkdownMemo: typeof import("@features/memos/components/MarkdownMemo.svelte").default | null =
+    null;
+  let QuillMemo: typeof import("@features/memos/components/QuillMemo.svelte").default | null = null;
+  let markdownMemoLoading: Promise<void> | null = null;
+  let quillMemoLoading: Promise<void> | null = null;
+
+  function loadMarkdownMemo() {
+    if (MarkdownMemo || markdownMemoLoading) return;
+    markdownMemoLoading = import("@features/memos/components/MarkdownMemo.svelte").then(
+      (module) => {
+        MarkdownMemo = module.default;
+      }
+    );
+  }
+
+  function loadQuillMemo() {
+    if (QuillMemo || quillMemoLoading) return;
+    quillMemoLoading = import("@features/memos/components/QuillMemo.svelte").then((module) => {
+      QuillMemo = module.default;
+    });
+  }
+
   $: memoFormat = normalizeMemoFormat(format, isWorkspaceProject ? "markdown" : "quill");
+  $: if (memoFormat === "markdown") {
+    loadMarkdownMemo();
+  } else {
+    loadQuillMemo();
+  }
 </script>
 
 <div class="memo-host">
   {#if memoFormat === "markdown"}
-    <MarkdownMemo
-      saveMemo={(nextContent) => saveMemo(nextContent)}
-      {content}
-      {readOnly}
-      {memoTitles}
-      {currentMemoTitle}
-      {openMemoLink}
-      {workspaceProjectDir}
-      {taskId}
-    />
-  {:else}
-    <QuillMemo saveMemo={saveUnknown} {content} {readOnly} />
+    {#if MarkdownMemo}
+      <svelte:component
+        this={MarkdownMemo}
+        saveMemo={(nextContent: string) => saveMemo(nextContent)}
+        {content}
+        {readOnly}
+        {memoTitles}
+        {currentMemoTitle}
+        {openMemoLink}
+        {workspaceProjectDir}
+        {taskId}
+      />
+    {/if}
+  {:else if QuillMemo}
+    <svelte:component this={QuillMemo} saveMemo={saveUnknown} {content} {readOnly} />
   {/if}
 </div>
 
