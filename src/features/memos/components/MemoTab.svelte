@@ -428,6 +428,7 @@
         <Memo
           saveMemo={(editedContent) => saveMemo(editedContent, selectedMemoIndex)}
           content={editedContent}
+          readOnly={disabled}
           memoTitles={memo.map((entry) => entry.title)}
           currentMemoTitle={selectedMemo?.title ?? ""}
           openMemoLink={selectMemoByTitle}

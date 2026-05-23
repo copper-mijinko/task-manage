@@ -9,11 +9,96 @@ import {
 } from "@features/tasks/utils/tree_control";
 import type { FilterState, SortState } from "@app-types/app";
 import { tree_data } from "@features/tasks/stores/tree";
-import { table_selected_id } from "@stores/ui";
+import { selected_id, selected_type, table_selected_id } from "@stores/ui";
 import { sort_state } from "@features/tasks/stores/sort";
+import { workspace_store, workspace_tasks_cache } from "@features/workspace/stores/workspace";
+import * as platform from "@lib/ipc/platform";
+import type { WorkspaceMemo } from "@app-types/workspace";
 
 export interface FilterStore extends Writable<FilterState> {
   init: () => void;
+}
+
+let workspaceMemoHydrationKey = "";
+
+function hasMemoBodySearch(current: FilterState): boolean {
+  return (
+    (current?.search_memo?.length ?? 0) > 0 &&
+    (current?.full_text ?? []).some((keyword) => String(keyword || "").trim())
+  );
+}
+
+function treeHasUnloadedMemo(node: TreeData | undefined): boolean {
+  if (!node) return false;
+  if ((node.data.memo ?? []).some((entry) => entry?.bodyLoaded === false)) {
+    return true;
+  }
+  return (node.children ?? []).some(treeHasUnloadedMemo);
+}
+
+function mergeProjectMemos(
+  node: TreeData,
+  memosByTaskId: Record<string, WorkspaceMemo[]>
+): { node: TreeData; changed: boolean } {
+  let changed = false;
+  const ownMemos = memosByTaskId[node.id];
+  const data = ownMemos ? { ...node.data, memo: ownMemos } : node.data;
+  if (ownMemos) changed = true;
+
+  const children = (node.children ?? []).map((child) => {
+    const merged = mergeProjectMemos(child, memosByTaskId);
+    if (merged.changed) changed = true;
+    return merged.node;
+  });
+
+  if (!changed) return { node, changed: false };
+  return { node: { ...node, data, children }, changed: true };
+}
+
+async function hydrateWorkspaceMemosForSearch(current: FilterState, currentTreeData: ProjectData) {
+  if (!hasMemoBodySearch(current)) return;
+  if (get(selected_type) !== "WorkspaceProject") return;
+  if (!treeHasUnloadedMemo(currentTreeData.data)) return;
+
+  const { activeProjectDir } = get(workspace_store);
+  const projectId = get(selected_id);
+  if (!activeProjectDir || !projectId) return;
+
+  const key = `${activeProjectDir}:${projectId}`;
+  if (workspaceMemoHydrationKey === key) return;
+  workspaceMemoHydrationKey = key;
+
+  try {
+    const result = await platform.wsReadProjectMemos(activeProjectDir);
+    if (!result?.memosByTaskId || get(selected_type) !== "WorkspaceProject") return;
+    if (
+      get(workspace_store).activeProjectDir !== activeProjectDir ||
+      get(selected_id) !== projectId
+    ) {
+      return;
+    }
+
+    const latestTreeData = get(tree_data);
+    if (!latestTreeData?.data) return;
+    const merged = mergeProjectMemos(latestTreeData.data, result.memosByTaskId);
+    if (!merged.changed) return;
+
+    tree_data.setFromSource({ ...latestTreeData, data: merged.node });
+    workspace_tasks_cache.update((cache) => {
+      let changed = false;
+      const next = { ...cache };
+      for (const [taskId, memos] of Object.entries(result.memosByTaskId)) {
+        if (!next[taskId]) continue;
+        changed = true;
+        next[taskId] = { ...next[taskId], memos };
+      }
+      return changed ? next : cache;
+    });
+  } finally {
+    if (workspaceMemoHydrationKey === key) {
+      workspaceMemoHydrationKey = "";
+    }
+  }
 }
 
 function createFilter(initialValue: FilterState): FilterStore {
@@ -26,10 +111,13 @@ function createFilter(initialValue: FilterState): FilterStore {
   ) => {
     if (!currentTreeData) {
       applyFilteredData.cancel();
+      workspaceMemoHydrationKey = "";
       filtered_data.set(undefined);
       table_selected_id.set(undefined);
       return;
     }
+
+    hydrateWorkspaceMemosForSearch(current, currentTreeData);
 
     if (!hasActiveFilters(current)) {
       applyFilteredData.cancel();

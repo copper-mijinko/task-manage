@@ -513,6 +513,17 @@ function parseFrontmatter(content) {
   return { data, body };
 }
 
+function readFilePrefix(filePath, maxBytes = 16 * 1024) {
+  const fd = fs.openSync(filePath, "r");
+  try {
+    const buffer = Buffer.alloc(maxBytes);
+    const bytesRead = fs.readSync(fd, buffer, 0, maxBytes, 0);
+    return buffer.subarray(0, bytesRead).toString("utf8");
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
 /**
  * Serialize data object + optional body to markdown with YAML frontmatter.
  */
@@ -623,7 +634,8 @@ function taskFrontmatterData(task) {
 }
 
 /** Read memos from a task directory. */
-function readMemos(taskDir, reservedFiles = ["_index.md"]) {
+function readMemos(taskDir, reservedFiles = ["_index.md"], options = {}) {
+  const includeMemoContent = options.includeMemoContent !== false;
   const memos = [];
   const reserved = new Set(reservedFiles);
   const files = fs
@@ -631,7 +643,8 @@ function readMemos(taskDir, reservedFiles = ["_index.md"]) {
     .filter((f) => f.endsWith(".md") && !reserved.has(f))
     .sort();
   files.forEach((file, fileIndex) => {
-    const raw = fs.readFileSync(path.join(taskDir, file), "utf8");
+    const filePath = path.join(taskDir, file);
+    const raw = includeMemoContent ? fs.readFileSync(filePath, "utf8") : readFilePrefix(filePath);
     const { data, body } = parseFrontmatter(raw);
     const id = data.id || crypto.randomUUID();
     const headingMatch = body.match(/^#\s+(.+)/m);
@@ -646,8 +659,21 @@ function readMemos(taskDir, reservedFiles = ["_index.md"]) {
     }
     const tags = Array.isArray(data.tags) ? data.tags.map(String) : [];
     const format = normalizeMemoFormat(data.format, "markdown");
-    const content = format === "quill" ? parseQuillMemoBody(body) : body.trim();
-    memos.push({ id, title, content, tags, format, order: parseOrderValue(data.order), fileIndex });
+    const content = includeMemoContent
+      ? format === "quill"
+        ? parseQuillMemoBody(body)
+        : body.trim()
+      : "";
+    memos.push({
+      id,
+      title,
+      content,
+      tags,
+      format,
+      order: parseOrderValue(data.order),
+      bodyLoaded: includeMemoContent,
+      fileIndex,
+    });
   });
   return memos
     .sort((a, b) => {
@@ -665,7 +691,7 @@ function parseOrderValue(value) {
   return value != null && Number.isFinite(Number(value)) ? Number(value) : undefined;
 }
 
-function readRootTask(projectDir) {
+function readRootTask(projectDir, options = {}) {
   const content = fs.readFileSync(path.join(projectDir, "_project.md"), "utf8");
   const { data } = parseFrontmatter(content);
   return {
@@ -675,14 +701,14 @@ function readRootTask(projectDir) {
     startDate: data.start || undefined,
     dueDate: data.due || undefined,
     parents: [],
-    memos: readMemos(projectDir, ["_project.md"]),
+    memos: readMemos(projectDir, ["_project.md"], options),
     createdAt: data.created || "",
     order: parseOrderValue(data.order),
   };
 }
 
 /** Read a regular task from its subdirectory. */
-function readTaskDir(taskDir) {
+function readTaskDir(taskDir, options = {}) {
   const content = fs.readFileSync(path.join(taskDir, "_index.md"), "utf8");
   const { data } = parseFrontmatter(content);
   const parents = Array.isArray(data.parents) ? data.parents : data.parents ? [data.parents] : [];
@@ -693,7 +719,7 @@ function readTaskDir(taskDir) {
     startDate: data.start || undefined,
     dueDate: data.due || undefined,
     parents,
-    memos: readMemos(taskDir),
+    memos: readMemos(taskDir, ["_index.md"], options),
     createdAt: data.created || "",
     order: parseOrderValue(data.order),
   };
@@ -703,13 +729,13 @@ function readTaskDir(taskDir) {
  * Read all tasks from a project directory.
  * Returns { tasks: Map<id, task>, taskDirs: Map<id, dirName> }
  */
-function readProject(projectDir) {
+function readProject(projectDir, options = {}) {
   const tasks = new Map();
   const taskDirs = new Map();
 
   const rootFile = path.join(projectDir, "_project.md");
   if (fs.existsSync(rootFile)) {
-    const root = readRootTask(projectDir);
+    const root = readRootTask(projectDir, options);
     if (root.id) {
       tasks.set(root.id, root);
       taskDirs.set(root.id, "_project");
@@ -722,7 +748,7 @@ function readProject(projectDir) {
     const taskDir = path.join(projectDir, entry.name);
     if (!fs.existsSync(path.join(taskDir, "_index.md"))) continue;
     try {
-      const task = readTaskDir(taskDir);
+      const task = readTaskDir(taskDir, options);
       if (task.id) {
         tasks.set(task.id, task);
         taskDirs.set(task.id, entry.name);
@@ -733,6 +759,17 @@ function readProject(projectDir) {
   }
 
   return { tasks, taskDirs };
+}
+
+function readTaskMemos(projectDir, taskId, taskDirs) {
+  const dirName = taskDirs.get(taskId);
+  if (!dirName) {
+    throw new Error("Task directory was not found");
+  }
+  const taskDir = dirName === "_project" ? projectDir : path.join(projectDir, dirName);
+  return readMemos(taskDir, dirName === "_project" ? ["_project.md"] : ["_index.md"], {
+    includeMemoContent: true,
+  });
 }
 
 function writeMemoFiles(taskDir, indexFileName, memos) {
@@ -961,7 +998,7 @@ async function deleteTaskDirAsync(projectDir, taskDirs, taskId) {
 
 async function writeProjectAsync(projectDir, tasks, options = {}) {
   const { onWritten } = options;
-  const { taskDirs } = readProject(projectDir);
+  const { taskDirs } = readProject(projectDir, { includeMemoContent: false });
   const nextTaskIds = new Set(tasks.map((task) => task.id));
 
   for (const id of [...taskDirs.keys()]) {
@@ -1314,6 +1351,7 @@ module.exports = {
   writeFileIfChanged,
   retryFileOperation,
   readProject,
+  readTaskMemos,
   writeTask,
   writeTaskAsync,
   writeProjectAsync,

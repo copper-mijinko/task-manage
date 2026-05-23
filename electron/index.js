@@ -129,8 +129,10 @@ app.on("ready", () => {
   const adapter = new JSONFileSync(file);
   const db = new LowSync(adapter);
   db.read();
-  db.data ||= defaultData; // initialize
-  db.write();
+  if (!db.data) {
+    db.data = defaultData; // initialize
+    db.write();
+  }
   // meta
   const file_meta = resolveAppDataPath("meta.json");
   log.info(file_meta);
@@ -141,8 +143,10 @@ app.on("ready", () => {
   const adapter_meta = new JSONFileSync(file_meta);
   const db_meta = new LowSync(adapter_meta);
   db_meta.read();
-  db_meta.data ||= defaultDataMeta; // initialize
-  db_meta.write();
+  if (!db_meta.data) {
+    db_meta.data = defaultDataMeta; // initialize
+    db_meta.write();
+  }
   log.info(`[perf] DB init done: ${Date.now() - t0}ms`);
 
   const dbWriter = createAsyncWriter(db, file, "db");
@@ -235,10 +239,96 @@ app.on("ready", () => {
   });
 
   const recordWrite = (filePath, buffer) => workspaceReconciler.recordWrite(filePath, buffer);
+  const INITIAL_WORKSPACE_WATCHER_DELAY_MS = 2500;
+  let deferredWorkspaceWatcherPath = null;
+  let deferredWorkspaceWatcherTimer = null;
+
+  function readProjectSummary(projectDir) {
+    return workspace.readProject(projectDir, { includeMemoContent: false });
+  }
+
+  function ensureWorkspaceCache(projectDir) {
+    let cached = wsCache.get(projectDir);
+    if (!cached) {
+      const { tasks, taskDirs } = readProjectSummary(projectDir);
+      cached = { tasks, taskDirs };
+      wsCache.set(projectDir, cached);
+    }
+    return cached;
+  }
+
+  function withLoadedMemoBodies(projectDir, tasks, taskDirs) {
+    return tasks.map((task) => {
+      if (!task?.memos?.some((memo) => memo?.bodyLoaded === false)) {
+        return task;
+      }
+
+      const diskMemos = workspace.readTaskMemos(projectDir, task.id, taskDirs);
+      const diskMemoById = new Map(diskMemos.map((memo) => [memo.id, memo]));
+      return {
+        ...task,
+        memos: task.memos.map((memo) => {
+          if (memo?.bodyLoaded !== false) return memo;
+          const diskMemo = diskMemoById.get(memo.id);
+          return {
+            ...memo,
+            content: diskMemo?.content ?? memo.content,
+            bodyLoaded: true,
+          };
+        }),
+      };
+    });
+  }
+
+  function cancelDeferredWorkspaceWatcher() {
+    deferredWorkspaceWatcherPath = null;
+    if (deferredWorkspaceWatcherTimer) {
+      clearTimeout(deferredWorkspaceWatcherTimer);
+      deferredWorkspaceWatcherTimer = null;
+    }
+  }
+
+  function startWorkspaceWatcher(workspacePath) {
+    cancelDeferredWorkspaceWatcher();
+    if (!workspacePath) {
+      workspaceReconciler.stop().catch((err) => {
+        log.error("workspace watcher stop error:", err.message);
+      });
+      return;
+    }
+    workspaceReconciler.start(workspacePath).catch((err) => {
+      log.error("workspace watcher start error:", err.message);
+    });
+  }
+
+  function scheduleDeferredWorkspaceWatcher() {
+    const workspacePath = deferredWorkspaceWatcherPath;
+    if (!workspacePath) return;
+    if (deferredWorkspaceWatcherTimer) clearTimeout(deferredWorkspaceWatcherTimer);
+    deferredWorkspaceWatcherTimer = setTimeout(() => {
+      deferredWorkspaceWatcherTimer = null;
+      const pathToStart = deferredWorkspaceWatcherPath;
+      deferredWorkspaceWatcherPath = null;
+      if (pathToStart) {
+        workspaceReconciler.start(pathToStart).catch((err) => {
+          log.error("workspace watcher start error:", err.message);
+        });
+      }
+    }, INITIAL_WORKSPACE_WATCHER_DELAY_MS);
+  }
+
+  function deferInitialWorkspaceWatcherStart(workspacePath) {
+    if (!workspacePath) return;
+    deferredWorkspaceWatcherPath = workspacePath;
+    mainWindow.webContents.once("did-finish-load", scheduleDeferredWorkspaceWatcher);
+    mainWindow.webContents.once("did-fail-load", scheduleDeferredWorkspaceWatcher);
+  }
 
   workspaceWriteQueue = new WorkspaceWriteQueue({
     writeProject: async (projectDir, tasks) => {
-      const updated = await workspace.writeProjectAsync(projectDir, tasks, {
+      const cached = ensureWorkspaceCache(projectDir);
+      const tasksToWrite = withLoadedMemoBodies(projectDir, tasks, cached.taskDirs);
+      const updated = await workspace.writeProjectAsync(projectDir, tasksToWrite, {
         onWritten: recordWrite,
       });
       await workspaceReconciler.markProjectWritten(projectDir);
@@ -251,11 +341,7 @@ app.on("ready", () => {
     },
   });
   let shutdownFlushPromise = null;
-  if (db_meta.data.activeWorkspace) {
-    workspaceReconciler.start(db_meta.data.activeWorkspace).catch((err) => {
-      log.error("workspace watcher start error:", err.message);
-    });
-  }
+  deferInitialWorkspaceWatcherStart(db_meta.data.activeWorkspace);
 
   // How long to wait for the workspace queue to flush before asking the user
   // whether to keep waiting or force-quit. Long enough to cover normal cloud
@@ -788,9 +874,7 @@ app.on("ready", () => {
     db_meta.data.workspaces = workspaces;
     if (activeWorkspace !== undefined) {
       db_meta.data.activeWorkspace = activeWorkspace;
-      workspaceReconciler.start(activeWorkspace).catch((err) => {
-        log.error("workspace watcher start error:", err.message);
-      });
+      startWorkspaceWatcher(activeWorkspace);
     }
     try {
       db_meta.write();
@@ -852,9 +936,9 @@ app.on("ready", () => {
         await workspaceWriteQueue.flush();
       }
 
-      let cached = wsCache.get(projectDir);
-      if (!cached || !cached.taskDirs?.has(taskId)) {
-        const { tasks, taskDirs } = workspace.readProject(projectDir);
+      let cached = ensureWorkspaceCache(projectDir);
+      if (!cached.taskDirs?.has(taskId)) {
+        const { tasks, taskDirs } = readProjectSummary(projectDir);
         cached = { tasks, taskDirs };
         wsCache.set(projectDir, cached);
       }
@@ -906,7 +990,7 @@ app.on("ready", () => {
 
   ipcMain.handle("ws:read-project", async (event, { projectDir }) => {
     try {
-      const { tasks, taskDirs } = workspace.readProject(projectDir);
+      const { tasks, taskDirs } = readProjectSummary(projectDir);
       wsCache.set(projectDir, { tasks, taskDirs });
       // Map 竊・plain object for IPC serialisation
       return { tasks: Object.fromEntries(tasks) };
@@ -916,28 +1000,58 @@ app.on("ready", () => {
     }
   });
 
+  ipcMain.handle("ws:read-task-memos", async (event, { projectDir, taskId }) => {
+    try {
+      const cached = ensureWorkspaceCache(projectDir);
+      const memos = workspace.readTaskMemos(projectDir, taskId, cached.taskDirs);
+      const task = cached.tasks.get(taskId);
+      if (task) {
+        task.memos = memos;
+      }
+      return { memos };
+    } catch (err) {
+      log.error("ws:read-task-memos error:", err.message);
+      return { memos: [], error: err.message };
+    }
+  });
+
+  ipcMain.handle("ws:read-project-memos", async (event, { projectDir }) => {
+    try {
+      const cached = ensureWorkspaceCache(projectDir);
+      const memosByTaskId = {};
+      for (const taskId of cached.taskDirs.keys()) {
+        const memos = workspace.readTaskMemos(projectDir, taskId, cached.taskDirs);
+        memosByTaskId[taskId] = memos;
+        const task = cached.tasks.get(taskId);
+        if (task) {
+          task.memos = memos;
+        }
+      }
+      return { memosByTaskId };
+    } catch (err) {
+      log.error("ws:read-project-memos error:", err.message);
+      return { memosByTaskId: {}, error: err.message };
+    }
+  });
+
   ipcMain.handle("ws:write-task", async (event, { projectDir, task }) => {
     try {
-      let cached = wsCache.get(projectDir);
-      if (!cached) {
-        const { tasks, taskDirs } = workspace.readProject(projectDir);
-        cached = { tasks, taskDirs };
-        wsCache.set(projectDir, cached);
-      }
+      const cached = ensureWorkspaceCache(projectDir);
       const { tasks, taskDirs } = cached;
+      const [taskToWrite] = withLoadedMemoBodies(projectDir, [task], taskDirs);
 
       // Cycle check when parents are being set
-      if (task.parents && task.parents.length > 0) {
+      if (taskToWrite.parents && taskToWrite.parents.length > 0) {
         // Merge updated task into the map for a correct check
         const tasksWithUpdate = new Map(tasks);
-        tasksWithUpdate.set(task.id, task);
-        if (workspace.wouldCreateCycle(tasksWithUpdate, task.id, task.parents)) {
+        tasksWithUpdate.set(taskToWrite.id, taskToWrite);
+        if (workspace.wouldCreateCycle(tasksWithUpdate, taskToWrite.id, taskToWrite.parents)) {
           return { success: false, error: "Cannot save because this would create a cycle" };
         }
       }
 
-      await workspace.writeTaskAsync(projectDir, task, taskDirs, recordWrite);
-      tasks.set(task.id, task);
+      await workspace.writeTaskAsync(projectDir, taskToWrite, taskDirs, recordWrite);
+      tasks.set(taskToWrite.id, taskToWrite);
       return { success: true };
     } catch (err) {
       log.error("ws:write-task error:", err.message);
@@ -949,12 +1063,7 @@ app.on("ready", () => {
     "ws:save-memo-image",
     async (event, { projectDir, taskId, bytes, mimeType = "image/png" }) => {
       try {
-        let cached = wsCache.get(projectDir);
-        if (!cached) {
-          const { tasks, taskDirs } = workspace.readProject(projectDir);
-          cached = { tasks, taskDirs };
-          wsCache.set(projectDir, cached);
-        }
+        const cached = ensureWorkspaceCache(projectDir);
 
         const result = await workspace.saveMemoImageAsync(
           projectDir,
@@ -974,12 +1083,7 @@ app.on("ready", () => {
 
   ipcMain.handle("ws:resolve-memo-asset", async (event, { projectDir, taskId, assetPath }) => {
     try {
-      let cached = wsCache.get(projectDir);
-      if (!cached) {
-        const { tasks, taskDirs } = workspace.readProject(projectDir);
-        cached = { tasks, taskDirs };
-        wsCache.set(projectDir, cached);
-      }
+      const cached = ensureWorkspaceCache(projectDir);
 
       const fileUrl = workspace.resolveMemoAssetPath(
         projectDir,
@@ -997,12 +1101,7 @@ app.on("ready", () => {
 
   ipcMain.handle("ws:delete-task", async (event, { projectDir, taskId }) => {
     try {
-      let cached = wsCache.get(projectDir);
-      if (!cached) {
-        const { tasks, taskDirs } = workspace.readProject(projectDir);
-        cached = { tasks, taskDirs };
-        wsCache.set(projectDir, cached);
-      }
+      const cached = ensureWorkspaceCache(projectDir);
       const { tasks, taskDirs } = cached;
 
       // Orphan check: any task whose only parent is taskId would be orphaned

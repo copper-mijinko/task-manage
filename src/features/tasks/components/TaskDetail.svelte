@@ -8,6 +8,7 @@
     selected_type,
     selected_id,
     workspace_store,
+    workspace_tasks_cache,
     tag_index,
     theme,
   } from "@stores";
@@ -44,7 +45,6 @@
   $: workspaceProjectDir = isWorkspaceProject ? $workspace_store.activeProjectDir : null;
   $: defaultMemoFormat = isWorkspaceProject ? "markdown" : "quill";
   $: isDark = $theme === "dark";
-
   const detailDateStyle =
     "border: 0; padding: 0 var(--sp7) 0 var(--sp2); font-size: 1rem; background-color: transparent;";
   const RESIZER_SIZE = 5;
@@ -82,6 +82,68 @@
     context.selectedId === $selected_id &&
     context.tableSelectedId === $table_selected_id &&
     context.activeProjectDir === $workspace_store.activeProjectDir;
+
+  let memoHydrationKey = "";
+  let memoBodyLoading = false;
+
+  function mergeLoadedMemos(currentMemos, loadedMemos) {
+    const loadedById = new Map(loadedMemos.map((entry) => [entry.id, entry]));
+    return (currentMemos ?? []).map((entry) => {
+      const loaded = loadedById.get(entry.id);
+      return loaded ? { ...entry, ...loaded, bodyLoaded: true } : entry;
+    });
+  }
+
+  async function hydrateWorkspaceTaskMemos(taskId, editContext = getEditContext()) {
+    if (!editContext.activeProjectDir || !taskId) return;
+    const key = `${editContext.activeProjectDir}:${taskId}`;
+    if (memoHydrationKey === key) return;
+
+    memoHydrationKey = key;
+    memoBodyLoading = true;
+    try {
+      const result = await platform.wsReadTaskMemos(editContext.activeProjectDir, taskId);
+      if (!contextMatches(editContext) || !result?.memos) return;
+
+      const liveTreeData = get(tree_data);
+      if (!liveTreeData?.data) return;
+      const liveNode = getNode(taskId, liveTreeData.data);
+      if (!liveNode) return;
+
+      const nextMemos = mergeLoadedMemos(liveNode.data.memo ?? [], result.memos);
+      const data = updateNodeDataById(liveTreeData.data, taskId, { memo: nextMemos });
+      if (data !== liveTreeData.data) {
+        tree_data.setFromSource({ ...liveTreeData, data });
+      }
+      workspace_tasks_cache.update((cache) => {
+        const cachedTask = cache[taskId];
+        if (!cachedTask) return cache;
+        return {
+          ...cache,
+          [taskId]: {
+            ...cachedTask,
+            memos: mergeLoadedMemos(cachedTask.memos ?? [], result.memos),
+          },
+        };
+      });
+    } finally {
+      if (contextMatches(editContext)) {
+        memoBodyLoading = false;
+      }
+      if (memoHydrationKey === key) {
+        memoHydrationKey = "";
+      }
+    }
+  }
+
+  $: if (
+    isWorkspaceProject &&
+    workspaceProjectDir &&
+    node?.id &&
+    memo.some((entry) => entry?.bodyLoaded === false)
+  ) {
+    hydrateWorkspaceTaskMemos(node.id);
+  }
 
   const changeData = (node, key, value, editContext = getEditContext()) => {
     if (!contextMatches(editContext)) {
@@ -575,6 +637,7 @@
             {saveMemoTags}
             {changeMemoFormat}
             {allTags}
+            disabled={memoBodyLoading}
             {isWorkspaceProject}
             {defaultMemoFormat}
             {workspaceProjectDir}

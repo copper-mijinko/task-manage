@@ -15,6 +15,7 @@ import {
   createProject,
   createProjectAsync,
   readProject,
+  readTaskMemos,
   writeTask,
   writeTaskAsync,
   writeProjectAsync,
@@ -407,6 +408,38 @@ describe("file system operations", () => {
     expect(loaded.memos).toHaveLength(1);
     expect(loaded.memos[0].id).toBe("memo-uuid-1");
     expect(loaded.memos[0].title).toBe("Notes");
+  });
+
+  it("readProject can defer memo bodies and read them for one task later", () => {
+    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
+    const taskDirs = new Map([["root-id", "_project"]]);
+    const task = {
+      id: "task-lazy-memo",
+      name: "Lazy Memo Task",
+      status: "Open",
+      parents: ["root-id"],
+      memos: [
+        {
+          id: "memo-lazy",
+          title: "Lazy Notes",
+          content: "# Lazy Notes\n\nLoaded later",
+          tags: ["lazy"],
+        },
+      ],
+      createdAt: "2026-04-24",
+    };
+    writeTask(projectDir, task, taskDirs);
+
+    const summary = readProject(projectDir, { includeMemoContent: false });
+    const summaryMemo = summary.tasks.get("task-lazy-memo").memos[0];
+    expect(summaryMemo.title).toBe("Lazy Notes");
+    expect(summaryMemo.tags).toEqual(["lazy"]);
+    expect(summaryMemo.content).toBe("");
+    expect(summaryMemo.bodyLoaded).toBe(false);
+
+    const loadedMemos = readTaskMemos(projectDir, "task-lazy-memo", summary.taskDirs);
+    expect(loadedMemos[0].content).toContain("Loaded later");
+    expect(loadedMemos[0].bodyLoaded).toBe(true);
   });
 
   it("writeTask + readProject round-trips order field", () => {

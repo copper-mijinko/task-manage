@@ -1,42 +1,29 @@
 import { marked, type Tokens } from "marked";
-import { markedHighlight } from "marked-highlight";
-import hljs from "highlight.js/lib/common";
 
+// Syntax highlighting is configured lazily in MarkdownMemo so highlight.js
+// stays out of the startup bundle.
 // marked 設定:
 //  - gfm: GitHub Flavored Markdown (タスクリスト、打消し線、テーブル等)
 //  - breaks: false (Markdown 標準仕様)。行末スペース2個+\n のみ hard break、単純 \n は同段落内空白扱い
 //  - tokenizer.code: 行頭4-space インデントを code block 扱いしない (インデント保持目的)
-//  - markedHighlight: フェンスコードブロックを highlight.js でカラー化。
-//    プレビュー側 (MarkdownMemo) と Quill→Markdown 双方向変換で共有される marked
-//    インスタンスを使うため、ここで一度だけ登録する。lexer は影響を受けず
-//    renderer のみが拡張される (markdownToQuillDelta は lexer ベースなので無関係)。
-marked.use(
-  markedHighlight({
-    langPrefix: "hljs language-",
-    highlight(code, lang) {
-      const language = lang && hljs.getLanguage(lang) ? lang : "plaintext";
-      return hljs.highlight(code, { language, ignoreIllegals: true }).value;
+marked.use({
+  gfm: true,
+  breaks: false,
+  tokenizer: {
+    code() {
+      return undefined;
     },
-  }),
-  {
-    gfm: true,
-    breaks: false,
-    tokenizer: {
-      code() {
-        return undefined;
-      },
+  },
+  renderer: {
+    // GFM のデフォルトは disabled 属性付き checkbox を出力するため、プレビュー上で
+    // ユーザーがクリックしてもチェック状態を切り替えられない。disabled を外して
+    // MarkdownMemo 側の click ハンドラがソース行 (`- [ ]` / `- [x]`) を直接編集
+    // できるようにする。
+    checkbox({ checked }) {
+      return `<input type="checkbox"${checked ? " checked" : ""}>`;
     },
-    renderer: {
-      // GFM のデフォルトは disabled 属性付き checkbox を出力するため、プレビュー上で
-      // ユーザーがクリックしてもチェック状態を切り替えられない。disabled を外して
-      // MarkdownMemo 側の click ハンドラがソース行 (`- [ ]` / `- [x]`) を直接編集
-      // できるようにする。
-      checkbox({ checked }) {
-        return `<input type="checkbox"${checked ? " checked" : ""}>`;
-      },
-    },
-  }
-);
+  },
+});
 
 export type MemoFormat = "markdown" | "quill";
 

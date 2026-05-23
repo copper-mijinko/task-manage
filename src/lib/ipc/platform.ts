@@ -16,6 +16,7 @@ import type {
   WorkspaceInfo,
   WorkspaceProject,
   WorkspaceProjectListItem,
+  WorkspaceMemo,
   WorkspaceTask,
 } from "@app-types/workspace";
 import type { ProjectData } from "@features/tasks/utils/tree_control";
@@ -237,6 +238,19 @@ export function wsSetProjectOrder(
 
 export function wsReadProject(projectDir: string): Promise<WorkspaceProject | undefined> {
   return api()?.wsReadProject?.(projectDir) ?? Promise.resolve(undefined);
+}
+
+export function wsReadTaskMemos(
+  projectDir: string,
+  taskId: string
+): Promise<{ memos: WorkspaceMemo[]; error?: string }> {
+  return api()?.wsReadTaskMemos?.(projectDir, taskId) ?? Promise.resolve({ memos: [] });
+}
+
+export function wsReadProjectMemos(
+  projectDir: string
+): Promise<{ memosByTaskId: Record<string, WorkspaceMemo[]>; error?: string }> {
+  return api()?.wsReadProjectMemos?.(projectDir) ?? Promise.resolve({ memosByTaskId: {} });
 }
 
 export function wsWriteTask(

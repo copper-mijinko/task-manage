@@ -37,8 +37,23 @@ vi.mock("quill", () => {
 
 import Memo from "@features/memos/components/Memo.svelte";
 
-function renderMarkdownMemo(props = {}) {
-  return render(Memo, {
+async function waitForMemoComponent() {
+  await waitFor(
+    () => {
+      expect(document.querySelector(".memo-host").firstElementChild).toBeInTheDocument();
+    },
+    { timeout: 20000 }
+  );
+}
+
+async function renderMemo(props = {}) {
+  const result = render(Memo, { props });
+  await waitForMemoComponent();
+  return result;
+}
+
+async function renderMarkdownMemo(props = {}) {
+  const result = render(Memo, {
     props: {
       saveMemo: vi.fn(),
       content: "",
@@ -46,6 +61,8 @@ function renderMarkdownMemo(props = {}) {
       ...props,
     },
   });
+  await waitForMemoComponent();
+  return result;
 }
 
 describe("Memo mode routing", () => {
@@ -58,16 +75,14 @@ describe("Memo mode routing", () => {
     delete window.electronAPI;
   });
 
-  test("uses Quill for db.json Projects even when a workspace path exists", () => {
+  test("uses Quill for db.json Projects even when a workspace path exists", async () => {
     const saveMemo = vi.fn();
-    render(Memo, {
-      props: {
-        saveMemo,
-        content: { ops: [{ insert: "legacy\n" }] },
-        workspaceProjectDir: "C:\\workspace\\project",
-        taskId: "task-1",
-        isWorkspaceProject: false,
-      },
+    await renderMemo({
+      saveMemo,
+      content: { ops: [{ insert: "legacy\n" }] },
+      workspaceProjectDir: "C:\\workspace\\project",
+      taskId: "task-1",
+      isWorkspaceProject: false,
     });
 
     expect(quillInstances).toHaveLength(1);
@@ -75,36 +90,32 @@ describe("Memo mode routing", () => {
     expect(quillInstances[0].setContents).toHaveBeenCalledWith({ ops: [{ insert: "legacy\n" }] });
   });
 
-  test("uses Markdown editor for workspace projects", () => {
-    renderMarkdownMemo({ content: "# Workspace" });
+  test("uses Markdown editor for workspace projects", async () => {
+    await renderMarkdownMemo({ content: "# Workspace" });
 
     expect(quillInstances).toHaveLength(0);
     expect(document.querySelector(".preview-mode")).toBeInTheDocument();
     expect(document.querySelector(".preview h1")).toHaveTextContent("Workspace");
-  });
+  }, 30000);
 
-  test("uses Markdown editor for db.json memo when its format is markdown", () => {
-    render(Memo, {
-      props: {
-        saveMemo: vi.fn(),
-        content: "# Markdown in db",
-        isWorkspaceProject: false,
-        format: "markdown",
-      },
+  test("uses Markdown editor for db.json memo when its format is markdown", async () => {
+    await renderMemo({
+      saveMemo: vi.fn(),
+      content: "# Markdown in db",
+      isWorkspaceProject: false,
+      format: "markdown",
     });
 
     expect(quillInstances).toHaveLength(0);
     expect(document.querySelector(".preview h1")).toHaveTextContent("Markdown in db");
   });
 
-  test("uses Quill editor for workspace memo when its format is quill", () => {
-    render(Memo, {
-      props: {
-        saveMemo: vi.fn(),
-        content: { ops: [{ insert: "workspace quill\n" }] },
-        isWorkspaceProject: true,
-        format: "quill",
-      },
+  test("uses Quill editor for workspace memo when its format is quill", async () => {
+    await renderMemo({
+      saveMemo: vi.fn(),
+      content: { ops: [{ insert: "workspace quill\n" }] },
+      isWorkspaceProject: true,
+      format: "quill",
     });
 
     expect(quillInstances).toHaveLength(1);
@@ -113,7 +124,7 @@ describe("Memo mode routing", () => {
 
   test("db.json Projects save Quill Delta content", async () => {
     const saveMemo = vi.fn();
-    render(Memo, { props: { saveMemo, content: "", isWorkspaceProject: false } });
+    await renderMemo({ saveMemo, content: "", isWorkspaceProject: false });
     const quill = quillInstances.at(-1);
 
     quill.handlers["text-change"]({}, {}, "user");
@@ -136,27 +147,27 @@ describe("Markdown Memo - view mode", () => {
     delete window.electronAPI;
   });
 
-  test("renders in view mode by default (no CM6 editor)", () => {
-    renderMarkdownMemo({ saveMemo, content: "" });
+  test("renders in view mode by default (no CM6 editor)", async () => {
+    await renderMarkdownMemo({ saveMemo, content: "" });
     expect(document.querySelector(".cm-editor")).not.toBeInTheDocument();
     expect(document.querySelector(".preview-mode")).toBeInTheDocument();
   });
 
-  test("shows placeholder when content is empty", () => {
-    renderMarkdownMemo({ saveMemo, content: "" });
+  test("shows placeholder when content is empty", async () => {
+    await renderMarkdownMemo({ saveMemo, content: "" });
     expect(document.querySelector(".placeholder")).toBeInTheDocument();
     expect(document.querySelector(".preview-mode")).toHaveClass("emptyContent");
   });
 
-  test("renders markdown content as HTML in view mode", () => {
-    renderMarkdownMemo({ saveMemo, content: "# Hello\n\nWorld" });
+  test("renders markdown content as HTML in view mode", async () => {
+    await renderMarkdownMemo({ saveMemo, content: "# Hello\n\nWorld" });
     const preview = document.querySelector(".preview");
     expect(preview).toBeInTheDocument();
     expect(preview.querySelector("h1")).toHaveTextContent("Hello");
   });
 
-  test("renders wiki links with resolved state when memo exists", () => {
-    renderMarkdownMemo({
+  test("renders wiki links with resolved state when memo exists", async () => {
+    await renderMarkdownMemo({
       saveMemo,
       content: "[[Daily Notes]] and [[Missing Note]]",
       memoTitles: ["Daily Notes"],
@@ -174,7 +185,7 @@ describe("Markdown Memo - view mode", () => {
       url: "file:///C:/workspace/project/task-1/assets/diagram.png",
     });
 
-    renderMarkdownMemo({
+    await renderMarkdownMemo({
       saveMemo,
       content: "![Diagram](./assets/diagram.png)",
       workspaceProjectDir: "C:\\workspace\\project",
@@ -190,16 +201,16 @@ describe("Markdown Memo - view mode", () => {
     });
   });
 
-  test("converts legacy Quill Delta object to readable markdown text in workspace view", () => {
+  test("converts legacy Quill Delta object to readable markdown text in workspace view", async () => {
     const delta = { ops: [{ insert: "hello" }, { insert: "\nworld" }] };
-    renderMarkdownMemo({ saveMemo, content: delta });
+    await renderMarkdownMemo({ saveMemo, content: delta });
     expect(document.querySelector(".preview")).toHaveTextContent("hello");
     expect(document.querySelector(".preview")).toHaveTextContent("world");
     expect(document.querySelector(".preview")).not.toHaveTextContent('"ops"');
   });
 
-  test("readOnly: no placeholder shown when empty", () => {
-    renderMarkdownMemo({ saveMemo, content: "", readOnly: true });
+  test("readOnly: no placeholder shown when empty", async () => {
+    await renderMarkdownMemo({ saveMemo, content: "", readOnly: true });
     expect(document.querySelector(".placeholder")).not.toBeInTheDocument();
     expect(document.querySelector(".preview-mode")).toHaveClass("emptyContent");
   });
@@ -219,7 +230,7 @@ describe("Markdown Memo - edit mode", () => {
   });
 
   test("clicking edit mode switch shows CM6 editor", async () => {
-    renderMarkdownMemo({ saveMemo, content: "hello" });
+    await renderMarkdownMemo({ saveMemo, content: "hello" });
     await fireEvent.click(document.querySelector(".edit-mode-btn"));
     await waitFor(() => {
       expect(document.querySelector(".cm-editor")).toBeInTheDocument();
@@ -227,7 +238,7 @@ describe("Markdown Memo - edit mode", () => {
   });
 
   test("suggests memo titles after a wiki-link opener", async () => {
-    renderMarkdownMemo({
+    await renderMarkdownMemo({
       saveMemo,
       content: "",
       memoTitles: ["Daily Notes", "Research Log"],
@@ -253,7 +264,7 @@ describe("Markdown Memo - edit mode", () => {
   });
 
   test("does not suggest the current memo title after a wiki-link opener", async () => {
-    renderMarkdownMemo({
+    await renderMarkdownMemo({
       saveMemo,
       content: "",
       memoTitles: ["Daily Notes", "Research Log"],
@@ -281,7 +292,7 @@ describe("Markdown Memo - edit mode", () => {
   });
 
   test("edit mode shows read mode switch", async () => {
-    renderMarkdownMemo({ saveMemo, content: "hello" });
+    await renderMarkdownMemo({ saveMemo, content: "hello" });
     await fireEvent.click(document.querySelector(".edit-mode-btn"));
     await waitFor(() => {
       expect(document.querySelector(".read-mode-btn")).toBeInTheDocument();
@@ -289,7 +300,7 @@ describe("Markdown Memo - edit mode", () => {
   });
 
   test("lets the markdown editor and preview split be resized with the keyboard", async () => {
-    renderMarkdownMemo({ saveMemo, content: "hello" });
+    await renderMarkdownMemo({ saveMemo, content: "hello" });
     await fireEvent.click(document.querySelector(".edit-mode-btn"));
     await waitFor(() => {
       expect(document.querySelector(".markdown-split-resizer")).toBeInTheDocument();
@@ -308,7 +319,7 @@ describe("Markdown Memo - edit mode", () => {
   });
 
   test("clicking read mode switch returns to view mode", async () => {
-    renderMarkdownMemo({ saveMemo, content: "hello" });
+    await renderMarkdownMemo({ saveMemo, content: "hello" });
     await fireEvent.click(document.querySelector(".edit-mode-btn"));
     await waitFor(() => expect(document.querySelector(".read-mode-btn")).toBeInTheDocument());
 
@@ -320,7 +331,7 @@ describe("Markdown Memo - edit mode", () => {
   });
 
   test("readOnly: clicking does not enter edit mode", async () => {
-    renderMarkdownMemo({ saveMemo, content: "hello", readOnly: true });
+    await renderMarkdownMemo({ saveMemo, content: "hello", readOnly: true });
     await fireEvent.click(document.querySelector(".preview-mode"));
     await tick();
     expect(document.querySelector(".cm-editor")).not.toBeInTheDocument();
@@ -328,14 +339,14 @@ describe("Markdown Memo - edit mode", () => {
 
   test("saveMemo is not called in readOnly mode", async () => {
     vi.useFakeTimers();
-    renderMarkdownMemo({ saveMemo, content: "text", readOnly: true });
+    await renderMarkdownMemo({ saveMemo, content: "text", readOnly: true });
     vi.runAllTimers();
     expect(saveMemo).not.toHaveBeenCalled();
     vi.useRealTimers();
   });
 
   test("switching back to read mode without changes does not call saveMemo", async () => {
-    renderMarkdownMemo({ saveMemo, content: "hello" });
+    await renderMarkdownMemo({ saveMemo, content: "hello" });
     await fireEvent.click(document.querySelector(".edit-mode-btn"));
     await waitFor(() => expect(document.querySelector(".read-mode-btn")).toBeInTheDocument());
 
@@ -353,7 +364,7 @@ describe("Markdown Memo - edit mode", () => {
     const originalGetClientRects = Range.prototype.getClientRects;
     Range.prototype.getClientRects = () => [];
 
-    renderMarkdownMemo({
+    await renderMarkdownMemo({
       saveMemo,
       content: "",
       workspaceProjectDir: "C:\\project",
@@ -413,7 +424,7 @@ describe("Markdown Memo - link handling in preview", () => {
   });
 
   test("clicking a markdown link opens it externally and does not enter edit mode", async () => {
-    renderMarkdownMemo({ saveMemo, content: "[Visit](https://example.com)" });
+    await renderMarkdownMemo({ saveMemo, content: "[Visit](https://example.com)" });
     const link = document.querySelector(".preview a");
     expect(link).toBeInTheDocument();
 
@@ -428,7 +439,7 @@ describe("Markdown Memo - link handling in preview", () => {
 
   test("clicking a wiki link opens the target memo and does not enter edit mode", async () => {
     const openMemoLink = vi.fn();
-    renderMarkdownMemo({
+    await renderMarkdownMemo({
       saveMemo,
       content: "[[Research Notes]]",
       memoTitles: ["Research Notes"],
@@ -447,7 +458,7 @@ describe("Markdown Memo - link handling in preview", () => {
   });
 
   test("clicking an external wiki link opens it externally", async () => {
-    renderMarkdownMemo({ saveMemo, content: "[[https://example.com|Example]]" });
+    await renderMarkdownMemo({ saveMemo, content: "[[https://example.com|Example]]" });
     const link = document.querySelector(".preview a");
     expect(link).toBeInTheDocument();
 
@@ -458,7 +469,7 @@ describe("Markdown Memo - link handling in preview", () => {
   });
 
   test("clicking non-link preview area stays in read mode", async () => {
-    renderMarkdownMemo({ saveMemo, content: "plain text" });
+    await renderMarkdownMemo({ saveMemo, content: "plain text" });
     await fireEvent.click(document.querySelector(".preview-mode"));
     await tick();
     expect(document.querySelector(".cm-editor")).not.toBeInTheDocument();

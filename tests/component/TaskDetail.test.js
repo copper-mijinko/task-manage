@@ -1,4 +1,4 @@
-﻿import { fireEvent, render, screen } from "@testing-library/svelte";
+﻿import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { get } from "svelte/store";
 import { tick } from "svelte";
 import { vi } from "vitest";
@@ -124,6 +124,54 @@ describe("TaskDetail", () => {
         projectDir: "C:\\workspace\\project-1",
       })
     );
+  });
+
+  test("hydrates workspace memo bodies for the selected task", async () => {
+    const project = createProjectData();
+    project.data.children[1].data.memo = [
+      {
+        id: "memo-review",
+        title: "review",
+        content: "",
+        tags: [],
+        format: "markdown",
+        bodyLoaded: false,
+      },
+    ];
+    tree_data.set(project);
+    workspace_store.set({
+      workspaces: [],
+      activeWorkspacePath: "C:\\workspace",
+      activeProjectDir: "C:\\workspace\\project-1",
+      projects: [],
+    });
+    selected_type.set("WorkspaceProject");
+    table_selected_id.set("task-2");
+    window.electronAPI = {
+      wsReadTaskMemos: vi.fn().mockResolvedValue({
+        memos: [
+          {
+            id: "memo-review",
+            title: "review",
+            content: "Loaded memo body",
+            tags: [],
+            format: "markdown",
+            bodyLoaded: true,
+          },
+        ],
+      }),
+    };
+
+    render(TaskDetail);
+
+    await waitFor(() => {
+      expect(window.electronAPI.wsReadTaskMemos).toHaveBeenCalledWith(
+        "C:\\workspace\\project-1",
+        "task-2"
+      );
+      expect(screen.getByTestId("memo-stub")).toHaveTextContent("Loaded memo body");
+    });
+    expect(get(tree_data).data.children[1].data.memo[0].bodyLoaded).toBe(true);
   });
 
   test("edits task detail fields independent of visible table columns", async () => {
