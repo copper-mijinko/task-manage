@@ -465,6 +465,12 @@ export function setTaskDetailWindowTarget(
 
 export const showPageSearch = writable(false);
 
+/**
+ * Whether the Inbox Quick Capture overlay is currently shown. Toggled by
+ * the header button and the global Ctrl+Shift+I shortcut.
+ */
+export const showQuickCapture = writable(false);
+
 export const saveStatus = writable<SaveStatus>("idle");
 
 export const copied_task = writable<TreeData | null>(null);

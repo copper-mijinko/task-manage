@@ -381,3 +381,66 @@ export function wsMigrateProjects(
     Promise.resolve({ success: false, migrated: [], errors: [] })
   );
 }
+
+// ---------------------------------------------------------------------------
+// Inbox operations
+// ---------------------------------------------------------------------------
+
+export function wsEnsureInbox(workspacePath: string): Promise<{
+  success: boolean;
+  projectDir?: string;
+  rootId?: string;
+  error?: string;
+}> {
+  return (
+    api()?.wsEnsureInbox?.(workspacePath) ??
+    Promise.resolve({ success: false, error: "API unavailable" })
+  );
+}
+
+export function wsReadInbox(workspacePath: string): Promise<{
+  success: boolean;
+  projectDir?: string;
+  rootId?: string;
+  tasks?: Record<string, WorkspaceTask>;
+  error?: string;
+}> {
+  return (
+    api()?.wsReadInbox?.(workspacePath) ??
+    Promise.resolve({ success: false, error: "API unavailable" })
+  );
+}
+
+export function wsAddInboxItem(
+  workspacePath: string,
+  item: Partial<WorkspaceTask> & { name: string }
+): Promise<{
+  success: boolean;
+  task?: WorkspaceTask;
+  projectDir?: string;
+  rootId?: string;
+  error?: string;
+}> {
+  return (
+    api()?.wsAddInboxItem?.(workspacePath, item) ??
+    Promise.resolve({ success: false, error: "API unavailable" })
+  );
+}
+
+export function wsSendInboxItems(args: {
+  workspacePath: string;
+  targetProjectDir: string;
+  targetRootId: string;
+  /** Parent task id under which the items will be appended. Omit to use the project root. */
+  targetParentId?: string;
+  taskIds: string[];
+}): Promise<{
+  success: boolean;
+  moved?: string[];
+  errors?: { taskId: string; error: string }[];
+  error?: string;
+}> {
+  return (
+    api()?.wsSendInboxItems?.(args) ?? Promise.resolve({ success: false, error: "API unavailable" })
+  );
+}

@@ -7,7 +7,7 @@ import type {
 } from "./workspace";
 
 export type ThemeName = "dark" | "light";
-export type SelectedType = "Projects" | "Info" | "WorkspaceProject" | undefined;
+export type SelectedType = "Projects" | "Info" | "WorkspaceProject" | "Inbox" | undefined;
 export type FilterState = Record<string, string[]>;
 export type SortDirection = "asc" | "desc";
 export interface SortState {
@@ -189,5 +189,43 @@ export interface ElectronAPI {
     success: boolean;
     migrated: { name: string; count: number }[];
     errors: { name: string; error: string }[];
+  }>;
+
+  // Inbox API
+  wsEnsureInbox: (workspacePath: string) => Promise<{
+    success: boolean;
+    projectDir?: string;
+    rootId?: string;
+    error?: string;
+  }>;
+  wsReadInbox: (workspacePath: string) => Promise<{
+    success: boolean;
+    projectDir?: string;
+    rootId?: string;
+    tasks?: Record<string, WorkspaceTask>;
+    error?: string;
+  }>;
+  wsAddInboxItem: (
+    workspacePath: string,
+    item: Partial<WorkspaceTask> & { name: string }
+  ) => Promise<{
+    success: boolean;
+    task?: WorkspaceTask;
+    projectDir?: string;
+    rootId?: string;
+    error?: string;
+  }>;
+  wsSendInboxItems: (args: {
+    workspacePath: string;
+    targetProjectDir: string;
+    targetRootId: string;
+    /** Parent task id under which the items will be appended. Omit to use the project root. */
+    targetParentId?: string;
+    taskIds: string[];
+  }) => Promise<{
+    success: boolean;
+    moved?: string[];
+    errors?: { taskId: string; error: string }[];
+    error?: string;
   }>;
 }

@@ -1045,11 +1045,19 @@ function listProjects(workspacePath) {
   const projects = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
+    // Reserved/internal workspace directories use a leading underscore and
+    // must not appear in the user-facing project list. (See electron/inbox.js
+    // for the `_inbox` Inbox bucket.)
+    if (entry.name.startsWith("_")) continue;
     const projectFile = path.join(workspacePath, entry.name, "_project.md");
     if (!fs.existsSync(projectFile)) continue;
     try {
       const content = fs.readFileSync(projectFile, "utf8");
       const { data } = parseFrontmatter(content);
+      // Defensive: even if a non-underscore directory happens to be tagged
+      // with kind=inbox (e.g. user copied an inbox into a project slot),
+      // keep it out of the project list.
+      if (data.kind === "inbox") continue;
       projects.push({
         name: data.name || entry.name,
         rootId: data.id,

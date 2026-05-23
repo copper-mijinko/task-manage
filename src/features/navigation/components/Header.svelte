@@ -2,7 +2,9 @@
   import { onMount } from "svelte";
   import IconButton from "@lib/primitives/IconButton.svelte";
   import ToggleSwitch from "@lib/primitives/ToggleSwitch.svelte";
-  import { theme, saveStatus, sidebarCollapsed } from "@stores";
+  import { theme, saveStatus, sidebarCollapsed, selected_type, selected_id } from "@stores";
+  import { workspace_store } from "@features/workspace/stores/workspace";
+  import { inbox_count, INBOX_SELECTED_ID } from "@features/inbox/stores/inbox";
   import { pageSearchQuery } from "@features/search/stores/search";
   import * as platform from "@lib/ipc/platform";
   import {
@@ -89,6 +91,12 @@
     if (status === "retrying") return "再試行中";
     if (status === "writing") return "保存中...";
     return "保存済み";
+  }
+
+  function openInboxView() {
+    if (!$workspace_store.activeWorkspacePath) return;
+    $selected_type = "Inbox";
+    $selected_id = INBOX_SELECTED_ID;
   }
 </script>
 
@@ -215,6 +223,41 @@
       <span class="SearchShortcut" aria-hidden="true">Ctrl+F</span>
     {/if}
   </label>
+
+  <button
+    type="button"
+    class="InboxBtn"
+    class:Active={$selected_type === "Inbox"}
+    class:Disabled={!$workspace_store.activeWorkspacePath}
+    disabled={!$workspace_store.activeWorkspacePath}
+    on:click={openInboxView}
+    aria-label="Inboxを開く"
+    aria-pressed={$selected_type === "Inbox"}
+    title={$workspace_store.activeWorkspacePath
+      ? "Inboxを開く (Ctrl+Shift+I でクイック追加)"
+      : "Workspaceを設定するとInboxが使えます"}
+  >
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M3 12L5.5 5.5C5.7 4.9 6.3 4.5 7 4.5H17C17.7 4.5 18.3 4.9 18.5 5.5L21 12V18C21 18.6 20.6 19 20 19H4C3.4 19 3 18.6 3 18V12Z"
+        stroke="currentColor"
+        stroke-width="1.6"
+        stroke-linejoin="round"
+        fill="none"
+      />
+      <path
+        d="M3 12H8L9.5 14H14.5L16 12H21"
+        stroke="currentColor"
+        stroke-width="1.6"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        fill="none"
+      />
+    </svg>
+    {#if $workspace_store.activeWorkspacePath && $inbox_count > 0}
+      <span class="InboxBtnBadge">{$inbox_count}</span>
+    {/if}
+  </button>
 
   <div class="HeaderRight">
     <div
@@ -467,6 +510,59 @@
     width: 1rem;
     height: 1rem;
     fill: none;
+  }
+
+  /* Inbox quick-capture trigger sits just before the right group so it stays
+     visually close to the page-search field (both are "input affordances"). */
+  .InboxBtn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    flex-shrink: 0;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: var(--shape-sm);
+    background-color: rgba(255, 255, 255, 0.1);
+    color: white;
+    cursor: pointer;
+    transition:
+      background-color 0.12s ease,
+      border-color 0.12s ease;
+  }
+  .InboxBtn:hover {
+    background-color: rgba(255, 255, 255, 0.22);
+    border-color: rgba(255, 255, 255, 0.55);
+  }
+  .InboxBtn.Active {
+    background-color: rgba(255, 255, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.75);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+  }
+  .InboxBtn.Disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .InboxBtn svg {
+    width: 1.1rem;
+    height: 1.1rem;
+    fill: none;
+  }
+  .InboxBtnBadge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    min-width: 1.1rem;
+    height: 1.1rem;
+    padding: 0 0.3rem;
+    border-radius: var(--shape-pill);
+    background-color: var(--on-theme-primary);
+    color: white;
+    font-size: 0.65rem;
+    font-weight: 700;
+    line-height: 1.1rem;
+    text-align: center;
   }
 
   /* Right group */

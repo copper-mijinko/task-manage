@@ -56,6 +56,9 @@ src/
 │   │   ├── stores/              # workspace
 │   │   └── utils/
 │   │       └── workspace_tree.ts
+│   ├── inbox/
+│   │   ├── components/          # InboxPanel / InboxDetailPanel / QuickCapture / ProjectTargetPicker / TargetTreeNode
+│   │   └── stores/              # inbox
 │   ├── projects/
 │   │   └── stores/              # project
 │   ├── search/
@@ -117,6 +120,7 @@ src/
 | `memos`      | メモ本体、タグ管理、Markdown/Quill エディタ         |
 | `gantt`      | 時系列可視化                                        |
 | `workspace`  | ワークスペース（ディレクトリ＋Markdown ベース）管理 |
+| `inbox`      | Workspace 横断のクイックキャプチャ専用バケット      |
 | `projects`   | 標準（JSON ベース）プロジェクト管理                 |
 | `search`     | フィルター・ページ内検索                            |
 | `navigation` | サイドナビ、トップヘッダー、Info                    |
@@ -195,6 +199,7 @@ import LocalComponent from "./LocalComponent.svelte";
 | `ganttVisible` / `ganttScale` 等                                                         | `@features/gantt/stores/gantt`                   | Gantt 表示設定                                          |
 | `workspace_store` 等                                                                     | `@features/workspace/stores/workspace`           | ワークスペース管理（含 `deleteProject`）                |
 | `project_ids`                                                                            | `@features/projects/stores/project`              | プロジェクト一覧                                        |
+| `inbox_store` / `inbox_count`                                                            | `@features/inbox/stores/inbox`                   | Workspace 横断 Inbox の状態（フラットアイテム列）       |
 | `filter` / `pageSearchQuery`                                                             | `@features/search/stores/search`                 | フィルター条件 / 画面内検索クエリ                       |
 | `pageSearchMatchCount` / `pageSearchCurrentIndex`                                        | `@features/search/utils/page_search_highlighter` | 画面内検索の件数と現在位置（readable store）            |
 | `selected_id` / `closed_node_ids` / `sidebarCollapsed` / `copied_task` / `saveStatus` 等 | `@stores/ui`                                     | UI状態（`saveStatus` はヘッダの保存状態インジケータ用） |
@@ -252,6 +257,9 @@ import LocalComponent from "./LocalComponent.svelte";
 | ワークスペース管理ダイアログ                                       | `WorkspaceSetup.svelte` + `MigrationWizard.svelte`                                                                                               |
 | ワークスペース永続化パイプライン（main プロセス）                  | `electron/workspace.js` + `electron/workspace-write-queue.js` + `electron/workspace-reconciler.js`                                               |
 | ワークスペースのコンフリクト / 通知バナー                          | `src/App.svelte` の `workspace-conflict-banner` / `workspace-notice-banner`                                                                      |
+| Inbox UI                                                           | `src/features/inbox/components/InboxPanel.svelte` + `InboxDetailPanel.svelte` + `QuickCapture.svelte` + `ProjectTargetPicker.svelte` + `TargetTreeNode.svelte`         |
+| Inbox 入り口                                                       | ヘッダの 📥 ボタン（`Header.svelte`）と `Ctrl+Shift+I`（`App.svelte` のグローバル keydown）。サイドバーには Inbox 行を置かない                  |
+| Inbox 永続化（main プロセス）                                      | `electron/inbox.js`（`ensureInbox` / `readInbox` / `addInboxItem` / `sendInboxItemsToProject`） + `electron/index.js` の `ws:*-inbox-*` ハンドラ |
 
 > `src/lib/primitives/Drawer.svelte` は現在は未使用（旧 Drawer 形式の左ナビ用）。互換のためファイルは残置するが、本アプリの画面構成では使用しない。
 

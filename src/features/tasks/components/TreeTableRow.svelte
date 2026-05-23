@@ -7,13 +7,10 @@
 
 <script>
   import { createEventDispatcher } from "svelte";
-  import { selected_id, selected_type } from "@stores";
   import { selected_ids } from "@stores/ui";
-  import { workspace_store } from "@features/workspace/stores/workspace";
   import { tree_data } from "@features/tasks/stores/tree";
   import { getNode, getTopLevelSelection } from "@features/tasks/utils/tree_control";
   import { ripple } from "@lib/actions";
-  import * as platform from "@lib/ipc/platform";
   import TaskName from "@features/tasks/components/TaskName.svelte";
   import StatusSelect from "@features/tasks/components/StatusSelect.svelte";
   import DateInput from "@lib/primitives/DateInput.svelte";
@@ -103,17 +100,6 @@
       patch: {
         [key]: value,
       },
-    });
-  }
-
-  function openTaskDetailInWindow(taskText) {
-    platform.openTaskDetailWindow({
-      projectId: $selected_id,
-      taskId: id,
-      taskName: taskText,
-      selectedType: $selected_type === "WorkspaceProject" ? "WorkspaceProject" : "Projects",
-      projectDir:
-        $selected_type === "WorkspaceProject" ? $workspace_store.activeProjectDir : undefined,
     });
   }
 
@@ -342,9 +328,6 @@
           }}
           on:menuVisibilityChange={({ detail }) => {
             isMenuOpen = detail.open;
-          }}
-          on:openTaskDetailWindow={({ detail }) => {
-            openTaskDetailInWindow(detail.text);
           }}
           on:openTaskFolder={() => {
             dispatch("openTaskFolder", { id });

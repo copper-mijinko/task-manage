@@ -445,20 +445,18 @@
     padded={false}
     style={"height: 100%; width: 100%; overflow: hidden;"}
   >
-    {#if !hideDetailTitle}
+    <svelte:fragment slot="header-actions">
       <IconButton
-        slot="header-actions"
-        variant="text"
-        normalColor="var(--theme-color-Sub-main)"
-        activeColor="var(--theme-color-Primary-main)"
-        ariaLabel="タスク詳細を別ウィンドウで開く"
         tooltipContent="別ウィンドウで開く"
-        style="margin: 0; width: 1.75rem; height: 1.75rem; box-shadow: none;"
+        ariaLabel="タスク詳細を別ウィンドウで開く"
+        variant="text"
+        normalColor={"var(--theme-color-Sub-main)"}
+        activeColor={"var(--theme-color-Primary-main)"}
         on:click={openTaskDetailInWindow}
       >
-        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path
-            d="M15 3H21V9M14 10L21 3M21 14V19C21 20.1 20.1 21 19 21H5C3.9 21 3 20.1 3 19V5C3 3.9 3.9 3 5 3H10"
+            d="M14 3h7v7M21 3l-9 9M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"
             stroke="currentColor"
             stroke-width="2"
             stroke-linecap="round"
@@ -466,7 +464,8 @@
           />
         </svg>
       </IconButton>
-    {/if}
+    </svelte:fragment>
+
     {#if extraSelectedCount > 0}
       <div class="multi-select-indicator" role="status" aria-live="polite">
         他 {extraSelectedCount} 件選択中（一括操作はバーから行えます）
