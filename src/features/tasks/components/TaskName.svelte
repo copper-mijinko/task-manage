@@ -158,6 +158,8 @@
       },
     ],
     // 6. Detail — anchor-only; disabled in multi.
+    // Note: "show details" (open task detail window) was moved to the
+    // TaskDetail Card header so the row menu doesn't duplicate the action.
     [
       ...(canOpenTaskFolder
         ? [
@@ -172,15 +174,6 @@
             },
           ]
         : []),
-      {
-        title: "show details",
-        action: "openTaskDetailWindow",
-        disabled: isMulti,
-        icon: {
-          viewBox: "0 0 24 24",
-          path: "M12 4C7 4 2.73 7.11 1 12c1.73 4.89 6 8 11 8s9.27-3.11 11-8c-1.73-4.89-6-8-11-8Zm0 13a5 5 0 1 1 0-10 5 5 0 0 1 0 10Zm0-8.2A3.2 3.2 0 1 0 12 15.2 3.2 3.2 0 0 0 12 8.8Z",
-        },
-      },
     ],
     // 7. Delete — bulk-aware when the row is part of the multi-selection.
     !isRoot
@@ -355,8 +348,6 @@
     const data = event.detail;
     if (data && data.action === "rename") {
       toggle();
-    } else if (data && data.action === "openTaskDetailWindow") {
-      dispatch("openTaskDetailWindow", { text: text ?? draftText });
     } else if (data && data.action === "openTaskFolder") {
       dispatch("openTaskFolder");
     } else if (data?.action) {
@@ -455,7 +446,6 @@
     on:moveDown={handleMenuAction}
     on:indentTask={handleMenuAction}
     on:outdentTask={handleMenuAction}
-    on:openTaskDetailWindow={handleMenuAction}
     on:openTaskFolder={handleMenuAction}
     on:deleteTask={handleMenuAction}
     on:copyTask={handleMenuAction}

@@ -4,6 +4,7 @@ const path = require("path");
 const { LowSync, JSONFileSync } = require("@commonify/lowdb");
 const log = require("electron-log/main");
 const workspace = require("./workspace");
+const inbox = require("./inbox");
 const { WorkspaceReconciler } = require("./workspace-reconciler");
 const { WorkspaceWriteQueue } = require("./workspace-write-queue");
 
@@ -1114,6 +1115,116 @@ app.on("ready", () => {
       return { success: false, error: err.message };
     }
   });
+
+  ////////////// Inbox IPC //////////////
+  ipcMain.handle("ws:ensure-inbox", async (event, { workspacePath }) => {
+    try {
+      const result = await inbox.ensureInbox(workspacePath, { onWritten: recordWrite });
+      return { success: true, projectDir: result.projectDir, rootId: result.rootId };
+    } catch (err) {
+      log.error("ws:ensure-inbox error:", err.message);
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle("ws:read-inbox", async (event, { workspacePath }) => {
+    try {
+      const { projectDir, rootId, tasks, taskDirs } = await inbox.readInbox(workspacePath, {
+        onWritten: recordWrite,
+      });
+      wsCache.set(projectDir, { tasks, taskDirs });
+      return {
+        success: true,
+        projectDir,
+        rootId,
+        tasks: Object.fromEntries(tasks),
+      };
+    } catch (err) {
+      log.error("ws:read-inbox error:", err.message);
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle("ws:add-inbox-item", async (event, { workspacePath, item }) => {
+    try {
+      const { task, projectDir, rootId, tasks, taskDirs } = await inbox.addInboxItem(
+        workspacePath,
+        item || {},
+        { onWritten: recordWrite }
+      );
+      await workspaceReconciler.markProjectWritten(projectDir);
+      wsCache.set(projectDir, { tasks, taskDirs });
+      sendWorkspaceProjectUpdated({
+        projectDir,
+        tasks: Object.fromEntries(tasks),
+        reason: "external-update",
+      });
+      return { success: true, task, projectDir, rootId };
+    } catch (err) {
+      log.error("ws:add-inbox-item error:", err.message);
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle(
+    "ws:send-inbox-items",
+    async (event, { workspacePath, targetProjectDir, targetRootId, targetParentId, taskIds }) => {
+      try {
+        if (!Array.isArray(taskIds) || taskIds.length === 0) {
+          return { success: false, error: "No items to send" };
+        }
+        if (!targetProjectDir || typeof targetProjectDir !== "string") {
+          return { success: false, error: "Invalid target project" };
+        }
+        if (!targetRootId || typeof targetRootId !== "string") {
+          return { success: false, error: "Invalid target project root" };
+        }
+        if (
+          targetParentId !== undefined &&
+          targetParentId !== null &&
+          typeof targetParentId !== "string"
+        ) {
+          return { success: false, error: "Invalid target parent" };
+        }
+
+        const result = await inbox.sendInboxItemsToProject(
+          workspacePath,
+          targetProjectDir,
+          taskIds,
+          targetRootId,
+          { onWritten: recordWrite, targetParentId: targetParentId || undefined }
+        );
+
+        await workspaceReconciler.markProjectWritten(result.inboxState.projectDir);
+        await workspaceReconciler.markProjectWritten(result.targetState.projectDir);
+
+        wsCache.set(result.inboxState.projectDir, {
+          tasks: result.inboxState.tasks,
+          taskDirs: result.inboxState.taskDirs,
+        });
+        wsCache.set(result.targetState.projectDir, {
+          tasks: result.targetState.tasks,
+          taskDirs: result.targetState.taskDirs,
+        });
+
+        sendWorkspaceProjectUpdated({
+          projectDir: result.inboxState.projectDir,
+          tasks: Object.fromEntries(result.inboxState.tasks),
+          reason: "external-update",
+        });
+        sendWorkspaceProjectUpdated({
+          projectDir: result.targetState.projectDir,
+          tasks: Object.fromEntries(result.targetState.tasks),
+          reason: "external-update",
+        });
+
+        return { success: true, moved: result.moved, errors: result.errors };
+      } catch (err) {
+        log.error("ws:send-inbox-items error:", err.message);
+        return { success: false, error: err.message };
+      }
+    }
+  );
 
   async function exportLegacyProjects(workspacePath, options = {}) {
     const migrated = [];

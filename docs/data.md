@@ -141,6 +141,54 @@
 - `["node-id-1", "node-id-2"]`
   - 指定した ID のノードが閉じている
 
+## 3a. Inbox
+
+Inbox はワークスペースごとに 1 つ存在する、プロジェクト非依存・フラット構造の特別なバケットである。
+
+### 3a.1 ファイル配置
+
+```
+<workspace>/
+├── _inbox/                     ← Inbox 専用ディレクトリ（_ 接頭辞）
+│   ├── _project.md             ← Inbox のルートマーカー（kind: inbox）
+│   ├── <uuid-a>/
+│   │   ├── _index.md           ← Inbox アイテム
+│   │   ├── <memo-id>.md        ← メモ（任意の数）
+│   │   └── assets/             ← ペースト画像など
+│   └── <uuid-b>/...
+├── プロジェクトA/
+└── プロジェクトB/
+```
+
+- ディレクトリ名が `_` で始まるため、`listProjects` の通常プロジェクト一覧から自然に除外される
+- `_project.md` のフロントマターには `kind: inbox` を追加し、初回作成時に固定の `id`（UUID）を発行・永続化する。以降この id が Inbox ルートタスクとして扱われる
+- アイテムは `parents: [<inbox-root-id>]` を満たすフラット構造のみ。renderer 側で indent/child 追加は提供しない。main 側の `readInbox` はパース時に `parents` を `[rootId]` にクランプして念のため矛盾を矯正する
+
+### 3a.2 IPC 一覧（main プロセス側 API）
+
+| チャネル | ペイロード | 役割 |
+| --- | --- | --- |
+| `ws:ensure-inbox` | `{ workspacePath }` | `_inbox/` と `_project.md` を必要なら作成し、`{ projectDir, rootId }` を返す |
+| `ws:read-inbox` | `{ workspacePath }` | `ws:read-project` 相当。Inbox の全アイテムを読み出す |
+| `ws:add-inbox-item` | `{ workspacePath, item }` | 1 件追加。書込→再ロード不要にするため `workspace-project-updated` も発火する |
+| `ws:send-inbox-items` | `{ workspacePath, targetProjectDir, targetRootId, targetParentId?, taskIds }` | 指定したアイテムを対象プロジェクトに移動。`targetParentId` を指定するとそのノードの子の末尾に、省略時はプロジェクトのルート直下に追加。ディレクトリごと `rename` するためメモ・アセットがそのまま運ばれる |
+
+Inbox 全体の永続化には既存の `ws:write-project(<inbox-projectDir>, items, options)` を再利用する。Inbox ディレクトリは構造的にワークスペースプロジェクトと同等のため、`WorkspaceWriteQueue` / `WorkspaceReconciler` / `wsCache` がそのまま機能する。
+
+### 3a.3 送信処理
+
+`ws:send-inbox-items` は以下の順序でアトミックに振る舞う：
+
+1. ソース（Inbox）とターゲット（プロジェクト）の双方を `readProject` で読み出す
+2. `targetParentId` 指定時はターゲットプロジェクト内に該当 ID が存在することを確認する（不在ならエラー）。省略時はターゲットのルート ID をフォールバックとして用いる
+3. 各 taskId について：
+   - ソース `_inbox/<dir>/` を `fs.rename` で `<projectDir>/<dir>/` へ移動（同一ボリュームなら原子的、`EXDEV` 時は `cp -r` + `rm -rf` にフォールバック）
+   - 移動先のディレクトリ名が衝突する場合は `-2`, `-3` … のサフィックスを付ける
+   - `parents` を解決後の親 ID で書き換え、`order` を解決後親の既存子の末尾に連番採番し、`writeTaskAsync` で `_index.md` を更新
+4. 双方の `wsCache` を最新化し、`workspace-project-updated` を双方の projectDir 向けに送出
+
+タスク内のメモ・assets は `_index.md` と同階層に保存されているため、ディレクトリ移動だけで相対パスは破綻しない。
+
 ## 4. ワークスペースプロジェクト
 
 ワークスペースプロジェクトは、通常の `db.json` プロジェクトと同じツリー UI に変換して表示する。

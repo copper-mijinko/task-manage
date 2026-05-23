@@ -17,6 +17,7 @@ export * from "@features/workspace/stores/workspace";
 export * from "@features/workspace/stores/policy";
 export * from "@features/projects/stores/project";
 export * from "@features/search/stores/search";
+export * from "@features/inbox/stores/inbox";
 
 import { tree_data } from "@features/tasks/stores/tree";
 import { project_ids } from "@features/projects/stores/project";
@@ -28,6 +29,7 @@ import { workspace_store } from "@features/workspace/stores/workspace";
 import { workspace_conflict_policy } from "@features/workspace/stores/policy";
 import { active_tag } from "@features/memos/stores/tags";
 import { sort_state } from "@features/tasks/stores/sort";
+import { inbox_store } from "@features/inbox/stores/inbox";
 
 export function init_store() {
   tree_data.init();
@@ -40,6 +42,7 @@ export function init_store() {
   column_settings.init();
   workspace_store.init();
   workspace_conflict_policy.init();
+  inbox_store.init();
 
   active_tag.subscribe((tag) => {
     filter.update((f) => {

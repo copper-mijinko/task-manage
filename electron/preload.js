@@ -143,6 +143,20 @@ const electronAPI = {
     ipcRenderer.invoke("ws:export-legacy-projects", { workspacePath, options }),
   wsMigrateProjects: (workspacePath, options) =>
     ipcRenderer.invoke("ws:migrate-projects", { workspacePath, options }),
+
+  // Inbox
+  wsEnsureInbox: (workspacePath) => ipcRenderer.invoke("ws:ensure-inbox", { workspacePath }),
+  wsReadInbox: (workspacePath) => ipcRenderer.invoke("ws:read-inbox", { workspacePath }),
+  wsAddInboxItem: (workspacePath, item) =>
+    ipcRenderer.invoke("ws:add-inbox-item", { workspacePath, item }),
+  wsSendInboxItems: ({ workspacePath, targetProjectDir, targetRootId, targetParentId, taskIds }) =>
+    ipcRenderer.invoke("ws:send-inbox-items", {
+      workspacePath,
+      targetProjectDir,
+      targetRootId,
+      targetParentId,
+      taskIds,
+    }),
 };
 
 contextBridge.exposeInMainWorld("electronAPI", electronAPI);

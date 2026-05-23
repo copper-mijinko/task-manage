@@ -22,6 +22,9 @@
   import Header from "@features/navigation/components/Header.svelte";
   import MenuList from "@features/navigation/components/MenuList.svelte";
   import InfoPage from "@features/navigation/components/InfoPage.svelte";
+  import InboxPanel from "@features/inbox/components/InboxPanel.svelte";
+  import QuickCapture from "@features/inbox/components/QuickCapture.svelte";
+  import { showQuickCapture } from "@stores/ui";
   import Modal from "@lib/primitives/Modal.svelte";
   import Button from "@lib/primitives/Button.svelte";
   import PageSearchBox from "@features/search/components/PageSearchBox.svelte";
@@ -139,6 +142,26 @@
 
   function handleKeyDown(event) {
     // Ctrl+F is handled by Header.svelte (focuses the inline search input)
+
+    // Ctrl+Shift+I opens the Inbox Quick Capture overlay from anywhere.
+    // We accept this even when an editable element has focus so the user
+    // can capture an idea mid-edit without losing it. The browser's
+    // devtools shortcut is normally Ctrl+Shift+I too, but Electron's
+    // packaged windows do not expose it to the renderer in production —
+    // and our dev builds open devtools via F12 anyway, so no conflict.
+    if (
+      (event.ctrlKey || event.metaKey) &&
+      event.shiftKey &&
+      (event.key === "I" || event.key === "i")
+    ) {
+      if (workspace_store && !$workspace_store.activeWorkspacePath) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      $showQuickCapture = true;
+      return;
+    }
 
     if (isInsideEditableTarget(event.target)) {
       return;
@@ -313,6 +336,8 @@
           </h1>
         {:else if $selected_type == "Projects" || $selected_type == "WorkspaceProject"}
           <ProjectPage />
+        {:else if $selected_type == "Inbox"}
+          <InboxPanel />
         {/if}
         {#if $selected_type == "Info"}
           <div
@@ -359,6 +384,13 @@
   show={$showPageSearch}
   on:close={() => {
     $showPageSearch = false;
+  }}
+/>
+
+<QuickCapture
+  show={$showQuickCapture}
+  on:close={() => {
+    $showQuickCapture = false;
   }}
 />
 
