@@ -335,6 +335,23 @@ app.on("ready", () => {
       wsCache.set(projectDir, updated);
       return updated;
     },
+    writeProjectPatch: async (projectDir, patch) => {
+      const cached = ensureWorkspaceCache(projectDir);
+      const tasksToWrite = withLoadedMemoBodies(projectDir, patch.tasks, cached.taskDirs);
+      const updated = await workspace.writeProjectPatchAsync(
+        projectDir,
+        {
+          tasks: tasksToWrite,
+          deletedTaskIds: patch.deletedTaskIds,
+        },
+        {
+          onWritten: recordWrite,
+        }
+      );
+      await workspaceReconciler.markProjectWritten(projectDir);
+      wsCache.set(projectDir, updated);
+      return updated;
+    },
     onStatus: sendWorkspaceSaveStatus,
     onError: ({ projectDir, error }) => {
       log.error(`workspace write failed (${projectDir}):`, error.message);
@@ -1126,6 +1143,15 @@ app.on("ready", () => {
       return workspaceWriteQueue.enqueue(projectDir, tasks, options || {});
     } catch (err) {
       log.error("ws:write-project error:", err.message);
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle("ws:write-project-patch", async (event, { projectDir, patch, options }) => {
+    try {
+      return workspaceWriteQueue.enqueuePatch(projectDir, patch, options || {});
+    } catch (err) {
+      log.error("ws:write-project-patch error:", err.message);
       return { success: false, error: err.message };
     }
   });

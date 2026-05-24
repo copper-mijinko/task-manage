@@ -356,10 +356,10 @@ import LocalComponent from "./LocalComponent.svelte";
 ```
 [ renderer ]
   tree_data (Svelte store)
-        │  ws:write-project（fire-and-forget）
+        │  ws:write-project-patch / ws:write-project（fire-and-forget）
         ▼
 [ main ]
-  WorkspaceWriteQueue ─ writeProjectAsync ─► atomicWriteFile (tmp → rename) ─► disk
+  WorkspaceWriteQueue ─ writeProjectPatchAsync / writeProjectAsync ─► atomicWriteFile (tmp → rename) ─► disk
         │                       │                                              │
         │                       │  onWritten(path, buffer)              (chokidar watch)
         │                       ▼                                              ▼
@@ -376,8 +376,8 @@ import LocalComponent from "./LocalComponent.svelte";
 
 | 要素                 | 配置                                                 | 主要 API                                                                                                                              |
 | -------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| 原子的・増分書込     | `electron/workspace.js`                              | `atomicWriteFile` / `writeFileIfChanged` / `retryFileOperation` / `writeProjectAsync` 等。書込成功直後に `onWritten(filePath, buffer)` を発火 |
-| 直列ライトキュー     | `electron/workspace-write-queue.js`                  | `WorkspaceWriteQueue`（`enqueue(projectDir, tasks, { forceLocal })` / `flush` / `hasPending` / `isWriting` / `discard` / `getActiveOptions`） |
+| 原子的・増分書込     | `electron/workspace.js`                              | `atomicWriteFile` / `writeFileIfChanged` / `retryFileOperation` / `writeProjectPatchAsync` / `writeProjectAsync` 等。書込成功直後に `onWritten(filePath, buffer)` を発火 |
+| 直列ライトキュー     | `electron/workspace-write-queue.js`                  | `WorkspaceWriteQueue`（`enqueuePatch(projectDir, patch, { forceLocal })` / `enqueue(projectDir, tasks, { forceLocal })` / `flush` / `hasPending` / `isWriting` / `discard` / `getActiveOptions`） |
 | 外部書込リコンサイラ | `electron/workspace-reconciler.js`                   | `WorkspaceReconciler`（`start` / `stop` / `recordWrite(filePath, buffer)` / `markProjectWritten(projectDir)`）+ `isConflictCopy` 判定 |
 | 状態スナップショット | `<TASK_MANAGE_DATA_DIR>/workspace-state/<hash>.json` | 配下ファイルの SHA-256 ハッシュ表                                                                                                     |
 
@@ -395,6 +395,7 @@ import LocalComponent from "./LocalComponent.svelte";
 renderer → main の追加 IPC：
 
 - `ws:resolve-conflict (action: "keep-local" | "reload")`
+- `ws:write-project-patch(projectDir, { tasks, deletedTaskIds }, { forceLocal? })` — 通常編集の差分保存。変更タスクと削除 id のみ送る
 - `ws:write-project(projectDir, tasks, { forceLocal? })` — `forceLocal` は省略可（既定 `false`）
 
 #### SaveStatus 状態遷移
@@ -422,12 +423,12 @@ renderer の `saveStatus` ストアは:
 
 #### `forceLocal` フラグ（メモリ優先保存）
 
-`WorkspaceWriteQueue.enqueue(projectDir, tasks, { forceLocal })` で 1 件のジョブに `forceLocal: true` を付けると、以下のセマンティクスを持つ：
+`WorkspaceWriteQueue.enqueuePatch(projectDir, patch, { forceLocal })` または `WorkspaceWriteQueue.enqueue(projectDir, tasks, { forceLocal })` で 1 件のジョブに `forceLocal: true` を付けると、以下のセマンティクスを持つ：
 
 1. **conflict 通知の格下げ**：書込み中に reconciler が外部書込を検知しても `workspace-conflict` を発火せず、`workspace-notice (kind: "overwritten-external")` のみ流す。saveStatus は `conflict` に遷移しない。
-2. **書込エラー時の内部リトライ**：`writeProjectAsync` が throw した場合（OneDrive ロック等、`atomicWriteFile` の retryFileOperation でも回復しなかったケース）、`processLoop` が指数バックオフ（初期 200ms、最大 5 回）で同 payload を再エンキューする。各リトライ前に `saveStatus: "retrying"` を発火。N 回超過で `saveStatus: "error"` 確定。
+2. **書込エラー時の内部リトライ**：`writeProjectPatchAsync` / `writeProjectAsync` が throw した場合（OneDrive ロック等、`atomicWriteFile` の retryFileOperation でも回復しなかったケース）、`processLoop` が指数バックオフ（初期 200ms、最大 5 回）で同 payload を再エンキューする。各リトライ前に `saveStatus: "retrying"` を発火。N 回超過で `saveStatus: "error"` 確定。
 
-renderer 側は `meta.json` の `workspaceConflictPolicy` に応じて `wsWriteProject` 呼出に `forceLocal` を自動付与する：
+renderer 側は `meta.json` の `workspaceConflictPolicy` に応じて `wsWriteProjectPatch` / `wsWriteProject` 呼出に `forceLocal` を自動付与する：
 
 - `"ask"`（既定）: `forceLocal: false`。conflict バナーで「維持 / 再読込」を選ばせる
 - `"prefer-memory"`: `forceLocal: true`。conflict バナーは出ず、`overwritten-external` 通知のみ

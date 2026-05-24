@@ -46,8 +46,11 @@ Electron アプリ全体を起動して確認する。
 | `electron/workspace.js`             | `retryFileOperation retries temporary OneDrive-style filesystem errors`                           | `EBUSY` / `EPERM` などのリトライ可能エラーを指数バックオフで再試行する          |
 | `electron/workspace.js`             | `writeProjectAsync skips unchanged task and memo files`                                           | プロジェクト全体保存時に変化のないファイルを書き直さない                        |
 | `electron/workspace.js`             | `writeProjectAsync touches only changed memo files and deletes removed tasks`                     | 変更メモのみ書き換え、削除されたタスクのディレクトリは消す                      |
+| `electron/workspace.js`             | `writeProjectPatchAsync writes only patched tasks and deletes requested tasks`                    | 差分パッチ保存時に対象タスクだけを書き込み、指定された削除 task dir だけを消す  |
 | `electron/workspace.js`             | `*Async` 系の `createProject` / `writeTask` / `saveMemoImage` / `deleteTaskDir` / `deleteProject` | 非同期 IO 経路でも従来同等のディレクトリ／ファイル構造を生成する                |
 | `electron/workspace-write-queue.js` | `keeps only the latest pending snapshot for the same project`                                     | 同一 projectDir への連続 enqueue を latest-wins でマージする                    |
+| `electron/workspace-write-queue.js` | `merges pending patches for the same project`                                                     | 同一 projectDir への連続 patch enqueue を 1 件にまとめる                        |
+| `electron/workspace-write-queue.js` | `applies a pending patch to a queued full snapshot`                                               | 全体保存が待機中のとき、後続 patch をその snapshot に反映する                   |
 | `electron/workspace-write-queue.js` | `applies a bounded pending-project guard`                                                         | 未知の projectDir を `maxPendingProjects` 超えで enqueue すると例外             |
 | `electron/workspace-write-queue.js` | `emits save status transitions and reports write errors`                                          | `queued` → `writing` → `error` のステータス遷移とエラーコールバック             |
 | `electron/workspace-reconciler.js`  | `suppresses watcher events caused by its own recent writes`                                       | `recentlyWritten` ハッシュ一致時は外部更新として扱わない                        |

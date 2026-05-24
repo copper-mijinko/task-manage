@@ -19,6 +19,7 @@ import {
   writeTask,
   writeTaskAsync,
   writeProjectAsync,
+  writeProjectPatchAsync,
   saveMemoImage,
   saveMemoImageAsync,
   resolveMemoAssetPath,
@@ -916,6 +917,67 @@ describe("file system operations", () => {
     expect(fs.statSync(keepMemoFile).mtimeMs).toBe(oldTime.getTime());
     expect(fs.statSync(changedMemoFile).mtimeMs).not.toBe(oldTime.getTime());
     expect(fs.existsSync(removedTaskDir)).toBe(false);
+  });
+
+  it("writeProjectPatchAsync writes only patched tasks and deletes requested tasks", async () => {
+    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
+    const rootTask = {
+      id: "root-id",
+      name: "Proj",
+      status: "Open",
+      parents: [],
+      memos: [],
+      createdAt: "2026-04-24",
+    };
+    const stableTask = {
+      id: "task-stable",
+      name: "Stable",
+      status: "Open",
+      parents: ["root-id"],
+      memos: [{ id: "memo-stable", title: "Stable", content: "Stable content" }],
+      createdAt: "2026-04-24",
+      order: 0,
+    };
+    const changingTask = {
+      id: "task-changing",
+      name: "Changing",
+      status: "Open",
+      parents: ["root-id"],
+      memos: [{ id: "memo-changing", title: "Changing", content: "Before" }],
+      createdAt: "2026-04-24",
+      order: 1,
+    };
+    const removedTask = {
+      id: "task-remove",
+      name: "Remove",
+      status: "Open",
+      parents: ["root-id"],
+      memos: [],
+      createdAt: "2026-04-24",
+      order: 2,
+    };
+    await writeProjectAsync(projectDir, [rootTask, stableTask, changingTask, removedTask]);
+
+    const stableTaskFile = path.join(projectDir, "task-stable", "_index.md");
+    const stableMemoFile = path.join(projectDir, "task-stable", "memo-stable.md");
+    const changingTaskFile = path.join(projectDir, "task-changing", "_index.md");
+    const removedTaskDir = path.join(projectDir, "task-remove");
+    const oldTime = new Date("2020-01-01T00:00:00.000Z");
+    fs.utimesSync(stableTaskFile, oldTime, oldTime);
+    fs.utimesSync(stableMemoFile, oldTime, oldTime);
+    fs.utimesSync(changingTaskFile, oldTime, oldTime);
+
+    const result = await writeProjectPatchAsync(projectDir, {
+      tasks: [{ ...changingTask, name: "Changed" }],
+      deletedTaskIds: ["task-remove"],
+    });
+
+    expect(fs.statSync(stableTaskFile).mtimeMs).toBe(oldTime.getTime());
+    expect(fs.statSync(stableMemoFile).mtimeMs).toBe(oldTime.getTime());
+    expect(fs.statSync(changingTaskFile).mtimeMs).not.toBe(oldTime.getTime());
+    expect(fs.existsSync(removedTaskDir)).toBe(false);
+    expect(result.tasks.get("task-changing").name).toBe("Changed");
+    expect(result.tasks.has("task-remove")).toBe(false);
   });
 });
 

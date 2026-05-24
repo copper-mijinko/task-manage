@@ -683,7 +683,7 @@ function readMemos(taskDir, reservedFiles = ["_index.md"], options = {}) {
       if (aHasOrder !== bHasOrder) return aHasOrder ? -1 : 1;
       return a.fileIndex - b.fileIndex;
     })
-    .map(({ fileIndex, ...memo }) => memo);
+    .map(({ fileIndex: _fileIndex, ...memo }) => memo);
 }
 
 /** Read the root task from _project.md inside projectDir. */
@@ -1013,6 +1013,30 @@ async function writeProjectAsync(projectDir, tasks, options = {}) {
 
   return {
     tasks: new Map(tasks.map((task) => [task.id, task])),
+    taskDirs,
+  };
+}
+
+async function writeProjectPatchAsync(projectDir, patch, options = {}) {
+  const { onWritten } = options;
+  const { tasks, taskDirs } = readProject(projectDir, { includeMemoContent: false });
+  const nextTasks = Array.isArray(patch?.tasks) ? patch.tasks.filter((task) => task?.id) : [];
+  const deletedTaskIds = Array.isArray(patch?.deletedTaskIds)
+    ? [...new Set(patch.deletedTaskIds.filter((id) => typeof id === "string" && id.length > 0))]
+    : [];
+
+  for (const id of deletedTaskIds) {
+    await deleteTaskDirAsync(projectDir, taskDirs, id);
+    tasks.delete(id);
+  }
+
+  for (const task of nextTasks) {
+    await writeTaskAsync(projectDir, task, taskDirs, onWritten);
+    tasks.set(task.id, task);
+  }
+
+  return {
+    tasks,
     taskDirs,
   };
 }
@@ -1355,6 +1379,7 @@ module.exports = {
   writeTask,
   writeTaskAsync,
   writeProjectAsync,
+  writeProjectPatchAsync,
   saveMemoImage,
   saveMemoImageAsync,
   resolveMemoAssetPath,

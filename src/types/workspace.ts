@@ -41,3 +41,8 @@ export interface WorkspaceProjectListItem {
 export interface WorkspaceProject {
   tasks: Record<string, WorkspaceTask>;
 }
+
+export interface WorkspaceProjectPatch {
+  tasks: WorkspaceTask[];
+  deletedTaskIds: string[];
+}

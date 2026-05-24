@@ -79,11 +79,21 @@ summary read 後のツリーには、本文未読のメモが混ざる。
 
 - renderer 側の `src/features/workspace/utils/workspace_tree.ts` は、`bodyLoaded: false` のメモについて既存ツリーの本文を優先して保持する
 - main process 側の `withLoadedMemoBodies(projectDir, tasks, taskDirs)` は、未読本文が残るタスクを保存する前に disk/cache から本文を補完する
-- `ws:write-task` と `ws:write-project` は、未読本文を含む payload をそのままファイルへ書かない
+- `ws:write-task` / `ws:write-project-patch` / `ws:write-project` は、未読本文を含む payload をそのままファイルへ書かない
 
 この方針により、プロジェクト選択は軽い summary read のままにしつつ、保存時のデータ欠落を防ぐ。
 
-## 5. 守るべき境界
+## 5. Workspace の差分保存
+
+通常編集では、保存のたびに WorkspaceProject 全体を main process へ送り直さない。
+renderer は前回保存時の `tree_data` と現在の `tree_data` を比較し、変更されたタスクと削除された task id だけを `ws:write-project-patch` で送る。
+
+main process 側では `WorkspaceWriteQueue` が同一 projectDir の pending patch をマージし、`writeProjectPatchAsync` が対象タスクだけを書き込む。
+さらに各 `_index.md` / memo file は `writeFileIfChanged` を通るため、patch 対象に入ったタスクでも内容が同じファイルは実書込しない。
+
+初回保存や前回データがない場合は、互換性と安全性のため `ws:write-project` の全体保存にフォールバックする。
+
+## 6. 守るべき境界
 
 性能を保つため、次の境界を維持する。
 
@@ -93,7 +103,7 @@ summary read 後のツリーには、本文未読のメモが混ざる。
 - プロジェクト選択時にタスク数ぶん `ws:read-task-memos` を呼ぶ実装にしない
 - `bodyLoaded` を renderer のツリー変換、検索、保存経路で落とさない
 
-## 6. 検証
+## 7. 検証
 
 性能関連の変更では、少なくとも次を確認する。
 
