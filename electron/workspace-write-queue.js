@@ -5,9 +5,85 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function normalizeOptions(options = {}) {
+  return {
+    forceLocal: Boolean(options?.forceLocal),
+  };
+}
+
+function normalizeTasks(tasks) {
+  return Array.isArray(tasks) ? tasks.filter((task) => task?.id) : [];
+}
+
+function normalizePatch(patch = {}) {
+  const deletedTaskIds = [
+    ...new Set(
+      (Array.isArray(patch?.deletedTaskIds) ? patch.deletedTaskIds : []).filter(
+        (id) => typeof id === "string" && id.length > 0
+      )
+    ),
+  ];
+  const deletedSet = new Set(deletedTaskIds);
+  return {
+    tasks: normalizeTasks(patch?.tasks).filter((task) => !deletedSet.has(task.id)),
+    deletedTaskIds,
+  };
+}
+
+function mergeOptions(a, b) {
+  return {
+    forceLocal: Boolean(a?.forceLocal || b?.forceLocal),
+  };
+}
+
+function mergeFullWithPatch(fullEntry, patchEntry) {
+  const tasksById = new Map(fullEntry.tasks.map((task) => [task.id, task]));
+  for (const taskId of patchEntry.deletedTaskIds) {
+    tasksById.delete(taskId);
+  }
+  for (const task of patchEntry.tasks) {
+    tasksById.set(task.id, task);
+  }
+
+  return {
+    mode: "full",
+    tasks: [...tasksById.values()],
+    options: mergeOptions(fullEntry.options, patchEntry.options),
+  };
+}
+
+function mergePatchEntries(currentEntry, nextEntry) {
+  const tasksById = new Map(currentEntry.tasks.map((task) => [task.id, task]));
+  const deletedTaskIds = new Set(currentEntry.deletedTaskIds);
+
+  for (const taskId of nextEntry.deletedTaskIds) {
+    tasksById.delete(taskId);
+    deletedTaskIds.add(taskId);
+  }
+  for (const task of nextEntry.tasks) {
+    tasksById.set(task.id, task);
+    deletedTaskIds.delete(task.id);
+  }
+
+  return {
+    mode: "patch",
+    tasks: [...tasksById.values()],
+    deletedTaskIds: [...deletedTaskIds],
+    options: mergeOptions(currentEntry.options, nextEntry.options),
+  };
+}
+
+function mergePendingEntry(currentEntry, nextEntry) {
+  if (!currentEntry) return nextEntry;
+  if (nextEntry.mode === "full") return nextEntry;
+  if (currentEntry.mode === "full") return mergeFullWithPatch(currentEntry, nextEntry);
+  return mergePatchEntries(currentEntry, nextEntry);
+}
+
 class WorkspaceWriteQueue {
   constructor({
     writeProject,
+    writeProjectPatch,
     onStatus = () => {},
     onWritten = () => {},
     onError = () => {},
@@ -20,13 +96,14 @@ class WorkspaceWriteQueue {
     }
 
     this.writeProject = writeProject;
+    this.writeProjectPatch = writeProjectPatch;
     this.onStatus = onStatus;
     this.onWritten = onWritten;
     this.onError = onError;
     this.maxPendingProjects = maxPendingProjects;
     this.maxRetryAttempts = maxRetryAttempts;
     this.retryBaseDelayMs = retryBaseDelayMs;
-    // pending: projectDir -> { tasks, options }
+    // pending: projectDir -> { mode, tasks, deletedTaskIds?, options }
     this.pending = new Map();
     this.processing = false;
     this.activeProjectDir = null;
@@ -44,10 +121,38 @@ class WorkspaceWriteQueue {
       throw new Error("Workspace save queue is full");
     }
 
-    const normalizedOptions = {
-      forceLocal: Boolean(options?.forceLocal),
+    const entry = {
+      mode: "full",
+      tasks: normalizeTasks(tasks),
+      options: normalizeOptions(options),
     };
-    this.pending.set(projectDir, { tasks, options: normalizedOptions });
+    this.pending.set(projectDir, mergePendingEntry(this.pending.get(projectDir), entry));
+    this.emitStatus(projectDir, "queued");
+    this.drain();
+    return { success: true, queued: true };
+  }
+
+  enqueuePatch(projectDir, patch, options = {}) {
+    if (!projectDir) {
+      throw new Error("projectDir is required");
+    }
+
+    const normalizedPatch = normalizePatch(patch);
+    if (normalizedPatch.tasks.length === 0 && normalizedPatch.deletedTaskIds.length === 0) {
+      return { success: true, queued: false, noop: true };
+    }
+
+    const isKnownProject = projectDir === this.activeProjectDir || this.pending.has(projectDir);
+    if (!isKnownProject && this.pending.size >= this.maxPendingProjects) {
+      throw new Error("Workspace save queue is full");
+    }
+
+    const entry = {
+      mode: "patch",
+      ...normalizedPatch,
+      options: normalizeOptions(options),
+    };
+    this.pending.set(projectDir, mergePendingEntry(this.pending.get(projectDir), entry));
     this.emitStatus(projectDir, "queued");
     this.drain();
     return { success: true, queued: true };
@@ -126,10 +231,15 @@ class WorkspaceWriteQueue {
       // Retry loop: only retries when the job is marked forceLocal AND the
       // queue hasn't received a fresher snapshot for the same project (in
       // which case the newer snapshot takes precedence).
-      // eslint-disable-next-line no-constant-condition
       while (true) {
         try {
-          const result = await this.writeProject(projectDir, tasks);
+          const result =
+            entry.mode === "patch"
+              ? await this.writeProjectPatch(projectDir, {
+                  tasks,
+                  deletedTaskIds: entry.deletedTaskIds,
+                })
+              : await this.writeProject(projectDir, tasks);
           this.onWritten({ projectDir, tasks, result });
           this.emitStatus(projectDir, "saved");
           succeeded = true;

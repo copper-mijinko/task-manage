@@ -17,6 +17,7 @@ import type {
   WorkspaceProject,
   WorkspaceProjectListItem,
   WorkspaceMemo,
+  WorkspaceProjectPatch,
   WorkspaceTask,
 } from "@app-types/workspace";
 import type { ProjectData } from "@features/tasks/utils/tree_control";
@@ -293,6 +294,17 @@ export function wsWriteProject(
 ): Promise<{ success: boolean; queued?: boolean; error?: string }> {
   return (
     api()?.wsWriteProject?.(projectDir, tasks, options) ??
+    Promise.resolve({ success: false, error: "API unavailable" })
+  );
+}
+
+export function wsWriteProjectPatch(
+  projectDir: string,
+  patch: WorkspaceProjectPatch,
+  options?: { forceLocal?: boolean }
+): Promise<{ success: boolean; queued?: boolean; noop?: boolean; error?: string }> {
+  return (
+    api()?.wsWriteProjectPatch?.(projectDir, patch, options) ??
     Promise.resolve({ success: false, error: "API unavailable" })
   );
 }

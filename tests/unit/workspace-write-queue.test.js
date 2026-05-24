@@ -42,6 +42,83 @@ describe("WorkspaceWriteQueue", () => {
     expect(writes.map((write) => write.tasks[0].id)).toEqual(["first", "third"]);
   });
 
+  test("merges pending patches for the same project", async () => {
+    const firstWrite = deferred();
+    const patchWrites = [];
+    const queue = new WorkspaceWriteQueue({
+      writeProject: async () => {
+        await firstWrite.promise;
+        return { tasks: new Map(), taskDirs: new Map() };
+      },
+      writeProjectPatch: async (projectDir, patch) => {
+        patchWrites.push({ projectDir, patch });
+        return { tasks: new Map(), taskDirs: new Map() };
+      },
+    });
+
+    queue.enqueue("project-a", [{ id: "active" }]);
+    await nextTick();
+    queue.enqueuePatch("project-a", {
+      tasks: [{ id: "task-a", name: "First" }],
+      deletedTaskIds: ["task-c"],
+    });
+    queue.enqueuePatch("project-a", {
+      tasks: [
+        { id: "task-a", name: "Second" },
+        { id: "task-b", name: "New" },
+      ],
+      deletedTaskIds: ["task-d"],
+    });
+
+    expect(queue.pendingSize("project-a")).toBe(1);
+
+    firstWrite.resolve();
+    await queue.flush();
+
+    expect(patchWrites).toHaveLength(1);
+    expect(patchWrites[0].patch.tasks).toEqual([
+      { id: "task-a", name: "Second" },
+      { id: "task-b", name: "New" },
+    ]);
+    expect(patchWrites[0].patch.deletedTaskIds).toEqual(["task-c", "task-d"]);
+  });
+
+  test("applies a pending patch to a queued full snapshot", async () => {
+    const firstWrite = deferred();
+    const fullWrites = [];
+    const queue = new WorkspaceWriteQueue({
+      writeProject: async (projectDir, tasks) => {
+        fullWrites.push({ projectDir, tasks });
+        if (projectDir === "project-a") {
+          await firstWrite.promise;
+        }
+        return { tasks: new Map(), taskDirs: new Map() };
+      },
+      writeProjectPatch: async () => {
+        throw new Error("patch should be merged into the full snapshot");
+      },
+    });
+
+    queue.enqueue("project-a", [{ id: "active" }]);
+    await nextTick();
+    queue.enqueue("project-b", [
+      { id: "task-a", name: "Old" },
+      { id: "task-remove", name: "Remove" },
+    ]);
+    queue.enqueuePatch("project-b", {
+      tasks: [{ id: "task-a", name: "New" }],
+      deletedTaskIds: ["task-remove"],
+    });
+
+    firstWrite.resolve();
+    await queue.flush();
+
+    expect(fullWrites).toEqual([
+      { projectDir: "project-a", tasks: [{ id: "active" }] },
+      { projectDir: "project-b", tasks: [{ id: "task-a", name: "New" }] },
+    ]);
+  });
+
   test("applies a bounded pending-project guard", async () => {
     const firstWrite = deferred();
     const queue = new WorkspaceWriteQueue({

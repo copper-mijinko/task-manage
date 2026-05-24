@@ -3,6 +3,7 @@ import type {
   WorkspaceInfo,
   WorkspaceMemo,
   WorkspaceProject,
+  WorkspaceProjectPatch,
   WorkspaceProjectListItem,
   WorkspaceTask,
 } from "./workspace";
@@ -160,6 +161,11 @@ export interface ElectronAPI {
     tasks: WorkspaceTask[],
     options?: { forceLocal?: boolean }
   ) => Promise<{ success: boolean; queued?: boolean; error?: string }>;
+  wsWriteProjectPatch: (
+    projectDir: string,
+    patch: WorkspaceProjectPatch,
+    options?: { forceLocal?: boolean }
+  ) => Promise<{ success: boolean; queued?: boolean; noop?: boolean; error?: string }>;
   wsDeleteTask: (
     projectDir: string,
     taskId: string

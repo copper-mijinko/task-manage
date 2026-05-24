@@ -130,6 +130,8 @@ const electronAPI = {
     ipcRenderer.invoke("ws:resolve-memo-asset", { projectDir, taskId, assetPath }),
   wsWriteProject: (projectDir, tasks, options) =>
     ipcRenderer.invoke("ws:write-project", { projectDir, tasks, options }),
+  wsWriteProjectPatch: (projectDir, patch, options) =>
+    ipcRenderer.invoke("ws:write-project-patch", { projectDir, patch, options }),
   wsDeleteTask: (projectDir, taskId) =>
     ipcRenderer.invoke("ws:delete-task", { projectDir, taskId }),
   wsCreateProject: (workspacePath, name, id, order) =>

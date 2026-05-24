@@ -27,7 +27,11 @@ import {
 } from "@features/workspace/stores/workspace";
 import { isPreferMemoryActive } from "@features/workspace/stores/policy";
 import type { SelectedType } from "@app-types/app";
-import type { WorkspaceProjectListItem, WorkspaceTask } from "@app-types/workspace";
+import type {
+  WorkspaceProjectListItem,
+  WorkspaceProjectPatch,
+  WorkspaceTask,
+} from "@app-types/workspace";
 
 export interface TreeDataStore extends Writable<ProjectData | undefined> {
   init: () => void;
@@ -108,6 +112,74 @@ function syncWorkspaceProjectSummaryFromTree(
   });
 }
 
+function applyWorkspaceRootOrder(
+  tasks: WorkspaceTask[],
+  activeWorkspaceProject: WorkspaceProjectListItem | undefined
+) {
+  const rootTask = getWorkspaceRootTask(tasks);
+  if (rootTask && typeof activeWorkspaceProject?.order === "number") {
+    rootTask.order = activeWorkspaceProject.order;
+  }
+}
+
+function comparableWorkspaceTask(task: WorkspaceTask) {
+  return {
+    id: task.id,
+    name: task.name,
+    status: task.status,
+    startDate: task.startDate ?? null,
+    dueDate: task.dueDate ?? null,
+    parents: task.parents ?? [],
+    memos: (task.memos ?? []).map((memo) => ({
+      id: memo.id,
+      title: memo.title,
+      content: memo.content,
+      tags: memo.tags ?? [],
+      format: memo.format ?? "markdown",
+      order: memo.order ?? null,
+    })),
+    createdAt: task.createdAt,
+    order: task.order ?? null,
+  };
+}
+
+function buildWorkspacePatch(
+  current: ProjectData,
+  previous: ProjectData | null,
+  context: PersistContext
+): { fullSnapshot: boolean; allTasks: WorkspaceTask[]; patch: WorkspaceProjectPatch } {
+  const allTasks = projectDataToWorkspaceTasks(current, context.cachedWorkspaceTasks);
+  applyWorkspaceRootOrder(allTasks, context.activeWorkspaceProject);
+
+  if (!previous?.data) {
+    return {
+      fullSnapshot: true,
+      allTasks,
+      patch: { tasks: allTasks, deletedTaskIds: [] },
+    };
+  }
+
+  const previousTasks = projectDataToWorkspaceTasks(previous, context.cachedWorkspaceTasks);
+  applyWorkspaceRootOrder(previousTasks, context.activeWorkspaceProject);
+
+  const previousById = new Map(previousTasks.map((task) => [task.id, task]));
+  const currentIds = new Set(allTasks.map((task) => task.id));
+  const dirtyTasks = allTasks.filter((task) => {
+    const previousTask = previousById.get(task.id);
+    return (
+      !previousTask ||
+      !_.isEqual(comparableWorkspaceTask(task), comparableWorkspaceTask(previousTask))
+    );
+  });
+  const deletedTaskIds = [...previousById.keys()].filter((id) => !currentIds.has(id));
+
+  return {
+    fullSnapshot: false,
+    allTasks,
+    patch: { tasks: dirtyTasks, deletedTaskIds },
+  };
+}
+
 function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
   const { subscribe, set, update } = writable<ProjectData | undefined>(initialValue);
   let previousData: ProjectData | null = null;
@@ -147,6 +219,7 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
       }
 
       const isWorkspace = context.selectedType === "WorkspaceProject";
+      const previousWorkspaceData = previousData;
 
       if (previousData) {
         if (!pendingSkipSnapshot) {
@@ -211,16 +284,22 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
       if (isWorkspace) {
         const activeProjectDir = context.activeProjectDir;
         if (!activeProjectDir) return;
-        const cachedTasks = context.cachedWorkspaceTasks;
-        const tasks = projectDataToWorkspaceTasks(current, cachedTasks);
-        const rootTask = getWorkspaceRootTask(tasks);
-        if (rootTask && typeof context.activeWorkspaceProject?.order === "number") {
-          rootTask.order = context.activeWorkspaceProject.order;
+        const { fullSnapshot, allTasks, patch } = buildWorkspacePatch(
+          current,
+          previousWorkspaceData,
+          context
+        );
+        if (!fullSnapshot && patch.tasks.length === 0 && patch.deletedTaskIds.length === 0) {
+          saveStatus.set("saved");
+          return;
         }
         try {
           const forceLocal = isPreferMemoryActive();
-          platform
-            .wsWriteProject(activeProjectDir, tasks, forceLocal ? { forceLocal: true } : undefined)
+          const options = forceLocal ? { forceLocal: true } : undefined;
+          const writePromise = fullSnapshot
+            ? platform.wsWriteProject(activeProjectDir, allTasks, options)
+            : platform.wsWriteProjectPatch(activeProjectDir, patch, options);
+          writePromise
             .then((result) => {
               if (!result?.success) {
                 saveStatus.set("error");
