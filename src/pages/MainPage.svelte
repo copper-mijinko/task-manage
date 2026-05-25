@@ -9,6 +9,7 @@
   import Dialog from "@lib/primitives/Dialog.svelte";
   import Modal from "@lib/primitives/Modal.svelte";
   import SearchBox from "@lib/primitives/SearchBox.svelte";
+  import ActiveFilterBar from "@features/search/components/ActiveFilterBar.svelte";
   import { tick } from "svelte";
   import {
     table_selected_id,
@@ -745,6 +746,7 @@
               </IconButton>
             </div>
           </div>
+          <ActiveFilterBar />
           <div class="TreeAndGantt">
             {#if $ganttVisible}
               <SplitPanes defaultRatio={[3, 2]}>
