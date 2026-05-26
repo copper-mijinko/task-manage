@@ -2,6 +2,7 @@ import { get } from "svelte/store";
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { selected_id, selected_type } from "@stores/ui";
+import { workspace_store } from "@features/workspace/stores/workspace";
 import { canGoBack, canGoForward, navigation_history } from "@stores/navigation_history";
 
 /**
@@ -19,11 +20,26 @@ async function navigateTo(type: "Projects" | "WorkspaceProject" | "Info" | "Inbo
   await flushMicrotask();
 }
 
+async function navigateToWorkspaceProject(rootId: string, projectDir: string) {
+  // MenuList.selectWorkspaceProject() と同じ順序：先に activeProjectDir、
+  // 続けて selected_type / selected_id を更新する。
+  workspace_store.setActiveProject(projectDir);
+  selected_type.set("WorkspaceProject");
+  selected_id.set(rootId);
+  await flushMicrotask();
+}
+
 describe("navigation_history store", () => {
   beforeEach(() => {
     navigation_history.reset();
     selected_type.set(undefined);
     selected_id.set(undefined);
+    workspace_store.set({
+      workspaces: [],
+      activeWorkspacePath: null,
+      activeProjectDir: null,
+      projects: [],
+    });
     navigation_history.init();
   });
 
@@ -125,9 +141,44 @@ describe("navigation_history store", () => {
 
     const state = get(navigation_history);
     expect(state.entries).toEqual([
-      { selectedType: "Projects", selectedId: "shared-id" },
-      { selectedType: "WorkspaceProject", selectedId: "shared-id" },
+      { selectedType: "Projects", selectedId: "shared-id", projectDir: null },
+      { selectedType: "WorkspaceProject", selectedId: "shared-id", projectDir: null },
     ]);
+  });
+
+  test("WorkspaceProject の back は activeProjectDir も復元する", async () => {
+    // ワークスペースプロジェクト A → B と移って戻ったとき、
+    // workspace_store.activeProjectDir も A に巻き戻らないと
+    // loadWorkspaceData が B のタスクを A の rootId で読んでしまい
+    // unknown ノードが出る。
+    await navigateToWorkspaceProject("root-A", "/ws/projectA");
+    await navigateToWorkspaceProject("root-B", "/ws/projectB");
+
+    expect(get(workspace_store).activeProjectDir).toBe("/ws/projectB");
+
+    navigation_history.back();
+    await flushMicrotask();
+
+    expect(get(selected_id)).toBe("root-A");
+    expect(get(workspace_store).activeProjectDir).toBe("/ws/projectA");
+
+    navigation_history.forward();
+    await flushMicrotask();
+
+    expect(get(selected_id)).toBe("root-B");
+    expect(get(workspace_store).activeProjectDir).toBe("/ws/projectB");
+  });
+
+  test("非 WorkspaceProject の back は activeProjectDir に触らない", async () => {
+    workspace_store.setActiveProject("/ws/sticky");
+    await navigateTo("Projects", "A");
+    await navigateTo("Projects", "B");
+
+    navigation_history.back();
+    await flushMicrotask();
+
+    // Projects 間の遷移なので activeProjectDir は変えない。
+    expect(get(workspace_store).activeProjectDir).toBe("/ws/sticky");
   });
 
   test("type と id の同時セットは中間状態を履歴に残さない", async () => {
