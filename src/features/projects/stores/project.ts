@@ -13,7 +13,7 @@ import {
 } from "@stores/ui";
 
 export interface ProjectIdsStore extends Writable<ProjectListItem[] | undefined> {
-  init: () => void;
+  init: () => Promise<void>;
   addProject: () => void;
   deleteProject: (projectId: string) => void;
   setProjectOrder: (projects: ProjectListItem[]) => void;
@@ -53,9 +53,11 @@ function createProjectIds(initialValue: ProjectListItem[] | undefined): ProjectI
         });
       }
 
+      let initialLoad: Promise<void> = Promise.resolve();
+
       subscribe((current) => {
         if (current === undefined) {
-          platform.getProjectIDs().then((result) => {
+          initialLoad = platform.getProjectIDs().then((result) => {
             set(result);
           });
         }
@@ -66,6 +68,8 @@ function createProjectIds(initialValue: ProjectListItem[] | undefined): ProjectI
           closed_node_ids.update(() => new Set());
         }
       });
+
+      return initialLoad;
     },
     addProject: () => {
       const newProject = getDefaultProject();

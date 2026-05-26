@@ -20,9 +20,10 @@ export * from "@features/projects/stores/project";
 export * from "@features/search/stores/search";
 export * from "@features/inbox/stores/inbox";
 
+import { get } from "svelte/store";
 import { tree_data } from "@features/tasks/stores/tree";
 import { project_ids } from "@features/projects/stores/project";
-import { selected_id, closed_node_ids } from "./ui";
+import { selected_id, selected_type, closed_node_ids } from "./ui";
 import { filter } from "@features/search/stores/search";
 import { theme } from "./theme";
 import { column_settings } from "@features/tasks/stores/column_settings";
@@ -33,16 +34,20 @@ import { sort_state } from "@features/tasks/stores/sort";
 import { inbox_store } from "@features/inbox/stores/inbox";
 import { date_time_format } from "./preferences";
 
-export function init_store() {
+let initStoreReady: Promise<void> | null = null;
+
+export function init_store(): Promise<void> {
+  if (initStoreReady) return initStoreReady;
+
   tree_data.init();
-  project_ids.init();
+  const projectIdsReady = project_ids.init();
   selected_id.init();
   sort_state.init();
   filter.init();
   theme.init();
   closed_node_ids.init();
   column_settings.init();
-  workspace_store.init();
+  const workspaceReady = workspace_store.init();
   workspace_conflict_policy.init();
   inbox_store.init();
   date_time_format.init();
@@ -58,4 +63,33 @@ export function init_store() {
       return next;
     });
   });
+
+  initStoreReady = Promise.all([projectIdsReady, workspaceReady]).then(() => undefined);
+  return initStoreReady;
+}
+
+/**
+ * After init_store() resolves, pick the top-most project to land on:
+ * Workspace projects take precedence over InApp (db.json) projects.
+ * No-op when a project is already selected (e.g. task-detail window).
+ */
+export async function autoSelectInitialProject(): Promise<void> {
+  await init_store();
+
+  if (get(selected_type) !== undefined) return;
+
+  const workspaceProjects = get(workspace_store).projects ?? [];
+  if (workspaceProjects.length > 0) {
+    const first = workspaceProjects[0];
+    workspace_store.setActiveProject(first.projectDir);
+    selected_type.set("WorkspaceProject");
+    selected_id.set(first.rootId);
+    return;
+  }
+
+  const inAppProjects = get(project_ids) ?? [];
+  if (inAppProjects.length > 0) {
+    selected_type.set("Projects");
+    selected_id.set(inAppProjects[0].id);
+  }
 }

@@ -129,13 +129,15 @@ function createSelectedID(initialValue: string | undefined): SelectedIdStore {
               pendingTaskDetailSelection.taskId
             ) {
               if (getNode(pendingTaskDetailSelection.taskId, result.data)) {
-                table_selected_id.set(pendingTaskDetailSelection.taskId);
+                selectOnly(pendingTaskDetailSelection.taskId);
               } else {
                 clearPendingTaskDetailSelection();
-                table_selected_id.set(undefined);
+                selectOnly(result.data.id);
               }
             } else {
-              table_selected_id.set(undefined);
+              // プロジェクト選択時は、ツリーのルート (= プロジェクト名)
+              // を自動選択する。
+              selectOnly(result.data.id);
             }
             finishLoad(version);
           },
@@ -178,9 +180,11 @@ function createSelectedID(initialValue: string | undefined): SelectedIdStore {
               pendingTaskDetailSelection.taskId &&
               getNode(pendingTaskDetailSelection.taskId, converted.data)
             ) {
-              table_selected_id.set(pendingTaskDetailSelection.taskId);
+              selectOnly(pendingTaskDetailSelection.taskId);
             } else {
-              table_selected_id.set(undefined);
+              // プロジェクト選択時は、ツリーのルート (= プロジェクト名)
+              // を自動選択する。
+              selectOnly(converted.data.id);
             }
             finishLoad(version);
           },

@@ -431,14 +431,11 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
             if (pendingTaskDetailSelection.taskId) {
               table_selected_id.set(pendingTaskDetailSelection.taskId);
             }
-          } else {
-            platform.getInitialTreeData().then((result) => {
-              selected_type.set("Projects");
-              if (result !== undefined) {
-                selected_id.set(result.data.id);
-              }
-            });
           }
+          // 起動時のデフォルト選択は autoSelectInitialProject() で行う。
+          // 以前ここで getInitialTreeData() 経由で "Projects" 型を
+          // 不条件に設定していたが、Workspace 優先のロジックと競合して
+          // InApp が選ばれてしまっていたため削除。
         }
 
         syncWorkspaceProjectSummaryFromTree(
