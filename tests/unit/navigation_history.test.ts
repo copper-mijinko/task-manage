@@ -1,7 +1,7 @@
 import { get } from "svelte/store";
 import { beforeEach, describe, expect, test } from "vitest";
 
-import { selected_id, selected_type } from "@stores/ui";
+import { selected_id, selected_type, table_selected_id } from "@stores/ui";
 import { workspace_store } from "@features/workspace/stores/workspace";
 import { canGoBack, canGoForward, navigation_history } from "@stores/navigation_history";
 
@@ -34,6 +34,7 @@ describe("navigation_history store", () => {
     navigation_history.reset();
     selected_type.set(undefined);
     selected_id.set(undefined);
+    table_selected_id.set(undefined);
     workspace_store.set({
       workspaces: [],
       activeWorkspacePath: null,
@@ -141,8 +142,20 @@ describe("navigation_history store", () => {
 
     const state = get(navigation_history);
     expect(state.entries).toEqual([
-      { selectedType: "Projects", selectedId: "shared-id", projectDir: null },
-      { selectedType: "WorkspaceProject", selectedId: "shared-id", projectDir: null },
+      {
+        selectedType: "Projects",
+        selectedId: "shared-id",
+        projectDir: null,
+        workspacePath: null,
+        tableSelectedId: undefined,
+      },
+      {
+        selectedType: "WorkspaceProject",
+        selectedId: "shared-id",
+        projectDir: null,
+        workspacePath: null,
+        tableSelectedId: undefined,
+      },
     ]);
   });
 
@@ -244,5 +257,65 @@ describe("navigation_history store", () => {
       "Info",
       "WorkspaceProject",
     ]);
+  });
+
+  test("同じページ内での table_selected_id の変更は履歴を伸ばさず in-place 更新する", async () => {
+    await navigateTo("Projects", "A");
+    expect(get(navigation_history).entries).toHaveLength(1);
+
+    table_selected_id.set("task-1");
+    await flushMicrotask();
+    expect(get(navigation_history).entries).toHaveLength(1);
+    expect(get(navigation_history).entries[0].tableSelectedId).toBe("task-1");
+
+    table_selected_id.set("task-2");
+    await flushMicrotask();
+    expect(get(navigation_history).entries).toHaveLength(1);
+    expect(get(navigation_history).entries[0].tableSelectedId).toBe("task-2");
+  });
+
+  test("ページ遷移時に直前ページの table_selected_id が次のエントリではなく前のエントリに残る", async () => {
+    await navigateTo("Projects", "A");
+    table_selected_id.set("task-A1");
+    await flushMicrotask();
+
+    await navigateTo("Projects", "B");
+    table_selected_id.set("task-B1");
+    await flushMicrotask();
+
+    const state = get(navigation_history);
+    expect(state.entries.map((e) => [e.selectedId, e.tableSelectedId])).toEqual([
+      ["A", "task-A1"],
+      ["B", "task-B1"],
+    ]);
+  });
+
+  test("activeWorkspacePath はエントリに記録される", async () => {
+    workspace_store.update((s) => ({ ...s, activeWorkspacePath: "/ws/alpha" }));
+    await navigateTo("Projects", "A");
+
+    workspace_store.update((s) => ({ ...s, activeWorkspacePath: "/ws/beta" }));
+    await navigateTo("Projects", "B");
+
+    const state = get(navigation_history);
+    expect(state.entries.map((e) => [e.selectedId, e.workspacePath])).toEqual([
+      ["A", "/ws/alpha"],
+      ["B", "/ws/beta"],
+    ]);
+  });
+
+  test("workspace_store の non-navigation 変更（projects 一覧更新など）は履歴を伸ばさない", async () => {
+    workspace_store.update((s) => ({ ...s, activeWorkspacePath: "/ws/x" }));
+    await navigateTo("Projects", "A");
+    expect(get(navigation_history).entries).toHaveLength(1);
+
+    // projects 一覧だけ更新する（async setActive の load 完了等の挙動を模す）。
+    workspace_store.update((s) => ({
+      ...s,
+      projects: [{ name: "p", rootId: "r", dirName: "d", projectDir: "/ws/x/p" }],
+    }));
+    await flushMicrotask();
+
+    expect(get(navigation_history).entries).toHaveLength(1);
   });
 });

@@ -75,6 +75,12 @@ Electron アプリ全体を起動して確認する。
 | `src/stores/navigation_history.ts`  | `type と id の同時セットは中間状態を履歴に残さない`                                               | microtask コアレスで途中の不整合タプルを捨てる                                  |
 | `src/stores/navigation_history.ts`  | `先頭で back を押しても何も起きない` / `末尾で forward を押しても何も起きない`                    | 境界条件で no-op                                                                |
 | `src/stores/navigation_history.ts`  | `microtask 未消化の状態で back されても押す前のページが履歴に残る`                                | flushPendingRecord により直前遷移を取りこぼさない                               |
+| `src/stores/navigation_history.ts`  | `WorkspaceProject の back は activeProjectDir も復元する`                                         | workspace_store.activeProjectDir をエントリに含め、戻る時に setActiveProject する |
+| `src/stores/navigation_history.ts`  | `非 WorkspaceProject の back は activeProjectDir に触らない`                                      | Projects 間遷移では workspace 側を変えない                                      |
+| `src/stores/navigation_history.ts`  | `同じページ内での table_selected_id の変更は履歴を伸ばさず in-place 更新する`                       | タスク行選択はページ内状態として扱う                                            |
+| `src/stores/navigation_history.ts`  | `ページ遷移時に直前ページの table_selected_id が次のエントリではなく前のエントリに残る`             | エントリ単位で tableSelectedId を保持し、戻ったとき復元できる                   |
+| `src/stores/navigation_history.ts`  | `activeWorkspacePath はエントリに記録される`                                                       | workspace 切替を跨いだ戻る/進むに対応                                           |
+| `src/stores/navigation_history.ts`  | `workspace_store の non-navigation 変更（projects 一覧更新など）は履歴を伸ばさない`                  | workspace_store 全体を購読しつつ、ページに関わらない更新は無視する              |
 
 ### 2.2 Component テスト
 
@@ -247,5 +253,5 @@ Electron アプリ全体を起動して確認する。
 | 種別         | 件数                              |
 | ------------ | --------------------------------- |
 | Test files   | unit 18 passed + component 18 passed (36) |
-| Tests        | unit 289 passed + component 126 passed / 7 skipped (415 / 7) |
+| Tests        | unit 295 passed + component 126 passed / 7 skipped (421 / 7) |
 | svelte-check | 455 files / 0 errors / 0 warnings |

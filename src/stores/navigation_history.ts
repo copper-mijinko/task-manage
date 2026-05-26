@@ -1,26 +1,30 @@
 import { derived, get, writable, type Readable } from "svelte/store";
 import type { SelectedType } from "@app-types/app";
 import { workspace_store } from "@features/workspace/stores/workspace";
-import { selected_id, selected_type } from "./ui";
+import { selected_id, selected_type, setPendingTaskDetailSelection, table_selected_id } from "./ui";
 
 /**
- * 1 件の「ページ」エントリ。本アプリでは画面遷移の単位を
- * `(selected_type, selected_id)` のタプルで定義する。
+ * 1 件の「ページ」エントリ。
  *
- * - `Projects` / `WorkspaceProject` の id は project root の id
- * - `Inbox` の id は `INBOX_SELECTED_ID` センチネル
- * - `Info` の id は info ページ id
+ * 「ページ」は本アプリでは `(selected_type, selected_id)` を主軸に、
+ * Workspace 側の `activeWorkspacePath` / `activeProjectDir` を含めて
+ * 一意に同定する。さらに「ページ内で選択していたタスク行」も
+ * `tableSelectedId` として併せて保持し、戻ったときの TaskDetail / Memo の
+ * コンテキストを復元する。
  *
- * `WorkspaceProject` だけは「どのワークスペースプロジェクトディレクトリを
- * アクティブにしていたか」も併せて持たないと、戻った先で
- * `workspace_store.activeProjectDir` が他プロジェクトを向いたままになり、
- * `loadWorkspaceData` が別プロジェクトのタスクを読み込んでしまう。
+ * - `Projects` / `WorkspaceProject` の `selectedId` は project root の id
+ * - `Inbox` の `selectedId` は `INBOX_SELECTED_ID` センチネル
+ * - `Info` の `selectedId` は info ページ id
+ * - `projectDir` は `WorkspaceProject` のときのみ意味があり、それ以外では null
+ * - `workspacePath` は `WorkspaceProject` / `Projects` 系で意味があり、Inbox/Info でも参考値として持つ（復元時は WorkspaceProject のときだけ反映）
+ * - `tableSelectedId` は `Projects` / `WorkspaceProject` のときのみ意味があり、ページ内のタスク行選択を表す
  */
 export interface NavigationEntry {
   selectedType: SelectedType;
   selectedId: string | undefined;
-  /** WorkspaceProject のみ参照する。それ以外の type では null。 */
   projectDir: string | null;
+  workspacePath: string | null;
+  tableSelectedId: string | undefined;
 }
 
 export interface NavigationHistoryState {
@@ -43,11 +47,16 @@ export interface NavigationHistoryStore extends Readable<NavigationHistoryState>
 /** 履歴の最大長。これを超える分は古い側から捨てる。 */
 const MAX_HISTORY = 100;
 
-function entriesEqual(a: NavigationEntry, b: NavigationEntry): boolean {
+/**
+ * ページとしての同一性を判定する。`tableSelectedId` はページ内選択なので
+ * 含めない（同じページ内のタスク選択切替で履歴を増やさない）。
+ */
+function pageEqual(a: NavigationEntry, b: NavigationEntry): boolean {
   return (
     a.selectedType === b.selectedType &&
     a.selectedId === b.selectedId &&
-    a.projectDir === b.projectDir
+    a.projectDir === b.projectDir &&
+    a.workspacePath === b.workspacePath
   );
 }
 
@@ -60,37 +69,64 @@ function createNavigationHistory(): NavigationHistoryStore {
 
   let initialized = false;
   let recordQueued = false;
-  // back() / forward() による store 更新は履歴に記録しないためのフラグ。
-  // 同期的に立て、microtask で消費する。
-  let programmaticNavigation = false;
+  /**
+   * back/forward 実行中に「target ページに着地するまで」を表す。
+   * - 設定されている間：commitRecord は entries を更新しない（target の
+   *   tableSelectedId を transient な undefined で上書きしてしまうのを防ぐ）。
+   * - pageEqual で着地が確認できた時点でクリアする。
+   * - 着地前にユーザが別ページへ移動したら（pageEqual が崩れたら）クリアして
+   *   通常記録に戻す。
+   */
+  let pendingNavigation: NavigationEntry | null = null;
 
   function currentEntry(): NavigationEntry {
     const type = get(selected_type);
+    const ws = get(workspace_store);
     return {
       selectedType: type,
       selectedId: get(selected_id),
-      projectDir:
-        type === "WorkspaceProject" ? (get(workspace_store).activeProjectDir ?? null) : null,
+      projectDir: type === "WorkspaceProject" ? (ws.activeProjectDir ?? null) : null,
+      workspacePath: ws.activeWorkspacePath ?? null,
+      tableSelectedId: get(table_selected_id),
     };
   }
 
   function commitRecord() {
-    const wasProgrammatic = programmaticNavigation;
-    programmaticNavigation = false;
-    if (wasProgrammatic) return;
-
     const entry = currentEntry();
+
+    if (pendingNavigation !== null) {
+      if (pageEqual(entry, pendingNavigation)) {
+        // ターゲットページに着地した。entries[index] には navigateTo 時点で
+        // セット済みの正しい tableSelectedId が入っているので触らない。
+        // pendingTaskDetailSelection 経由で loader が tableSelectedId を反映
+        // するのはこの後の async load 完了時。それは通常の commitRecord 経路
+        // で entries[index].tableSelectedId と比較され、合致するため no-op。
+        pendingNavigation = null;
+        return;
+      }
+      // pageEqual が崩れた = ユーザが target を待たずに別ページへ移動した。
+      // 待つのをやめて通常記録に進む。
+      pendingNavigation = null;
+    }
+
     if (isEmptyEntry(entry)) {
       // 起動直後 / プロジェクト削除直後など、選択なし状態は履歴に積まない。
       return;
     }
+
     internal.update((state) => {
       const current = state.entries[state.index];
-      if (current && entriesEqual(current, entry)) {
-        // 同一ページへの遷移は履歴に積まない（無限の重複防止）。
-        return state;
+      if (current && pageEqual(current, entry)) {
+        // 同じページ内での操作（タスク行の選択変更など）。tableSelectedId だけ
+        // 差分があれば in-place で更新し、履歴は伸ばさない。
+        if (current.tableSelectedId === entry.tableSelectedId) {
+          return state;
+        }
+        const updated = state.entries.slice();
+        updated[state.index] = entry;
+        return { ...state, entries: updated };
       }
-      // index より先（forward 履歴）は新規遷移によって失われる。
+      // 新しいページへの遷移。index より先（forward 履歴）は失う。
       const truncated = state.entries.slice(0, state.index + 1);
       truncated.push(entry);
       const overflow = truncated.length - MAX_HISTORY;
@@ -124,7 +160,36 @@ function createNavigationHistory(): NavigationHistoryStore {
     const target = state.entries[targetIndex];
     internal.update((s) => ({ ...s, index: targetIndex }));
 
-    programmaticNavigation = true;
+    pendingNavigation = target;
+
+    // ページ内のタスク行も復元したい場合、loader が読みに行く
+    // pendingTaskDetailSelection にヒントを置く。`tableSelectedId` が
+    // 未定義のときは触らない（loader は selectOnly(undefined) に倒す）。
+    if (
+      (target.selectedType === "Projects" || target.selectedType === "WorkspaceProject") &&
+      target.selectedId &&
+      target.tableSelectedId
+    ) {
+      setPendingTaskDetailSelection({
+        projectId: target.selectedId,
+        taskId: target.tableSelectedId,
+        selectedType: target.selectedType,
+        projectDir: target.projectDir,
+      });
+    } else {
+      setPendingTaskDetailSelection(undefined);
+    }
+
+    // activeWorkspacePath を先に戻す。workspace_store.setActive は disk から
+    // projects 一覧を再読込する async 関数で、その間 activeWorkspacePath は
+    // 旧値のまま。サイドバーの projects 表示は遅延更新になるが、
+    // tree の読み込みは activeProjectDir に直接依存するため問題ない。
+    const currentWorkspacePath = get(workspace_store).activeWorkspacePath ?? null;
+    if (target.workspacePath && target.workspacePath !== currentWorkspacePath) {
+      // fire-and-forget。失敗しても画面遷移自体は進む。
+      void workspace_store.setActive(target.workspacePath);
+    }
+
     // WorkspaceProject の場合は activeProjectDir を選択 store より先に戻す。
     // MenuList.selectWorkspaceProject() と同じ順序にしておかないと
     // selected_id の subscriber (loadWorkspaceData) が古い activeProjectDir
@@ -144,9 +209,11 @@ function createNavigationHistory(): NavigationHistoryStore {
     init: () => {
       if (initialized) return;
       initialized = true;
-      // 起動時の type/id 初期化を最初の履歴エントリとして拾う。
+      // ページ主軸 + サブ軸の各 store を購読し、microtask で 1 回にコアレスする。
       selected_type.subscribe(queueRecord);
       selected_id.subscribe(queueRecord);
+      table_selected_id.subscribe(queueRecord);
+      workspace_store.subscribe(queueRecord);
     },
     back: () => {
       // 直前のユーザ遷移が microtask 待ちで未記録のまま戻る/進むが押されることがある。
@@ -161,7 +228,7 @@ function createNavigationHistory(): NavigationHistoryStore {
     reset: () => {
       internal.set({ entries: [], index: -1 });
       recordQueued = false;
-      programmaticNavigation = false;
+      pendingNavigation = null;
     },
   };
 }
