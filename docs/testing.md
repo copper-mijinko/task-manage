@@ -48,6 +48,8 @@ Electron アプリ全体を起動して確認する。
 | `electron/workspace.js`             | `writeProjectAsync touches only changed memo files and deletes removed tasks`                     | 変更メモのみ書き換え、削除されたタスクのディレクトリは消す                      |
 | `electron/workspace.js`             | `writeProjectPatchAsync writes only patched tasks and deletes requested tasks`                    | 差分パッチ保存時に対象タスクだけを書き込み、指定された削除 task dir だけを消す  |
 | `electron/workspace.js`             | `*Async` 系の `createProject` / `writeTask` / `saveMemoImage` / `deleteTaskDir` / `deleteProject` | 非同期 IO 経路でも従来同等のディレクトリ／ファイル構造を生成する                |
+| `electron/workspace.js`             | `saveTaskAttachmentAsync copies files into task attachments and readProject lists them`           | 添付ファイルを `attachments/` に保存し、同名衝突時のリネームと再読込結果を確認する |
+| `electron/workspace.js`             | `deleteTaskAttachmentAsync deletes only safe attachment paths`                                    | `./attachments/<file>` 以外の削除を拒否し、添付削除後の一覧を返す                |
 | `electron/workspace-write-queue.js` | `keeps only the latest pending snapshot for the same project`                                     | 同一 projectDir への連続 enqueue を latest-wins でマージする                    |
 | `electron/workspace-write-queue.js` | `merges pending patches for the same project`                                                     | 同一 projectDir への連続 patch enqueue を 1 件にまとめる                        |
 | `electron/workspace-write-queue.js` | `applies a pending patch to a queued full snapshot`                                               | 全体保存が待機中のとき、後続 patch をその snapshot に反映する                   |
@@ -67,6 +69,7 @@ Electron アプリ全体を起動して確認する。
 [tests/component/TaskDetail.test.js](../tests/component/TaskDetail.test.js)
 [tests/component/ProjectPage.test.js](../tests/component/ProjectPage.test.js)
 [tests/component/TreeTable.test.js](../tests/component/TreeTable.test.js)
+[tests/component/TreeTableRow.test.js](../tests/component/TreeTableRow.test.js)
 [tests/component/TaskName.test.js](../tests/component/TaskName.test.js)
 [tests/component/App.test.js](../tests/component/App.test.js)
 [tests/component/Header.test.js](../tests/component/Header.test.js)
@@ -97,6 +100,11 @@ Electron アプリ全体を起動して確認する。
 | `src/features/tasks/components/TaskDetail.svelte`  | `adds a memo tab to the selected task`                                          | メモ追加で store とタブ表示を更新する                                                                   | [tests/component/TaskDetail.test.js](../tests/component/TaskDetail.test.js) |
 | `src/features/tasks/components/TaskDetail.svelte`  | `deletes the selected memo after confirmation`                                  | メモ削除確認後に store から削除する                                                                     | [tests/component/TaskDetail.test.js](../tests/component/TaskDetail.test.js) |
 | `src/features/tasks/components/TaskDetail.svelte`  | `resets the selected memo tab when the selected task changes`                   | タスク切替時にメモタブ選択を初期化する                                                                  | [tests/component/TaskDetail.test.js](../tests/component/TaskDetail.test.js) |
+| `src/features/tasks/components/TaskDetail.svelte`  | `adds a file attachment to a workspace task`                                    | 添付ボタンから選んだファイルを workspace task に保存して store を更新する                                | [tests/component/TaskDetail.test.js](../tests/component/TaskDetail.test.js) |
+| `src/features/tasks/components/TaskDetail.svelte`  | `opens the file picker from the attachment button`                              | 添付ボタン押下で hidden file input を開く                                                                | [tests/component/TaskDetail.test.js](../tests/component/TaskDetail.test.js) |
+| `src/features/tasks/components/TaskDetail.svelte`  | `adds attachments by drag and drop`                                             | 添付欄への drop でファイル保存 API を呼び、添付一覧を更新する                                            | [tests/component/TaskDetail.test.js](../tests/component/TaskDetail.test.js) |
+| `src/features/tasks/components/TaskDetail.svelte`  | `opens attachment actions from the context menu`                                | 添付ファイル右クリックメニューから「開く」と「プログラムから開く」を呼び分ける                          | [tests/component/TaskDetail.test.js](../tests/component/TaskDetail.test.js) |
+| `src/features/tasks/components/TaskDetail.svelte`  | `opens and deletes a workspace task attachment`                                 | 添付ファイルを既定アプリで開き、削除後に store の添付一覧を更新する                                      | [tests/component/TaskDetail.test.js](../tests/component/TaskDetail.test.js) |
 | `src/pages/MainPage.svelte`                        | `adds a sibling task and selects it`                                            | 兄弟タスク追加後に新規ノードを選択する                                                                  | [tests/component/ProjectPage.test.js](../tests/component/ProjectPage.test.js) |
 | `src/pages/MainPage.svelte`                        | `adds the first task under the project root when nothing is selected`           | タスク未選択の空プロジェクトで、ルート配下に最初のタスクを追加する                                      | [tests/component/ProjectPage.test.js](../tests/component/ProjectPage.test.js) |
 | `src/pages/MainPage.svelte`                        | `shows an alert when adding a sibling next to the project root`                 | ルート選択 + 兄弟挿入 = アラート表示する                                                                | [tests/component/ProjectPage.test.js](../tests/component/ProjectPage.test.js) |
@@ -106,6 +114,8 @@ Electron アプリ全体を起動して確認する。
 | `src/pages/MainPage.svelte`                        | `removes the selected task after confirmation`                                  | 削除確認後に選択中タスクを削除する                                                                      | [tests/component/ProjectPage.test.js](../tests/component/ProjectPage.test.js) |
 | `src/features/tasks/components/TreeTable.svelte`   | `selects a row and reflects the selected state`                                 | 行選択で `table_selected_id` と選択状態表示を更新する                                                   | [tests/component/TreeTable.test.js](../tests/component/TreeTable.test.js) |
 | `src/features/tasks/components/TreeTable.svelte`   | `collapses and expands a branch by toggling the row`                            | 折りたたみ操作で子行の表示と `closed_node_ids` を切り替える                                             | [tests/component/TreeTable.test.js](../tests/component/TreeTable.test.js) |
+| `src/features/tasks/components/TreeTable.svelte`   | `shows the attachments count column`                                            | `attachments` 列に添付数を表示する                                                                      | [tests/component/TreeTable.test.js](../tests/component/TreeTable.test.js) |
+| `src/features/tasks/components/TreeTableRow.svelte` | `renders array-valued columns as counts`                                       | 配列値の列を件数表示し、添付未定義時は `0` を表示する                                                   | [tests/component/TreeTableRow.test.js](../tests/component/TreeTableRow.test.js) |
 | `src/features/tasks/components/TaskName.svelte`    | `allows click on read-only input to bubble to row selection handler`            | 非編集（read-only）入力欄クリックでも行選択ハンドラまでイベントを伝播させる                             | [tests/component/TaskName.test.js](../tests/component/TaskName.test.js) |
 | `src/App.svelte`                                   | `shows workspace conflict actions and keeps local changes`                      | コンフリクトバナーの「維持」ボタンで `wsResolveConflict(projectDir, "keep-local")` を呼ぶ               | [tests/component/App.test.js](../tests/component/App.test.js) |
 | `src/App.svelte`                                   | `resolves workspace conflict by reloading from disk`                            | コンフリクトバナーの「再読込」ボタンで `wsResolveConflict(projectDir, "reload")` を呼ぶ                 | [tests/component/App.test.js](../tests/component/App.test.js) |
@@ -143,6 +153,7 @@ Electron アプリ全体を起動して確認する。
 | `src/features/tasks/utils/tree_control.ts` | 不正入力時の安全性                  | 実装済み | [tests/unit/tree_control.test.js](../tests/unit/tree_control.test.js) |
 | `src/features/search/stores/search.ts`     | 表示用ツリー同期                    | 実装済み | [tests/unit/search.test.js](../tests/unit/search.test.js)             |
 | `electron/workspace.js`             | 原子的・増分書込・リトライ・`*Async` 経路  | 実装済み | [tests/unit/workspace.test.js](../tests/unit/workspace.test.js)       |
+| `electron/workspace.js`             | 添付ファイル保存 / 削除 / 安全なパス解決    | 実装済み | [tests/unit/workspace.test.js](../tests/unit/workspace.test.js)       |
 | `electron/workspace-write-queue.js` | latest-wins / 上限 / ステータス通知        | 実装済み | [tests/unit/workspace-write-queue.test.js](../tests/unit/workspace-write-queue.test.js) |
 | `electron/workspace-reconciler.js`  | 自前書込除外 / 外部書込取り込み / 競合通知 | 実装済み | [tests/unit/workspace-reconciler.test.js](../tests/unit/workspace-reconciler.test.js)   |
 
@@ -165,6 +176,7 @@ Electron アプリ全体を起動して確認する。
 | `src/features/tasks/components/TaskDetail.svelte`  | メモ追加                                                                       | 実装済み | [tests/component/TaskDetail.test.js](../tests/component/TaskDetail.test.js) |
 | `src/features/tasks/components/TaskDetail.svelte`  | メモ削除                                                                       | 実装済み | [tests/component/TaskDetail.test.js](../tests/component/TaskDetail.test.js) |
 | `src/features/tasks/components/TaskDetail.svelte`  | タスク切替時のタブ選択初期化                                                   | 実装済み | [tests/component/TaskDetail.test.js](../tests/component/TaskDetail.test.js) |
+| `src/features/tasks/components/TaskDetail.svelte`  | 添付追加 / drag & drop / 右クリックメニュー / 削除                              | 実装済み | [tests/component/TaskDetail.test.js](../tests/component/TaskDetail.test.js) |
 | `src/pages/MainPage.svelte`                        | タスク追加                                                                     | 実装済み | [tests/component/ProjectPage.test.js](../tests/component/ProjectPage.test.js) |
 | `src/pages/MainPage.svelte`                        | 未選択時の初回タスク追加                                                       | 実装済み | [tests/component/ProjectPage.test.js](../tests/component/ProjectPage.test.js) |
 | `src/pages/MainPage.svelte`                        | ルート選択時の兄弟挿入アラート                                                 | 実装済み | [tests/component/ProjectPage.test.js](../tests/component/ProjectPage.test.js) |

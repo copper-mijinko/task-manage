@@ -198,6 +198,38 @@ Inbox 全体の永続化には既存の `ws:write-project(<inbox-projectDir>, it
 - root task 配下の通常タスクは、root task の子ノードとして表示する
 - `tree_data` がワークスペース読み込みで更新された場合、検索フィルタの変更を待たずに表示用ツリーも同期する
 
+#### 添付ファイル
+
+ワークスペースタスクは、任意ファイルをタスク単位の添付として保持できる。添付は `db.json` には保存せず、ワークスペースプロジェクトのタスクディレクトリ配下に実ファイルとして置く。
+
+```
+<projectDir>/
+├── _project.md
+├── attachments/              ← root task の添付
+│   └── <file>
+└── <task-id>/
+    ├── _index.md
+    ├── <memo-id>.md
+    ├── assets/               ← メモ内ペースト画像
+    └── attachments/          ← 通常タスクの添付
+        └── <file>
+```
+
+- 添付ファイル名は `safeFileName` / `uniqueFileName` で正規化し、同名衝突時は `-2`, `-3` … のサフィックスを付ける
+- `readProject` は各タスクの `attachments/` 直下にある通常ファイルを列挙し、`WorkspaceAttachment { id, name, relativePath, size, modifiedAt }` として返す
+- `relativePath` は `./attachments/<file>` 形式に限定する。`resolveTaskAttachmentFilePath` は `attachments/` 外へのパストラバーサル、絶対パス、NUL 文字を拒否する
+- 添付追加・削除は単発 IPC として実行し、成功時に main 側の `wsCache` と renderer 側の `tree_data` を更新する。タスク本文 `_index.md` には添付一覧を書かない
+- タスクツリーの `attachments` 列は `attachments` 配列の長さを表示する。既存データのように `attachments` が未定義の場合は `0` として扱う
+
+添付関連 IPC:
+
+| チャネル | ペイロード | 役割 |
+| --- | --- | --- |
+| `ws:save-task-attachment` | `{ projectDir, taskId, fileName, bytes }` | ファイルを対象タスクの `attachments/` へコピーし、作成された `WorkspaceAttachment` を返す |
+| `ws:delete-task-attachment` | `{ projectDir, taskId, attachmentPath }` | `./attachments/<file>` を削除し、削除後の添付一覧を返す |
+| `ws:open-task-attachment` | `{ projectDir, taskId, attachmentPath }` | 添付ファイルを OS の既定アプリで開く |
+| `ws:open-task-attachment-with` | `{ projectDir, taskId, attachmentPath }` | Windows の「プログラムから開く」ダイアログを表示する |
+
 ### 4.1 永続化の挙動
 
 Workspace の通常編集では、renderer 側の Svelte store を単一の信頼元とする。
