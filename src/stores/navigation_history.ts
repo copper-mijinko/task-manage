@@ -40,6 +40,20 @@ export interface NavigationHistoryStore extends Readable<NavigationHistoryState>
   back: () => void;
   /** 1 つ先の履歴へ進む。末尾にいるときは何もしない。 */
   forward: () => void;
+  /**
+   * 「ユーザがタスク行を能動的に選択した」と分かっている呼び出し元から
+   * 同ページ内のタスク行切替を 1 エントリとして履歴に積むためのフック。
+   *
+   * 通常の subscriber 経路では同ページ内の `table_selected_id` 変更は
+   * in-place 更新（履歴を伸ばさない）として扱う。これは load 完了直後の
+   * 自動 selectOnly や clearSelection といった transient な変更が
+   * 履歴を肥らせるのを防ぐためで、結果としてユーザのクリックも履歴に
+   * 残らなくなる。クリックハンドラ側から本メソッドを呼ぶことで、
+   * 「これは能動的な選択である」というシグナルを与え、明示的に push する。
+   *
+   * 直前エントリと完全一致する状態であれば no-op。
+   */
+  pushSelection: () => void;
   /** テスト用のリセットフック。本体コードからは呼ばない。 */
   reset: () => void;
 }
@@ -117,18 +131,29 @@ function createNavigationHistory(): NavigationHistoryStore {
     internal.update((state) => {
       const current = state.entries[state.index];
       if (current && pageEqual(current, entry)) {
-        // 同じページ内での操作（タスク行の選択変更など）。tableSelectedId だけ
-        // 差分があれば in-place で更新し、履歴は伸ばさない。
-        if (current.tableSelectedId === entry.tableSelectedId) {
-          return state;
+        // 同じページ内の subscriber 経由の commitRecord は基本的に
+        // 「ロード完了で tableSelectedId が決まった」という fill-in イベント
+        // を取り込むためにだけ使う。current.tableSelectedId が未定 (undefined)
+        // のときに entry 側で定まった値が来たら 1 回だけ in-place 更新する。
+        //
+        // それ以外（current 側に既に値があるとき）は in-place 更新しない。
+        // pushSelection で積まれたユーザ選択を後続の transient な変更で
+        // 上書きしないため。
+        if (current.tableSelectedId === undefined && entry.tableSelectedId !== undefined) {
+          const updated = state.entries.slice();
+          updated[state.index] = entry;
+          return { ...state, entries: updated };
         }
-        const updated = state.entries.slice();
-        updated[state.index] = entry;
-        return { ...state, entries: updated };
+        return state;
       }
       // 新しいページへの遷移。index より先（forward 履歴）は失う。
+      // ページ切替時点の table_selected_id は旧ページの値が残っているのが
+      // 通常で（clearSelection はこの microtask の後に走る）、新しい
+      // ページのエントリに古い値を混ぜないため、tableSelectedId は undefined
+      // にして push する。ロード完了後の selectOnly で上の fill-in 経路に
+      // 乗って埋められる。
       const truncated = state.entries.slice(0, state.index + 1);
-      truncated.push(entry);
+      truncated.push({ ...entry, tableSelectedId: undefined });
       const overflow = truncated.length - MAX_HISTORY;
       if (overflow > 0) {
         truncated.splice(0, overflow);
@@ -158,13 +183,23 @@ function createNavigationHistory(): NavigationHistoryStore {
     if (targetIndex === state.index) return;
 
     const target = state.entries[targetIndex];
+    const current = currentEntry();
     internal.update((s) => ({ ...s, index: targetIndex }));
 
     pendingNavigation = target;
 
-    // ページ内のタスク行も復元したい場合、loader が読みに行く
-    // pendingTaskDetailSelection にヒントを置く。`tableSelectedId` が
-    // 未定義のときは触らない（loader は selectOnly(undefined) に倒す）。
+    // 同じページ内での移動（tableSelectedId だけが違う）は selected_id を
+    // 動かさないので loader が起動しない。代わりに table_selected_id を
+    // 直接巻き戻す。workspace 系はすべて同値で no-op になる。
+    if (pageEqual(current, target)) {
+      table_selected_id.set(target.tableSelectedId);
+      return;
+    }
+
+    // ページ自体が変わるナビゲーション。ページ内のタスク行も復元したい場合、
+    // loader が読みに行く pendingTaskDetailSelection にヒントを置く。
+    // `tableSelectedId` が未定義のときは触らない（loader は
+    // selectOnly(undefined) に倒す）。
     if (
       (target.selectedType === "Projects" || target.selectedType === "WorkspaceProject") &&
       target.selectedId &&
@@ -204,6 +239,34 @@ function createNavigationHistory(): NavigationHistoryStore {
     selected_id.set(target.selectedId);
   }
 
+  function pushSelection() {
+    const entry = currentEntry();
+    if (isEmptyEntry(entry)) return;
+
+    internal.update((state) => {
+      const current = state.entries[state.index];
+      if (
+        current &&
+        pageEqual(current, entry) &&
+        current.tableSelectedId === entry.tableSelectedId
+      ) {
+        // 既に同じ状態が積まれている。重複しない。
+        return state;
+      }
+      const truncated = state.entries.slice(0, state.index + 1);
+      truncated.push(entry);
+      const overflow = truncated.length - MAX_HISTORY;
+      if (overflow > 0) {
+        truncated.splice(0, overflow);
+      }
+      return { entries: truncated, index: truncated.length - 1 };
+    });
+
+    // pushSelection の直後に subscriber 経由の commitRecord が microtask で
+    // 走るが、その時点では state は既に entries[last] と一致しているため
+    // no-op になる。ここでフラグを下ろしておくのは不要。
+  }
+
   return {
     subscribe: internal.subscribe,
     init: () => {
@@ -225,6 +288,7 @@ function createNavigationHistory(): NavigationHistoryStore {
       flushPendingRecord();
       navigateTo(get(internal).index + 1);
     },
+    pushSelection,
     reset: () => {
       internal.set({ entries: [], index: -1 });
       recordQueued = false;

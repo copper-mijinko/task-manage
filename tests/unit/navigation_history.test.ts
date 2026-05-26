@@ -259,34 +259,42 @@ describe("navigation_history store", () => {
     ]);
   });
 
-  test("同じページ内での table_selected_id の変更は履歴を伸ばさず in-place 更新する", async () => {
+  test("ロード完了直後の table_selected_id fill-in は履歴を伸ばさず最後のエントリへ in-place で入る", async () => {
     await navigateTo("Projects", "A");
     expect(get(navigation_history).entries).toHaveLength(1);
+    expect(get(navigation_history).entries[0].tableSelectedId).toBeUndefined();
 
-    table_selected_id.set("task-1");
+    // 「ロード完了でルートを auto-select」のような system-driven な
+    // table_selected_id 変更は in-place で fill-in される。
+    table_selected_id.set("task-root");
     await flushMicrotask();
     expect(get(navigation_history).entries).toHaveLength(1);
-    expect(get(navigation_history).entries[0].tableSelectedId).toBe("task-1");
+    expect(get(navigation_history).entries[0].tableSelectedId).toBe("task-root");
 
+    // 一度 fill-in した後は、subscriber 経路の table_selected_id 変更は
+    // 履歴を一切触らない（pushSelection 経由でのみ反映される）。
     table_selected_id.set("task-2");
     await flushMicrotask();
     expect(get(navigation_history).entries).toHaveLength(1);
-    expect(get(navigation_history).entries[0].tableSelectedId).toBe("task-2");
+    expect(get(navigation_history).entries[0].tableSelectedId).toBe("task-root");
   });
 
-  test("ページ遷移時に直前ページの table_selected_id が次のエントリではなく前のエントリに残る", async () => {
+  test("ページ遷移時、新ページの初期エントリの tableSelectedId は undefined にしておきロード完了で埋まる", async () => {
     await navigateTo("Projects", "A");
     table_selected_id.set("task-A1");
     await flushMicrotask();
 
     await navigateTo("Projects", "B");
-    table_selected_id.set("task-B1");
+    // ページ切替直後はまだ table_selected_id が古い A の値を持ったままだが、
+    // 新エントリは undefined で記録される（旧値の混入を防ぐため）。
+    // 続けてロード完了で B のルートが selectOnly される想定でセット：
+    table_selected_id.set("task-B-root");
     await flushMicrotask();
 
     const state = get(navigation_history);
     expect(state.entries.map((e) => [e.selectedId, e.tableSelectedId])).toEqual([
       ["A", "task-A1"],
-      ["B", "task-B1"],
+      ["B", "task-B-root"],
     ]);
   });
 
@@ -317,5 +325,96 @@ describe("navigation_history store", () => {
     await flushMicrotask();
 
     expect(get(navigation_history).entries).toHaveLength(1);
+  });
+
+  // TreeTable.handleSelectRow は selectOnly() を同期で呼んだ直後に
+  // pushSelection() を呼ぶ。microtask が走る前に呼ぶことで「ユーザの
+  // 能動的なクリック」というシグナルになる（subscriber 経路の in-place
+  // 更新より先に push する）。テストヘルパでこの呼び順を模す。
+  function userSelectTask(taskId: string) {
+    table_selected_id.set(taskId);
+    navigation_history.pushSelection();
+  }
+
+  test("pushSelection は同ページ内のタスク行切替を 1 エントリとして積む", async () => {
+    await navigateTo("Projects", "A");
+    expect(get(navigation_history).entries).toHaveLength(1);
+
+    userSelectTask("task-1");
+    await flushMicrotask();
+    userSelectTask("task-2");
+    await flushMicrotask();
+
+    const state = get(navigation_history);
+    expect(state.entries.map((e) => [e.selectedId, e.tableSelectedId])).toEqual([
+      ["A", undefined],
+      ["A", "task-1"],
+      ["A", "task-2"],
+    ]);
+  });
+
+  test("pushSelection で積んだタスク選択は back で逆める", async () => {
+    await navigateTo("Projects", "A");
+    userSelectTask("task-1");
+    await flushMicrotask();
+    userSelectTask("task-2");
+    await flushMicrotask();
+    userSelectTask("task-3");
+    await flushMicrotask();
+
+    expect(get(table_selected_id)).toBe("task-3");
+
+    navigation_history.back();
+    await flushMicrotask();
+    expect(get(table_selected_id)).toBe("task-2");
+    expect(get(selected_id)).toBe("A");
+
+    navigation_history.back();
+    await flushMicrotask();
+    expect(get(table_selected_id)).toBe("task-1");
+
+    navigation_history.forward();
+    await flushMicrotask();
+    expect(get(table_selected_id)).toBe("task-2");
+  });
+
+  test("pushSelection は直前エントリと完全一致する状態では no-op", async () => {
+    await navigateTo("Projects", "A");
+    userSelectTask("task-1");
+    await flushMicrotask();
+
+    // 同じタスクを連打しても重複しない
+    navigation_history.pushSelection();
+    navigation_history.pushSelection();
+    navigation_history.pushSelection();
+
+    expect(get(navigation_history).entries).toHaveLength(2);
+  });
+
+  test("ページ跨ぎ + タスクの 2 アクションは 2 回の back で巻き戻る", async () => {
+    // クリック 1: A 表示 → entries[(A, undefined)]
+    await navigateTo("Projects", "A");
+    // クリック 2: A の task-A1 を選択 → 追加 entry
+    userSelectTask("task-A1");
+    await flushMicrotask();
+    // クリック 3: B 表示 → 追加 entry。tableSelectedId は undefined（ロード未完了）
+    await navigateTo("Projects", "B");
+    // クリック 4: B の task-B1 を選択 → 追加 entry
+    userSelectTask("task-B1");
+    await flushMicrotask();
+
+    // 1 回戻る = task-B1 選択操作のみ取り消し → (B, undefined) へ
+    navigation_history.back();
+    await flushMicrotask();
+    expect(get(selected_id)).toBe("B");
+    expect(get(table_selected_id)).toBeUndefined();
+
+    // もう 1 回戻る = B へのページ遷移を取り消し → (A, task-A1) へ
+    // table_selected_id の復元は loader (loadProjectsData) が
+    // pendingTaskDetailSelection を読んで selectOnly(taskA1) する経路で
+    // 行われるため、ここではユニットテスト範囲外。selected_id だけ確認する。
+    navigation_history.back();
+    await flushMicrotask();
+    expect(get(selected_id)).toBe("A");
   });
 });
