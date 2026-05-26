@@ -247,6 +247,7 @@ import LocalComponent from "./LocalComponent.svelte";
 | ツリーペイン                                                       | `src/features/tasks/components/TreeTable.svelte` + `TreeTableHeader.svelte` + `TreeTableRow.svelte`                                              |
 | ガントペイン                                                       | `src/features/gantt/components/GanttPanel.svelte`                                                                                                |
 | 右ペイン（Task Detail + Memo の単一 Card / Card 内部で上下分割）   | `src/features/tasks/components/TaskDetail.svelte`                                                                                                |
+| タスク添付ファイル UI                                              | `src/features/tasks/components/TaskAttachments.svelte`                                                                                           |
 | メモパネル                                                         | `src/features/memos/components/MemoTab.svelte`                                                                                                   |
 | メモエディタ                                                       | `src/features/memos/components/Memo.svelte` → `MarkdownMemo.svelte` / `QuillMemo.svelte`                                                         |
 | セグメントコントロール                                             | `src/lib/primitives/SegmentedControl.svelte`（Memo フォーマット切替・Markdown Read/Edit 切替で共用）                                             |
