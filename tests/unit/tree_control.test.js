@@ -1,6 +1,7 @@
 ﻿import {
   addNode,
   areAllSiblings,
+  buildStickyTrail,
   bulkAddNodes,
   bulkDuplicate,
   bulkIndent,
@@ -674,5 +675,165 @@ describe("bulk operations", () => {
     expect(dup[0].id).not.toBe("task-2");
     expect(dup[0].children[0].id).not.toBe("task-2-1");
     expect(dup[0].data.name).toBe("Ship release");
+  });
+});
+
+describe("buildStickyTrail", () => {
+  // Builds a tree like:
+  //   Root
+  //   ├── A
+  //   │   ├── A1
+  //   │   ├── A2
+  //   │   └── A3
+  //   ├── B
+  //   │   ├── B1
+  //   │   └── B2
+  //   └── C
+  function makeStickyTree() {
+    const node = (id, children = []) => ({
+      id,
+      data: { name: id, status: "Open", "due date": undefined, memo: [] },
+      children,
+    });
+    return node("Root", [
+      node("A", [node("A1"), node("A2"), node("A3")]),
+      node("B", [node("B1"), node("B2")]),
+      node("C"),
+    ]);
+  }
+
+  const ROW_HEIGHT = 40;
+
+  function namesOf(trail) {
+    return trail.map((row) => row.node.data.name);
+  }
+
+  test("returns empty array when nothing is visible", () => {
+    expect(buildStickyTrail([], 0, ROW_HEIGHT)).toEqual([]);
+  });
+
+  test("returns empty array when row height is zero or negative", () => {
+    const rows = flattenVisibleTree(makeStickyTree());
+    expect(buildStickyTrail(rows, 100, 0)).toEqual([]);
+    expect(buildStickyTrail(rows, 100, -1)).toEqual([]);
+  });
+
+  test("hides the trail at the very top (only root in scope)", () => {
+    const rows = flattenVisibleTree(makeStickyTree());
+    // scrollTop=0: topmost-visible row is A (depth 1); only ancestor would
+    // be the root, so the breadcrumb is suppressed.
+    expect(buildStickyTrail(rows, 0, ROW_HEIGHT)).toEqual([]);
+  });
+
+  test("shows parent path when topmost-visible row is a descendant of covered row", () => {
+    const rows = flattenVisibleTree(makeStickyTree());
+    // Flattened order: Root, A, A1, A2, A3, B, B1, B2, C
+    // scrollTop=1*rowHeight covers A; topmost-visible = A1; ancestors of A1 = [Root, A]
+    expect(namesOf(buildStickyTrail(rows, 1 * ROW_HEIGHT, ROW_HEIGHT))).toEqual(["Root", "A"]);
+  });
+
+  test("does NOT show sibling row when topmost-visible is a sibling of covered row", () => {
+    const rows = flattenVisibleTree(makeStickyTree());
+    // scrollTop=2*rowHeight covers A1; topmost-visible = A2 (sibling of A1).
+    // Before fix this produced ["Root", "A", "A1"] — A1 is a sibling, not an ancestor.
+    const trail = buildStickyTrail(rows, 2 * ROW_HEIGHT, ROW_HEIGHT);
+    expect(namesOf(trail)).toEqual(["Root", "A"]);
+    expect(namesOf(trail)).not.toContain("A1");
+  });
+
+  test("switches scope when scrolling across subtrees", () => {
+    const rows = flattenVisibleTree(makeStickyTree());
+    // scrollTop=4*rowHeight covers A3 (last child of A); topmost-visible = B.
+    // B has no meaningful parents (only root), so the trail is hidden.
+    expect(buildStickyTrail(rows, 4 * ROW_HEIGHT, ROW_HEIGHT)).toEqual([]);
+
+    // scrollTop=5*rowHeight covers B; topmost-visible = B1 → ["Root", "B"].
+    expect(namesOf(buildStickyTrail(rows, 5 * ROW_HEIGHT, ROW_HEIGHT))).toEqual(["Root", "B"]);
+  });
+
+  test("handles fractional scrollTop the same as the floor row boundary", () => {
+    const rows = flattenVisibleTree(makeStickyTree());
+    // scrollTop slightly past 2 rows still covers A1 → trail computed from A2.
+    const trail = buildStickyTrail(rows, 2 * ROW_HEIGHT + 17, ROW_HEIGHT);
+    expect(namesOf(trail)).toEqual(["Root", "A"]);
+  });
+
+  test("clamps to the last row when scrollTop exceeds content", () => {
+    const rows = flattenVisibleTree(makeStickyTree());
+    // Far past the end: topmost-visible is clamped to the last row (C, depth 1).
+    // C's only ancestor is the root, so the trail is suppressed.
+    expect(buildStickyTrail(rows, 99 * ROW_HEIGHT, ROW_HEIGHT)).toEqual([]);
+  });
+
+  test("respects collapsed nodes: skips hidden descendants entirely", () => {
+    const rows = flattenVisibleTree(makeStickyTree(), new Set(["A"]));
+    // With A collapsed, A's children (A1, A2, A3) are not in the rows.
+    // Flattened: Root, A, B, B1, B2, C
+    // scrollTop=2*rowHeight covers B; topmost-visible = B1; ancestors = [Root, B].
+    expect(namesOf(buildStickyTrail(rows, 2 * ROW_HEIGHT, ROW_HEIGHT))).toEqual(["Root", "B"]);
+  });
+
+  test("respects collapsed nodes: covered=collapsed node has no descendants to leak", () => {
+    const rows = flattenVisibleTree(makeStickyTree(), new Set(["A"]));
+    // Flattened: Root, A, B, B1, B2, C
+    // scrollTop=1*rowHeight covers A; topmost-visible = B (depth 1 → trail hidden).
+    expect(buildStickyTrail(rows, 1 * ROW_HEIGHT, ROW_HEIGHT)).toEqual([]);
+  });
+
+  test("respects filtered trees: traversal only sees rows present in the filtered view", () => {
+    // Filter the tree by name "A1". filterTree keeps A (because A1 is a
+    // matching descendant) but drops A2, A3 and all of B's / C's subtrees.
+    // Resulting tree: Root → A → A1
+    const filtered = filterTree(makeStickyTree(), { name: ["A1"] });
+    const rows = flattenVisibleTree(filtered);
+    // Flattened: Root, A, A1
+    // scrollTop=1*rowHeight covers A; topmost-visible = A1; ancestors = [Root, A].
+    expect(namesOf(buildStickyTrail(rows, 1 * ROW_HEIGHT, ROW_HEIGHT))).toEqual(["Root", "A"]);
+  });
+
+  test("trail length grows with subtree depth", () => {
+    const deepTree = {
+      id: "Root",
+      data: { name: "Root", status: "Open", "due date": undefined, memo: [] },
+      children: [
+        {
+          id: "L1",
+          data: { name: "L1", status: "Open", "due date": undefined, memo: [] },
+          children: [
+            {
+              id: "L2",
+              data: { name: "L2", status: "Open", "due date": undefined, memo: [] },
+              children: [
+                {
+                  id: "L3",
+                  data: { name: "L3", status: "Open", "due date": undefined, memo: [] },
+                  children: [
+                    {
+                      id: "leaf",
+                      data: {
+                        name: "leaf",
+                        status: "Open",
+                        "due date": undefined,
+                        memo: [],
+                      },
+                      children: [],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const rows = flattenVisibleTree(deepTree);
+    // Flattened: Root, L1, L2, L3, leaf
+    // scrollTop=3*rowHeight covers L3; topmost-visible = leaf; ancestors = [Root, L1, L2, L3].
+    expect(namesOf(buildStickyTrail(rows, 3 * ROW_HEIGHT, ROW_HEIGHT))).toEqual([
+      "Root",
+      "L1",
+      "L2",
+      "L3",
+    ]);
   });
 });

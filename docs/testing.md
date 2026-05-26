@@ -41,6 +41,9 @@ Electron アプリ全体を起動して確認する。
 | `src/features/tasks/utils/tree_control.ts` | `move and hierarchy helpers are no-ops for invalid or blocked operations`                         | 無効な ID や禁止された操作でもツリーを壊さない                                  |
 | `src/features/tasks/utils/tree_control.ts` | `indentNode and outdentNode change hierarchy level`                                               | インデントとアウトデントで親子関係が変わる                                      |
 | `src/features/tasks/utils/tree_control.ts` | `getNode returns undefined when the target does not exist`                                        | 存在しない ID に対して `undefined` を返す                                       |
+| `src/features/tasks/utils/tree_control.ts` | `buildStickyTrail does NOT show sibling row when topmost-visible is a sibling of covered row`     | スティッキー帯下に見える行の祖先のみを返し、兄弟ノードを誤って混入させない      |
+| `src/features/tasks/utils/tree_control.ts` | `buildStickyTrail switches scope when scrolling across subtrees`                                  | サブツリーをまたいでスクロールするとパンくずがその場の祖先に切り替わる          |
+| `src/features/tasks/utils/tree_control.ts` | `buildStickyTrail hides the trail at the very top (only root in scope)`                           | プロジェクト直下しか見えていない時はパンくずを表示しない                        |
 | `src/features/search/stores/search.ts`     | `updates visible tree data when tree_data changes without filter changes`                         | ワークスペース読み込みなどで `tree_data` だけが変わっても表示用ツリーを同期する |
 | `electron/workspace.js`             | `atomicWriteFile replaces files without leaving temp files`                                       | 一時ファイル経由 → `rename` の原子的書込で `.tmp` が残らない                    |
 | `electron/workspace.js`             | `writeFileIfChanged skips unchanged content`                                                      | 既存ファイルと内容一致の場合に書込をスキップし mtime を維持する                 |
@@ -154,6 +157,7 @@ Electron アプリ全体を起動して確認する。
 | `src/features/tasks/utils/tree_control.ts` | 並び替え                            | 実装済み | [tests/unit/tree_control.test.js](../tests/unit/tree_control.test.js) |
 | `src/features/tasks/utils/tree_control.ts` | 階層移動                            | 実装済み | [tests/unit/tree_control.test.js](../tests/unit/tree_control.test.js) |
 | `src/features/tasks/utils/tree_control.ts` | 不正入力時の安全性                  | 実装済み | [tests/unit/tree_control.test.js](../tests/unit/tree_control.test.js) |
+| `src/features/tasks/utils/tree_control.ts` | スティッキー パンくず計算           | 実装済み | [tests/unit/tree_control.test.js](../tests/unit/tree_control.test.js) |
 | `src/features/search/stores/search.ts`     | 表示用ツリー同期                    | 実装済み | [tests/unit/search.test.js](../tests/unit/search.test.js)             |
 | `electron/workspace.js`             | 原子的・増分書込・リトライ・`*Async` 経路  | 実装済み | [tests/unit/workspace.test.js](../tests/unit/workspace.test.js)       |
 | `electron/workspace.js`             | 添付ファイル保存 / 削除 / 安全なパス解決    | 実装済み | [tests/unit/workspace.test.js](../tests/unit/workspace.test.js)       |

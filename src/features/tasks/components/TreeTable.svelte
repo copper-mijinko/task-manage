@@ -20,6 +20,7 @@
     buildInheritedDueDateMap,
     buildLineNumberMap,
     buildNodePathMap,
+    buildStickyTrail,
     updateNodeDataById,
     isChild,
     reorderTree,
@@ -124,44 +125,7 @@
     return parseFloat(window.getComputedStyle(document.documentElement).fontSize) * 2.5;
   };
 
-  const buildStickyTrail = (visibleRows, currentScrollTop) => {
-    if (!visibleRows?.length) {
-      return [];
-    }
-
-    const rowHeightPx = getRowHeightPx();
-    if (!rowHeightPx) {
-      return [];
-    }
-
-    // スティッキー表示自体が 1 行分 (2.5rem) を覆い隠す。スクロール量から
-    // 計算される「画面最上段の行」はちょうどスティッキーに覆われている行で、
-    // ユーザが実際に見える最初の本文行 (content-visible) はその 1 つ下。
-    // スティッキー上のパスを「画面で見える行の親パス」と一致させるには、
-    // 覆われている行 (= floor(scrollTop / rowHeight)) の祖先 (自身含む) を
-    // パンくずに使えばよい。
-    const coveredIndex = Math.min(
-      visibleRows.length - 1,
-      Math.max(0, Math.floor(currentScrollTop / rowHeightPx))
-    );
-    const coveredRow = visibleRows[coveredIndex];
-    if (!coveredRow || coveredRow.depth === 0) {
-      return [];
-    }
-
-    const rowById = new Map(visibleRows.map((row) => [row.id, row]));
-    const trail = [];
-    let currentRow = coveredRow;
-
-    while (currentRow) {
-      trail.unshift(currentRow);
-      currentRow = currentRow.parentId ? rowById.get(currentRow.parentId) : undefined;
-    }
-
-    return trail;
-  };
-
-  $: stickyTrail = buildStickyTrail(rows, scrollTop);
+  $: stickyTrail = buildStickyTrail(rows, scrollTop, getRowHeightPx());
 
   let showDeleteConfirm = false;
   let deleteTargetId;

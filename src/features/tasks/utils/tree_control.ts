@@ -422,6 +422,45 @@ export function buildLineNumberMap(tree: TreeData | null | undefined): Map<strin
   return result;
 }
 
+// ツリーテーブルのスクロール時に、ヘッダー直下のスティッキーバーへ表示する
+// パンくず (祖先列) を計算する。
+//
+// 仕様:
+//  - スティッキーバーは本文行 1 行分 (= rowHeightPx) を覆い隠す。
+//    floor(scrollTop / rowHeightPx) は「覆われている行」のインデックス。
+//    ユーザが実際にバー下に最初に見る本文行はその +1。
+//  - パンくずに含めるのは「最上段可視行 の祖先のみ」(自分自身は除く)。
+//    可視行そのものを混ぜると、子を持たない兄弟ノードを横切るときに
+//    祖先ではない兄弟が一瞬パンくずに混入してしまう。
+//  - depth が 1 以下のときの祖先はルートのみ。ルート名は別途見えているので
+//    冗長なパンくずを避けるため空配列を返す。
+export function buildStickyTrail(
+  visibleRows: VisibleTreeRow[],
+  scrollTop: number,
+  rowHeightPx: number
+): VisibleTreeRow[] {
+  if (!visibleRows?.length) return [];
+  if (!rowHeightPx || rowHeightPx <= 0) return [];
+
+  const topVisibleIndex = Math.min(
+    visibleRows.length - 1,
+    Math.max(0, Math.floor(scrollTop / rowHeightPx) + 1)
+  );
+  const topVisibleRow = visibleRows[topVisibleIndex];
+  if (!topVisibleRow || topVisibleRow.depth <= 1) return [];
+
+  const rowById = new Map(visibleRows.map((row) => [row.id, row]));
+  const trail: VisibleTreeRow[] = [];
+  let cursor: VisibleTreeRow | undefined = topVisibleRow.parentId
+    ? rowById.get(topVisibleRow.parentId)
+    : undefined;
+  while (cursor) {
+    trail.unshift(cursor);
+    cursor = cursor.parentId ? rowById.get(cursor.parentId) : undefined;
+  }
+  return trail;
+}
+
 export function buildInheritedDueDateMap(rows: VisibleTreeRow[]): Map<string, string> {
   const rowMap = new Map(rows.map((r) => [r.id, r]));
   const result = new Map<string, string>();
