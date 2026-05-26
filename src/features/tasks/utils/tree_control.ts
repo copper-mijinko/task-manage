@@ -373,6 +373,24 @@ export function buildNodePathMap(rows: VisibleTreeRow[]): Map<string, string> {
   return result;
 }
 
+// ツリー全体を DFS して各ノードに 1 始まりの通し番号を割り当てる。
+// flattenVisibleTree と違い折り畳み状態を無視するので、ノードを開閉しても番号は動かない。
+export function buildLineNumberMap(tree: TreeData | null | undefined): Map<string, number> {
+  const result = new Map<string, number>();
+  if (!tree) return result;
+
+  let counter = 0;
+  const visit = (node: TreeData) => {
+    counter += 1;
+    result.set(node.id, counter);
+    for (const child of node.children ?? []) {
+      visit(child);
+    }
+  };
+  visit(tree);
+  return result;
+}
+
 export function buildInheritedDueDateMap(rows: VisibleTreeRow[]): Map<string, string> {
   const rowMap = new Map(rows.map((r) => [r.id, r]));
   const result = new Map<string, string>();

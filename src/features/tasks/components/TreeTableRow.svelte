@@ -29,6 +29,7 @@
   export let canOpenTaskFolder = false;
   export let inheritedDueDate = "";
   export let nodePath = "";
+  export let lineNumber = 0;
   // Capabilities for bulk operations (used when this row is part of multi-selection).
   export let bulkCanMove = false;
   export let bulkCanTreeOp = false;
@@ -229,6 +230,7 @@
   <div
     class="CheckboxCell"
     class:Visible={selected || anyMultiSelected}
+    class:HasCheckbox={depth > 0}
     role="gridcell"
     tabindex="-1"
     draggable="false"
@@ -236,6 +238,9 @@
     on:keydown|stopPropagation
     on:dragstart|preventDefault|stopPropagation
   >
+    {#if lineNumber > 0}
+      <span class="RowNumber" aria-hidden="true" data-page-search-skip>{lineNumber}</span>
+    {/if}
     {#if depth > 0}
       <input
         type="checkbox"
@@ -520,20 +525,34 @@
     align-items: center;
     justify-content: center;
     height: 100%;
-    visibility: hidden;
     background-color: var(--backgroundColor);
     border-right: 1px solid var(--theme-color-Main-dark);
   }
-  .TableRow:hover .CheckboxCell,
-  .CheckboxCell.Visible {
-    visibility: visible;
+  .RowNumber {
+    font-size: 0.7rem;
+    line-height: 1;
+    color: var(--theme-color-Sub-dark);
+    opacity: 0.55;
+    user-select: none;
+    pointer-events: none;
+    font-variant-numeric: tabular-nums;
   }
   .RowCheckbox {
+    display: none;
     width: 0.95rem;
     height: 0.95rem;
     margin: 0;
     cursor: pointer;
     accent-color: var(--theme-color-Primary-dark);
+  }
+  /* チェックボックスを持つ行で hover / 選択中のとき、番号を隠してチェックボックスを出す */
+  .TableRow:hover .CheckboxCell.HasCheckbox .RowNumber,
+  .CheckboxCell.HasCheckbox.Visible .RowNumber {
+    display: none;
+  }
+  .TableRow:hover .CheckboxCell.HasCheckbox .RowCheckbox,
+  .CheckboxCell.HasCheckbox.Visible .RowCheckbox {
+    display: inline-block;
   }
   .TableData {
     display: flex;
