@@ -1,14 +1,21 @@
 <script lang="ts">
   import { filter } from "@features/search/stores/search";
   import { active_tag } from "@features/memos/stores/tags";
+  import { tokenizeFullTextQuery } from "@features/tasks/utils/tree_control";
 
-  $: fullText = (
+  $: rawFullText = (
     ($filter as Record<string, string[] | null | undefined>)?.full_text?.[0] ?? ""
   ).trim();
+  $: fullTextTokens = rawFullText ? tokenizeFullTextQuery(rawFullText) : [];
   $: searchMemoOn =
     ((($filter as Record<string, string[] | null | undefined>)?.search_memo ?? []).length ?? 0) > 0;
   $: activeTag = $active_tag ?? "";
-  $: hasFilters = Boolean(fullText) || Boolean(activeTag);
+  $: hasFilters = fullTextTokens.length > 0 || Boolean(activeTag);
+  $: showClearAll = fullTextTokens.length + (activeTag ? 1 : 0) > 1;
+
+  function serializeTokens(tokens: string[]): string {
+    return tokens.map((t) => (/\s/.test(t) ? `"${t}"` : t)).join(" ");
+  }
 
   function clearFullText() {
     filter.update((f) => {
@@ -18,6 +25,22 @@
     });
   }
 
+  function removeToken(index: number) {
+    const remaining = fullTextTokens.filter((_, i) => i !== index);
+    if (remaining.length === 0) {
+      clearFullText();
+      return;
+    }
+    const serialized = serializeTokens(remaining);
+    filter.update(
+      (f) =>
+        ({
+          ...(f as Record<string, unknown>),
+          full_text: [serialized],
+        }) as typeof f
+    );
+  }
+
   function clearTag() {
     // active_tag drives filter.tags via the subscriber in src/stores/index.ts
     active_tag.set(null);
@@ -25,7 +48,7 @@
 
   function clearAll() {
     if (activeTag) active_tag.set(null);
-    if (fullText) clearFullText();
+    if (fullTextTokens.length > 0) clearFullText();
   }
 </script>
 
@@ -41,16 +64,16 @@
       <span class="LabelText">絞り込み中</span>
     </span>
 
-    {#if fullText}
+    {#each fullTextTokens as token, i (i + ":" + token)}
       <span class="Chip" title={searchMemoOn ? "全文検索（メモ本文を含む）" : "全文検索"}>
         <span class="ChipKind">{searchMemoOn ? "検索(メモ含む)" : "検索"}</span>
-        <span class="ChipValue">{fullText}</span>
+        <span class="ChipValue">{token}</span>
         <button
           type="button"
           class="ChipClear"
-          aria-label="全文フィルタをクリア"
-          title="全文フィルタをクリア"
-          on:click={clearFullText}
+          aria-label={`全文フィルタ「${token}」を削除`}
+          title={`「${token}」を削除`}
+          on:click={() => removeToken(i)}
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path
@@ -63,7 +86,7 @@
           </svg>
         </button>
       </span>
-    {/if}
+    {/each}
 
     {#if activeTag}
       <span class="Chip" title="タグフィルタ">
@@ -89,7 +112,7 @@
       </span>
     {/if}
 
-    {#if Boolean(fullText) && Boolean(activeTag)}
+    {#if showClearAll}
       <button type="button" class="ClearAll" on:click={clearAll}>すべてクリア</button>
     {/if}
   </div>

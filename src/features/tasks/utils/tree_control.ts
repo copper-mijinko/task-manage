@@ -62,6 +62,17 @@ function valueForFullText(value: unknown): string {
   return JSON.stringify(value);
 }
 
+export function tokenizeFullTextQuery(input: string): string[] {
+  const tokens: string[] = [];
+  const regex = /"([^"]*)"|(\S+)/g;
+  let m: RegExpExecArray | null;
+  while ((m = regex.exec(input)) !== null) {
+    const token = m[1] !== undefined ? m[1] : m[2];
+    if (token) tokens.push(token);
+  }
+  return tokens;
+}
+
 function fullTextMatches(data: TreeNodeData, keywords: string[], includeMemo: boolean): boolean {
   const fieldText = Object.entries(data)
     .filter(([key]) => key !== "memo")
@@ -77,7 +88,9 @@ function fullTextMatches(data: TreeNodeData, keywords: string[], includeMemo: bo
         .join(" ")
     : "";
   const text = `${fieldText} ${memoText}`.toLowerCase();
-  return keywords.some((keyword) => text.includes(keyword.toLowerCase()));
+  const tokens = keywords.flatMap((keyword) => tokenizeFullTextQuery(keyword));
+  if (tokens.length === 0) return true;
+  return tokens.every((token) => text.includes(token.toLowerCase()));
 }
 
 export function filterTree(
