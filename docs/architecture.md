@@ -62,6 +62,8 @@ src/
 │   │   └── stores/              # inbox
 │   ├── projects/
 │   │   └── stores/              # project
+│   ├── settings/
+│   │   └── components/          # SettingsModal（カテゴリ一覧＋詳細ペインの2カラム構成）
 │   ├── search/
 │   │   ├── components/          # PageSearchBox / NameFilterPanel / DateRangePanel / NumberRangePanel / StatusFilterPanel
 │   │   ├── stores/              # search
@@ -77,6 +79,7 @@ src/
 ├── stores/                      # 横断ストア（複数 feature が読み書き）
 │   ├── ui.ts                    # 選択ID・折りたたみ・パネル開閉
 │   ├── theme.ts                 # テーマ
+│   ├── preferences.ts           # ユーザ設定（date_time_format 等）。meta.json に永続化
 │   ├── panel_coordinator.ts     # ポップオーバー調停
 │   └── index.ts                 # バレル（feature stores も再エクスポート）
 │
@@ -124,6 +127,7 @@ src/
 | `inbox`      | Workspace 横断のクイックキャプチャ専用バケット      |
 | `projects`   | 標準（JSON ベース）プロジェクト管理                 |
 | `search`     | フィルター・ページ内検索                            |
+| `settings`   | アプリ全体の設定モーダル                            |
 | `navigation` | サイドナビ、トップヘッダー、Info                    |
 
 ### 3.3 `pages/`（画面層）
@@ -205,6 +209,7 @@ import LocalComponent from "./LocalComponent.svelte";
 | `pageSearchMatchCount` / `pageSearchCurrentIndex`                                        | `@features/search/utils/page_search_highlighter` | 画面内検索の件数と現在位置（readable store）            |
 | `selected_id` / `closed_node_ids` / `sidebarCollapsed` / `copied_task` / `saveStatus` 等 | `@stores/ui`                                     | UI状態（`saveStatus` はヘッダの保存状態インジケータ用） |
 | `theme`                                                                                  | `@stores/theme`                                  | テーマ                                                  |
+| `date_time_format`                                                                       | `@stores/preferences`                            | 入力ショートカット（`Ctrl+;` / `Ctrl+:`）の挿入フォーマット |
 | `panelCoordinator`                                                                       | `@stores/panel_coordinator`                      | ポップオーバー調停                                      |
 
 ### 5.2 init_store()
@@ -262,6 +267,8 @@ import LocalComponent from "./LocalComponent.svelte";
 | Inbox UI                                                           | `src/features/inbox/components/InboxPanel.svelte` + `InboxDetailPanel.svelte` + `QuickCapture.svelte` + `ProjectTargetPicker.svelte` + `TargetTreeNode.svelte`         |
 | Inbox 入り口                                                       | ヘッダの 📥 ボタン（`Header.svelte`）と `Ctrl+Shift+I`（`App.svelte` のグローバル keydown）。サイドバーには Inbox 行を置かない                  |
 | Inbox 永続化（main プロセス）                                      | `electron/inbox.js`（`ensureInbox` / `readInbox` / `addInboxItem` / `sendInboxItemsToProject`） + `electron/index.js` の `ws:*-inbox-*` ハンドラ |
+| 設定モーダル                                                       | `src/features/settings/components/SettingsModal.svelte`、トリガは `Header.svelte` の ⚙ ボタン                                                    |
+| 入力ショートカット（日付・時刻）                                   | `src/lib/utils/datetime_shortcuts.ts`（`registerDateTimeShortcuts`）、`App.svelte` の `onMount` で登録                                            |
 
 > `src/lib/primitives/Drawer.svelte` は現在は未使用（旧 Drawer 形式の左ナビ用）。互換のためファイルは残置するが、本アプリの画面構成では使用しない。
 
@@ -450,7 +457,23 @@ renderer 側は `meta.json` の `workspaceConflictPolicy` に応じて `wsWriteP
 
 `app.on("before-quit")` は programmatic quit（Cmd+Q 等）からのフォールバックとして残し、close intercept と同じ flush フローを再利用する。`mainWindow` が既に destroy 済みの場合は同期 flush（`dbWriter` / `dbMetaWriter`）のみ実行する。
 
-### 8.10 メモフォーマットの責務分離
+### 8.10 入力ショートカット（日付・時刻）の挿入経路
+
+`Ctrl+;` / `Ctrl+:` で現在の日付・時刻を挿入するハンドラは `src/lib/utils/datetime_shortcuts.ts` に置く。`App.svelte` の `onMount` で `window.keydown` に **capture phase** で登録する。
+
+capture phase を選ぶ理由は、CodeMirror / Quill が自前のキーマップを `.cm-editor` / `.ql-editor` 上に持つため、bubble phase で受けると先に `;` / `:` がエディタへリテラル入力されてしまうため。`event.preventDefault()` + `event.stopPropagation()` でエディタへの伝播を遮断する。
+
+挿入先のディスパッチ:
+
+- `<input type="date|time|datetime-local|month|week">` → 仕様通りの ISO 値を `element.value` に直接代入し、`input` / `change` イベントを発火
+- `<input>` / `<textarea>` → `selectionStart/End` を読んでキャレット位置に挿入
+- `.cm-editor` 配下 → `EditorView.findFromDOM` で EditorView を取得し `dispatch({ changes, selection })`
+- `.ql-editor` 配下 → 親方向に `Quill.find` を辿って Quill インスタンスを取得し `insertText(index, text, "user")`
+- その他 `contenteditable` → `document.execCommand("insertText")`（Electron / Chromium で引き続き有効）
+
+フォーマットは `@stores/preferences` の `date_time_format` から取得する。
+
+### 8.11 メモフォーマットの責務分離
 
 メモ単位のフォーマット（Markdown / Quill）は次の責務分担で扱う。
 

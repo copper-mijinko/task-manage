@@ -118,6 +118,7 @@
 {
   "theme": "light",
   "workspaceConflictPolicy": "ask",
+  "preferences.date_time_format": "slash",
   "closed_nodes_8e392450-20f7-479a-a7f2-38bdafb913df": null,
   "closed_nodes_89f8d9b0-c94e-4f9f-80e6-1ef8d9448088": []
 }
@@ -129,6 +130,8 @@
   - アプリ全体のテーマ
 - `workspaceConflictPolicy`
   - ワークスペース保存時に外部書込との競合が検知されたときの挙動。`"ask"`（既定）はバナーで「維持 / 再読込」を問い合わせる。`"prefer-memory"` は問い合わせを行わず、メモリ上の `tree_data` を優先してそのまま上書き保存する（`forceLocal` 経路）
+- `preferences.date_time_format`
+  - 入力ショートカット（`Ctrl+;` / `Ctrl+:`）でテキスト入力に挿入される書式。`"slash"`（既定、`2026/05/26`）/ `"iso"`（`2026-05-26`）/ `"japanese"`（`2026年5月26日`）のいずれか
 - `closed_nodes_<プロジェクトID>`
   - そのプロジェクトで閉じているノードの一覧
 
