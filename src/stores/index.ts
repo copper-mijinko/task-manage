@@ -6,6 +6,7 @@ export * from "./theme";
 export * from "./ui";
 export * from "./panel_coordinator";
 export * from "./preferences";
+export * from "./navigation_history";
 
 // Feature stores も互換性のため再エクスポート
 // 新規コードは @features/* から直接 import を推奨
@@ -33,6 +34,7 @@ import { active_tag } from "@features/memos/stores/tags";
 import { sort_state } from "@features/tasks/stores/sort";
 import { inbox_store } from "@features/inbox/stores/inbox";
 import { date_time_format } from "./preferences";
+import { navigation_history } from "./navigation_history";
 
 let initStoreReady: Promise<void> | null = null;
 
@@ -51,6 +53,15 @@ export function init_store(): Promise<void> {
   workspace_conflict_policy.init();
   inbox_store.init();
   date_time_format.init();
+
+  // 履歴記録は selected_type / selected_id への subscribe を張る。
+  // タスク詳細サブウィンドウ (`#task-detail-window`) では戻る/進むの概念が
+  // 不要なため、メインウィンドウのときだけ初期化する。
+  const isTaskDetailWindow =
+    typeof window !== "undefined" && window.location.hash === "#task-detail-window";
+  if (!isTaskDetailWindow) {
+    navigation_history.init();
+  }
 
   active_tag.subscribe((tag) => {
     filter.update((f) => {

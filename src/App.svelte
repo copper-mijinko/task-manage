@@ -15,6 +15,7 @@
     projectLoading,
     workspace_store,
     workspace_tasks_cache,
+    navigation_history,
   } from "@stores";
   import { onMount, onDestroy } from "svelte";
   import * as platform from "@lib/ipc/platform";
@@ -189,6 +190,37 @@
       redoHistory();
       return;
     }
+
+    // Browser-style "back / forward" through the visited-page history.
+    if (event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        event.stopPropagation();
+        navigation_history.back();
+        return;
+      }
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        event.stopPropagation();
+        navigation_history.forward();
+        return;
+      }
+    }
+  }
+
+  // Mouse XButtons (back / forward thumb buttons on most mice).
+  // Browsers fire `mouseup` with `button === 3` (back) / `4` (forward).
+  // Some browsers also dispatch a native browser-back via `auxclick`, but
+  // since this is an Electron renderer with no navigation, we own the gesture.
+  function handleMouseUp(event) {
+    if (isTaskDetailWindow) return;
+    if (event.button === 3) {
+      event.preventDefault();
+      navigation_history.back();
+    } else if (event.button === 4) {
+      event.preventDefault();
+      navigation_history.forward();
+    }
   }
 
   async function resolveWorkspaceConflict(action) {
@@ -231,6 +263,9 @@
     });
 
     window.addEventListener("keydown", handleKeyDown, true);
+    if (!isTaskDetailWindow) {
+      window.addEventListener("mouseup", handleMouseUp);
+    }
 
     platform.onSaveError((message) => {
       saveErrorMessage = message;
@@ -282,6 +317,7 @@
 
   onDestroy(() => {
     window.removeEventListener("keydown", handleKeyDown, true);
+    window.removeEventListener("mouseup", handleMouseUp);
     stopAutoRescan();
     unregisterDateTimeShortcuts?.();
   });
