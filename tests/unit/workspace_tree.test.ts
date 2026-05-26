@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { projectDataToWorkspaceTasks } from "../../src/features/workspace/utils/workspace_tree";
+import {
+  projectDataToWorkspaceTasks,
+  workspaceToProjectData,
+} from "../../src/features/workspace/utils/workspace_tree";
 
 describe("workspace tree conversion", () => {
   it("preserves root order while assigning child sibling order", () => {
@@ -106,5 +109,46 @@ describe("workspace tree conversion", () => {
 
     expect(tasks[0].memos[0].content).toBe("Existing body");
     expect(tasks[0].memos[0].bodyLoaded).toBe(false);
+  });
+
+  it("round-trips task attachments through workspace tree conversion", () => {
+    const attachment = {
+      id: "./attachments/spec.pdf",
+      name: "spec.pdf",
+      relativePath: "./attachments/spec.pdf",
+      size: 1024,
+      modifiedAt: "2026-05-25T00:00:00.000Z",
+    };
+
+    const projectData = workspaceToProjectData(
+      {
+        "root-id": {
+          id: "root-id",
+          name: "Project",
+          status: "Open",
+          parents: [],
+          memos: [],
+          attachments: [attachment],
+          createdAt: "2026-05-20",
+        },
+      },
+      "root-id"
+    );
+
+    expect(projectData.data.data.attachments).toEqual([attachment]);
+
+    const tasks = projectDataToWorkspaceTasks(projectData, {
+      "root-id": {
+        id: "root-id",
+        name: "Project",
+        status: "Open",
+        parents: [],
+        memos: [],
+        attachments: [attachment],
+        createdAt: "2026-05-20",
+      },
+    });
+
+    expect(tasks[0].attachments).toEqual([attachment]);
   });
 });

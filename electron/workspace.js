@@ -38,6 +38,27 @@ function uniqueName(parentDir, baseName) {
   return `${baseName}-${i}`;
 }
 
+function safeFileName(fileName, fallback = "attachment") {
+  const baseName = path
+    .basename(String(fileName || fallback))
+    .split("\0")
+    .join("")
+    .replace(/[/\\:*?"<>|]/g, "")
+    .trim();
+  return baseName || fallback;
+}
+
+function uniqueFileName(parentDir, fileName) {
+  const safeName = safeFileName(fileName);
+  if (!fs.existsSync(path.join(parentDir, safeName))) return safeName;
+
+  const extension = path.extname(safeName);
+  const stem = path.basename(safeName, extension) || "attachment";
+  let i = 2;
+  while (fs.existsSync(path.join(parentDir, `${stem}-${i}${extension}`))) i++;
+  return `${stem}-${i}${extension}`;
+}
+
 function extensionFromMimeType(mimeType) {
   switch (String(mimeType || "").toLowerCase()) {
     case "image/png":
@@ -686,6 +707,30 @@ function readMemos(taskDir, reservedFiles = ["_index.md"], options = {}) {
     .map(({ fileIndex: _fileIndex, ...memo }) => memo);
 }
 
+function attachmentEntryFromFile(attachmentsDir, fileName) {
+  const filePath = path.join(attachmentsDir, fileName);
+  const stats = fs.statSync(filePath);
+  return {
+    id: `./attachments/${fileName}`,
+    name: fileName,
+    relativePath: `./attachments/${fileName}`,
+    size: stats.size,
+    modifiedAt: stats.mtime.toISOString(),
+  };
+}
+
+function readAttachments(taskDir) {
+  const attachmentsDir = path.join(taskDir, "attachments");
+  if (!fs.existsSync(attachmentsDir)) return [];
+
+  return fs
+    .readdirSync(attachmentsDir, { withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => entry.name)
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }))
+    .map((fileName) => attachmentEntryFromFile(attachmentsDir, fileName));
+}
+
 /** Read the root task from _project.md inside projectDir. */
 function parseOrderValue(value) {
   return value != null && Number.isFinite(Number(value)) ? Number(value) : undefined;
@@ -702,6 +747,7 @@ function readRootTask(projectDir, options = {}) {
     dueDate: data.due || undefined,
     parents: [],
     memos: readMemos(projectDir, ["_project.md"], options),
+    attachments: readAttachments(projectDir),
     createdAt: data.created || "",
     order: parseOrderValue(data.order),
   };
@@ -720,6 +766,7 @@ function readTaskDir(taskDir, options = {}) {
     dueDate: data.due || undefined,
     parents,
     memos: readMemos(taskDir, ["_index.md"], options),
+    attachments: readAttachments(taskDir),
     createdAt: data.created || "",
     order: parseOrderValue(data.order),
   };
@@ -904,13 +951,16 @@ async function writeTaskAsync(projectDir, task, taskDirs, onWritten) {
   await writeMemoFilesAsync(taskDir, "_index.md", task.memos, onWritten);
 }
 
-function saveMemoImage(projectDir, taskDirs, taskId, bytes, mimeType) {
+function getTaskTargetDir(projectDir, taskDirs, taskId) {
   const dirName = taskDirs.get(taskId);
   if (!dirName) {
     throw new Error("Task directory was not found");
   }
+  return dirName === "_project" ? projectDir : path.join(projectDir, dirName);
+}
 
-  const targetDir = dirName === "_project" ? projectDir : path.join(projectDir, dirName);
+function saveMemoImage(projectDir, taskDirs, taskId, bytes, mimeType) {
+  const targetDir = getTaskTargetDir(projectDir, taskDirs, taskId);
   const assetsDir = path.join(targetDir, "assets");
   fs.mkdirSync(assetsDir, { recursive: true });
 
@@ -929,12 +979,7 @@ function saveMemoImage(projectDir, taskDirs, taskId, bytes, mimeType) {
 }
 
 async function saveMemoImageAsync(projectDir, taskDirs, taskId, bytes, mimeType, onWritten) {
-  const dirName = taskDirs.get(taskId);
-  if (!dirName) {
-    throw new Error("Task directory was not found");
-  }
-
-  const targetDir = dirName === "_project" ? projectDir : path.join(projectDir, dirName);
+  const targetDir = getTaskTargetDir(projectDir, taskDirs, taskId);
   const assetsDir = path.join(targetDir, "assets");
   await fs.promises.mkdir(assetsDir, { recursive: true });
 
@@ -950,6 +995,65 @@ async function saveMemoImageAsync(projectDir, taskDirs, taskId, bytes, mimeType,
     relativePath: `./assets/${fileName}`,
     assetPath,
   };
+}
+
+function resolveTaskAttachmentFilePath(projectDir, taskDirs, taskId, attachmentPath) {
+  if (!attachmentPath) return null;
+
+  const taskDir = getTaskTargetDir(projectDir, taskDirs, taskId);
+  const normalizedAttachmentPath = String(attachmentPath).replace(/\\/g, "/").trim();
+  const relativeAttachmentPath = normalizedAttachmentPath.replace(/^\.\//, "");
+
+  if (
+    !relativeAttachmentPath.startsWith("attachments/") ||
+    path.isAbsolute(relativeAttachmentPath) ||
+    relativeAttachmentPath.includes("\0")
+  ) {
+    return null;
+  }
+
+  const resolvedPath = path.resolve(taskDir, relativeAttachmentPath);
+  const relativePath = path.relative(taskDir, resolvedPath);
+  const attachmentsDir = path.join(taskDir, "attachments");
+  const relativeToAttachments = path.relative(attachmentsDir, resolvedPath);
+
+  if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+    return null;
+  }
+
+  if (relativeToAttachments.startsWith("..") || path.isAbsolute(relativeToAttachments)) {
+    return null;
+  }
+
+  if (!fs.existsSync(resolvedPath) || !fs.statSync(resolvedPath).isFile()) {
+    return null;
+  }
+
+  return resolvedPath;
+}
+
+async function saveTaskAttachmentAsync(projectDir, taskDirs, taskId, fileName, bytes, onWritten) {
+  const targetDir = getTaskTargetDir(projectDir, taskDirs, taskId);
+  const attachmentsDir = path.join(targetDir, "attachments");
+  await fs.promises.mkdir(attachmentsDir, { recursive: true });
+
+  const attachmentFileName = uniqueFileName(attachmentsDir, fileName);
+  const attachmentPath = path.join(attachmentsDir, attachmentFileName);
+  const buffer = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
+
+  await atomicWriteFile(attachmentPath, buffer, undefined, onWritten);
+
+  return attachmentEntryFromFile(attachmentsDir, attachmentFileName);
+}
+
+async function deleteTaskAttachmentAsync(projectDir, taskDirs, taskId, attachmentPath) {
+  const resolvedPath = resolveTaskAttachmentFilePath(projectDir, taskDirs, taskId, attachmentPath);
+  if (!resolvedPath) {
+    throw new Error("Attachment was not found");
+  }
+
+  await retryFileOperation(() => fs.promises.unlink(resolvedPath));
+  return readAttachments(getTaskTargetDir(projectDir, taskDirs, taskId));
 }
 
 function resolveMemoAssetPath(projectDir, taskDirs, taskId, assetPath) {
@@ -1382,6 +1486,9 @@ module.exports = {
   writeProjectPatchAsync,
   saveMemoImage,
   saveMemoImageAsync,
+  saveTaskAttachmentAsync,
+  deleteTaskAttachmentAsync,
+  resolveTaskAttachmentFilePath,
   resolveMemoAssetPath,
   deleteTaskDir,
   deleteTaskDirAsync,

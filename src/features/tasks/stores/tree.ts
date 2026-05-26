@@ -138,6 +138,13 @@ function comparableWorkspaceTask(task: WorkspaceTask) {
       format: memo.format ?? "markdown",
       order: memo.order ?? null,
     })),
+    attachments: (task.attachments ?? []).map((attachment) => ({
+      id: attachment.id,
+      name: attachment.name,
+      relativePath: attachment.relativePath,
+      size: attachment.size,
+      modifiedAt: attachment.modifiedAt ?? null,
+    })),
     createdAt: task.createdAt,
     order: task.order ?? null,
   };

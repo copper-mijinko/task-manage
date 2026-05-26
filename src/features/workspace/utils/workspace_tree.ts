@@ -8,6 +8,7 @@ const DEFAULT_HEADERS = [
   { name: "start date", default_ratio: 4 },
   { name: "due date", default_ratio: 4 },
   { name: "memo", default_ratio: 2 },
+  { name: "attachments", default_ratio: 2 },
 ];
 
 /**
@@ -60,6 +61,7 @@ export function workspaceToProjectData(
           order: m.order,
           bodyLoaded: m.bodyLoaded,
         })),
+        attachments: task.attachments ?? [],
       },
       children: childIds.map((cid) => buildNode(cid)),
     };
@@ -120,6 +122,9 @@ export function projectDataToWorkspaceTasks(
           bodyLoaded: m.bodyLoaded,
         };
       }),
+      attachments: Array.isArray(node.data.attachments)
+        ? node.data.attachments
+        : (existing?.attachments ?? []),
       createdAt: existing?.createdAt || today,
       order: parentIds.length === 0 ? existing?.order : siblingIndex,
     });

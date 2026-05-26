@@ -128,6 +128,14 @@ const electronAPI = {
     ipcRenderer.invoke("ws:save-memo-image", { projectDir, taskId, bytes, mimeType }),
   wsResolveMemoAsset: (projectDir, taskId, assetPath) =>
     ipcRenderer.invoke("ws:resolve-memo-asset", { projectDir, taskId, assetPath }),
+  wsSaveTaskAttachment: (projectDir, taskId, fileName, bytes) =>
+    ipcRenderer.invoke("ws:save-task-attachment", { projectDir, taskId, fileName, bytes }),
+  wsDeleteTaskAttachment: (projectDir, taskId, attachmentPath) =>
+    ipcRenderer.invoke("ws:delete-task-attachment", { projectDir, taskId, attachmentPath }),
+  wsOpenTaskAttachment: (projectDir, taskId, attachmentPath) =>
+    ipcRenderer.invoke("ws:open-task-attachment", { projectDir, taskId, attachmentPath }),
+  wsOpenTaskAttachmentWith: (projectDir, taskId, attachmentPath) =>
+    ipcRenderer.invoke("ws:open-task-attachment-with", { projectDir, taskId, attachmentPath }),
   wsWriteProject: (projectDir, tasks, options) =>
     ipcRenderer.invoke("ws:write-project", { projectDir, tasks, options }),
   wsWriteProjectPatch: (projectDir, patch, options) =>

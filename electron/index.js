@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain, shell, dialog } = require("electron");
+const { spawn } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const { LowSync, JSONFileSync } = require("@commonify/lowdb");
@@ -33,6 +34,34 @@ function showSaveError(context, err) {
     if (!win.isDestroyed()) {
       win.webContents.send("save-error", message);
     }
+  });
+}
+
+function openPathWithProgramPicker(filePath) {
+  if (process.platform !== "win32") {
+    return Promise.reject(new Error("Open with is only supported on Windows"));
+  }
+
+  return new Promise((resolve, reject) => {
+    const child = spawn("rundll32.exe", ["shell32.dll,OpenAs_RunDLL", filePath], {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: false,
+    });
+    let settled = false;
+
+    child.once("error", (err) => {
+      if (settled) return;
+      settled = true;
+      reject(err);
+    });
+
+    child.once("spawn", () => {
+      if (settled) return;
+      settled = true;
+      child.unref();
+      resolve();
+    });
   });
 }
 
@@ -1115,6 +1144,113 @@ app.on("ready", () => {
       return { success: false, error: err.message };
     }
   });
+
+  ipcMain.handle(
+    "ws:save-task-attachment",
+    async (event, { projectDir, taskId, fileName, bytes }) => {
+      try {
+        const cached = ensureWorkspaceCache(projectDir);
+        const attachment = await workspace.saveTaskAttachmentAsync(
+          projectDir,
+          cached.taskDirs,
+          taskId,
+          fileName,
+          bytes,
+          recordWrite
+        );
+
+        const task = cached.tasks.get(taskId);
+        if (task) {
+          task.attachments = [...(task.attachments ?? []), attachment];
+        }
+
+        return { success: true, attachment };
+      } catch (err) {
+        log.error("ws:save-task-attachment error:", err.message);
+        return { success: false, error: err.message };
+      }
+    }
+  );
+
+  ipcMain.handle(
+    "ws:delete-task-attachment",
+    async (event, { projectDir, taskId, attachmentPath }) => {
+      try {
+        const cached = ensureWorkspaceCache(projectDir);
+        const attachments = await workspace.deleteTaskAttachmentAsync(
+          projectDir,
+          cached.taskDirs,
+          taskId,
+          attachmentPath
+        );
+        await workspaceReconciler.markProjectWritten(projectDir);
+
+        const task = cached.tasks.get(taskId);
+        if (task) {
+          task.attachments = attachments;
+        }
+
+        return { success: true, attachments };
+      } catch (err) {
+        log.error("ws:delete-task-attachment error:", err.message);
+        return { success: false, error: err.message };
+      }
+    }
+  );
+
+  ipcMain.handle(
+    "ws:open-task-attachment",
+    async (event, { projectDir, taskId, attachmentPath }) => {
+      try {
+        const cached = ensureWorkspaceCache(projectDir);
+        const resolvedPath = workspace.resolveTaskAttachmentFilePath(
+          projectDir,
+          cached.taskDirs,
+          taskId,
+          attachmentPath
+        );
+
+        if (!resolvedPath) {
+          return { success: false, error: "Attachment was not found" };
+        }
+
+        const openError = await shell.openPath(resolvedPath);
+        if (openError) {
+          return { success: false, error: openError };
+        }
+
+        return { success: true };
+      } catch (err) {
+        log.error("ws:open-task-attachment error:", err.message);
+        return { success: false, error: err.message };
+      }
+    }
+  );
+
+  ipcMain.handle(
+    "ws:open-task-attachment-with",
+    async (event, { projectDir, taskId, attachmentPath }) => {
+      try {
+        const cached = ensureWorkspaceCache(projectDir);
+        const resolvedPath = workspace.resolveTaskAttachmentFilePath(
+          projectDir,
+          cached.taskDirs,
+          taskId,
+          attachmentPath
+        );
+
+        if (!resolvedPath) {
+          return { success: false, error: "Attachment was not found" };
+        }
+
+        await openPathWithProgramPicker(resolvedPath);
+        return { success: true };
+      } catch (err) {
+        log.error("ws:open-task-attachment-with error:", err.message);
+        return { success: false, error: err.message };
+      }
+    }
+  );
 
   ipcMain.handle("ws:delete-task", async (event, { projectDir, taskId }) => {
     try {

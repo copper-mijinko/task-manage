@@ -39,6 +39,7 @@ function createProjectData() {
       { name: "status", default_ratio: 4 },
       { name: "due date", default_ratio: 4 },
       { name: "memo", default_ratio: 2 },
+      { name: "attachments", default_ratio: 2 },
     ],
     data: {
       id: "project-1",
@@ -47,6 +48,7 @@ function createProjectData() {
         status: "Open",
         "due date": undefined,
         memo: [],
+        attachments: [],
       },
       children: [
         {
@@ -56,6 +58,14 @@ function createProjectData() {
             status: "In Progress",
             "due date": undefined,
             memo: [],
+            attachments: [
+              {
+                id: "./attachments/spec.pdf",
+                name: "spec.pdf",
+                relativePath: "./attachments/spec.pdf",
+                size: 4,
+              },
+            ],
           },
           children: [
             {
@@ -65,6 +75,7 @@ function createProjectData() {
                 status: "Open",
                 "due date": undefined,
                 memo: [],
+                attachments: [],
               },
               children: [],
             },
@@ -109,6 +120,7 @@ describe("TreeTable", () => {
       { id: "start date", label: "開始日", visible: true },
       { id: "due date", label: "期限日", visible: true },
       { id: "memo", label: "メモ数", visible: true },
+      { id: "attachments", label: "添付数", visible: true },
     ]);
     theme.set("dark");
     workspace_store.set({
@@ -163,6 +175,14 @@ describe("TreeTable", () => {
 
     expect(get(closed_node_ids).has("task-1")).toBe(false);
     expect(screen.getByText("Nested Task")).toBeInTheDocument();
+  });
+
+  test("shows the attachments count column", () => {
+    render(TreeTable);
+
+    expect(screen.getByTestId("header-attachments")).toHaveTextContent("attachments");
+    expect(screen.getByTestId("cell-task-1-attachments")).toHaveTextContent("1");
+    expect(screen.getByTestId("cell-task-1-1-attachments")).toHaveTextContent("0");
   });
 
   test("opens a workspace task folder from the row action", async () => {
@@ -223,7 +243,7 @@ describe("TreeTable", () => {
 
     const firstResizer = container.querySelector(".Resizer");
     const nameRatio = 10;
-    const ratioSum = 10 + 4 + 3 + 4 + 2;
+    const ratioSum = 10 + 4 + 3 + 4 + 2 + 2;
     const checkboxWidth = 28;
     const expectedNameWidth = ((1000 - checkboxWidth) * nameRatio) / ratioSum;
 
