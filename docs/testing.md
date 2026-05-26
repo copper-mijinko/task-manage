@@ -77,8 +77,12 @@ Electron アプリ全体を起動して確認する。
 | `src/stores/navigation_history.ts`  | `microtask 未消化の状態で back されても押す前のページが履歴に残る`                                | flushPendingRecord により直前遷移を取りこぼさない                               |
 | `src/stores/navigation_history.ts`  | `WorkspaceProject の back は activeProjectDir も復元する`                                         | workspace_store.activeProjectDir をエントリに含め、戻る時に setActiveProject する |
 | `src/stores/navigation_history.ts`  | `非 WorkspaceProject の back は activeProjectDir に触らない`                                      | Projects 間遷移では workspace 側を変えない                                      |
-| `src/stores/navigation_history.ts`  | `同じページ内での table_selected_id の変更は履歴を伸ばさず in-place 更新する`                       | タスク行選択はページ内状態として扱う                                            |
-| `src/stores/navigation_history.ts`  | `ページ遷移時に直前ページの table_selected_id が次のエントリではなく前のエントリに残る`             | エントリ単位で tableSelectedId を保持し、戻ったとき復元できる                   |
+| `src/stores/navigation_history.ts`  | `ロード完了直後の table_selected_id fill-in は履歴を伸ばさず最後のエントリへ in-place で入る`         | 「ロード完了で auto-select root」を 1 回だけエントリへ取り込み、以降は固定化     |
+| `src/stores/navigation_history.ts`  | `ページ遷移時、新ページの初期エントリの tableSelectedId は undefined にしておきロード完了で埋まる`    | ページ切替直後の旧 tableSelectedId 残留を防ぎ、loader の selectOnly で埋める    |
+| `src/stores/navigation_history.ts`  | `pushSelection は同ページ内のタスク行切替を 1 エントリとして積む`                                     | ユーザの能動的なタスク選択は履歴に積み、戻れるようにする                        |
+| `src/stores/navigation_history.ts`  | `pushSelection で積んだタスク選択は back で逆める`                                                    | 同ページ内 back は table_selected_id を直接巻き戻す                            |
+| `src/stores/navigation_history.ts`  | `pushSelection は直前エントリと完全一致する状態では no-op`                                            | 同じタスクを連打しても履歴を重複させない                                        |
+| `src/stores/navigation_history.ts`  | `ページ跨ぎ + タスクの 2 アクションは 2 回の back で巻き戻る`                                          | 「プロジェクト遷移」と「タスク選択」をそれぞれ 1 エントリとして積む            |
 | `src/stores/navigation_history.ts`  | `activeWorkspacePath はエントリに記録される`                                                       | workspace 切替を跨いだ戻る/進むに対応                                           |
 | `src/stores/navigation_history.ts`  | `workspace_store の non-navigation 変更（projects 一覧更新など）は履歴を伸ばさない`                  | workspace_store 全体を購読しつつ、ページに関わらない更新は無視する              |
 
@@ -253,5 +257,5 @@ Electron アプリ全体を起動して確認する。
 | 種別         | 件数                              |
 | ------------ | --------------------------------- |
 | Test files   | unit 18 passed + component 18 passed (36) |
-| Tests        | unit 295 passed + component 126 passed / 7 skipped (421 / 7) |
+| Tests        | unit 312 passed + component 126 passed / 7 skipped (438 / 7) |
 | svelte-check | 455 files / 0 errors / 0 warnings |

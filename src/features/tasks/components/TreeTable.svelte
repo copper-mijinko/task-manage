@@ -58,6 +58,7 @@
     selectAll,
     pruneSelection,
   } from "@stores/ui";
+  import { navigation_history } from "@stores/navigation_history";
 
   let table_root; // Bind
 
@@ -492,6 +493,10 @@
     } else {
       selectOnly(id);
     }
+    // ユーザの能動的なタスク行選択は、ページ遷移と同等の navigation event として
+    // 履歴に積む。subscriber 経路で同ページ内の table_selected_id 変更を in-place
+    // 更新に倒しているため、ここで明示的に呼ばないとクリック履歴が残らない。
+    navigation_history.pushSelection();
   }
 
   function handleToggleCheckbox(event) {
