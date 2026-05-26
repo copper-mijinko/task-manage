@@ -28,6 +28,7 @@ describe("column_settings store", () => {
     expect(settings.find((s) => s.id === "start date").visible).toBe(true);
     expect(settings.find((s) => s.id === "due date").visible).toBe(true);
     expect(settings.find((s) => s.id === "memo").visible).toBe(true);
+    expect(settings.find((s) => s.id === "attachments").visible).toBe(true);
   });
 
   test("name column is always first by default", () => {
@@ -111,6 +112,7 @@ describe("column_settings store", () => {
     expect(settings.find((s) => s.id === "status").visible).toBe(false);
     expect(settings.find((s) => s.id === "start date").visible).toBe(true);
     expect(settings.find((s) => s.id === "memo").visible).toBe(true);
+    expect(settings.find((s) => s.id === "attachments").visible).toBe(true);
   });
 
   test("init preserves saved column ordering", async () => {

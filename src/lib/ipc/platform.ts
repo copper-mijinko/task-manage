@@ -14,6 +14,7 @@
 } from "@app-types/app";
 import type {
   WorkspaceInfo,
+  WorkspaceAttachment,
   WorkspaceProject,
   WorkspaceProjectListItem,
   WorkspaceMemo,
@@ -283,6 +284,51 @@ export function wsResolveMemoAsset(
 ): Promise<{ success: boolean; url?: string; error?: string }> {
   return (
     api()?.wsResolveMemoAsset?.(projectDir, taskId, assetPath) ??
+    Promise.resolve({ success: false, error: "API unavailable" })
+  );
+}
+
+export function wsSaveTaskAttachment(
+  projectDir: string,
+  taskId: string,
+  fileName: string,
+  bytes: Uint8Array
+): Promise<{ success: boolean; attachment?: WorkspaceAttachment; error?: string }> {
+  return (
+    api()?.wsSaveTaskAttachment?.(projectDir, taskId, fileName, bytes) ??
+    Promise.resolve({ success: false, error: "API unavailable" })
+  );
+}
+
+export function wsDeleteTaskAttachment(
+  projectDir: string,
+  taskId: string,
+  attachmentPath: string
+): Promise<{ success: boolean; attachments?: WorkspaceAttachment[]; error?: string }> {
+  return (
+    api()?.wsDeleteTaskAttachment?.(projectDir, taskId, attachmentPath) ??
+    Promise.resolve({ success: false, error: "API unavailable" })
+  );
+}
+
+export function wsOpenTaskAttachment(
+  projectDir: string,
+  taskId: string,
+  attachmentPath: string
+): Promise<{ success: boolean; error?: string }> {
+  return (
+    api()?.wsOpenTaskAttachment?.(projectDir, taskId, attachmentPath) ??
+    Promise.resolve({ success: false, error: "API unavailable" })
+  );
+}
+
+export function wsOpenTaskAttachmentWith(
+  projectDir: string,
+  taskId: string,
+  attachmentPath: string
+): Promise<{ success: boolean; error?: string }> {
+  return (
+    api()?.wsOpenTaskAttachmentWith?.(projectDir, taskId, attachmentPath) ??
     Promise.resolve({ success: false, error: "API unavailable" })
   );
 }

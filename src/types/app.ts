@@ -1,6 +1,7 @@
 ﻿import type { ProjectData } from "@features/tasks/utils/tree_control";
 import type {
   WorkspaceInfo,
+  WorkspaceAttachment,
   WorkspaceMemo,
   WorkspaceProject,
   WorkspaceProjectPatch,
@@ -156,6 +157,27 @@ export interface ElectronAPI {
     taskId: string,
     assetPath: string
   ) => Promise<{ success: boolean; url?: string; error?: string }>;
+  wsSaveTaskAttachment: (
+    projectDir: string,
+    taskId: string,
+    fileName: string,
+    bytes: Uint8Array
+  ) => Promise<{ success: boolean; attachment?: WorkspaceAttachment; error?: string }>;
+  wsDeleteTaskAttachment: (
+    projectDir: string,
+    taskId: string,
+    attachmentPath: string
+  ) => Promise<{ success: boolean; attachments?: WorkspaceAttachment[]; error?: string }>;
+  wsOpenTaskAttachment: (
+    projectDir: string,
+    taskId: string,
+    attachmentPath: string
+  ) => Promise<{ success: boolean; error?: string }>;
+  wsOpenTaskAttachmentWith: (
+    projectDir: string,
+    taskId: string,
+    attachmentPath: string
+  ) => Promise<{ success: boolean; error?: string }>;
   wsWriteProject: (
     projectDir: string,
     tasks: WorkspaceTask[],

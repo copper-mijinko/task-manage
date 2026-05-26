@@ -63,6 +63,12 @@
             open folder
           </button>
         {/if}
+      {:else}
+        <span data-testid={"cell-" + row.id + "-" + header.name}>
+          {Array.isArray(row.node.data[header.name])
+            ? row.node.data[header.name].length
+            : (row.node.data[header.name] ?? "")}
+        </span>
       {/if}
     </div>
   {/each}

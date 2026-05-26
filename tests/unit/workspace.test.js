@@ -22,6 +22,9 @@ import {
   writeProjectPatchAsync,
   saveMemoImage,
   saveMemoImageAsync,
+  saveTaskAttachmentAsync,
+  deleteTaskAttachmentAsync,
+  resolveTaskAttachmentFilePath,
   resolveMemoAssetPath,
   deleteTaskDir,
   deleteTaskDirAsync,
@@ -710,6 +713,105 @@ describe("file system operations", () => {
     );
 
     expect(fileUrl).toBe(pathToFileURL(assetPath).toString());
+  });
+
+  it("saveTaskAttachmentAsync copies files into task attachments and readProject lists them", async () => {
+    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
+    const taskDirs = new Map([["root-id", "_project"]]);
+    const task = {
+      id: "task-attachments",
+      name: "Attachments",
+      status: "Open",
+      parents: ["root-id"],
+      memos: [],
+      createdAt: "2026-04-24",
+    };
+    writeTask(projectDir, task, taskDirs);
+
+    const first = await saveTaskAttachmentAsync(
+      projectDir,
+      taskDirs,
+      "task-attachments",
+      "Spec?.pdf",
+      Uint8Array.from([1, 2, 3])
+    );
+    const second = await saveTaskAttachmentAsync(
+      projectDir,
+      taskDirs,
+      "task-attachments",
+      "Spec?.pdf",
+      Uint8Array.from([4, 5])
+    );
+
+    expect(first).toMatchObject({
+      name: "Spec.pdf",
+      relativePath: "./attachments/Spec.pdf",
+      size: 3,
+    });
+    expect(second.relativePath).toBe("./attachments/Spec-2.pdf");
+    expect(
+      fs.existsSync(path.join(projectDir, "task-attachments", "attachments", "Spec.pdf"))
+    ).toBe(true);
+
+    const { tasks } = readProject(projectDir);
+    expect(tasks.get("task-attachments").attachments.map((entry) => entry.relativePath)).toEqual(
+      expect.arrayContaining(["./attachments/Spec.pdf", "./attachments/Spec-2.pdf"])
+    );
+  });
+
+  it("deleteTaskAttachmentAsync removes a task attachment and blocks path traversal", async () => {
+    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
+    const taskDirs = new Map([["root-id", "_project"]]);
+    const task = {
+      id: "task-delete-attachment",
+      name: "Attachments",
+      status: "Open",
+      parents: ["root-id"],
+      memos: [],
+      createdAt: "2026-04-24",
+    };
+    writeTask(projectDir, task, taskDirs);
+
+    const attachment = await saveTaskAttachmentAsync(
+      projectDir,
+      taskDirs,
+      "task-delete-attachment",
+      "note.txt",
+      Uint8Array.from([1])
+    );
+    const attachmentPath = path.join(
+      projectDir,
+      "task-delete-attachment",
+      "attachments",
+      "note.txt"
+    );
+
+    expect(
+      resolveTaskAttachmentFilePath(
+        projectDir,
+        taskDirs,
+        "task-delete-attachment",
+        "../_project.md"
+      )
+    ).toBeNull();
+    expect(
+      resolveTaskAttachmentFilePath(
+        projectDir,
+        taskDirs,
+        "task-delete-attachment",
+        "./attachments/../_index.md"
+      )
+    ).toBeNull();
+
+    const attachments = await deleteTaskAttachmentAsync(
+      projectDir,
+      taskDirs,
+      "task-delete-attachment",
+      attachment.relativePath
+    );
+
+    expect(attachments).toEqual([]);
+    expect(fs.existsSync(attachmentPath)).toBe(false);
   });
 
   it("atomicWriteFile replaces files without leaving temp files", async () => {

@@ -20,6 +20,7 @@
   import Card from "@lib/primitives/Card.svelte";
   import IconButton from "@lib/primitives/IconButton.svelte";
   import StatusSelect from "@features/tasks/components/StatusSelect.svelte";
+  import TaskAttachments from "@features/tasks/components/TaskAttachments.svelte";
   import DateInput from "@lib/primitives/DateInput.svelte";
   import * as platform from "@lib/ipc/platform";
   import {
@@ -41,6 +42,7 @@
     $table_selected_id && $tree_data ? getNode($table_selected_id, $tree_data.data) : undefined;
   $: name = node ? node.data["name"] : "Select Task";
   $: memo = node ? node.data["memo"] : [];
+  $: attachments = node ? (node.data["attachments"] ?? []) : [];
   $: isWorkspaceProject = $selected_type === "WorkspaceProject";
   $: workspaceProjectDir = isWorkspaceProject ? $workspace_store.activeProjectDir : null;
   $: defaultMemoFormat = isWorkspaceProject ? "markdown" : "quill";
@@ -289,6 +291,13 @@
       (currentMemo) => ({ ...currentMemo, tags }),
       editContext
     );
+  };
+  const saveAttachments = (nextAttachments) => {
+    const editContext = getEditContext();
+    const liveNode = getLiveNode(editContext);
+    if (!liveNode) return false;
+    changeData(liveNode, "attachments", nextAttachments, editContext);
+    return true;
   };
   const changeMemoFormat = (selectedMemoIndex, nextFormat) => {
     const editContext = getEditContext();
@@ -603,6 +612,14 @@
               >{memo.length}</output
             >
           </div>
+
+          <TaskAttachments
+            {attachments}
+            {isWorkspaceProject}
+            {workspaceProjectDir}
+            taskId={$table_selected_id ?? null}
+            onAttachmentsChange={saveAttachments}
+          />
         </div>
       </div>
 
