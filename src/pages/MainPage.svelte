@@ -9,6 +9,7 @@
   import Dialog from "@lib/primitives/Dialog.svelte";
   import Modal from "@lib/primitives/Modal.svelte";
   import SearchBox from "@lib/primitives/SearchBox.svelte";
+  import Loading from "@lib/primitives/Loading.svelte";
   import ActiveFilterBar from "@features/search/components/ActiveFilterBar.svelte";
   import { tick } from "svelte";
   import {
@@ -868,9 +869,7 @@
     </div>
   </Modal>
 {:else}
-  <h1 style="color:var(--theme-color-Sub-main); display:flex; justify-content:center">
-    Loading...
-  </h1>
+  <Loading variant="h1" />
 {/if}
 
 <style>

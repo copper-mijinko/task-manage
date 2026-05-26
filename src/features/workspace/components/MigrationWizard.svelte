@@ -1,5 +1,6 @@
 ﻿<script lang="ts">
   import Modal from "@lib/primitives/Modal.svelte";
+  import Loading from "@lib/primitives/Loading.svelte";
   import { workspace_store } from "@features/workspace/stores/workspace";
   import * as platform from "@lib/ipc/platform";
 
@@ -82,7 +83,7 @@
 
     <div class="body">
       {#if phase === "loading"}
-        <p class="note">Loading...</p>
+        <Loading variant="note" />
       {:else if phase === "idle"}
         {#if loadError}
           <p class="empty-note">{loadError}</p>
@@ -145,7 +146,7 @@
 
         <p class="warn-note">This exports to Workspace only. The source db.json is not changed.</p>
         {#if phase === "running"}
-          <p class="note">Exporting...</p>
+          <Loading variant="note" text="Exporting..." />
         {/if}
       {:else if phase === "done" && result}
         {#if result.migrated.length > 0}
@@ -245,7 +246,6 @@
   }
 
   .task-count,
-  .note,
   .warn-note,
   .empty-note {
     color: var(--theme-color-Sub-dark);

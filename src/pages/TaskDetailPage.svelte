@@ -2,6 +2,7 @@
   import { getNode } from "@features/tasks/utils/tree_control";
   import { selected_id, tree_data } from "@stores";
   import Button from "@lib/primitives/Button.svelte";
+  import Loading from "@lib/primitives/Loading.svelte";
   import TaskDetail from "@features/tasks/components/TaskDetail.svelte";
 
   export let initialTaskName = "Task Detail";
@@ -44,7 +45,7 @@
   <div class="detail-body">
     {#if !ready}
       <div class="empty-state">
-        <h2>Loading...</h2>
+        <Loading variant="h2" />
       </div>
     {:else if isProjectDeleted}
       <div class="empty-state">
