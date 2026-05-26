@@ -78,6 +78,7 @@ describe("TaskDetail", () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     delete window.__memoStubSaveOnDestroy;
     delete window.electronAPI;
   });
@@ -172,6 +173,203 @@ describe("TaskDetail", () => {
       expect(screen.getByTestId("memo-stub")).toHaveTextContent("Loaded memo body");
     });
     expect(get(tree_data).data.children[1].data.memo[0].bodyLoaded).toBe(true);
+  });
+
+  test("adds a file attachment to a workspace task", async () => {
+    workspace_store.set({
+      workspaces: [],
+      activeWorkspacePath: "C:\\workspace",
+      activeProjectDir: "C:\\workspace\\project-1",
+      projects: [],
+    });
+    selected_type.set("WorkspaceProject");
+    table_selected_id.set("task-1");
+    window.electronAPI = {
+      wsSaveTaskAttachment: vi.fn().mockResolvedValue({
+        success: true,
+        attachment: {
+          id: "./attachments/spec.pdf",
+          name: "spec.pdf",
+          relativePath: "./attachments/spec.pdf",
+          size: 4,
+        },
+      }),
+    };
+
+    const { container } = render(TaskDetail);
+    const input = container.querySelector('[data-testid="attachment-file-input"]');
+    const file = new File(["spec"], "spec.pdf", { type: "application/pdf" });
+
+    await fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(window.electronAPI.wsSaveTaskAttachment).toHaveBeenCalledWith(
+        "C:\\workspace\\project-1",
+        "task-1",
+        "spec.pdf",
+        expect.any(Uint8Array)
+      );
+      expect(get(tree_data).data.children[0].data.attachments).toEqual([
+        expect.objectContaining({ name: "spec.pdf", relativePath: "./attachments/spec.pdf" }),
+      ]);
+    });
+  });
+
+  test("opens the file picker from the attachment button", async () => {
+    workspace_store.set({
+      workspaces: [],
+      activeWorkspacePath: "C:\\workspace",
+      activeProjectDir: "C:\\workspace\\project-1",
+      projects: [],
+    });
+    selected_type.set("WorkspaceProject");
+    table_selected_id.set("task-1");
+    const clickSpy = vi.spyOn(HTMLInputElement.prototype, "click").mockImplementation(() => {});
+
+    render(TaskDetail);
+
+    await fireEvent.click(screen.getByRole("button", { name: "添付を追加" }));
+
+    expect(clickSpy).toHaveBeenCalled();
+  });
+
+  test("adds attachments by drag and drop", async () => {
+    workspace_store.set({
+      workspaces: [],
+      activeWorkspacePath: "C:\\workspace",
+      activeProjectDir: "C:\\workspace\\project-1",
+      projects: [],
+    });
+    selected_type.set("WorkspaceProject");
+    table_selected_id.set("task-1");
+    window.electronAPI = {
+      wsSaveTaskAttachment: vi.fn().mockResolvedValue({
+        success: true,
+        attachment: {
+          id: "./attachments/drop.txt",
+          name: "drop.txt",
+          relativePath: "./attachments/drop.txt",
+          size: 4,
+        },
+      }),
+    };
+
+    render(TaskDetail);
+    const file = new File(["drop"], "drop.txt", { type: "text/plain" });
+
+    await fireEvent.drop(screen.getByTestId("task-attachments"), {
+      dataTransfer: {
+        files: [file],
+        types: ["Files"],
+        dropEffect: "",
+      },
+    });
+
+    await waitFor(() => {
+      expect(window.electronAPI.wsSaveTaskAttachment).toHaveBeenCalledWith(
+        "C:\\workspace\\project-1",
+        "task-1",
+        "drop.txt",
+        expect.any(Uint8Array)
+      );
+      expect(get(tree_data).data.children[0].data.attachments).toEqual([
+        expect.objectContaining({ name: "drop.txt", relativePath: "./attachments/drop.txt" }),
+      ]);
+    });
+  });
+
+  test("opens attachment actions from the context menu", async () => {
+    const project = createProjectData();
+    project.data.children[0].data.attachments = [
+      {
+        id: "./attachments/spec.pdf",
+        name: "spec.pdf",
+        relativePath: "./attachments/spec.pdf",
+        size: 4,
+      },
+    ];
+    tree_data.set(project);
+    workspace_store.set({
+      workspaces: [],
+      activeWorkspacePath: "C:\\workspace",
+      activeProjectDir: "C:\\workspace\\project-1",
+      projects: [],
+    });
+    selected_type.set("WorkspaceProject");
+    table_selected_id.set("task-1");
+    window.electronAPI = {
+      wsOpenTaskAttachment: vi.fn().mockResolvedValue({ success: true }),
+      wsOpenTaskAttachmentWith: vi.fn().mockResolvedValue({ success: true }),
+    };
+
+    render(TaskDetail);
+
+    await fireEvent.contextMenu(screen.getByTitle("spec.pdf"), { clientX: 24, clientY: 32 });
+    await tick();
+    await fireEvent.click(screen.getByRole("menuitem", { name: /^開く$/ }));
+
+    expect(window.electronAPI.wsOpenTaskAttachment).toHaveBeenCalledWith(
+      "C:\\workspace\\project-1",
+      "task-1",
+      "./attachments/spec.pdf"
+    );
+
+    await fireEvent.contextMenu(screen.getByTitle("spec.pdf"), { clientX: 24, clientY: 32 });
+    await tick();
+    await fireEvent.click(screen.getByRole("menuitem", { name: "プログラムから開く" }));
+
+    expect(window.electronAPI.wsOpenTaskAttachmentWith).toHaveBeenCalledWith(
+      "C:\\workspace\\project-1",
+      "task-1",
+      "./attachments/spec.pdf"
+    );
+  });
+
+  test("opens and deletes a workspace task attachment", async () => {
+    const project = createProjectData();
+    project.data.children[0].data.attachments = [
+      {
+        id: "./attachments/spec.pdf",
+        name: "spec.pdf",
+        relativePath: "./attachments/spec.pdf",
+        size: 4,
+      },
+    ];
+    tree_data.set(project);
+    workspace_store.set({
+      workspaces: [],
+      activeWorkspacePath: "C:\\workspace",
+      activeProjectDir: "C:\\workspace\\project-1",
+      projects: [],
+    });
+    selected_type.set("WorkspaceProject");
+    table_selected_id.set("task-1");
+    window.electronAPI = {
+      wsOpenTaskAttachment: vi.fn().mockResolvedValue({ success: true }),
+      wsDeleteTaskAttachment: vi.fn().mockResolvedValue({ success: true, attachments: [] }),
+    };
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(TaskDetail);
+
+    await fireEvent.click(screen.getByTitle("spec.pdf"));
+    expect(window.electronAPI.wsOpenTaskAttachment).toHaveBeenCalledWith(
+      "C:\\workspace\\project-1",
+      "task-1",
+      "./attachments/spec.pdf"
+    );
+
+    await fireEvent.click(screen.getByRole("button", { name: "添付を削除 spec.pdf" }));
+
+    await waitFor(() => {
+      expect(window.electronAPI.wsDeleteTaskAttachment).toHaveBeenCalledWith(
+        "C:\\workspace\\project-1",
+        "task-1",
+        "./attachments/spec.pdf"
+      );
+      expect(get(tree_data).data.children[0].data.attachments).toEqual([]);
+    });
+    confirmSpy.mockRestore();
   });
 
   test("edits task detail fields independent of visible table columns", async () => {

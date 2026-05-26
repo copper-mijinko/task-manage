@@ -12,6 +12,14 @@ export interface WorkspaceMemo {
   bodyLoaded?: boolean;
 }
 
+export interface WorkspaceAttachment {
+  id: string;
+  name: string;
+  relativePath: string;
+  size: number;
+  modifiedAt?: string;
+}
+
 export interface WorkspaceTask {
   id: string;
   name: string;
@@ -21,6 +29,7 @@ export interface WorkspaceTask {
   /** Empty array means this is the root task (project itself). */
   parents: string[];
   memos: WorkspaceMemo[];
+  attachments?: WorkspaceAttachment[];
   createdAt: string; // YYYY-MM-DD
   order?: number;
 }

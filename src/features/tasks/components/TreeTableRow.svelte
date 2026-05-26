@@ -71,6 +71,14 @@
 
   $: dueDateUrgency = getDueDateUrgency(data["due date"] || inheritedDueDate, data["status"]);
 
+  function displayCellValue(headerName) {
+    const value = data[headerName];
+    if (headerName === "attachments" && value == null) {
+      return 0;
+    }
+    return Array.isArray(value) ? value.length : (value ?? "");
+  }
+
   function select(e) {
     e.stopPropagation();
     dispatch("select", {
@@ -362,9 +370,7 @@
           }}
         />
       {:else}
-        <span class:TextOverFlow={true}
-          >{header.name == "memo" ? data[header.name].length : data[header.name]}</span
-        >
+        <span class:TextOverFlow={true}>{displayCellValue(header.name)}</span>
       {/if}
     </div>
   {/each}

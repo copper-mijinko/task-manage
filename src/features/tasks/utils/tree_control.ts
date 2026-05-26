@@ -13,12 +13,21 @@ export interface MemoEntry {
   bodyLoaded?: boolean;
 }
 
+export interface TaskAttachmentEntry {
+  id: string;
+  name: string;
+  relativePath: string;
+  size: number;
+  modifiedAt?: string;
+}
+
 export interface TreeNodeData {
   name: string;
   status: TaskStatus;
   "start date": `${string}-${string}-${string}` | undefined;
   "due date": `${string}-${string}-${string}` | undefined;
   memo: MemoEntry[];
+  attachments?: TaskAttachmentEntry[];
   [key: string]: unknown;
 }
 
@@ -186,7 +195,11 @@ function cloneTreeWithAllChildren(tree: TreeData): TreeData {
 export function cloneWithNewIds(node: TreeData): TreeData {
   return {
     id: `${uuidV4()}`,
-    data: { ...node.data, memo: [...node.data.memo] },
+    data: {
+      ...node.data,
+      memo: [...node.data.memo],
+      attachments: node.data.attachments ? [...node.data.attachments] : undefined,
+    },
     children: node.children.map((child) => cloneWithNewIds(child)),
   };
 }
@@ -228,6 +241,10 @@ export function getDefaultProject(): ProjectData {
         name: "memo",
         default_ratio: 2,
       },
+      {
+        name: "attachments",
+        default_ratio: 2,
+      },
     ],
     data: {
       id: `${uuidV4()}`,
@@ -237,6 +254,7 @@ export function getDefaultProject(): ProjectData {
         "start date": undefined,
         "due date": undefined,
         memo: [],
+        attachments: [],
       },
       children: [],
     },

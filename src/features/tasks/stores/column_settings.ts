@@ -22,6 +22,7 @@ export const DEFAULT_COLUMN_SETTINGS: ColumnSetting[] = [
   { id: "start date", label: "開始日", visible: true },
   { id: "due date", label: "期限日", visible: true },
   { id: "memo", label: "メモ数", visible: true },
+  { id: "attachments", label: "添付数", visible: true },
 ];
 
 function isColumnSettingsArray(value: unknown): value is ColumnSetting[] {
