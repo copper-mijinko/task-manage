@@ -157,6 +157,29 @@ describe("WorkspaceWriteQueue", () => {
     expect(errors).toEqual(["disk failed"]);
   });
 
+  test("reports the committed project snapshot after a successful write", async () => {
+    const written = [];
+    const result = {
+      tasks: new Map([["task-a", { id: "task-a", name: "Task A" }]]),
+      taskDirs: new Map([["task-a", "task-a"]]),
+    };
+    const queue = new WorkspaceWriteQueue({
+      writeProject: async () => result,
+      onWritten: (event) => written.push(event),
+    });
+
+    queue.enqueue("project-a", [{ id: "task-a", name: "Task A" }]);
+    await queue.flush();
+
+    expect(written).toEqual([
+      {
+        projectDir: "project-a",
+        tasks: [{ id: "task-a", name: "Task A" }],
+        result,
+      },
+    ]);
+  });
+
   test("exposes getActiveOptions for queued and active jobs", async () => {
     const firstWrite = deferred();
     const queue = new WorkspaceWriteQueue({

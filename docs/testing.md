@@ -56,6 +56,7 @@ Electron アプリ全体を起動して確認する。
 | `electron/workspace-write-queue.js` | `applies a pending patch to a queued full snapshot`                                               | 全体保存が待機中のとき、後続 patch をその snapshot に反映する                   |
 | `electron/workspace-write-queue.js` | `applies a bounded pending-project guard`                                                         | 未知の projectDir を `maxPendingProjects` 超えで enqueue すると例外             |
 | `electron/workspace-write-queue.js` | `emits save status transitions and reports write errors`                                          | `queued` → `writing` → `error` のステータス遷移とエラーコールバック             |
+| `electron/workspace-write-queue.js` | `reports the committed project snapshot after a successful write`                                 | 書込成功後に main が他ウィンドウへ同期できる committed snapshot を `onWritten` で受け取る |
 | `electron/workspace-reconciler.js`  | `suppresses watcher events caused by its own recent writes`                                       | `recentlyWritten` ハッシュ一致時は外部更新として扱わない                        |
 | `electron/workspace-reconciler.js`  | `pushes an external update when no local write is pending`                                        | ペンディング書込なしの場合は再読込して `onProjectUpdated` を発火                |
 | `electron/workspace-reconciler.js`  | `reports a conflict when a local write is pending`                                                | ペンディング書込ありの場合は `onConflict` を発火し再読込しない                  |

@@ -369,6 +369,17 @@ import LocalComponent from "./LocalComponent.svelte";
 ```
 [ renderer ]
   tree_data (Svelte store)
+        │  ws:broadcast-project-snapshot（optimistic cache / other-window sync）
+        ▼
+[ main ]
+  wsCache ─► workspace-project-updated (reason: local-update)
+        │
+        ▼
+[ renderer windows ]
+  tree_data.setFromSource(...)
+
+[ renderer ]
+  tree_data (Svelte store)
         │  ws:write-project-patch / ws:write-project（fire-and-forget）
         ▼
 [ main ]
@@ -399,7 +410,7 @@ import LocalComponent from "./LocalComponent.svelte";
 | チャネル                    | ペイロード                              | 用途                                                                                                                   |
 | --------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | `workspace-save-status`     | `{ projectDir, status, message? }`      | キュー進行状態の楽観 UI 用 push                                                                                        |
-| `workspace-project-updated` | `{ projectDir, tasks, reason }`         | 外部書込・コンフリクト解決後の再読込通知                                                                               |
+| `workspace-project-updated` | `{ projectDir, tasks, reason }`         | 外部書込・コンフリクト解決・local-update・local-write の再読込通知。Task Detail 別ウィンドウを含む他 renderer はこの payload で `tree_data` を同期する |
 | `workspace-conflict`        | `{ projectDir, message }`               | ローカルにペンディング書込ありの外部編集検知（`forceLocal` 中は発火せず `workspace-notice (kind: "overwritten-external")` に格下げ） |
 | `workspace-notice`          | `{ kind, projectDir?, path?, message }` | `workspace-updated` / `conflicted-copy` / `overwritten-external` / `error` の通知                                      |
 | `workspace-flush-start`     | `{ projectDir? }`                       | アプリ終了処理開始の通知。renderer はブロッキングオーバーレイを表示する                                                |
@@ -408,6 +419,7 @@ import LocalComponent from "./LocalComponent.svelte";
 renderer → main の追加 IPC：
 
 - `ws:resolve-conflict (action: "keep-local" | "reload")`
+- `ws:broadcast-project-snapshot(projectDir, tasks)` — disk queue 完了前の in-memory snapshot を main の optimistic `wsCache` と他ウィンドウへ同期する
 - `ws:write-project-patch(projectDir, { tasks, deletedTaskIds }, { forceLocal? })` — 通常編集の差分保存。変更タスクと削除 id のみ送る
 - `ws:write-project(projectDir, tasks, { forceLocal? })` — `forceLocal` は省略可（既定 `false`）
 

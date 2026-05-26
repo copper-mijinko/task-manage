@@ -181,6 +181,7 @@ app.on("ready", () => {
   const dbWriter = createAsyncWriter(db, file, "db");
   const dbMetaWriter = createAsyncWriter(db_meta, file_meta, "meta", 100);
   const wsCache = new Map();
+  const optimisticWorkspaceProjectDirs = new Set();
 
   function normalizeForCompare(value) {
     const resolved = path.resolve(String(value));
@@ -218,9 +219,9 @@ app.on("ready", () => {
     });
   }
 
-  function sendWorkspaceProjectUpdated(payload) {
+  function sendWorkspaceProjectUpdated(payload, excludeWebContents = null) {
     BrowserWindow.getAllWindows().forEach((win) => {
-      if (!win.isDestroyed()) {
+      if (!win.isDestroyed() && win.webContents !== excludeWebContents) {
         win.webContents.send("workspace-project-updated", payload);
       }
     });
@@ -250,6 +251,7 @@ app.on("ready", () => {
     getActiveOptions: (projectDir) => workspaceWriteQueue?.getActiveOptions(projectDir) ?? null,
     onProjectUpdated: ({ projectDir, tasks, taskDirs, reason }) => {
       wsCache.set(projectDir, { tasks, taskDirs });
+      optimisticWorkspaceProjectDirs.delete(projectDir);
       sendWorkspaceProjectUpdated({
         projectDir,
         tasks: Object.fromEntries(tasks),
@@ -284,6 +286,115 @@ app.on("ready", () => {
       wsCache.set(projectDir, cached);
     }
     return cached;
+  }
+
+  function normalizeWorkspaceTasksSnapshot(tasks) {
+    if (!tasks || typeof tasks !== "object") {
+      return new Map();
+    }
+
+    const entries = Array.isArray(tasks)
+      ? tasks.map((task) => [task?.id, task])
+      : Object.entries(tasks);
+    const result = new Map();
+    for (const [id, task] of entries) {
+      if (typeof id === "string" && id && task?.id) {
+        result.set(id, task);
+      }
+    }
+    return result;
+  }
+
+  function buildOptimisticTaskDirs(projectDir, tasks) {
+    let taskDirs = new Map();
+    const cached = wsCache.get(projectDir);
+    if (cached?.taskDirs) {
+      taskDirs = new Map(cached.taskDirs);
+    } else {
+      try {
+        taskDirs = new Map(readProjectSummary(projectDir).taskDirs);
+      } catch {
+        taskDirs = new Map();
+      }
+    }
+
+    for (const id of [...taskDirs.keys()]) {
+      if (!tasks.has(id)) {
+        taskDirs.delete(id);
+      }
+    }
+
+    for (const task of tasks.values()) {
+      if (taskDirs.has(task.id)) continue;
+      taskDirs.set(task.id, task.parents?.length === 0 ? "_project" : task.id);
+    }
+
+    return taskDirs;
+  }
+
+  function primeWorkspaceProjectSnapshot(projectDir, tasksSnapshot) {
+    if (!projectDir || typeof projectDir !== "string") {
+      return null;
+    }
+
+    const tasks = normalizeWorkspaceTasksSnapshot(tasksSnapshot);
+    if (tasks.size === 0) {
+      return null;
+    }
+
+    const taskDirs = buildOptimisticTaskDirs(projectDir, tasks);
+    const cached = { tasks, taskDirs };
+    wsCache.set(projectDir, cached);
+    optimisticWorkspaceProjectDirs.add(projectDir);
+    return cached;
+  }
+
+  function primeWorkspaceProjectPatch(projectDir, patch) {
+    if (!projectDir || typeof projectDir !== "string") {
+      return null;
+    }
+
+    const nextTasks = Array.isArray(patch?.tasks) ? patch.tasks : [];
+    const deletedTaskIds = Array.isArray(patch?.deletedTaskIds) ? patch.deletedTaskIds : [];
+    if (nextTasks.length === 0 && deletedTaskIds.length === 0) {
+      return wsCache.get(projectDir) ?? null;
+    }
+
+    const cached = ensureWorkspaceCache(projectDir);
+    const tasks = new Map(cached.tasks);
+    for (const taskId of deletedTaskIds) {
+      if (typeof taskId === "string") {
+        tasks.delete(taskId);
+      }
+    }
+
+    for (const task of nextTasks) {
+      if (task?.id) {
+        tasks.set(task.id, task);
+      }
+    }
+
+    const taskDirs = buildOptimisticTaskDirs(projectDir, tasks);
+    const nextCached = { tasks, taskDirs };
+    wsCache.set(projectDir, nextCached);
+    optimisticWorkspaceProjectDirs.add(projectDir);
+    return nextCached;
+  }
+
+  function readWorkspaceProjectForRenderer(projectDir) {
+    const cached = wsCache.get(projectDir);
+    if (
+      cached &&
+      (optimisticWorkspaceProjectDirs.has(projectDir) || workspaceWriteQueue.hasPending(projectDir))
+    ) {
+      return cached;
+    }
+
+    const { tasks, taskDirs } = readProjectSummary(projectDir);
+    const fresh = { tasks, taskDirs };
+    wsCache.set(projectDir, fresh);
+    optimisticWorkspaceProjectDirs.delete(projectDir);
+    return fresh;
   }
 
   function withLoadedMemoBodies(projectDir, tasks, taskDirs) {
@@ -362,6 +473,7 @@ app.on("ready", () => {
       });
       await workspaceReconciler.markProjectWritten(projectDir);
       wsCache.set(projectDir, updated);
+      optimisticWorkspaceProjectDirs.delete(projectDir);
       return updated;
     },
     writeProjectPatch: async (projectDir, patch) => {
@@ -379,9 +491,18 @@ app.on("ready", () => {
       );
       await workspaceReconciler.markProjectWritten(projectDir);
       wsCache.set(projectDir, updated);
+      optimisticWorkspaceProjectDirs.delete(projectDir);
       return updated;
     },
     onStatus: sendWorkspaceSaveStatus,
+    onWritten: ({ projectDir, result }) => {
+      if (!result?.tasks) return;
+      sendWorkspaceProjectUpdated({
+        projectDir,
+        tasks: Object.fromEntries(result.tasks),
+        reason: "local-write",
+      });
+    },
     onError: ({ projectDir, error }) => {
       log.error(`workspace write failed (${projectDir}):`, error.message);
     },
@@ -1036,8 +1157,7 @@ app.on("ready", () => {
 
   ipcMain.handle("ws:read-project", async (event, { projectDir }) => {
     try {
-      const { tasks, taskDirs } = readProjectSummary(projectDir);
-      wsCache.set(projectDir, { tasks, taskDirs });
+      const { tasks } = readWorkspaceProjectForRenderer(projectDir);
       // Map 竊・plain object for IPC serialisation
       return { tasks: Object.fromEntries(tasks) };
     } catch (err) {
@@ -1274,8 +1394,31 @@ app.on("ready", () => {
     }
   });
 
+  ipcMain.on("ws:broadcast-project-snapshot", (event, { projectDir, tasks }) => {
+    try {
+      if (!projectDir || !isInsideKnownWorkspace(projectDir)) {
+        return;
+      }
+
+      const cached = primeWorkspaceProjectSnapshot(projectDir, tasks);
+      if (!cached) return;
+
+      sendWorkspaceProjectUpdated(
+        {
+          projectDir,
+          tasks: Object.fromEntries(cached.tasks),
+          reason: "local-update",
+        },
+        event.sender
+      );
+    } catch (err) {
+      log.error("ws:broadcast-project-snapshot error:", err.message);
+    }
+  });
+
   ipcMain.handle("ws:write-project", async (event, { projectDir, tasks, options }) => {
     try {
+      primeWorkspaceProjectSnapshot(projectDir, tasks);
       return workspaceWriteQueue.enqueue(projectDir, tasks, options || {});
     } catch (err) {
       log.error("ws:write-project error:", err.message);
@@ -1285,6 +1428,7 @@ app.on("ready", () => {
 
   ipcMain.handle("ws:write-project-patch", async (event, { projectDir, patch, options }) => {
     try {
+      primeWorkspaceProjectPatch(projectDir, patch);
       return workspaceWriteQueue.enqueuePatch(projectDir, patch, options || {});
     } catch (err) {
       log.error("ws:write-project-patch error:", err.message);
@@ -1309,6 +1453,7 @@ app.on("ready", () => {
       workspaceWriteQueue.discard(projectDir);
       const { tasks, taskDirs } = workspace.readProject(projectDir);
       wsCache.set(projectDir, { tasks, taskDirs });
+      optimisticWorkspaceProjectDirs.delete(projectDir);
       sendWorkspaceProjectUpdated({
         projectDir,
         tasks: Object.fromEntries(tasks),
@@ -1370,6 +1515,7 @@ app.on("ready", () => {
     try {
       const result = await workspace.deleteProjectAsync(projectDir);
       wsCache.delete(projectDir);
+      optimisticWorkspaceProjectDirs.delete(projectDir);
       return result;
     } catch (err) {
       log.error("ws:delete-project error:", err.message);

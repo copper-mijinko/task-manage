@@ -13,6 +13,7 @@ function makeElectronAPI(overrides = {}) {
     setTreeData: vi.fn().mockResolvedValue(undefined),
     wsWriteProject: vi.fn().mockResolvedValue({ success: true, queued: true }),
     wsWriteProjectPatch: vi.fn().mockResolvedValue({ success: true, queued: true }),
+    wsBroadcastProjectSnapshot: vi.fn(),
     onTreeDataUpdated: vi.fn(),
     onProjectDeleted: vi.fn(),
     onWorkspaceSaveStatus: vi.fn(),
@@ -148,9 +149,10 @@ describe("saveStatus store", () => {
   test("workspace project saves only dirty tasks through a patch", async () => {
     const wsWriteProject = vi.fn().mockResolvedValue({ success: true, queued: true });
     const wsWriteProjectPatch = vi.fn().mockResolvedValue({ success: true, queued: true });
+    const wsBroadcastProjectSnapshot = vi.fn();
     Object.defineProperty(window, "electronAPI", {
       configurable: true,
-      value: makeElectronAPI({ wsWriteProject, wsWriteProjectPatch }),
+      value: makeElectronAPI({ wsWriteProject, wsWriteProjectPatch, wsBroadcastProjectSnapshot }),
     });
     selected_type.set("WorkspaceProject");
     selected_id.set("root-id");
@@ -203,6 +205,16 @@ describe("saveStatus store", () => {
     const edited = JSON.parse(JSON.stringify(source));
     edited.data.children[0].data.name = "Task A edited";
     tree_data.set(edited);
+
+    expect(wsBroadcastProjectSnapshot).toHaveBeenCalledWith(
+      "C:/workspace/project",
+      expect.objectContaining({
+        "task-a": expect.objectContaining({
+          id: "task-a",
+          name: "Task A edited",
+        }),
+      })
+    );
 
     await vi.runAllTimersAsync();
 

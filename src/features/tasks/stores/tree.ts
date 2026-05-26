@@ -187,6 +187,27 @@ function buildWorkspacePatch(
   };
 }
 
+function workspaceTasksToRecord(tasks: WorkspaceTask[]): Record<string, WorkspaceTask> {
+  return Object.fromEntries(tasks.map((task) => [task.id, task]));
+}
+
+function broadcastWorkspaceSnapshot(
+  current: ProjectData | undefined,
+  previous: ProjectData | null,
+  context: PersistContext
+) {
+  if (context.selectedType !== "WorkspaceProject" || !context.activeProjectDir || !current?.data) {
+    return;
+  }
+
+  const { fullSnapshot, allTasks, patch } = buildWorkspacePatch(current, previous, context);
+  if (!fullSnapshot && patch.tasks.length === 0 && patch.deletedTaskIds.length === 0) {
+    return;
+  }
+
+  platform.wsBroadcastProjectSnapshot(context.activeProjectDir, workspaceTasksToRecord(allTasks));
+}
+
 function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
   const { subscribe, set, update } = writable<ProjectData | undefined>(initialValue);
   let previousData: ProjectData | null = null;
@@ -384,7 +405,9 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
           workspace_tasks_cache.set(event.tasks);
           skipPersistOnce = true;
           set(workspaceToProjectData(event.tasks, currentSelectedId));
-          saveStatus.set("saved");
+          if (event.reason !== "local-update") {
+            saveStatus.set("saved");
+          }
         });
         platform.onTreeDataUpdated((nextTreeData) => {
           if (!nextTreeData) {
@@ -421,6 +444,17 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
         const currentSelectedType = get(selected_type);
         const currentSelectedId = get(selected_id);
         const workspaceState = get(workspace_store);
+        const persistContext = {
+          selectedType: currentSelectedType,
+          selectedId: currentSelectedId,
+          activeProjectDir: workspaceState.activeProjectDir,
+          activeWorkspaceProject: getActiveWorkspaceProject(
+            workspaceState.projects,
+            workspaceState.activeProjectDir,
+            currentSelectedId
+          ),
+          cachedWorkspaceTasks: get(workspace_tasks_cache),
+        };
 
         if (current === undefined) {
           if (suppressInitialLoadOnce) {
@@ -474,17 +508,8 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
         } else {
           saveStatus.set("idle");
         }
-        persistTreeData(current, {
-          selectedType: currentSelectedType,
-          selectedId: currentSelectedId,
-          activeProjectDir: workspaceState.activeProjectDir,
-          activeWorkspaceProject: getActiveWorkspaceProject(
-            workspaceState.projects,
-            workspaceState.activeProjectDir,
-            currentSelectedId
-          ),
-          cachedWorkspaceTasks: get(workspace_tasks_cache),
-        });
+        broadcastWorkspaceSnapshot(current, previousData, persistContext);
+        persistTreeData(current, persistContext);
       });
     },
   };

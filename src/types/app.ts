@@ -57,7 +57,7 @@ export interface WorkspaceSaveStatusEvent {
 export interface WorkspaceProjectUpdatedEvent {
   projectDir: string;
   tasks: Record<string, WorkspaceTask>;
-  reason: "external-update" | "conflict-reload";
+  reason: "external-update" | "conflict-reload" | "local-update" | "local-write";
 }
 
 export interface WorkspaceConflictEvent {
@@ -188,6 +188,7 @@ export interface ElectronAPI {
     patch: WorkspaceProjectPatch,
     options?: { forceLocal?: boolean }
   ) => Promise<{ success: boolean; queued?: boolean; noop?: boolean; error?: string }>;
+  wsBroadcastProjectSnapshot: (projectDir: string, tasks: Record<string, WorkspaceTask>) => void;
   wsDeleteTask: (
     projectDir: string,
     taskId: string
