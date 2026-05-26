@@ -27,6 +27,7 @@ Electron アプリ全体を起動して確認する。
 [tests/unit/tree_control.test.js](../tests/unit/tree_control.test.js)
 [tests/unit/search.test.js](../tests/unit/search.test.js)
 [tests/unit/datetime_shortcuts.test.ts](../tests/unit/datetime_shortcuts.test.ts)
+[tests/unit/navigation_history.test.ts](../tests/unit/navigation_history.test.ts)
 
 | 対象                                | テストケース                                                                                      | 確認内容                                                                        |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
@@ -65,6 +66,15 @@ Electron アプリ全体を起動して確認する。
 | `electron/workspace-reconciler.js`  | `reports a conflict when a local write is pending`                                                | ペンディング書込ありの場合は `onConflict` を発火し再読込しない                  |
 | `electron/workspace-reconciler.js`  | `notifies conflicted copy files without trying to merge them`                                     | `conflicted copy` を含むファイルは `conflicted-copy` 通知のみで自動マージしない |
 | `src/lib/utils/datetime_shortcuts.ts` | `formatDate` / `formatTime` の slash / iso / japanese 各書式                                    | 入力ショートカットで挿入される日付・時刻文字列のフォーマットが期待通り        |
+| `src/stores/navigation_history.ts`  | `初期状態は entries 空・index -1。back / forward は無効`                                          | 履歴未蓄積時はナビゲーションが無効                                              |
+| `src/stores/navigation_history.ts`  | `undefined / undefined への遷移は履歴に積まない`                                                  | 初期化中の選択なし状態を履歴に残さない                                          |
+| `src/stores/navigation_history.ts`  | `ページ遷移ごとに 1 エントリ積まれ、back / forward で行き来できる`                                | type/id 切替の度に履歴が伸び、戻る/進むで再現できる                             |
+| `src/stores/navigation_history.ts`  | `back / forward 自体は履歴を再増殖させない（重複しない）`                                         | プログラム的 navigation は記録対象外                                            |
+| `src/stores/navigation_history.ts`  | `途中から別ページへ遷移すると forward 履歴は捨てられる`                                           | 分岐時に進む側履歴を切り捨てる                                                  |
+| `src/stores/navigation_history.ts`  | `同一ページへの再選択は履歴に積まない`                                                            | 重複エントリの押し戻しを防ぐ                                                    |
+| `src/stores/navigation_history.ts`  | `type と id の同時セットは中間状態を履歴に残さない`                                               | microtask コアレスで途中の不整合タプルを捨てる                                  |
+| `src/stores/navigation_history.ts`  | `先頭で back を押しても何も起きない` / `末尾で forward を押しても何も起きない`                    | 境界条件で no-op                                                                |
+| `src/stores/navigation_history.ts`  | `microtask 未消化の状態で back されても押す前のページが履歴に残る`                                | flushPendingRecord により直前遷移を取りこぼさない                               |
 
 ### 2.2 Component テスト
 
@@ -164,6 +174,7 @@ Electron アプリ全体を起動して確認する。
 | `electron/workspace-write-queue.js` | latest-wins / 上限 / ステータス通知        | 実装済み | [tests/unit/workspace-write-queue.test.js](../tests/unit/workspace-write-queue.test.js) |
 | `electron/workspace-reconciler.js`  | 自前書込除外 / 外部書込取り込み / 競合通知 | 実装済み | [tests/unit/workspace-reconciler.test.js](../tests/unit/workspace-reconciler.test.js)   |
 | `src/lib/utils/datetime_shortcuts.ts` | 入力ショートカットの日付・時刻フォーマット | 実装済み | [tests/unit/datetime_shortcuts.test.ts](../tests/unit/datetime_shortcuts.test.ts)       |
+| `src/stores/navigation_history.ts`  | ページ遷移履歴の push / back / forward / 重複防止 / 分岐切り捨て / flush 同期 | 実装済み | [tests/unit/navigation_history.test.ts](../tests/unit/navigation_history.test.ts) |
 
 ### 3.2 Component テスト
 
@@ -235,6 +246,6 @@ Electron アプリ全体を起動して確認する。
 
 | 種別         | 件数                              |
 | ------------ | --------------------------------- |
-| Test files   | 24 passed / 1 skipped (25)        |
-| Tests        | 213 passed / 7 skipped (220)      |
-| svelte-check | 159 files / 0 errors / 0 warnings |
+| Test files   | unit 18 passed + component 18 passed (36) |
+| Tests        | unit 289 passed + component 126 passed / 7 skipped (415 / 7) |
+| svelte-check | 455 files / 0 errors / 0 warnings |

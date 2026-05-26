@@ -3,7 +3,16 @@
   import IconButton from "@lib/primitives/IconButton.svelte";
   import ToggleSwitch from "@lib/primitives/ToggleSwitch.svelte";
   import SettingsModal from "@features/settings/components/SettingsModal.svelte";
-  import { theme, saveStatus, sidebarCollapsed, selected_type, selected_id } from "@stores";
+  import {
+    theme,
+    saveStatus,
+    sidebarCollapsed,
+    selected_type,
+    selected_id,
+    navigation_history,
+    canGoBack,
+    canGoForward,
+  } from "@stores";
   import { workspace_store } from "@features/workspace/stores/workspace";
   import { inbox_count, INBOX_SELECTED_ID } from "@features/inbox/stores/inbox";
   import { pageSearchQuery } from "@features/search/stores/search";
@@ -82,6 +91,13 @@
     }
   }
 
+  function goBack() {
+    navigation_history.back();
+  }
+  function goForward() {
+    navigation_history.forward();
+  }
+
   function isSavePending(status) {
     return status === "queued" || status === "writing" || status === "retrying";
   }
@@ -141,6 +157,52 @@
       >
     {/if}
   </IconButton>
+
+  <!-- Browser-style back / forward through visited pages
+       (selected_type + selected_id history). -->
+  <div class="NavHistoryGroup" data-page-search-skip>
+    <button
+      type="button"
+      class="NavHistoryBtn"
+      aria-label="戻る"
+      title="戻る (Alt+←)"
+      data-testid="nav-history-back"
+      on:click={goBack}
+      disabled={!$canGoBack}
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path
+          d="M15 6L9 12L15 18"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          fill="none"
+        />
+      </svg>
+    </button>
+    <button
+      type="button"
+      class="NavHistoryBtn"
+      aria-label="進む"
+      title="進む (Alt+→)"
+      data-testid="nav-history-forward"
+      on:click={goForward}
+      disabled={!$canGoForward}
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path
+          d="M9 6L15 12L9 18"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          fill="none"
+        />
+      </svg>
+    </button>
+  </div>
+
   <h1 class="Title">{title}</h1>
 
   <!-- Page-search: highlight matches on screen only; does NOT filter rows. -->
@@ -433,6 +495,49 @@
     flex-shrink: 0;
     flex-grow: 0;
     margin: var(--sp4);
+  }
+
+  /* Browser-style back/forward navigation through the visited-page history. */
+  .NavHistoryGroup {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp1);
+    flex-shrink: 0;
+  }
+  .NavHistoryBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    margin: 0;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: var(--shape-sm);
+    background-color: rgba(255, 255, 255, 0.1);
+    color: white;
+    cursor: pointer;
+    transition:
+      background-color 0.12s ease,
+      border-color 0.12s ease,
+      opacity 0.12s ease;
+  }
+  .NavHistoryBtn:hover:not(:disabled) {
+    background-color: rgba(255, 255, 255, 0.22);
+    border-color: rgba(255, 255, 255, 0.55);
+  }
+  .NavHistoryBtn:focus-visible {
+    outline: 2px solid var(--on-theme-primary);
+    outline-offset: 2px;
+  }
+  .NavHistoryBtn:disabled {
+    opacity: 0.38;
+    cursor: not-allowed;
+  }
+  .NavHistoryBtn svg {
+    width: 1.1rem;
+    height: 1.1rem;
+    fill: none;
   }
   svg {
     fill: white;
