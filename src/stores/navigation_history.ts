@@ -1,5 +1,6 @@
 import { derived, get, writable, type Readable } from "svelte/store";
 import type { SelectedType } from "@app-types/app";
+import { workspace_store } from "@features/workspace/stores/workspace";
 import { selected_id, selected_type } from "./ui";
 
 /**
@@ -9,10 +10,17 @@ import { selected_id, selected_type } from "./ui";
  * - `Projects` / `WorkspaceProject` の id は project root の id
  * - `Inbox` の id は `INBOX_SELECTED_ID` センチネル
  * - `Info` の id は info ページ id
+ *
+ * `WorkspaceProject` だけは「どのワークスペースプロジェクトディレクトリを
+ * アクティブにしていたか」も併せて持たないと、戻った先で
+ * `workspace_store.activeProjectDir` が他プロジェクトを向いたままになり、
+ * `loadWorkspaceData` が別プロジェクトのタスクを読み込んでしまう。
  */
 export interface NavigationEntry {
   selectedType: SelectedType;
   selectedId: string | undefined;
+  /** WorkspaceProject のみ参照する。それ以外の type では null。 */
+  projectDir: string | null;
 }
 
 export interface NavigationHistoryState {
@@ -36,7 +44,11 @@ export interface NavigationHistoryStore extends Readable<NavigationHistoryState>
 const MAX_HISTORY = 100;
 
 function entriesEqual(a: NavigationEntry, b: NavigationEntry): boolean {
-  return a.selectedType === b.selectedType && a.selectedId === b.selectedId;
+  return (
+    a.selectedType === b.selectedType &&
+    a.selectedId === b.selectedId &&
+    a.projectDir === b.projectDir
+  );
 }
 
 function isEmptyEntry(entry: NavigationEntry): boolean {
@@ -53,9 +65,12 @@ function createNavigationHistory(): NavigationHistoryStore {
   let programmaticNavigation = false;
 
   function currentEntry(): NavigationEntry {
+    const type = get(selected_type);
     return {
-      selectedType: get(selected_type),
+      selectedType: type,
       selectedId: get(selected_id),
+      projectDir:
+        type === "WorkspaceProject" ? (get(workspace_store).activeProjectDir ?? null) : null,
     };
   }
 
@@ -110,6 +125,13 @@ function createNavigationHistory(): NavigationHistoryStore {
     internal.update((s) => ({ ...s, index: targetIndex }));
 
     programmaticNavigation = true;
+    // WorkspaceProject の場合は activeProjectDir を選択 store より先に戻す。
+    // MenuList.selectWorkspaceProject() と同じ順序にしておかないと
+    // selected_id の subscriber (loadWorkspaceData) が古い activeProjectDir
+    // を読んで、他プロジェクトのタスクから unknown ノードを作ってしまう。
+    if (target.selectedType === "WorkspaceProject" && target.projectDir) {
+      workspace_store.setActiveProject(target.projectDir);
+    }
     // 順序は selected_type を先にしておく。読み込み側 (ui.ts) は両方の変更を
     // microtask で 1 回にまとめてさばくため、どちらが先でも結果は同じだが
     // type が先のほうが「同 type 内での id 切替」と一貫した順序になる。
