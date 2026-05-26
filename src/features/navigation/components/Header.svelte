@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import IconButton from "@lib/primitives/IconButton.svelte";
   import ToggleSwitch from "@lib/primitives/ToggleSwitch.svelte";
+  import SettingsModal from "@features/settings/components/SettingsModal.svelte";
   import { theme, saveStatus, sidebarCollapsed, selected_type, selected_id } from "@stores";
   import { workspace_store } from "@features/workspace/stores/workspace";
   import { inbox_count, INBOX_SELECTED_ID } from "@features/inbox/stores/inbox";
@@ -19,6 +20,7 @@
   let searchInputEl;
   let queryText = "";
   let isMaximized = false;
+  let showSettings = false;
 
   onMount(async () => {
     try {
@@ -292,6 +294,26 @@
       />
     </div>
 
+    <button
+      type="button"
+      class="SettingsBtn"
+      on:click={() => (showSettings = true)}
+      aria-label="設定を開く"
+      title="設定"
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2" fill="none" />
+        <path
+          d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06A2 2 0 1 1 4.29 16.96l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.36.17.66.43.88.75.22.32.34.7.34 1.09v.32c0 .39-.12.77-.34 1.09-.22.32-.52.58-.88.75z"
+          stroke="currentColor"
+          stroke-width="1.6"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          fill="none"
+        />
+      </svg>
+    </button>
+
     <div class="WindowControls">
       <button
         type="button"
@@ -366,6 +388,8 @@
     </div>
   </div>
 </div>
+
+<SettingsModal show={showSettings} toggle={() => (showSettings = !showSettings)} />
 
 <style>
   h1.Title {
@@ -600,6 +624,33 @@
   }
   .ToggleSwitchContainer {
     flex-shrink: 0;
+  }
+  .SettingsBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    flex-shrink: 0;
+    padding: 0;
+    margin: 0;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: var(--shape-sm);
+    background-color: rgba(255, 255, 255, 0.1);
+    color: white;
+    cursor: pointer;
+    transition:
+      background-color 0.12s ease,
+      border-color 0.12s ease;
+  }
+  .SettingsBtn:hover {
+    background-color: rgba(255, 255, 255, 0.22);
+    border-color: rgba(255, 255, 255, 0.55);
+  }
+  .SettingsBtn svg {
+    width: 1.1rem;
+    height: 1.1rem;
+    fill: none;
   }
 
   /* Window controls (frameless window) */

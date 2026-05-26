@@ -32,11 +32,13 @@
   import TaskDetailWindow from "@pages/TaskDetailPage.svelte";
   import { sidebarCollapsed } from "@stores";
   import { startAutoRescan, stopAutoRescan } from "@features/search/utils/page_search_highlighter";
+  import { registerDateTimeShortcuts } from "@lib/utils/datetime_shortcuts";
   let show = Array(4).fill(false);
   let saveErrorMessage = null;
   let workspaceConflict = null;
   let workspaceNoticeMessage = null;
   let flushingOnShutdown = false;
+  let unregisterDateTimeShortcuts = null;
 
   const currentHash = typeof window !== "undefined" ? window.location.hash : "";
   const currentSearch =
@@ -270,11 +272,14 @@
     // Start the document-wide page-search highlighter. It watches the whole
     // document for changes and re-applies CSS Custom Highlight ranges.
     startAutoRescan();
+
+    unregisterDateTimeShortcuts = registerDateTimeShortcuts();
   });
 
   onDestroy(() => {
     window.removeEventListener("keydown", handleKeyDown, true);
     stopAutoRescan();
+    unregisterDateTimeShortcuts?.();
   });
 </script>
 
