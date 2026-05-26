@@ -26,6 +26,7 @@ Electron アプリ全体を起動して確認する。
 対象ファイル:
 [tests/unit/tree_control.test.js](../tests/unit/tree_control.test.js)
 [tests/unit/search.test.js](../tests/unit/search.test.js)
+[tests/unit/datetime_shortcuts.test.ts](../tests/unit/datetime_shortcuts.test.ts)
 
 | 対象                                | テストケース                                                                                      | 確認内容                                                                        |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
@@ -59,6 +60,7 @@ Electron アプリ全体を起動して確認する。
 | `electron/workspace-reconciler.js`  | `pushes an external update when no local write is pending`                                        | ペンディング書込なしの場合は再読込して `onProjectUpdated` を発火                |
 | `electron/workspace-reconciler.js`  | `reports a conflict when a local write is pending`                                                | ペンディング書込ありの場合は `onConflict` を発火し再読込しない                  |
 | `electron/workspace-reconciler.js`  | `notifies conflicted copy files without trying to merge them`                                     | `conflicted copy` を含むファイルは `conflicted-copy` 通知のみで自動マージしない |
+| `src/lib/utils/datetime_shortcuts.ts` | `formatDate` / `formatTime` の slash / iso / japanese 各書式                                    | 入力ショートカットで挿入される日付・時刻文字列のフォーマットが期待通り        |
 
 ### 2.2 Component テスト
 
@@ -156,6 +158,7 @@ Electron アプリ全体を起動して確認する。
 | `electron/workspace.js`             | 添付ファイル保存 / 削除 / 安全なパス解決    | 実装済み | [tests/unit/workspace.test.js](../tests/unit/workspace.test.js)       |
 | `electron/workspace-write-queue.js` | latest-wins / 上限 / ステータス通知        | 実装済み | [tests/unit/workspace-write-queue.test.js](../tests/unit/workspace-write-queue.test.js) |
 | `electron/workspace-reconciler.js`  | 自前書込除外 / 外部書込取り込み / 競合通知 | 実装済み | [tests/unit/workspace-reconciler.test.js](../tests/unit/workspace-reconciler.test.js)   |
+| `src/lib/utils/datetime_shortcuts.ts` | 入力ショートカットの日付・時刻フォーマット | 実装済み | [tests/unit/datetime_shortcuts.test.ts](../tests/unit/datetime_shortcuts.test.ts)       |
 
 ### 3.2 Component テスト
 
