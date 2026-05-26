@@ -280,6 +280,17 @@
     });
   };
 
+  const getLeadingColumnWidth = () =>
+    table_root?.querySelector(".CheckboxHeaderCell")?.getBoundingClientRect().width ?? 0;
+
+  const positionResizers = (targetResizers, widths) => {
+    let left = getLeadingColumnWidth();
+    targetResizers.forEach((resizer, index) => {
+      left += widths[index] ?? 0;
+      resizer.style.left = `${left - 3}px`;
+    });
+  };
+
   const createResizers = (
     currentHeaders,
     existingResizers = [],
@@ -295,9 +306,6 @@
         data_rows.push(data_row.querySelectorAll(".TableData"));
       }
     });
-
-    const getLeadingColumnWidth = () =>
-      tableRows[0]?.querySelector(".CheckboxHeaderCell")?.getBoundingClientRect().width ?? 0;
 
     // Set width
     if (is_default) {
@@ -321,19 +329,14 @@
       });
 
       // Create resizer elements
-      let left = leadingColumnWidth;
-      domHeaders.forEach((header, index) => {
-        if (index === 0) {
-          left += default_data_widths[index];
-          return;
-        }
+      domHeaders.forEach((_header, index) => {
+        if (index === domHeaders.length - 1) return;
         const resizer = document.createElement("div");
         resizer.classList.add("Resizer");
-        resizer.style.left = `${left - 3}px`;
         table_root.insertBefore(resizer, tableRows[0]);
         existingResizers.push(resizer);
-        left += default_data_widths[index];
       });
+      positionResizers(existingResizers, default_data_widths);
     } else {
       domHeaders.forEach((header, index) => {
         // Read the inline style — not getBoundingClientRect, which rounds
@@ -345,6 +348,10 @@
           data_row[index].style.width = w;
         });
       });
+      positionResizers(
+        existingResizers,
+        domHeaders.map((header) => header.getBoundingClientRect().width)
+      );
     }
     syncResizerBounds(existingResizers);
 
@@ -380,13 +387,8 @@
         if (cell) cell.style.width = `${nameWidth}px`;
       });
       // Every resizer sits between two columns; since column 0 changed,
-      // ALL resizer left positions shift by the delta. Re-place them
-      // using the new Name width followed by each fixed downstream width.
-      let left = leadingColumnWidth + nameWidth;
-      existingResizers.forEach((resizer, idx) => {
-        resizer.style.left = `${left - 3}px`;
-        left += widths[idx + 1] ?? 0;
-      });
+      // ALL resizer left positions shift by the delta.
+      positionResizers(existingResizers, [nameWidth, ...widths.slice(1)]);
     }
 
     const newResizeObserver = new ResizeObserver(() => {
@@ -409,13 +411,7 @@
         });
       });
 
-      const leadingColumnWidth =
-        table_root?.querySelector(".CheckboxHeaderCell")?.getBoundingClientRect().width ?? 0;
-      let left = leadingColumnWidth;
-      resizers.forEach((columnResizer, index) => {
-        left += widths[index];
-        columnResizer.style.left = `${left - 3}px`;
-      });
+      positionResizers(resizers, widths);
     };
 
     // Create resizers and their events
