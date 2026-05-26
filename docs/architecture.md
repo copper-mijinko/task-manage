@@ -309,10 +309,14 @@ import LocalComponent from "./LocalComponent.svelte";
 ### 8.4 ツリー列幅の維持
 
 - ユーザーがドラッグした列幅は inline `style.width` で保持
-- ペインリサイズ時の `ResizeObserver` では、最終列だけ
-  `max(lastMinWidth, tableWidth − fixedTotal)` で再計算する
+- ペインリサイズ時の `ResizeObserver` では、`name` 列だけ
+  `max(nameMinWidth, tableWidth − checkboxColumnWidth − fixedTotal)` で再計算する
 - 折りたたみ・展開時の `MutationObserver` 経由 createResizers は `getBoundingClientRect` ではなく
   `header.style.width` を読む。サブピクセル誤差の累積を避ける目的
+- チェックボックス列はヘッダ・データ行ともに `border-box` の固定外寸として扱う。
+  JS 側の列幅計算はヘッダの `.CheckboxHeaderCell` 幅を基準にするため、行側も同じ外寸に揃える
+- リサイザ位置は `positionResizers()` で一元計算する。初期配置、ドラッグ中、行再同期、
+  ペインリサイズ後の再配置を同じ「チェックボックス列幅 + 各データ列幅」の座標系に揃える
 
 ### 8.5 ステータス選択（`StatusSelect.svelte`）
 

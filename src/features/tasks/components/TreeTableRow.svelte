@@ -531,6 +531,7 @@
     align-items: center;
     justify-content: center;
     height: 100%;
+    box-sizing: border-box;
     background-color: var(--backgroundColor);
     border-right: 1px solid var(--theme-color-Main-dark);
   }

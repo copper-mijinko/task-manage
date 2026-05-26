@@ -1,4 +1,6 @@
 import { render, screen } from "@testing-library/svelte";
+import fs from "node:fs";
+import path from "node:path";
 import { describe, expect, test } from "vitest";
 
 import TreeTableRow from "@features/tasks/components/TreeTableRow.svelte";
@@ -65,5 +67,15 @@ describe("TreeTableRow", () => {
     render(TreeTableRow, { props });
 
     expect(screen.getByText("0")).toBeInTheDocument();
+  });
+
+  test("uses border-box sizing for the selection checkbox column", () => {
+    const source = fs.readFileSync(
+      path.join(process.cwd(), "src/features/tasks/components/TreeTableRow.svelte"),
+      "utf8"
+    );
+    const checkboxCellRule = source.match(/\.CheckboxCell\s*\{[^}]+}/)?.[0] ?? "";
+
+    expect(checkboxCellRule).toContain("box-sizing: border-box;");
   });
 });
