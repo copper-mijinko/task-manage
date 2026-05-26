@@ -27,6 +27,7 @@
   import { showQuickCapture } from "@stores/ui";
   import Modal from "@lib/primitives/Modal.svelte";
   import Button from "@lib/primitives/Button.svelte";
+  import Loading from "@lib/primitives/Loading.svelte";
   import PageSearchBox from "@features/search/components/PageSearchBox.svelte";
   import TaskDetailWindow from "@pages/TaskDetailPage.svelte";
   import { sidebarCollapsed } from "@stores";
@@ -331,9 +332,7 @@
           </h1>
         {/if}
         {#if ($selected_type == "Projects" || $selected_type == "WorkspaceProject") && $projectLoading}
-          <h1 style="color:var(--theme-color-Sub-main); display:flex; justify-content:center">
-            Loading...
-          </h1>
+          <Loading variant="h1" />
         {:else if $selected_type == "Projects" || $selected_type == "WorkspaceProject"}
           <ProjectPage />
         {:else if $selected_type == "Inbox"}

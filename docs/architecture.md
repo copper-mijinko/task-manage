@@ -12,7 +12,7 @@
 ```
 src/
 ├── lib/                         # 再利用可能な汎用層（ドメイン非依存）
-│   ├── primitives/              # アトミックUI（12 ファイル）
+│   ├── primitives/              # アトミックUI（13 ファイル）
 │   │   ├── Button.svelte
 │   │   ├── IconButton.svelte
 │   │   ├── Card.svelte
@@ -24,7 +24,8 @@ src/
 │   │   ├── Select.svelte
 │   │   ├── MultiSelect.svelte
 │   │   ├── SearchBox.svelte
-│   │   └── DateInput.svelte
+│   │   ├── DateInput.svelte
+│   │   └── Loading.svelte       # 共通ローディング表示（opacity 呼吸アニメ）
 │   ├── layouts/                 # レイアウトプリミティブ
 │   │   ├── Pane.svelte
 │   │   └── SplitPanes.svelte
