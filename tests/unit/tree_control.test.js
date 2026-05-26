@@ -112,6 +112,42 @@ describe("tree_control", () => {
     expect(filtered.children[0].id).toBe("task-1");
   });
 
+  test("filterTree treats space-separated full-text query as AND search", () => {
+    const tree = createTree();
+
+    // "ship release" matches task-2 ("Ship release") — both tokens present
+    const both = filterTree(tree, { full_text: ["ship release"] });
+    expect(both.children).toHaveLength(1);
+    expect(both.children[0].id).toBe("task-2");
+
+    // Order does not matter for AND
+    const reversed = filterTree(tree, { full_text: ["release ship"] });
+    expect(reversed.children).toHaveLength(1);
+    expect(reversed.children[0].id).toBe("task-2");
+
+    // No single task contains both "ship" and "tests"
+    expect(filterTree(tree, { full_text: ["ship tests"] })).toBeNull();
+  });
+
+  test("filterTree treats double-quoted substrings as a single phrase", () => {
+    const tree = createTree();
+
+    // Quoted phrase requires the contiguous "ship release" substring
+    const quoted = filterTree(tree, { full_text: ['"ship release"'] });
+    expect(quoted.children).toHaveLength(1);
+    expect(quoted.children[0].id).toBe("task-2");
+
+    // Quoted phrase in the wrong order does NOT match (because the space matters)
+    expect(filterTree(tree, { full_text: ['"release ship"'] })).toBeNull();
+
+    // Mixed: phrase + standalone token must both match within the same node
+    // task-2 has name "Ship release" AND status "Pending"
+    expect(filterTree(tree, { full_text: ['"ship release" pending'] }).children[0].id).toBe(
+      "task-2"
+    );
+    expect(filterTree(tree, { full_text: ['"ship release" missing'] })).toBeNull();
+  });
+
   test("filterTree can include memo content in full-text search", () => {
     const tree = createTree();
     tree.children[0].data.memo = [{ id: "m1", title: "Note", content: "launch notes", tags: [] }];
