@@ -6,6 +6,7 @@
     tree_data,
     setTaskDetailWindowTarget,
     init_store,
+    autoSelectInitialProject,
     showPageSearch,
     theme,
     undoHistory,
@@ -214,6 +215,9 @@
       await initTaskDetailWindow();
     } else {
       detailWindowReady = true;
+      // 起動時の自動選択: Workspace を優先、なければ InApp の先頭プロジェクト。
+      // 既に何か選択されている (例: タスク詳細ウィンドウ) 場合は no-op。
+      autoSelectInitialProject();
     }
 
     // テーマ初期化

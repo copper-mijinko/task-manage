@@ -13,7 +13,7 @@ export interface WorkspaceState {
 }
 
 export interface WorkspaceStore extends Writable<WorkspaceState> {
-  init: () => void;
+  init: () => Promise<void>;
   selectDirectory: () => Promise<platform.WsSelectDirectoryResult>;
   addWorkspace: (path: string, label: string) => void;
   removeWorkspace: (path: string) => void;
@@ -76,7 +76,7 @@ function createWorkspaceStore(): WorkspaceStore {
     update,
 
     init() {
-      (async () => {
+      return (async () => {
         const { workspaces, activeWorkspace } = await platform.wsGetWorkspaces();
         const projects = activeWorkspace ? await loadProjects(activeWorkspace) : [];
         const current = get({ subscribe } as WorkspaceStore);
