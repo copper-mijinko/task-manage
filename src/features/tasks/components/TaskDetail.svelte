@@ -23,6 +23,7 @@
   import TaskAttachments from "@features/tasks/components/TaskAttachments.svelte";
   import DateInput from "@lib/primitives/DateInput.svelte";
   import * as platform from "@lib/ipc/platform";
+  import { projectDataToWorkspaceTasks } from "@features/workspace/utils/workspace_tree";
   import {
     convertMemoContent,
     isQuillDelta,
@@ -499,6 +500,15 @@
 
   function openTaskDetailInWindow() {
     if (!node || !$selected_id || !$table_selected_id) return;
+
+    if (isWorkspaceProject && workspaceProjectDir && $tree_data?.data) {
+      const tasks = projectDataToWorkspaceTasks($tree_data, $workspace_tasks_cache);
+      platform.wsBroadcastProjectSnapshot(
+        workspaceProjectDir,
+        Object.fromEntries(tasks.map((task) => [task.id, task]))
+      );
+      tree_data.flushPendingPersist();
+    }
 
     platform.openTaskDetailWindow({
       projectId: $selected_id,

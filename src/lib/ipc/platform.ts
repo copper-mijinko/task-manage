@@ -355,6 +355,13 @@ export function wsWriteProjectPatch(
   );
 }
 
+export function wsBroadcastProjectSnapshot(
+  projectDir: string,
+  tasks: Record<string, WorkspaceTask>
+): void {
+  api()?.wsBroadcastProjectSnapshot?.(projectDir, tasks);
+}
+
 export function wsDeleteTask(
   projectDir: string,
   taskId: string
