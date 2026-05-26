@@ -5,6 +5,7 @@
 export * from "./theme";
 export * from "./ui";
 export * from "./panel_coordinator";
+export * from "./preferences";
 
 // Feature stores も互換性のため再エクスポート
 // 新規コードは @features/* から直接 import を推奨
@@ -30,6 +31,7 @@ import { workspace_conflict_policy } from "@features/workspace/stores/policy";
 import { active_tag } from "@features/memos/stores/tags";
 import { sort_state } from "@features/tasks/stores/sort";
 import { inbox_store } from "@features/inbox/stores/inbox";
+import { date_time_format } from "./preferences";
 
 export function init_store() {
   tree_data.init();
@@ -43,6 +45,7 @@ export function init_store() {
   workspace_store.init();
   workspace_conflict_policy.init();
   inbox_store.init();
+  date_time_format.init();
 
   active_tag.subscribe((tag) => {
     filter.update((f) => {
