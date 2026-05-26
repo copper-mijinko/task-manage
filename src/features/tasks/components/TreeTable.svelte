@@ -18,6 +18,7 @@
   import {
     flattenVisibleTree,
     buildInheritedDueDateMap,
+    buildLineNumberMap,
     buildNodePathMap,
     updateNodeDataById,
     isChild,
@@ -76,6 +77,7 @@
   $: rows = $filtered_data ? flattenVisibleTree($filtered_data, $closed_node_ids) : [];
   $: inheritedDueDateMap = buildInheritedDueDateMap(rows);
   $: nodePathMap = buildNodePathMap(rows);
+  $: lineNumberMap = buildLineNumberMap($filtered_data);
   $: isDark = $theme == "dark";
   $: hasNoTasks = !$tree_data?.data?.children?.length;
   let scrollTop = 0;
@@ -1039,6 +1041,7 @@
         bulkCanOutdent={canBulkOutdent}
         inheritedDueDate={inheritedDueDateMap.get(row.id) ?? ""}
         nodePath={nodePathMap.get(row.id) ?? ""}
+        lineNumber={lineNumberMap.get(row.id) ?? 0}
         on:select={handleSelectRow}
         on:toggleCheckbox={handleToggleCheckbox}
         on:toggle={handleToggleRow}
