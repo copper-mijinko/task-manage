@@ -1,10 +1,13 @@
 import { defineConfig } from "vite";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { spawn } from "child_process";
+import { readFileSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+const pkg = JSON.parse(readFileSync(path.resolve(__dirname, "package.json"), "utf8"));
 
 function electronDevPlugin() {
   return {
@@ -26,6 +29,10 @@ export default defineConfig({
   plugins: [svelte(), electronDevPlugin()],
   base: "./",
   publicDir: "public",
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+    __APP_NAME__: JSON.stringify(pkg.name),
+  },
   build: {
     outDir: "renderer",
     emptyOutDir: true,

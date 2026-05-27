@@ -8,6 +8,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   plugins: [svelte(), svelteTesting()],
+  define: {
+    __APP_VERSION__: JSON.stringify("test"),
+    __APP_NAME__: JSON.stringify("task-manage"),
+  },
   resolve: {
     alias: {
       "@lib": path.resolve(__dirname, "src/lib"),
