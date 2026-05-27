@@ -36,43 +36,102 @@
     bulkOutdent,
     areAllSiblings,
     isContiguousSiblingBlock,
+    archiveNode,
+    restoreNode,
+    bulkArchiveNodes,
+    bulkRestoreNodes,
   } from "@features/tasks/utils/tree_control";
   import { getDefaultNode } from "@features/tasks/utils/tree_control";
   import { undoHistory, redoHistory } from "@features/tasks/stores/tree";
-  import { selected_ids, clearSelection, selectOnly } from "@stores/ui";
+  import { selected_ids, clearSelection, selectOnly, show_archived } from "@stores/ui";
 
   // ページ内検索はstoresから共有
 
   // Dialog
+  // 確認ダイアログの状態：単発の場合と bulk の場合で経路が分かれる。
+  // bulk のときは「active 分はアーカイブ、archived 分は完全削除」と
+  // 自動振り分けする（仕様）。archiveTargetIds と permanentTargetIds の
+  // 両方を保持し、ダイアログには両方の件数を表示する。
   let show_confirm = false;
+  /** 単発時のモード: "archive" | "permanent"。bulk のときは見ない。 */
+  let confirm_mode = "archive";
+  /** bulk の振り分け結果。 */
+  let archive_target_ids = [];
+  let permanent_target_ids = [];
+
   const toggle_confirm = () => {
     show_confirm = !show_confirm;
     if (!show_confirm) {
       is_bulk_confirm = false;
       bulk_confirm_count = 0;
+      confirm_mode = "archive";
+      archive_target_ids = [];
+      permanent_target_ids = [];
     }
   };
   let name_confirm = "";
   let is_bulk_confirm = false;
   let bulk_confirm_count = 0;
+
   const callback_confirm = () => {
+    if (!$tree_data?.data) return;
     if (is_bulk_confirm) {
-      if (!$tree_data?.data) return;
-      const rootId = $tree_data.data.id;
-      const targets = new Set(Array.from($selected_ids).filter((id) => id !== rootId));
-      if (targets.size === 0) return;
-      const data = bulkRemoveNodes($tree_data.data, targets);
-      if (data && data !== $tree_data.data) {
-        $tree_data = { ...$tree_data, data };
+      let data = $tree_data.data;
+      if (archive_target_ids.length > 0) {
+        data = bulkArchiveNodes(data, new Set(archive_target_ids));
       }
+      if (permanent_target_ids.length > 0) {
+        const removed = bulkRemoveNodes(data, new Set(permanent_target_ids));
+        if (removed) data = removed;
+      }
+      $tree_data = { ...$tree_data, data };
       clearSelection();
       is_bulk_confirm = false;
       bulk_confirm_count = 0;
+      confirm_mode = "archive";
+      archive_target_ids = [];
+      permanent_target_ids = [];
       return;
     }
-    $tree_data.data = rmNode($table_selected_id, $tree_data.data);
+    if (!$table_selected_id) return;
+    if (confirm_mode === "permanent") {
+      $tree_data.data = rmNode($table_selected_id, $tree_data.data);
+      $tree_data = { ...$tree_data, data: $tree_data.data };
+    } else {
+      $tree_data.data = archiveNode($table_selected_id, $tree_data.data);
+      $tree_data = { ...$tree_data, data: $tree_data.data };
+    }
     clearSelection();
+    confirm_mode = "archive";
   };
+
+  $: confirmDialogHeader = (() => {
+    if (is_bulk_confirm) {
+      if (archive_target_ids.length > 0 && permanent_target_ids.length > 0) {
+        return "アーカイブと完全削除の確認";
+      }
+      return permanent_target_ids.length > 0 ? "完全削除の確認" : "アーカイブの確認";
+    }
+    return confirm_mode === "permanent" ? "完全削除の確認" : "アーカイブの確認";
+  })();
+
+  $: confirmDialogContent = (() => {
+    if (is_bulk_confirm) {
+      const lines = [];
+      if (archive_target_ids.length > 0) lines.push(`${archive_target_ids.length} 件をアーカイブ`);
+      if (permanent_target_ids.length > 0)
+        lines.push(`${permanent_target_ids.length} 件を完全削除`);
+      const body = lines.join(" / ");
+      if (permanent_target_ids.length > 0) {
+        return `${body} します。\n完全削除分は取り消せません。`;
+      }
+      return `${body} します。\n後でアーカイブ表示から復元できます。`;
+    }
+    if (confirm_mode === "permanent") {
+      return `"${name_confirm}" を完全に削除しますか？\nこの操作は取り消せません。`;
+    }
+    return `"${name_confirm}" をアーカイブしますか？\n後でアーカイブ表示から復元できます。`;
+  })();
 
   // Reactive bulk-capability flags for the toolbar buttons.
   $: selectionSize = $selected_ids.size;
@@ -294,20 +353,33 @@
     }
   }
 
-  // Remove — routes to bulk delete when multiple rows are selected.
-  export function handleRemove(e) {
+  // Remove — toolbar の削除ボタン。
+  // - bulk: 選択中の active 分はアーカイブ、archived 分は完全削除に自動振り分け
+  // - 単発: anchor が active なら archive、archived なら完全削除
+  // mode は単発時のみ意味を持つ（"archive" | "permanent"）。
+  export function handleRemove(e, mode = "archive") {
     e.stopPropagation();
     if (!$tree_data?.data) return;
     if (isMultiSelect) {
       const rootId = $tree_data.data.id;
-      const targets = Array.from($selected_ids).filter((id) => id !== rootId);
-      if (targets.length === 0) {
+      const ids = Array.from($selected_ids).filter((id) => id !== rootId);
+      if (ids.length === 0) {
         alert_content = "Cannot delete the root node.";
         show_alert = true;
         return;
       }
+      const archiveIds = [];
+      const permanentIds = [];
+      for (const id of ids) {
+        const n = getNode(id, $tree_data.data);
+        if (!n) continue;
+        if (n.archived) permanentIds.push(id);
+        else archiveIds.push(id);
+      }
+      archive_target_ids = archiveIds;
+      permanent_target_ids = permanentIds;
       is_bulk_confirm = true;
-      bulk_confirm_count = targets.length;
+      bulk_confirm_count = ids.length;
       name_confirm = "";
       show_confirm = true;
       return;
@@ -320,13 +392,52 @@
         return;
       }
       if (node) {
+        confirm_mode = mode;
         is_bulk_confirm = false;
         bulk_confirm_count = 0;
+        archive_target_ids = [];
+        permanent_target_ids = [];
         show_confirm = true;
         name_confirm = node.data.name;
       }
     }
   }
+
+  // Restore — archived 行を元に戻す。確認ダイアログは挟まない（取り消し可能なため）。
+  export function handleRestore(e) {
+    e.stopPropagation();
+    if (!$tree_data?.data) return;
+    if (isMultiSelect) {
+      const rootId = $tree_data.data.id;
+      const targets = new Set(Array.from($selected_ids).filter((id) => id !== rootId));
+      if (targets.size === 0) return;
+      const data = bulkRestoreNodes($tree_data.data, targets);
+      $tree_data = { ...$tree_data, data };
+      return;
+    }
+    if ($table_selected_id) {
+      const node = getNode($table_selected_id, $tree_data.data);
+      if (!node || node.id === $tree_data.data.id) return;
+      $tree_data.data = restoreNode($table_selected_id, $tree_data.data);
+      $tree_data = { ...$tree_data, data: $tree_data.data };
+    }
+  }
+
+  // 選択中の anchor が archived かどうか（toolbar のアイコン切替に使う）
+  $: anchorIsArchived = (() => {
+    if (!$tree_data?.data || !$table_selected_id) return false;
+    const node = getNode($table_selected_id, $tree_data.data);
+    return !!node?.archived;
+  })();
+  // 選択中のどこかに archived が含まれているか（restore ボタン表示の判定に使う）
+  $: selectionHasArchived = (() => {
+    if (!$tree_data?.data) return false;
+    for (const id of $selected_ids) {
+      const node = getNode(id, $tree_data.data);
+      if (node?.archived) return true;
+    }
+    return anchorIsArchived;
+  })();
 
   // Move / indent helpers — tree_control functions mutate the tree in-place
   // and return the SAME reference, so we must force Svelte reactivity by
@@ -401,8 +512,11 @@
             <!-- Group 1: Add / Delete -->
             <div class="TbGroup">
               <IconButton
-                tooltipContent="タスク追加"
+                tooltipContent={anchorIsArchived
+                  ? "アーカイブ済みタスクには追加できません"
+                  : "タスク追加"}
                 ariaLabel="タスク追加"
+                disabled={anchorIsArchived}
                 activeColor={"var(--theme-color-Primary-dark)"}
                 normalColor={"var(--theme-color-Primary-main)"}
                 on:click={(e) => handleAdd(e, "insert_after")}
@@ -418,8 +532,11 @@
                 >
               </IconButton>
               <IconButton
-                tooltipContent="子タスク追加"
+                tooltipContent={anchorIsArchived
+                  ? "アーカイブ済みタスクには追加できません"
+                  : "子タスク追加"}
                 ariaLabel="子タスク追加"
+                disabled={anchorIsArchived}
                 variant="outlined"
                 activeColor={"var(--theme-color-Primary-main)"}
                 normalColor={"var(--theme-color-Primary-main)"}
@@ -448,12 +565,20 @@
                 </svg>
               </IconButton>
               <IconButton
-                tooltipContent={isMultiSelect ? `${selectionSize}件削除` : "削除"}
-                ariaLabel={isMultiSelect ? `${selectionSize}件削除` : "削除"}
+                tooltipContent={isMultiSelect
+                  ? `${selectionSize}件を削除（アーカイブ／完全削除を自動振り分け）`
+                  : anchorIsArchived
+                    ? "完全に削除"
+                    : "アーカイブ"}
+                ariaLabel={isMultiSelect
+                  ? `${selectionSize}件を削除`
+                  : anchorIsArchived
+                    ? "完全に削除"
+                    : "アーカイブ"}
                 variant="text"
                 activeColor={"var(--theme-color-Error-main)"}
                 normalColor={"var(--theme-color-Error-main)"}
-                on:click={(e) => handleRemove(e)}
+                on:click={(e) => handleRemove(e, anchorIsArchived ? "permanent" : "archive")}
               >
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path
@@ -465,6 +590,26 @@
                   />
                 </svg>
               </IconButton>
+              {#if selectionHasArchived}
+                <IconButton
+                  tooltipContent={isMultiSelect ? "選択中のアーカイブ済みタスクを復元" : "復元"}
+                  ariaLabel="アーカイブから復元"
+                  variant="text"
+                  activeColor={"var(--theme-color-Primary-main)"}
+                  normalColor={"var(--theme-color-Primary-main)"}
+                  on:click={handleRestore}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path
+                      d="M3 12a9 9 0 1 1 3.6 7.2M3 12V6M3 12h6"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </IconButton>
+              {/if}
             </div>
             <span class="TbSep" aria-hidden="true"></span>
 
@@ -480,7 +625,7 @@
                 variant="text"
                 normalColor={"var(--theme-color-Sub-main)"}
                 activeColor={"var(--theme-color-Primary-main)"}
-                disabled={isMultiSelect && !canMultiSiblingMove}
+                disabled={anchorIsArchived || (isMultiSelect && !canMultiSiblingMove)}
                 on:click={handleMoveUp}
               >
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -503,7 +648,7 @@
                 variant="text"
                 normalColor={"var(--theme-color-Sub-main)"}
                 activeColor={"var(--theme-color-Primary-main)"}
-                disabled={isMultiSelect && !canMultiSiblingMove}
+                disabled={anchorIsArchived || (isMultiSelect && !canMultiSiblingMove)}
                 on:click={handleMoveDown}
               >
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -528,7 +673,8 @@
                 variant="text"
                 normalColor={"var(--theme-color-Sub-main)"}
                 activeColor={"var(--theme-color-Primary-main)"}
-                disabled={isMultiSelect && (!canMultiTreeOp || !canMultiOutdent)}
+                disabled={anchorIsArchived ||
+                  (isMultiSelect && (!canMultiTreeOp || !canMultiOutdent))}
                 on:click={handleOutdent}
               >
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -551,7 +697,7 @@
                 variant="text"
                 normalColor={"var(--theme-color-Sub-main)"}
                 activeColor={"var(--theme-color-Primary-main)"}
-                disabled={isMultiSelect && !canMultiTreeOp}
+                disabled={anchorIsArchived || (isMultiSelect && !canMultiTreeOp)}
                 on:click={handleIndent}
               >
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -745,6 +891,28 @@
                   <path d="M15 4V20" stroke="currentColor" stroke-width="1.8" />
                 </svg>
               </IconButton>
+              <IconButton
+                tooltipContent={$show_archived
+                  ? "アーカイブ済みタスクを隠す"
+                  : "アーカイブ済みタスクを表示"}
+                ariaLabel="アーカイブ表示の切替"
+                variant="text"
+                normalColor={$show_archived
+                  ? "var(--theme-color-Primary-main)"
+                  : "var(--theme-color-Sub-main)"}
+                activeColor={"var(--theme-color-Primary-main)"}
+                on:click={() => show_archived.set(!$show_archived)}
+              >
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path
+                    d="M3 7h18v3H3V7zM5 10v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-9M10 14h4"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </IconButton>
             </div>
           </div>
           <ActiveFilterBar />
@@ -778,10 +946,8 @@
   <Dialog
     show={show_confirm}
     toggle={toggle_confirm}
-    header="Confirm."
-    content={is_bulk_confirm
-      ? `選択中の ${bulk_confirm_count} 件を削除しますか？\n子タスクも一緒に削除されます。`
-      : `Do you really delete "${name_confirm}"?\nThis may delete child nodes.`}
+    header={confirmDialogHeader}
+    content={confirmDialogContent}
     callback={callback_confirm}
   />
   <Dialog

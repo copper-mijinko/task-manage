@@ -45,7 +45,7 @@ export function workspaceToProjectData(
     visited.add(id);
     const task = tasks[id];
     const childIds = (childrenMap.get(id) ?? []).filter((cid) => !visited.has(cid));
-    return {
+    const node: TreeData = {
       id,
       data: {
         name: task.name,
@@ -65,6 +65,11 @@ export function workspaceToProjectData(
       },
       children: childIds.map((cid) => buildNode(cid)),
     };
+    if (task.archived) {
+      node.archived = true;
+      if (task.archivedAt) node.archivedAt = task.archivedAt;
+    }
+    return node;
   }
 
   if (!tasks[rootId]) {
@@ -100,7 +105,7 @@ export function projectDataToWorkspaceTasks(
 
   function traverse(node: TreeData, parentIds: string[], siblingIndex: number) {
     const existing = existingTasks[node.id];
-    result.push({
+    const task: WorkspaceTask = {
       id: node.id,
       name: node.data.name,
       status: (node.data.status as WorkspaceTaskStatus) || "Open",
@@ -127,7 +132,12 @@ export function projectDataToWorkspaceTasks(
         : (existing?.attachments ?? []),
       createdAt: existing?.createdAt || today,
       order: parentIds.length === 0 ? existing?.order : siblingIndex,
-    });
+    };
+    if (node.archived) {
+      task.archived = true;
+      task.archivedAt = node.archivedAt ?? existing?.archivedAt;
+    }
+    result.push(task);
     for (const [index, child] of (node.children || []).entries()) {
       traverse(child, [node.id], index);
     }

@@ -35,6 +35,18 @@ export interface TreeData {
   id: string;
   data: TreeNodeData;
   children: TreeData[];
+  /**
+   * アーカイブされたノードに付くフラグ。`true` のときはツリーから「論理削除」
+   * された扱いで、`flattenVisibleTree` の `includeArchived` が `false`
+   * （既定）の場合に自分自身と子孫が表示対象から外れる。
+   *
+   * `permanentlyDeleteNode` ／ `bulkRemoveNodes` を呼ぶまでデータとしては残る。
+   * 親が archived のとき子も連動して非表示になる（子の archived フラグの
+   * 有無は問わない）。
+   */
+  archived?: boolean;
+  /** archived を立てた時刻（ISO 8601）。表示ソート用。 */
+  archivedAt?: string;
 }
 
 export interface ProjectHeader {
@@ -340,7 +352,8 @@ export function updateNodeDataById(
 
 export function flattenVisibleTree(
   tree_data: TreeData | undefined,
-  closedIds: Set<string> = new Set()
+  closedIds: Set<string> = new Set(),
+  includeArchived: boolean = false
 ): VisibleTreeRow[] {
   if (!tree_data) {
     return [];
@@ -353,8 +366,15 @@ export function flattenVisibleTree(
     depth: number,
     parentId: string | undefined,
     siblingIndex: number,
-    siblingCount: number
+    siblingCount: number,
+    insideArchived: boolean
   ) => {
+    const isArchived = !!node.archived;
+    const effectivelyArchived = insideArchived || isArchived;
+    if (effectivelyArchived && !includeArchived) {
+      // includeArchived=false の通常表示モードでは archived 配下を丸ごとスキップ。
+      return;
+    }
     const hasChildren = !!(node.children && node.children.length > 0);
     const expanded = !closedIds.has(node.id);
 
@@ -379,11 +399,11 @@ export function flattenVisibleTree(
 
     const childCount = node.children.length;
     node.children.forEach((child, index) => {
-      visit(child, depth + 1, node.id, index, childCount);
+      visit(child, depth + 1, node.id, index, childCount, effectivelyArchived);
     });
   };
 
-  visit(tree_data, 0, undefined, 0, 1);
+  visit(tree_data, 0, undefined, 0, 1, false);
 
   return rows;
 }
@@ -797,6 +817,121 @@ export function bulkUpdateNodeData(
   }
 
   return visit(tree_data);
+}
+
+/**
+ * ノードに archived フラグを立てる（論理削除）。
+ * - ルートは archived 不可（ルートを archive すると画面に何も出なくなるため）
+ * - 既に archived ならそのまま
+ * - archivedAt を新たに（または既存値を維持で）セット
+ *
+ * `permanentlyDeleteNode` で消すまでデータとしては残る。子はフラグを変えない
+ * （親が archived なら表示側で連動して非表示になる）。
+ */
+export function archiveNode(target: string, tree_data: TreeData): TreeData {
+  if (target === tree_data.id) {
+    // ルートは archive 不可
+    return tree_data;
+  }
+  const parent = getParent(target, tree_data);
+  if (!parent) return tree_data;
+  for (const child of parent.children) {
+    if (child.id === target) {
+      if (child.archived) return tree_data;
+      child.archived = true;
+      child.archivedAt = new Date().toISOString();
+      return tree_data;
+    }
+  }
+  return tree_data;
+}
+
+/** ノードの archived を解除する。`archivedAt` も消す。 */
+export function restoreNode(target: string, tree_data: TreeData): TreeData {
+  if (target === tree_data.id) return tree_data;
+  const parent = getParent(target, tree_data);
+  if (!parent) return tree_data;
+  for (const child of parent.children) {
+    if (child.id === target) {
+      if (!child.archived) return tree_data;
+      delete child.archived;
+      delete child.archivedAt;
+      // 復元時は元の親の末尾へ移動する。元親 ID をエントリに残していない
+      // 設計のため、archived 中も子は親の children 配列内にいる前提で、
+      // 末尾に詰め直す（同 parent の他の active 兄弟の後ろになるため、
+      // archived 表示時の並びと整合する）。
+      const index = parent.children.findIndex((c) => c.id === target);
+      if (index >= 0 && index !== parent.children.length - 1) {
+        const [moved] = parent.children.splice(index, 1);
+        parent.children.push(moved);
+      }
+      return tree_data;
+    }
+  }
+  return tree_data;
+}
+
+/** archived フラグを無視して、対象ノードをツリーから物理削除する。 */
+export function permanentlyDeleteNode(target: string, tree_data: TreeData): TreeData {
+  return rmNode(target, tree_data);
+}
+
+/** 複数まとめて archive する。ルートは含まれていても無視。 */
+export function bulkArchiveNodes(tree_data: TreeData, ids: Set<string>): TreeData {
+  if (ids.size === 0) return tree_data;
+  const now = new Date().toISOString();
+  function visit(node: TreeData) {
+    for (const child of node.children) {
+      if (ids.has(child.id) && !child.archived) {
+        child.archived = true;
+        child.archivedAt = now;
+      }
+      visit(child);
+    }
+  }
+  visit(tree_data);
+  return tree_data;
+}
+
+/** 複数まとめて restore する。 */
+export function bulkRestoreNodes(tree_data: TreeData, ids: Set<string>): TreeData {
+  if (ids.size === 0) return tree_data;
+  function visit(node: TreeData) {
+    let i = 0;
+    while (i < node.children.length) {
+      const child = node.children[i];
+      if (ids.has(child.id) && child.archived) {
+        delete child.archived;
+        delete child.archivedAt;
+        // 末尾へ移動
+        if (i !== node.children.length - 1) {
+          const [moved] = node.children.splice(i, 1);
+          node.children.push(moved);
+          // splice したので index は進めない
+          visit(child);
+          continue;
+        }
+      }
+      visit(child);
+      i++;
+    }
+  }
+  visit(tree_data);
+  return tree_data;
+}
+
+/**
+ * archived フラグの立った子孫をすべて取り除いた新しいツリーを返す。
+ * 表示・検索・タグ集計から archived を除外するための前処理として使う。
+ * 元のツリーは変更しない（pure）。
+ */
+export function stripArchivedNodes(node: TreeData): TreeData {
+  const children: TreeData[] = [];
+  for (const child of node.children ?? []) {
+    if (child.archived) continue;
+    children.push(stripArchivedNodes(child));
+  }
+  return { ...node, children };
 }
 
 export function bulkRemoveNodes(

@@ -24,7 +24,7 @@ export * from "@features/inbox/stores/inbox";
 import { get } from "svelte/store";
 import { tree_data } from "@features/tasks/stores/tree";
 import { project_ids } from "@features/projects/stores/project";
-import { selected_id, selected_type, closed_node_ids } from "./ui";
+import { selected_id, selected_type, closed_node_ids, show_archived } from "./ui";
 import { filter } from "@features/search/stores/search";
 import { theme } from "./theme";
 import { column_settings } from "@features/tasks/stores/column_settings";
@@ -48,6 +48,7 @@ export function init_store(): Promise<void> {
   filter.init();
   theme.init();
   closed_node_ids.init();
+  show_archived.init();
   column_settings.init();
   const workspaceReady = workspace_store.init();
   workspace_conflict_policy.init();

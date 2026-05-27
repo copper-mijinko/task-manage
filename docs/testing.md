@@ -28,6 +28,7 @@ Electron アプリ全体を起動して確認する。
 [tests/unit/search.test.js](../tests/unit/search.test.js)
 [tests/unit/datetime_shortcuts.test.ts](../tests/unit/datetime_shortcuts.test.ts)
 [tests/unit/navigation_history.test.ts](../tests/unit/navigation_history.test.ts)
+[tests/unit/archive.test.ts](../tests/unit/archive.test.ts)
 
 | 対象                                | テストケース                                                                                      | 確認内容                                                                        |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
@@ -85,6 +86,16 @@ Electron アプリ全体を起動して確認する。
 | `src/stores/navigation_history.ts`  | `ページ跨ぎ + タスクの 2 アクションは 2 回の back で巻き戻る`                                          | 「プロジェクト遷移」と「タスク選択」をそれぞれ 1 エントリとして積む            |
 | `src/stores/navigation_history.ts`  | `activeWorkspacePath はエントリに記録される`                                                       | workspace 切替を跨いだ戻る/進むに対応                                           |
 | `src/stores/navigation_history.ts`  | `workspace_store の non-navigation 変更（projects 一覧更新など）は履歴を伸ばさない`                  | workspace_store 全体を購読しつつ、ページに関わらない更新は無視する              |
+| `src/features/tasks/utils/tree_control.ts` | `archiveNode は対象に archived=true と archivedAt を立てる`                                  | アーカイブ操作の基本動作                                                        |
+| `src/features/tasks/utils/tree_control.ts` | `archiveNode はルートには作用しない`                                                          | プロジェクトルートを誤って消せないことを保証                                    |
+| `src/features/tasks/utils/tree_control.ts` | `archiveNode は既に archived のノードは触らない`                                              | idempotency                                                                     |
+| `src/features/tasks/utils/tree_control.ts` | `restoreNode は archived を外し、親 children 配列の末尾へ移動する`                            | 復元時の挿入位置を「元の親の末尾」に固定                                        |
+| `src/features/tasks/utils/tree_control.ts` | `bulkArchiveNodes は複数ノードに同じ archivedAt を一括で立てる`                                | バルク操作で時間印が揃う                                                        |
+| `src/features/tasks/utils/tree_control.ts` | `bulkRestoreNodes は対象を末尾へ寄せ、archived を外す`                                         | バルク復元の挙動                                                                |
+| `src/features/tasks/utils/tree_control.ts` | `flattenVisibleTree は archived とその子孫を既定で除外する`                                    | show_archived=OFF 時の display 動作                                              |
+| `src/features/tasks/utils/tree_control.ts` | `flattenVisibleTree は includeArchived=true で archived も並べる`                              | show_archived=ON 時の display 動作                                               |
+| `src/features/tasks/utils/tree_control.ts` | `stripArchivedNodes は archived の子孫を完全に取り除いた新ツリーを返す`                          | filter/tag 系の前処理が新ツリーを返し、元を破壊しない                            |
+| `src/features/tasks/utils/tree_control.ts` | `restoreNode で親を復元しても、独立 archived な子は archived のまま`                            | restore は対象ノードだけに作用する（cascade なし）                                |
 
 ### 2.2 Component テスト
 
@@ -185,6 +196,7 @@ Electron アプリ全体を起動して確認する。
 | `electron/workspace-reconciler.js`  | 自前書込除外 / 外部書込取り込み / 競合通知 | 実装済み | [tests/unit/workspace-reconciler.test.js](../tests/unit/workspace-reconciler.test.js)   |
 | `src/lib/utils/datetime_shortcuts.ts` | 入力ショートカットの日付・時刻フォーマット | 実装済み | [tests/unit/datetime_shortcuts.test.ts](../tests/unit/datetime_shortcuts.test.ts)       |
 | `src/stores/navigation_history.ts`  | ページ遷移履歴の push / back / forward / 重複防止 / 分岐切り捨て / flush 同期 | 実装済み | [tests/unit/navigation_history.test.ts](../tests/unit/navigation_history.test.ts) |
+| `src/features/tasks/utils/tree_control.ts` | アーカイブ操作（archive / restore / bulk / display 制御 / strip）              | 実装済み | [tests/unit/archive.test.ts](../tests/unit/archive.test.ts) |
 
 ### 3.2 Component テスト
 
@@ -256,6 +268,6 @@ Electron アプリ全体を起動して確認する。
 
 | 種別         | 件数                              |
 | ------------ | --------------------------------- |
-| Test files   | unit 18 passed + component 18 passed (36) |
-| Tests        | unit 312 passed + component 126 passed / 7 skipped (438 / 7) |
+| Test files   | unit 19 passed + component 18 passed (37) |
+| Tests        | unit 324 passed + component 126 passed / 7 skipped (450 / 7) |
 | svelte-check | 455 files / 0 errors / 0 warnings |

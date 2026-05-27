@@ -148,6 +148,8 @@ function comparableWorkspaceTask(task: WorkspaceTask) {
     })),
     createdAt: task.createdAt,
     order: task.order ?? null,
+    archived: task.archived ?? false,
+    archivedAt: task.archivedAt ?? null,
   };
 }
 

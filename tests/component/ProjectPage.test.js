@@ -183,19 +183,21 @@ describe("ProjectPage", () => {
     expect(get(tree_data).data.children).toHaveLength(1);
   });
 
-  test("removes the selected task after confirmation", async () => {
+  test("archives the selected task after confirmation (delete button = archive)", async () => {
     const { container } = render(ProjectPage);
     const buttons = container.querySelectorAll(".TbGroup button");
 
     await fireEvent.click(buttons[2]);
     expect(
-      screen.getByText((content) => content.includes("Do you really delete"))
+      screen.getByText((content) => content.includes("アーカイブしますか"))
     ).toBeInTheDocument();
 
     await fireEvent.click(screen.getByRole("button", { name: "ok" }));
     await tick();
 
-    expect(get(tree_data).data.children).toHaveLength(0);
+    // タスクは物理削除されず archived フラグだけが立つ（論理削除）。
+    expect(get(tree_data).data.children).toHaveLength(1);
+    expect(get(tree_data).data.children[0].archived).toBe(true);
     expect(get(table_selected_id)).toBeUndefined();
   });
 

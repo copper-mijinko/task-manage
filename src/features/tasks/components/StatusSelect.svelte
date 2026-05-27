@@ -3,6 +3,7 @@
 
   export let status = "Open";
   export let style = "";
+  export let disabled = false;
 
   const dispatch = createEventDispatcher();
 
@@ -23,6 +24,7 @@
 
   async function toggle(event) {
     event.stopPropagation();
+    if (disabled) return;
     if (open) {
       open = false;
       return;
@@ -76,10 +78,12 @@
   <button
     type="button"
     class="s-button"
+    class:s-disabled={disabled}
     style="--status-color: {color_map[status]};"
     aria-label="Status"
     aria-haspopup="listbox"
     aria-expanded={open}
+    {disabled}
     data-current-status={status}
     on:click={toggle}
   >

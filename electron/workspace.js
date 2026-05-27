@@ -757,7 +757,22 @@ function taskFrontmatterData(task) {
   if (task.parents?.length > 0) data.parents = task.parents;
   if (typeof task.order === "number") data.order = task.order;
   data.created = task.createdAt || new Date().toISOString().slice(0, 10);
+  // Archived (論理削除) フラグはオプションで載せる。未アーカイブのときは
+  // フィールド自体を出さないことで、既存ファイルとの差分も最小限になる。
+  if (task.archived) {
+    data.archived = true;
+    if (task.archivedAt) data.archived_at = task.archivedAt;
+  }
   return data;
+}
+
+function parseArchivedValue(value) {
+  if (value === true) return true;
+  if (typeof value === "string") {
+    const lower = value.trim().toLowerCase();
+    if (lower === "true" || lower === "yes" || lower === "1") return true;
+  }
+  return false;
 }
 
 /** Read memos from a task directory. */
@@ -845,7 +860,7 @@ function parseOrderValue(value) {
 function readRootTask(projectDir, options = {}) {
   const content = fs.readFileSync(path.join(projectDir, "_project.md"), "utf8");
   const { data } = parseFrontmatter(content);
-  return {
+  const task = {
     id: data.id,
     name: data.name || "",
     status: data.status || "Open",
@@ -857,6 +872,11 @@ function readRootTask(projectDir, options = {}) {
     createdAt: data.created || "",
     order: parseOrderValue(data.order),
   };
+  if (parseArchivedValue(data.archived)) {
+    task.archived = true;
+    if (data.archived_at) task.archivedAt = String(data.archived_at);
+  }
+  return task;
 }
 
 /** Read a regular task from its subdirectory. */
@@ -864,7 +884,7 @@ function readTaskDir(taskDir, options = {}) {
   const content = fs.readFileSync(path.join(taskDir, "_index.md"), "utf8");
   const { data } = parseFrontmatter(content);
   const parents = Array.isArray(data.parents) ? data.parents : data.parents ? [data.parents] : [];
-  return {
+  const task = {
     id: data.id,
     name: data.name || "",
     status: data.status || "Open",
@@ -876,6 +896,11 @@ function readTaskDir(taskDir, options = {}) {
     createdAt: data.created || "",
     order: parseOrderValue(data.order),
   };
+  if (parseArchivedValue(data.archived)) {
+    task.archived = true;
+    if (data.archived_at) task.archivedAt = String(data.archived_at);
+  }
+  return task;
 }
 
 /**

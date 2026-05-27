@@ -4,12 +4,13 @@ import {
   filterTree,
   getNode,
   sortTree,
+  stripArchivedNodes,
   type ProjectData,
   type TreeData,
 } from "@features/tasks/utils/tree_control";
 import type { FilterState, SortState } from "@app-types/app";
 import { tree_data } from "@features/tasks/stores/tree";
-import { selected_id, selected_type, table_selected_id } from "@stores/ui";
+import { selected_id, selected_type, show_archived, table_selected_id } from "@stores/ui";
 import { sort_state } from "@features/tasks/stores/sort";
 import { workspace_store, workspace_tasks_cache } from "@features/workspace/stores/workspace";
 import * as platform from "@lib/ipc/platform";
@@ -104,6 +105,17 @@ async function hydrateWorkspaceMemosForSearch(current: FilterState, currentTreeD
 function createFilter(initialValue: FilterState): FilterStore {
   const { subscribe, set, update } = writable<FilterState>(initialValue);
 
+  /**
+   * show_archived が OFF のとき、ツリーから archived ノードを切り落として
+   * から後段に渡す。これによってフィルター・件数・ページ内検索・タグ集計の
+   * すべてが「画面に見えているもの」に一致する。
+   */
+  const archivedAdjustedTree = (data: ProjectData | undefined): ProjectData | undefined => {
+    if (!data?.data) return data;
+    if (get(show_archived)) return data;
+    return { ...data, data: stripArchivedNodes(data.data) };
+  };
+
   const syncFilteredData = (
     current: FilterState,
     currentTreeData: ProjectData | undefined,
@@ -119,10 +131,18 @@ function createFilter(initialValue: FilterState): FilterStore {
 
     hydrateWorkspaceMemosForSearch(current, currentTreeData);
 
+    const visibleTreeData = archivedAdjustedTree(currentTreeData);
+    if (!visibleTreeData?.data) {
+      applyFilteredData.cancel();
+      filtered_data.set(undefined);
+      table_selected_id.set(undefined);
+      return;
+    }
+
     if (!hasActiveFilters(current)) {
       applyFilteredData.cancel();
-      const nextTree = (sortTree(currentTreeData.data, currentSort) ??
-        currentTreeData.data) as TreeData;
+      const nextTree = (sortTree(visibleTreeData.data, currentSort) ??
+        visibleTreeData.data) as TreeData;
       if (
         !get(table_selected_id) ||
         !nextTree ||
@@ -135,7 +155,7 @@ function createFilter(initialValue: FilterState): FilterStore {
       return;
     }
 
-    applyFilteredData(current, currentTreeData, currentSort);
+    applyFilteredData(current, visibleTreeData, currentSort);
   };
 
   const applyFilteredData = debounce(
@@ -179,6 +199,15 @@ function createFilter(initialValue: FilterState): FilterStore {
 
       sort_state.subscribe((currentSort) => {
         syncFilteredData(get({ subscribe } as Writable<FilterState>), get(tree_data), currentSort);
+      });
+
+      show_archived.subscribe(() => {
+        // show_archived の変更時にも再フィルター（archived の strip 有無が変わる）。
+        syncFilteredData(
+          get({ subscribe } as Writable<FilterState>),
+          get(tree_data),
+          get(sort_state)
+        );
       });
     },
   };
