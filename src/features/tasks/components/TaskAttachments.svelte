@@ -385,9 +385,11 @@
     display: grid;
     gap: var(--sp1);
     min-width: 0;
+    max-height: 12rem;
     margin: 0;
     padding: 0;
     list-style: none;
+    overflow-y: auto;
   }
   .attachment-item {
     display: flex;
