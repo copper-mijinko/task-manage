@@ -70,7 +70,7 @@ src/
 │   │   └── utils/
 │   │       └── page_search_highlighter.ts  # CSS Custom Highlight API ベースの全文ハイライト
 │   └── navigation/
-│       └── components/          # MenuList / Header / InfoPage
+│       └── components/          # MenuList / Header
 │
 ├── pages/                       # 画面（ウィンドウレベル）
 │   ├── MainPage.svelte          # W-001 メインウィンドウ本体

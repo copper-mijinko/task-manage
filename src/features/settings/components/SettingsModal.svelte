@@ -7,7 +7,7 @@
   export let show = false;
   export let toggle: () => void;
 
-  type CategoryId = "datetime-format";
+  type CategoryId = "datetime-format" | "about";
 
   type Category = {
     id: CategoryId;
@@ -22,7 +22,15 @@
       label: "日時フォーマット",
       description: "Ctrl+; / Ctrl+: で挿入する書式",
     },
+    {
+      id: "about",
+      label: "バージョン情報",
+      description: "アプリのバージョンを確認",
+    },
   ];
+
+  const appVersion = __APP_VERSION__;
+  const appName = __APP_NAME__;
 
   let selected: CategoryId = categories[0].id;
 
@@ -125,6 +133,22 @@
             <code>&lt;input type="date"&gt;</code> や <code>&lt;input type="time"&gt;</code>
             では仕様上 ISO 形式が必要なため、ここでの設定にかかわらず YYYY-MM-DD / HH:MM 形式で値がセットされます。
           </p>
+        {:else if selected === "about"}
+          <header class="DetailHeader">
+            <h3 class="DetailTitle">バージョン情報</h3>
+            <p class="DetailHint">現在インストールされているアプリのバージョンです。</p>
+          </header>
+
+          <dl class="AboutList">
+            <div class="AboutRow">
+              <dt class="AboutKey">アプリ名</dt>
+              <dd class="AboutValue">{appName}</dd>
+            </div>
+            <div class="AboutRow">
+              <dt class="AboutKey">バージョン</dt>
+              <dd class="AboutValue"><code>{appVersion}</code></dd>
+            </div>
+          </dl>
         {/if}
       </section>
     </div>
@@ -324,6 +348,48 @@
     font-size: var(--font-label-md);
     color: var(--theme-color-Sub-main);
     line-height: 1.6;
+  }
+  .AboutList {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin: 0;
+    padding: 0;
+    border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 18%, transparent);
+    border-radius: var(--shape-sm);
+    background-color: var(--theme-color-Main-main);
+    overflow: hidden;
+  }
+  .AboutRow {
+    display: flex;
+    align-items: center;
+    gap: var(--sp3);
+    padding: var(--sp2) var(--sp3);
+    border-top: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 12%, transparent);
+  }
+  .AboutRow:first-child {
+    border-top: none;
+  }
+  .AboutKey {
+    flex: 0 0 8rem;
+    margin: 0;
+    font-size: var(--font-body-sm);
+    font-weight: 500;
+    color: var(--theme-color-Sub-main);
+  }
+  .AboutValue {
+    flex: 1 1 auto;
+    margin: 0;
+    font-size: var(--font-body-md);
+    color: var(--theme-color-Sub-light);
+  }
+  .AboutValue code {
+    padding: 2px var(--sp2);
+    border-radius: var(--shape-xs);
+    background-color: var(--theme-color-Main-light);
+    border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 18%, transparent);
+    font-family: "Consolas", "Courier New", monospace;
+    font-size: var(--font-body-sm);
   }
   .Note code {
     padding: 0 4px;

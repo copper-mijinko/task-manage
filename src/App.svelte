@@ -22,19 +22,15 @@
   import ProjectPage from "@pages/MainPage.svelte";
   import Header from "@features/navigation/components/Header.svelte";
   import MenuList from "@features/navigation/components/MenuList.svelte";
-  import InfoPage from "@features/navigation/components/InfoPage.svelte";
   import InboxPanel from "@features/inbox/components/InboxPanel.svelte";
   import QuickCapture from "@features/inbox/components/QuickCapture.svelte";
   import { showQuickCapture } from "@stores/ui";
-  import Modal from "@lib/primitives/Modal.svelte";
-  import Button from "@lib/primitives/Button.svelte";
   import Loading from "@lib/primitives/Loading.svelte";
   import PageSearchBox from "@features/search/components/PageSearchBox.svelte";
   import TaskDetailWindow from "@pages/TaskDetailPage.svelte";
   import { sidebarCollapsed } from "@stores";
   import { startAutoRescan, stopAutoRescan } from "@features/search/utils/page_search_highlighter";
   import { registerDateTimeShortcuts } from "@lib/utils/datetime_shortcuts";
-  let show = Array(4).fill(false);
   let saveErrorMessage = null;
   let workspaceConflict = null;
   let workspaceNoticeMessage = null;
@@ -346,28 +342,6 @@
           <ProjectPage />
         {:else if $selected_type == "Inbox"}
           <InboxPanel />
-        {/if}
-        {#if $selected_type == "Info"}
-          <div
-            style="height:100%; display: flex; flex-direction: column; justify-content: center; align-items: center;"
-          >
-            {#each [1, 2, 3, 4] as i}
-              <Button
-                content="Setp{i}"
-                on:click={() => {
-                  show[i - 1] = !show[i - 1];
-                }}
-              />
-              <Modal
-                show={show[i - 1]}
-                toggle={() => {
-                  show[i - 1] = !show[i - 1];
-                }}
-              >
-                <InfoPage index={i} />
-              </Modal>
-            {/each}
-          </div>
         {/if}
       {/if}
       {#if !isTaskDetailWindow && !$sidebarCollapsed}

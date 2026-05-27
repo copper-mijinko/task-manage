@@ -19,10 +19,6 @@ export interface ProjectIdsStore extends Writable<ProjectListItem[] | undefined>
   setProjectOrder: (projects: ProjectListItem[]) => void;
 }
 
-export const info_ids = writable<ProjectListItem[]>([
-  { id: "9ba28822-6240-4280-9da3-63ac6b8356a6", name: "Usage" },
-]);
-
 function createProjectIds(initialValue: ProjectListItem[] | undefined): ProjectIdsStore {
   const { subscribe, set, update } = writable<ProjectListItem[] | undefined>(initialValue);
   let projectDeleteListenerRegistered = false;

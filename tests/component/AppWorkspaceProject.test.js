@@ -10,18 +10,6 @@ vi.mock("@pages/MainPage.svelte", async () => {
   const mod = await import("../mocks/TreeTableStub.svelte");
   return { default: mod.default };
 });
-vi.mock("@features/navigation/components/InfoPage.svelte", async () => {
-  const mod = await import("../mocks/PassThroughStub.svelte");
-  return { default: mod.default };
-});
-vi.mock("@lib/primitives/Modal.svelte", async () => {
-  const mod = await import("../mocks/DialogStub.svelte");
-  return { default: mod.default };
-});
-vi.mock("@lib/primitives/Button.svelte", async () => {
-  const mod = await import("../mocks/PassThroughStub.svelte");
-  return { default: mod.default };
-});
 vi.mock("@features/search/components/PageSearchBox.svelte", async () => {
   const mod = await import("../mocks/PassThroughStub.svelte");
   return { default: mod.default };
