@@ -1,6 +1,7 @@
 ﻿<script>
   import { onMount } from "svelte";
   import Quill from "quill";
+  import quillIcons from "quill/ui/icons.js";
   import "quill/dist/quill.snow.css";
   import { isEqual } from "lodash";
   import { memoContentForCompare } from "@features/memos/utils/memo_utils";
@@ -16,20 +17,44 @@
   let lastSavedContent = null;
   let linkClickListener;
   let pasteListener;
+  let editReleaseTimer;
   let errorMessage = null;
   let isHandlingLink = false;
 
+  const codeBlockIconSvg =
+    '<svg viewBox="0 0 18 18" aria-hidden="true" focusable="false">' +
+    '<rect class="ql-stroke" x="2.5" y="3.5" width="13" height="11" rx="1.5" ry="1.5" fill="none"/>' +
+    '<polyline class="ql-even ql-stroke" points="7 8 5.5 9.5 7 11"/>' +
+    '<polyline class="ql-even ql-stroke" points="11 8 12.5 9.5 11 11"/>' +
+    "</svg>";
+
+  const formatToolbarLabels = {
+    code: "インラインコード",
+    "code-block": "コードブロック",
+  };
+
+  const formatToolbarIcons = {
+    code: quillIcons.code,
+    "code-block": codeBlockIconSvg,
+  };
+
+  const tableToolbarLabels = {
+    insert: "表を挿入",
+    "row-above": "行を上に追加",
+    "row-below": "行を下に追加",
+    "column-left": "列を左に追加",
+    "column-right": "列を右に追加",
+    "delete-row": "行を削除",
+    "delete-column": "列を削除",
+    "delete-table": "表を削除",
+  };
+
+  const tableToolbarActions = Object.keys(tableToolbarLabels);
+
   const toolbarOptions = [
-    [{ font: [] }],
     [{ header: [1, 2, false] }],
-    [{ color: [] }, { background: [] }],
-    ["bold", "italic", "underline", "strike"],
-    ["blockquote", "code-block", { list: "ordered" }, { list: "bullet" }],
-    [{ script: "sub" }, { script: "super" }],
-    [{ indent: "-1" }, { indent: "+1" }],
-    [{ align: [] }],
-    ["link", "image"],
-    ["clean"],
+    ["bold", "italic", "code"],
+    ["link", { list: "bullet" }, "blockquote", "code-block"],
   ];
 
   function isEmptyContent(value) {
@@ -40,6 +65,31 @@
       (value.ops.length === 0 ||
         (value.ops.length === 1 && (value.ops[0].insert === "\n" || value.ops[0].insert === "")))
     );
+  }
+
+  function normalizeContent(value) {
+    if (value && typeof value === "object" && Array.isArray(value.ops)) {
+      return JSON.parse(JSON.stringify({ ops: value.ops }));
+    }
+    return value;
+  }
+
+  function releaseEditingAfter(delay) {
+    if (editReleaseTimer) {
+      clearTimeout(editReleaseTimer);
+    }
+    editReleaseTimer = setTimeout(() => {
+      isEditing = false;
+      editReleaseTimer = null;
+    }, delay);
+  }
+
+  function restoreSelection(range) {
+    if (!quill || !range || !quill.hasFocus()) return;
+
+    const index = Math.max(0, Math.min(range.index, quill.getLength()));
+    const length = Math.max(0, Math.min(range.length ?? 0, quill.getLength() - index));
+    quill.setSelection(index, length, "silent");
   }
 
   function applyContent(nextContent) {
@@ -60,6 +110,91 @@
 
   function openExternalLink(href) {
     return window.electronAPI?.openExternalLink?.(href);
+  }
+
+  function runTableAction(value) {
+    const table = quill?.getModule?.("table");
+    if (!table) return;
+
+    switch (value) {
+      case "insert":
+        table.insertTable(2, 2);
+        return;
+      case "row-above":
+        table.insertRowAbove();
+        return;
+      case "row-below":
+        table.insertRowBelow();
+        return;
+      case "column-left":
+        table.insertColumnLeft();
+        return;
+      case "column-right":
+        table.insertColumnRight();
+        return;
+      case "delete-row":
+        table.deleteRow();
+        return;
+      case "delete-column":
+        table.deleteColumn();
+        return;
+      case "delete-table":
+        table.deleteTable();
+        return;
+      default:
+    }
+  }
+
+  function installTableToolbarSelect() {
+    const toolbar = quill?.getModule?.("toolbar")?.container;
+    if (!toolbar || toolbar.querySelector(".memo-table-picker")) return;
+
+    const group = document.createElement("span");
+    group.className = "ql-formats memo-table-picker";
+
+    const select = document.createElement("select");
+    select.className = "memo-toolbar-select memo-table-select";
+    select.setAttribute("aria-label", "Table");
+    select.setAttribute("title", "Table");
+
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Table";
+    placeholder.disabled = true;
+    placeholder.selected = true;
+    select.appendChild(placeholder);
+
+    for (const value of tableToolbarActions) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = tableToolbarLabels[value];
+      select.appendChild(option);
+    }
+
+    select.addEventListener("change", () => {
+      if (!select.value) return;
+      runTableAction(select.value);
+      select.value = "";
+    });
+
+    group.appendChild(select);
+    toolbar.appendChild(group);
+  }
+
+  function labelToolbarButtons() {
+    const toolbar = quill?.getModule?.("toolbar")?.container;
+    if (!toolbar) return;
+
+    for (const [value, label] of Object.entries(formatToolbarLabels)) {
+      const button = toolbar.querySelector(`button.ql-${value}`);
+      button?.setAttribute("aria-label", label);
+      button?.setAttribute("title", label);
+      if (button && formatToolbarIcons[value]) {
+        button.innerHTML = formatToolbarIcons[value];
+      }
+    }
+
+    installTableToolbarSelect();
   }
 
   function handleLinkTooltips() {
@@ -130,15 +265,22 @@
     quill = new Quill(editor, {
       theme: "snow",
       modules: {
-        toolbar: readOnly ? false : toolbarOptions,
+        table: true,
+        toolbar: readOnly
+          ? false
+          : {
+              container: toolbarOptions,
+            },
         clipboard: {
           matchVisual: false,
         },
       },
     });
+    labelToolbarButtons();
 
-    applyContent(content);
-    lastSavedContent = content;
+    const initialContent = normalizeContent(content);
+    applyContent(initialContent);
+    lastSavedContent = initialContent;
     quill.enable(!readOnly);
 
     if (!readOnly) {
@@ -147,8 +289,14 @@
 
         isEditing = true;
         const currentSelection = quill.hasFocus() ? quill.getSelection() : null;
-        const contents = quill.getContents();
+        const contents = normalizeContent(quill.getContents());
         lastSavedContent = contents;
+        if (currentSelection) {
+          savedSelection = {
+            index: currentSelection.index,
+            length: currentSelection.length,
+          };
+        }
 
         if (currentSelection) {
           saveMemo(contents, currentSelection);
@@ -156,9 +304,7 @@
           saveMemo(contents);
         }
 
-        setTimeout(() => {
-          isEditing = false;
-        }, 100);
+        releaseEditingAfter(100);
       });
 
       quill.on("selection-change", (range, _oldRange, source) => {
@@ -184,6 +330,10 @@
         pasteListener = null;
       }
 
+      if (editReleaseTimer) {
+        clearTimeout(editReleaseTimer);
+        editReleaseTimer = null;
+      }
       isEditing = false;
       savedSelection = null;
       lastSavedContent = null;
@@ -192,20 +342,24 @@
   });
 
   $: if (quill && !isEditing) {
-    const contentIsEmpty = isEmptyContent(content);
-    const lastSavedIsEmpty = isEmptyContent(lastSavedContent);
+    const normalizedContent = normalizeContent(content);
+    const normalizedLastSavedContent = normalizeContent(lastSavedContent);
+    const contentIsEmpty = isEmptyContent(normalizedContent);
+    const lastSavedIsEmpty = isEmptyContent(normalizedLastSavedContent);
     const needsUpdate =
       contentIsEmpty !== lastSavedIsEmpty ||
       (!contentIsEmpty &&
-        !isEqual(memoContentForCompare(content), memoContentForCompare(lastSavedContent)));
+        !isEqual(
+          memoContentForCompare(normalizedContent),
+          memoContentForCompare(normalizedLastSavedContent)
+        ));
 
     if (needsUpdate) {
       isEditing = true;
-      applyContent(content);
-      lastSavedContent = content;
-      setTimeout(() => {
-        isEditing = false;
-      }, 50);
+      applyContent(normalizedContent);
+      restoreSelection(savedSelection);
+      lastSavedContent = normalizedContent;
+      releaseEditingAfter(50);
     }
   }
 
@@ -228,6 +382,10 @@
 
 <style>
   .wrapper {
+    --memo-editor-font:
+      "BIZ UDゴシック", "BIZ UDGothic", "Cascadia Mono", "Cascadia Code", Consolas, "Courier New",
+      monospace;
+
     display: flex;
     flex-direction: column;
     flex: 1;
@@ -282,13 +440,62 @@
     border-color: var(--theme-color-Sub-dark) !important;
     border-top: 0 !important;
     color: var(--theme-color-Sub-light);
-    font-family: inherit;
+    font-family: var(--memo-editor-font);
   }
 
   .wrapper :global(.ql-toolbar) {
     flex-shrink: 0;
     border-color: var(--theme-color-Sub-dark) !important;
     background-color: var(--theme-color-Main-dark);
+  }
+
+  .wrapper :global(.ql-toolbar .memo-table-picker) {
+    position: relative;
+    display: inline-block;
+    height: 24px;
+    color: var(--theme-color-Sub-light);
+    vertical-align: middle;
+  }
+
+  .wrapper :global(.ql-toolbar .memo-table-picker::after) {
+    content: "";
+    position: absolute;
+    top: 50%;
+    right: 6px;
+    width: 6px;
+    height: 6px;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: translateY(-65%) rotate(45deg);
+    pointer-events: none;
+  }
+
+  .wrapper :global(.ql-toolbar .memo-toolbar-select) {
+    appearance: none;
+    width: 112px;
+    height: 24px;
+    padding: 0 20px 0 8px;
+    margin: 0;
+    border: none;
+    border-radius: 0;
+    outline: none;
+    color: inherit;
+    background: transparent;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 24px;
+  }
+
+  .wrapper :global(.ql-toolbar .memo-table-picker:hover),
+  .wrapper :global(.ql-toolbar .memo-table-picker:focus-within) {
+    color: #06c;
+  }
+
+  .wrapper :global(.ql-toolbar .memo-toolbar-select option) {
+    color: var(--theme-color-Sub-light);
+    background-color: var(--theme-color-Main-light);
   }
 
   .wrapper :global(.ql-editor) {
@@ -298,8 +505,64 @@
     overflow-y: auto;
     padding: var(--sp3) var(--sp4);
     color: var(--theme-color-Sub-light);
+    font-family: var(--memo-editor-font);
     font-size: var(--font-body-md);
+    font-kerning: none;
+    font-variant-ligatures: none;
+    font-feature-settings:
+      "liga" 0,
+      "calt" 0;
     line-height: 1.7;
+  }
+
+  .wrapper :global(.ql-editor code),
+  .wrapper :global(.ql-editor .ql-code-block-container) {
+    font-family: var(--memo-editor-font);
+  }
+
+  .wrapper :global(.ql-editor code) {
+    font-size: 0.85em;
+    color: var(--theme-color-Sub-light);
+    background-color: var(--theme-color-Main-dark);
+    padding: 0.1em 0.35em;
+    border-radius: var(--shape-xs);
+    border: 1px solid color-mix(in srgb, var(--theme-color-Sub-dark) 20%, transparent);
+  }
+
+  .wrapper :global(.ql-editor .ql-code-block-container) {
+    color: var(--theme-color-Sub-light);
+    background-color: var(--theme-color-Main-dark);
+    padding: var(--sp3) var(--sp4);
+    border-radius: var(--shape-sm);
+    overflow-x: auto;
+    margin: 0.75em 0;
+    border: 1px solid color-mix(in srgb, var(--theme-color-Sub-dark) 25%, transparent);
+  }
+
+  .wrapper :global(.ql-editor table) {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 0.5em 0;
+    color: var(--theme-color-Sub-light);
+    font-size: var(--font-body-md);
+  }
+
+  .wrapper :global(.ql-editor table th),
+  .wrapper :global(.ql-editor table td) {
+    border: 1px solid var(--theme-color-Sub-dark);
+    padding: 0.3em 0.6em;
+    min-width: 2.5rem;
+    vertical-align: top;
+  }
+
+  .wrapper :global(.ql-editor table th),
+  .wrapper :global(.ql-editor table tr:first-child td) {
+    background-color: var(--theme-color-Main-dark);
+    font-weight: 700;
+  }
+
+  .wrapper :global(.ql-editor table p) {
+    margin: 0;
   }
 
   :global(.ql-picker :not(.ql-active, :hover)) {

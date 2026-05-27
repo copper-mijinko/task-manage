@@ -1,7 +1,7 @@
 ﻿<script lang="ts">
   import { tick, onDestroy } from "svelte";
   import { EditorView, keymap, lineNumbers } from "@codemirror/view";
-  import { EditorState } from "@codemirror/state";
+  import { EditorState, type Text } from "@codemirror/state";
   import {
     autocompletion,
     completionKeymap,
@@ -72,6 +72,8 @@
   let livePreviewEl: HTMLElement | null = null;
   let editBody: HTMLElement | null = null;
   let markdownSplitPercent = 55;
+  let currentHeadingLevel = "normal";
+  let tableActionValue = "";
 
   const SPLIT_MIN_PERCENT = 30;
   const SPLIT_MAX_PERCENT = 72;
@@ -91,15 +93,22 @@
     bold: quillIcons.bold,
     italic: quillIcons.italic,
     inlineCode: quillIcons.code,
-    heading1: quillIcons.header["1"],
-    heading2: quillIcons.header["2"],
-    heading3: quillIcons.header["3"],
     link: quillIcons.link,
     bulletList: quillIcons.list.bullet,
-    checklist: quillIcons.list.check,
     quote: quillIcons.blockquote,
     codeBlock: codeBlockIconSvg,
   };
+  const tableActionOptions = [
+    { value: "insert", label: "表を挿入" },
+    { value: "row-above", label: "行を上に追加" },
+    { value: "row-below", label: "行を下に追加" },
+    { value: "column-left", label: "列を左に追加" },
+    { value: "column-right", label: "列を右に追加" },
+    { value: "delete-row", label: "行を削除" },
+    { value: "delete-column", label: "列を削除" },
+    { value: "delete-table", label: "表を削除" },
+  ] as const;
+  type TableAction = (typeof tableActionOptions)[number]["value"];
   const memoModeOptions = [
     { value: "read", label: "Read", className: "read-mode-btn" },
     { value: "edit", label: "Edit", className: "edit-mode-btn" },
@@ -284,16 +293,28 @@
     wrapInline("`");
   }
 
-  function formatHeading(level: 1 | 2 | 3) {
+  function getHeadingLevelFromState(state: EditorState): string {
+    const { from } = state.selection.main;
+    const line = state.doc.lineAt(from);
+    const headingMatch = line.text.match(/^(#{1,6}) /);
+    const level = headingMatch?.[1]?.length ?? 0;
+    return level >= 1 && level <= 2 ? String(level) : "normal";
+  }
+
+  function syncHeadingLevel(editorView: EditorView | null = view) {
+    currentHeadingLevel = editorView ? getHeadingLevelFromState(editorView.state) : "normal";
+  }
+
+  function formatHeading(level: 0 | 1 | 2) {
     if (!view) return;
     const { from } = view.state.selection.main;
     const line = view.state.doc.lineAt(from);
-    const newPrefix = "#".repeat(level) + " ";
+    const newPrefix = level > 0 ? "#".repeat(level) + " " : "";
     const headingMatch = line.text.match(/^(#{1,6}) /);
-    if (headingMatch && headingMatch[0] === newPrefix) {
+    if (headingMatch && (!newPrefix || headingMatch[0] === newPrefix)) {
       view.dispatch({
-        changes: { from: line.from, to: line.from + newPrefix.length, insert: "" },
-        selection: { anchor: Math.max(line.from, from - newPrefix.length) },
+        changes: { from: line.from, to: line.from + headingMatch[0].length, insert: "" },
+        selection: { anchor: Math.max(line.from, from - headingMatch[0].length) },
       });
     } else if (headingMatch) {
       const oldLen = headingMatch[0].length;
@@ -307,26 +328,14 @@
         selection: { anchor: from + newPrefix.length },
       });
     }
+    syncHeadingLevel();
     view.focus();
   }
 
-  function formatCheckbox() {
-    if (!view) return;
-    const prefix = "- [ ] ";
-    const { from } = view.state.selection.main;
-    const line = view.state.doc.lineAt(from);
-    if (line.text.startsWith(prefix)) {
-      view.dispatch({
-        changes: { from: line.from, to: line.from + prefix.length, insert: "" },
-        selection: { anchor: Math.max(line.from, from - prefix.length) },
-      });
-    } else {
-      view.dispatch({
-        changes: { from: line.from, insert: prefix },
-        selection: { anchor: from + prefix.length },
-      });
-    }
-    view.focus();
+  function handleHeadingChange(event: Event) {
+    const value = (event.currentTarget as HTMLSelectElement).value;
+    const level = value === "normal" ? 0 : Number(value);
+    formatHeading(level === 1 || level === 2 ? level : 0);
   }
 
   function toggleLinePrefix(prefix: string) {
@@ -394,6 +403,521 @@
       });
     }
     view.focus();
+  }
+
+  type TableAlignment = "left" | "center" | "right" | undefined;
+
+  type MarkdownTable = {
+    startLineNumber: number;
+    endLineNumber: number;
+    startPos: number;
+    endPos: number;
+    rows: string[][];
+    aligns: TableAlignment[];
+    columnCount: number;
+    currentSourceLineIndex: number;
+    currentColumnIndex: number;
+  };
+
+  function isEscaped(value: string, index: number): boolean {
+    let backslashCount = 0;
+    for (let i = index - 1; i >= 0 && value[i] === "\\"; i -= 1) {
+      backslashCount += 1;
+    }
+    return backslashCount % 2 === 1;
+  }
+
+  function splitMarkdownTableCells(row: string): string[] {
+    let text = row.trim();
+    if (text.startsWith("|")) {
+      text = text.slice(1);
+    }
+    if (text.endsWith("|") && !isEscaped(text, text.length - 1)) {
+      text = text.slice(0, -1);
+    }
+
+    const cells: string[] = [];
+    let current = "";
+    for (let i = 0; i < text.length; i += 1) {
+      const char = text[i];
+      if (char === "\\" && text[i + 1] === "|") {
+        current += "|";
+        i += 1;
+        continue;
+      }
+      if (char === "|" && !isEscaped(text, i)) {
+        cells.push(current.trim());
+        current = "";
+        continue;
+      }
+      current += char;
+    }
+    cells.push(current.trim());
+    return cells;
+  }
+
+  function isPotentialTableLine(line: string): boolean {
+    return /^\s*\|/.test(line) && splitMarkdownTableCells(line).length >= 1;
+  }
+
+  function normalizeDividerCell(cell: string): TableAlignment | null {
+    const value = cell.trim();
+    if (!/^:?-{3,}:?$/.test(value)) return null;
+    const left = value.startsWith(":");
+    const right = value.endsWith(":");
+    if (left && right) return "center";
+    if (left) return "left";
+    if (right) return "right";
+    return undefined;
+  }
+
+  function isDividerRow(line: string): boolean {
+    const cells = splitMarkdownTableCells(line);
+    return cells.length >= 1 && cells.every((cell) => normalizeDividerCell(cell) !== null);
+  }
+
+  function columnIndexAtOffset(line: string, offset: number, columnCount: number): number {
+    let pipeCount = 0;
+    for (let i = 0; i < Math.min(offset, line.length); i += 1) {
+      if (line[i] === "|" && !isEscaped(line, i)) {
+        pipeCount += 1;
+      }
+    }
+
+    const hasLeadingPipe = /^\s*\|/.test(line);
+    const rawIndex = hasLeadingPipe ? pipeCount - 1 : pipeCount;
+    return Math.max(0, Math.min(columnCount - 1, rawIndex));
+  }
+
+  function findMarkdownTableAt(doc: Text, pos: number): MarkdownTable | null {
+    const currentLine = doc.lineAt(pos);
+    if (!isPotentialTableLine(currentLine.text)) return null;
+
+    let blockStart = currentLine.number;
+    while (blockStart > 1 && isPotentialTableLine(doc.line(blockStart - 1).text)) {
+      blockStart -= 1;
+    }
+
+    let blockEnd = currentLine.number;
+    while (blockEnd < doc.lines && isPotentialTableLine(doc.line(blockEnd + 1).text)) {
+      blockEnd += 1;
+    }
+
+    const blockLines = [];
+    for (let lineNumber = blockStart; lineNumber <= blockEnd; lineNumber += 1) {
+      blockLines.push(doc.line(lineNumber));
+    }
+
+    const dividerIndex = blockLines.findIndex((line) => isDividerRow(line.text));
+    if (dividerIndex <= 0) return null;
+
+    const headerIndex = dividerIndex - 1;
+    const tableLines = blockLines.slice(headerIndex);
+    const startLine = tableLines[0];
+    const endLine = tableLines[tableLines.length - 1];
+    if (currentLine.number < startLine.number || currentLine.number > endLine.number) {
+      return null;
+    }
+
+    const headerCells = splitMarkdownTableCells(tableLines[0].text);
+    const dividerCells = splitMarkdownTableCells(tableLines[1].text);
+    const bodyRows = tableLines.slice(2).map((line) => splitMarkdownTableCells(line.text));
+    const rows = [headerCells, ...bodyRows];
+    const columnCount = Math.max(1, dividerCells.length, ...rows.map((row) => row.length));
+    const aligns = Array.from({ length: columnCount }, (_, index) => {
+      const align = normalizeDividerCell(dividerCells[index] ?? "---");
+      return align === null ? undefined : align;
+    });
+
+    return {
+      startLineNumber: startLine.number,
+      endLineNumber: endLine.number,
+      startPos: startLine.from,
+      endPos: endLine.to,
+      rows,
+      aligns,
+      columnCount,
+      currentSourceLineIndex: currentLine.number - startLine.number,
+      currentColumnIndex: columnIndexAtOffset(
+        currentLine.text,
+        pos - currentLine.from,
+        columnCount
+      ),
+    };
+  }
+
+  function escapeMarkdownTableCell(value: string): string {
+    return value.replace(/\r?\n/g, "<br>").replace(/\|/g, "\\|");
+  }
+
+  function characterDisplayWidth(value: string): number {
+    const code = value.codePointAt(0) ?? 0;
+    if (
+      (code >= 0x0300 && code <= 0x036f) ||
+      (code >= 0x1ab0 && code <= 0x1aff) ||
+      (code >= 0x1dc0 && code <= 0x1dff) ||
+      (code >= 0x20d0 && code <= 0x20ff) ||
+      (code >= 0xfe20 && code <= 0xfe2f)
+    ) {
+      return 0;
+    }
+    if (
+      code >= 0x1100 &&
+      (code <= 0x115f ||
+        code === 0x2329 ||
+        code === 0x232a ||
+        (code >= 0x2e80 && code <= 0xa4cf && code !== 0x303f) ||
+        (code >= 0xac00 && code <= 0xd7a3) ||
+        (code >= 0xf900 && code <= 0xfaff) ||
+        (code >= 0xfe10 && code <= 0xfe19) ||
+        (code >= 0xfe30 && code <= 0xfe6f) ||
+        (code >= 0xff00 && code <= 0xff60) ||
+        (code >= 0xffe0 && code <= 0xffe6) ||
+        (code >= 0x1f300 && code <= 0x1f64f) ||
+        (code >= 0x1f900 && code <= 0x1f9ff) ||
+        (code >= 0x20000 && code <= 0x3fffd))
+    ) {
+      return 2;
+    }
+    return 1;
+  }
+
+  function displayWidth(value: string): number {
+    return Array.from(value).reduce((width, char) => width + characterDisplayWidth(char), 0);
+  }
+
+  function padDisplayEnd(value: string, width: number): string {
+    return value + " ".repeat(Math.max(0, width - displayWidth(value)));
+  }
+
+  function padDisplayStart(value: string, width: number): string {
+    return " ".repeat(Math.max(0, width - displayWidth(value))) + value;
+  }
+
+  function padDisplayCenter(value: string, width: number): string {
+    const space = Math.max(0, width - displayWidth(value));
+    const left = Math.floor(space / 2);
+    return " ".repeat(left) + value + " ".repeat(space - left);
+  }
+
+  function padMarkdownTableCell(value: string, width: number, align: TableAlignment): string {
+    switch (align) {
+      case "right":
+        return padDisplayStart(value, width);
+      case "center":
+        return padDisplayCenter(value, width);
+      default:
+        return padDisplayEnd(value, width);
+    }
+  }
+
+  function minimumDividerWidth(align: TableAlignment): number {
+    if (align === "center") return 5;
+    if (align === "left" || align === "right") return 4;
+    return 3;
+  }
+
+  function renderDividerCell(align: TableAlignment, width: number): string {
+    const targetWidth = Math.max(width, minimumDividerWidth(align));
+    switch (align) {
+      case "left":
+        return ":" + "-".repeat(targetWidth - 1);
+      case "center":
+        return ":" + "-".repeat(targetWidth - 2) + ":";
+      case "right":
+        return "-".repeat(targetWidth - 1) + ":";
+      default:
+        return "-".repeat(targetWidth);
+    }
+  }
+
+  function normalizeTableRow(row: string[], columnCount: number): string[] {
+    return Array.from({ length: columnCount }, (_, index) => row[index] ?? "");
+  }
+
+  function renderMarkdownTable(rows: string[][], aligns: TableAlignment[]): string {
+    const columnCount = Math.max(1, aligns.length, ...rows.map((row) => row.length));
+    const normalizedRows = rows.map((row) => normalizeTableRow(row, columnCount));
+    const normalizedAligns = Array.from({ length: columnCount }, (_, index) => aligns[index]);
+    const columnWidths = Array.from({ length: columnCount }, (_, columnIndex) =>
+      Math.max(
+        minimumDividerWidth(normalizedAligns[columnIndex]),
+        ...normalizedRows.map((row) => displayWidth(escapeMarkdownTableCell(row[columnIndex])))
+      )
+    );
+    const header = normalizedRows[0] ?? Array.from({ length: columnCount }, () => "");
+    const body = normalizedRows.slice(1);
+    const renderDataRow = (row: string[]) =>
+      `| ${row
+        .map((cell, index) =>
+          padMarkdownTableCell(
+            escapeMarkdownTableCell(cell),
+            columnWidths[index],
+            normalizedAligns[index]
+          )
+        )
+        .join(" | ")} |`;
+
+    return [
+      renderDataRow(header),
+      `| ${normalizedAligns
+        .map((align, index) => renderDividerCell(align, columnWidths[index]))
+        .join(" | ")} |`,
+      ...body.map(renderDataRow),
+    ].join("\n");
+  }
+
+  function sourceLineIndexToRowIndex(sourceLineIndex: number): number {
+    return sourceLineIndex <= 1 ? 0 : sourceLineIndex - 1;
+  }
+
+  function rowIndexToSourceLineIndex(rowIndex: number): number {
+    return rowIndex === 0 ? 0 : rowIndex + 1;
+  }
+
+  function renderedCellAnchor(markdownTable: string, sourceLineIndex: number, columnIndex: number) {
+    const lines = markdownTable.split("\n");
+    const targetLineIndex = Math.max(0, Math.min(sourceLineIndex, lines.length - 1));
+    const targetLine = lines[targetLineIndex] ?? "";
+    let offset = 0;
+    for (let i = 0; i < targetLineIndex; i += 1) {
+      offset += lines[i].length + 1;
+    }
+
+    let column = -1;
+    for (let i = 0; i < targetLine.length; i += 1) {
+      if (targetLine[i] === "|" && !isEscaped(targetLine, i)) {
+        column += 1;
+        if (column === columnIndex) {
+          return offset + Math.min(targetLine.length, i + 2);
+        }
+      }
+    }
+    return offset + targetLine.length;
+  }
+
+  function replaceMarkdownTable(
+    table: MarkdownTable,
+    rows: string[][],
+    aligns: TableAlignment[],
+    sourceLineIndex: number,
+    columnIndex: number,
+    editorView: EditorView | null = view
+  ): boolean {
+    if (!editorView) return false;
+    const nextTable = renderMarkdownTable(rows, aligns);
+    const anchor = table.startPos + renderedCellAnchor(nextTable, sourceLineIndex, columnIndex);
+    editorView.dispatch({
+      changes: { from: table.startPos, to: table.endPos, insert: nextTable },
+      selection: { anchor },
+      scrollIntoView: true,
+    });
+    editorView.focus();
+    return true;
+  }
+
+  function formatTableAndMoveCell(editorView: EditorView, direction: 1 | -1): boolean {
+    const table = findMarkdownTableAt(editorView.state.doc, editorView.state.selection.main.from);
+    if (!table) return false;
+
+    const rows = table.rows.map((row) => normalizeTableRow(row, table.columnCount));
+    let rowIndex = sourceLineIndexToRowIndex(table.currentSourceLineIndex);
+    let columnIndex = table.currentColumnIndex + direction;
+
+    if (direction > 0 && columnIndex >= table.columnCount) {
+      columnIndex = 0;
+      rowIndex += 1;
+    } else if (direction < 0 && columnIndex < 0) {
+      rowIndex -= 1;
+      columnIndex = table.columnCount - 1;
+    }
+
+    if (rowIndex >= rows.length) {
+      rows.push(Array.from({ length: table.columnCount }, () => ""));
+    }
+
+    if (rowIndex < 0) {
+      rowIndex = 0;
+      columnIndex = 0;
+    }
+
+    return replaceMarkdownTable(
+      table,
+      rows,
+      table.aligns,
+      rowIndexToSourceLineIndex(rowIndex),
+      columnIndex,
+      editorView
+    );
+  }
+
+  function formatInsertTable() {
+    if (!view) return;
+    const { from, to } = view.state.selection.main;
+    const docText = view.state.doc.toString();
+    const selected = docText.slice(from, to).replace(/\s+/g, " ").trim();
+    const rows = [
+      [selected || "Column 1", "Column 2"],
+      ["", ""],
+    ];
+    const tableMarkdown = renderMarkdownTable(rows, [undefined, undefined]);
+    const prefix = from > 0 && !docText.slice(0, from).endsWith("\n") ? "\n\n" : "";
+    const suffix = to < docText.length && !docText.slice(to).startsWith("\n") ? "\n\n" : "";
+    const insert = `${prefix}${tableMarkdown}${suffix}`;
+
+    view.dispatch({
+      changes: { from, to, insert },
+      selection: { anchor: from + prefix.length + renderedCellAnchor(tableMarkdown, 0, 0) },
+      scrollIntoView: true,
+    });
+    view.focus();
+  }
+
+  function formatInsertTableRow(position: "above" | "below") {
+    if (!view) return;
+    const table = findMarkdownTableAt(view.state.doc, view.state.selection.main.from);
+    if (!table) return;
+
+    const rows = table.rows.map((row) => normalizeTableRow(row, table.columnCount));
+    const emptyRow = Array.from({ length: table.columnCount }, () => "");
+    const currentRowIndex = sourceLineIndexToRowIndex(table.currentSourceLineIndex);
+    let insertIndex =
+      position === "above" ? currentRowIndex : Math.min(rows.length, currentRowIndex + 1);
+    if (currentRowIndex === 0) {
+      insertIndex = 1;
+    }
+
+    rows.splice(insertIndex, 0, emptyRow);
+    replaceMarkdownTable(
+      table,
+      rows,
+      table.aligns,
+      rowIndexToSourceLineIndex(insertIndex),
+      table.currentColumnIndex
+    );
+  }
+
+  function formatInsertTableColumn(side: "left" | "right") {
+    if (!view) return;
+    const table = findMarkdownTableAt(view.state.doc, view.state.selection.main.from);
+    if (!table) return;
+
+    const insertIndex = side === "left" ? table.currentColumnIndex : table.currentColumnIndex + 1;
+    const rows = table.rows.map((row) => {
+      const nextRow = normalizeTableRow(row, table.columnCount);
+      nextRow.splice(insertIndex, 0, "");
+      return nextRow;
+    });
+    const aligns = [...table.aligns];
+    aligns.splice(insertIndex, 0, undefined);
+    const sourceLineIndex = table.currentSourceLineIndex === 1 ? 0 : table.currentSourceLineIndex;
+
+    replaceMarkdownTable(table, rows, aligns, sourceLineIndex, insertIndex);
+  }
+
+  function formatDeleteTableRow() {
+    if (!view) return;
+    const table = findMarkdownTableAt(view.state.doc, view.state.selection.main.from);
+    if (!table) return;
+
+    const rows = table.rows.map((row) => normalizeTableRow(row, table.columnCount));
+    const rowIndex = sourceLineIndexToRowIndex(table.currentSourceLineIndex);
+    if (rows.length <= 1) {
+      formatDeleteTable();
+      return;
+    }
+
+    rows.splice(rowIndex, 1);
+    const nextRowIndex = Math.max(0, Math.min(rowIndex, rows.length - 1));
+    replaceMarkdownTable(
+      table,
+      rows,
+      table.aligns,
+      rowIndexToSourceLineIndex(nextRowIndex),
+      table.currentColumnIndex
+    );
+  }
+
+  function formatDeleteTableColumn() {
+    if (!view) return;
+    const table = findMarkdownTableAt(view.state.doc, view.state.selection.main.from);
+    if (!table) return;
+
+    if (table.columnCount <= 1) {
+      formatDeleteTable();
+      return;
+    }
+
+    const rows = table.rows.map((row) => {
+      const nextRow = normalizeTableRow(row, table.columnCount);
+      nextRow.splice(table.currentColumnIndex, 1);
+      return nextRow;
+    });
+    const aligns = [...table.aligns];
+    aligns.splice(table.currentColumnIndex, 1);
+    const nextColumnIndex = Math.max(0, Math.min(table.currentColumnIndex, table.columnCount - 2));
+    const sourceLineIndex = table.currentSourceLineIndex === 1 ? 0 : table.currentSourceLineIndex;
+
+    replaceMarkdownTable(table, rows, aligns, sourceLineIndex, nextColumnIndex);
+  }
+
+  function formatDeleteTable() {
+    if (!view) return;
+    const table = findMarkdownTableAt(view.state.doc, view.state.selection.main.from);
+    if (!table) return;
+
+    const doc = view.state.doc;
+    let from = table.startPos;
+    let to = table.endPos;
+    if (table.endLineNumber < doc.lines) {
+      to = doc.line(table.endLineNumber + 1).from;
+    } else if (table.startLineNumber > 1) {
+      from = doc.line(table.startLineNumber - 1).to;
+    }
+
+    view.dispatch({
+      changes: { from, to, insert: "" },
+      selection: { anchor: from },
+      scrollIntoView: true,
+    });
+    view.focus();
+  }
+
+  function runTableAction(action: TableAction) {
+    switch (action) {
+      case "insert":
+        formatInsertTable();
+        return;
+      case "row-above":
+        formatInsertTableRow("above");
+        return;
+      case "row-below":
+        formatInsertTableRow("below");
+        return;
+      case "column-left":
+        formatInsertTableColumn("left");
+        return;
+      case "column-right":
+        formatInsertTableColumn("right");
+        return;
+      case "delete-row":
+        formatDeleteTableRow();
+        return;
+      case "delete-column":
+        formatDeleteTableColumn();
+        return;
+      case "delete-table":
+        formatDeleteTable();
+        return;
+      default:
+    }
+  }
+
+  function handleTableActionChange(event: Event) {
+    const value = (event.currentTarget as HTMLSelectElement).value as TableAction | "";
+    if (!value) return;
+    runTableAction(value);
+    tableActionValue = "";
   }
 
   async function resolveImageSources(html: string): Promise<string> {
@@ -595,6 +1119,9 @@
     }
   }
 
+  const markdownSourceFontFamily =
+    '"BIZ UDゴシック", "BIZ UDGothic", "Cascadia Mono", "Cascadia Code", Consolas, "Courier New", monospace';
+
   const editorTheme = EditorView.theme({
     "&": {
       height: "100%",
@@ -603,9 +1130,12 @@
     },
     ".cm-scroller": {
       overflow: "auto",
-      fontFamily: "inherit",
+      fontFamily: markdownSourceFontFamily,
       fontSize: "var(--font-body-md)",
       lineHeight: "1.7",
+      fontKerning: "none",
+      fontVariantLigatures: "none",
+      fontFeatureSettings: '"liga" 0, "calt" 0',
     },
     ".cm-content": {
       padding: "var(--sp3) var(--sp4)",
@@ -699,6 +1229,14 @@
             return true;
           },
         },
+        {
+          key: "Tab",
+          run: (editorView) => formatTableAndMoveCell(editorView, 1),
+        },
+        {
+          key: "Shift-Tab",
+          run: (editorView) => formatTableAndMoveCell(editorView, -1),
+        },
         ...completionKeymap,
         ...defaultKeymap,
         ...searchKeymap,
@@ -765,6 +1303,9 @@
         },
       }),
       EditorView.updateListener.of((update) => {
+        if (update.selectionSet || update.docChanged) {
+          syncHeadingLevel(update.view);
+        }
         if (update.docChanged) {
           hasChanges = true;
           saveState = "dirty";
@@ -789,6 +1330,7 @@
       state: EditorState.create({ doc: currentContent, extensions: buildExtensions() }),
       parent: container,
     });
+    syncHeadingLevel(view);
     view.focus();
   }
 
@@ -929,6 +1471,19 @@
       <div class="edit-bar">
         <div class="toolbar">
           <!-- eslint-disable svelte/no-at-html-tags -->
+          <span class="heading-picker toolbar-picker">
+            <select
+              aria-label="Heading"
+              title="Heading"
+              bind:value={currentHeadingLevel}
+              on:change={handleHeadingChange}
+            >
+              <option value="normal">Normal</option>
+              <option value="1">Heading 1</option>
+              <option value="2">Heading 2</option>
+            </select>
+          </span>
+          <span class="tool-sep"></span>
           <button
             type="button"
             class="tool-btn tool-bold"
@@ -963,37 +1518,6 @@
           <button
             type="button"
             class="tool-btn"
-            aria-label="Heading 1"
-            title="Heading 1"
-            on:mousedown|preventDefault
-            on:click={() => formatHeading(1)}
-          >
-            <span class="tool-icon" aria-hidden="true">{@html toolbarIcons.heading1}</span>
-          </button>
-          <button
-            type="button"
-            class="tool-btn"
-            aria-label="Heading 2"
-            title="Heading 2"
-            on:mousedown|preventDefault
-            on:click={() => formatHeading(2)}
-          >
-            <span class="tool-icon" aria-hidden="true">{@html toolbarIcons.heading2}</span>
-          </button>
-          <button
-            type="button"
-            class="tool-btn"
-            aria-label="Heading 3"
-            title="Heading 3"
-            on:mousedown|preventDefault
-            on:click={() => formatHeading(3)}
-          >
-            <span class="tool-icon" aria-hidden="true">{@html toolbarIcons.heading3}</span>
-          </button>
-          <span class="tool-sep"></span>
-          <button
-            type="button"
-            class="tool-btn"
             aria-label="Link"
             title="Link (Ctrl+K)"
             on:mousedown|preventDefault
@@ -1010,16 +1534,6 @@
             on:click={formatBulletList}
           >
             <span class="tool-icon" aria-hidden="true">{@html toolbarIcons.bulletList}</span>
-          </button>
-          <button
-            type="button"
-            class="tool-btn"
-            aria-label="Checklist"
-            title="Checklist"
-            on:mousedown|preventDefault
-            on:click={formatCheckbox}
-          >
-            <span class="tool-icon" aria-hidden="true">{@html toolbarIcons.checklist}</span>
           </button>
           <button
             type="button"
@@ -1041,6 +1555,20 @@
           >
             <span class="tool-icon" aria-hidden="true">{@html toolbarIcons.codeBlock}</span>
           </button>
+          <span class="tool-sep"></span>
+          <span class="table-picker toolbar-picker">
+            <select
+              aria-label="Table"
+              title="Table"
+              bind:value={tableActionValue}
+              on:change={handleTableActionChange}
+            >
+              <option value="" disabled>Table</option>
+              {#each tableActionOptions as action}
+                <option value={action.value}>{action.label}</option>
+              {/each}
+            </select>
+          </span>
           <!-- eslint-enable svelte/no-at-html-tags -->
         </div>
         <div class="edit-bar-end">
@@ -1123,10 +1651,13 @@
 
 <style>
   .wrapper {
+    --memo-editor-font:
+      "BIZ UDゴシック", "BIZ UDGothic", "Cascadia Mono", "Cascadia Code", Consolas, "Courier New",
+      monospace;
     --memo-quill-button-color: var(--theme-color-Sub-light);
     --memo-quill-button-active-color: #06c;
-    --memo-quill-button-height: 28px;
-    --memo-quill-button-width: 30px;
+    --memo-quill-button-height: 24px;
+    --memo-quill-button-width: 28px;
 
     display: flex;
     flex-direction: column;
@@ -1162,7 +1693,7 @@
   .edit-bar {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
     padding: var(--sp2);
     background-color: var(--theme-color-Main-dark);
     flex-shrink: 0;
@@ -1174,11 +1705,11 @@
     display: flex;
     align-items: center;
     gap: 0;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     flex: 1 1 auto;
     min-width: 0;
-    overflow-x: auto;
-    overflow-y: hidden;
+    row-gap: var(--sp1);
+    overflow: visible;
     scrollbar-width: none;
   }
 
@@ -1192,17 +1723,16 @@
     justify-content: center;
     flex: 0 0 auto;
     height: var(--memo-quill-button-height);
-    width: auto;
-    padding: var(--sp1) calc(var(--sp2) + 2px);
+    width: var(--memo-quill-button-width);
+    padding: 3px 5px;
     margin: 0;
-    font-size: var(--font-label-md);
+    font-size: 14px;
     background: none;
     border: none;
-    border-radius: var(--shape-xs);
+    border-radius: 0;
     color: var(--memo-quill-button-color);
     cursor: pointer;
     line-height: 1;
-    min-width: var(--memo-quill-button-width);
     text-align: center;
     transition:
       color 0.1s ease,
@@ -1223,15 +1753,15 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 20px;
-    height: 20px;
+    width: 18px;
+    height: 18px;
     pointer-events: none;
   }
 
   .tool-icon :global(svg) {
     display: block;
-    width: 20px;
-    height: 20px;
+    width: 18px;
+    height: 18px;
   }
 
   .tool-icon :global(.ql-stroke) {
@@ -1278,6 +1808,64 @@
   .tool-code-inline,
   .tool-code-block {
     min-width: var(--memo-quill-button-width);
+  }
+
+  .toolbar-picker {
+    position: relative;
+    display: inline-block;
+    flex: 0 0 auto;
+    height: var(--memo-quill-button-height);
+    color: var(--memo-quill-button-color);
+    font-size: 14px;
+    font-weight: 500;
+    vertical-align: middle;
+  }
+
+  .heading-picker {
+    width: 98px;
+  }
+
+  .table-picker {
+    width: 112px;
+  }
+
+  .toolbar-picker select {
+    appearance: none;
+    width: 100%;
+    height: 100%;
+    padding: 0 20px 0 8px;
+    margin: 0;
+    border: none;
+    border-radius: 0;
+    outline: none;
+    color: inherit;
+    background: transparent;
+    cursor: pointer;
+    font: inherit;
+    line-height: 22px;
+  }
+
+  .toolbar-picker::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    right: 6px;
+    width: 6px;
+    height: 6px;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: translateY(-65%) rotate(45deg);
+    pointer-events: none;
+  }
+
+  .toolbar-picker:hover,
+  .toolbar-picker:focus-within {
+    color: var(--memo-quill-button-active-color);
+  }
+
+  .toolbar-picker select option {
+    color: var(--theme-color-Sub-light);
+    background-color: var(--theme-color-Main-light);
   }
 
   .tool-sep {
@@ -1443,7 +2031,13 @@
     min-height: 0;
     padding: var(--sp4);
     color: var(--theme-color-Sub-light);
+    font-family: var(--memo-editor-font);
     font-size: var(--font-body-md);
+    font-kerning: none;
+    font-variant-ligatures: none;
+    font-feature-settings:
+      "liga" 0,
+      "calt" 0;
     line-height: 1.7;
   }
 
@@ -1568,7 +2162,7 @@
   }
 
   .preview :global(code) {
-    font-family: monospace;
+    font-family: var(--memo-editor-font);
     font-size: 0.85em;
     background-color: var(--theme-color-Main-dark);
     padding: 0.1em 0.35em;
@@ -1673,7 +2267,7 @@
     color: var(--theme-color-Error-main);
     background-color: color-mix(in srgb, var(--theme-color-Error-main) 8%, transparent);
     border-color: color-mix(in srgb, var(--theme-color-Error-main) 35%, transparent);
-    font-family: monospace;
+    font-family: var(--memo-editor-font);
     font-size: var(--font-body-sm);
     white-space: pre-wrap;
   }

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  convertMemoContent,
   markdownToQuillDelta,
   quillDeltaToMarkdown,
   type QuillDelta,
@@ -105,6 +106,15 @@ describe("Markdown ↔ Quill Delta — inline formatting", () => {
     const d = markdownToQuillDelta(md);
     expect(ops(d)).toEqual([{ insert: "code", attributes: { code: true } }, { insert: "\n" }]);
     expect(quillDeltaToMarkdown(d)).toBe(md);
+  });
+
+  it("convertMemoContent preserves inline code and fenced code blocks", () => {
+    const md = "`code`\n\n```\nline\n```";
+    const delta = convertMemoContent(md, "markdown", "quill") as QuillDelta;
+
+    expect(delta.ops).toContainEqual({ insert: "code", attributes: { code: true } });
+    expect(delta.ops).toContainEqual({ insert: "\n", attributes: { "code-block": true } });
+    expect(convertMemoContent(delta, "quill", "markdown")).toBe(md);
   });
 
   it("link", () => {
@@ -254,6 +264,55 @@ describe("Markdown ↔ Quill Delta — combined", () => {
   it("blockquote then list", () => {
     const md = "> quote\n\n- A\n- B";
     expect(roundTripMd(md)).toBe(md);
+  });
+});
+
+describe("Markdown <-> Quill Delta - table", () => {
+  it("converts a GFM table into Quill table rows", () => {
+    const md = "| Name | Count |\n| --- | ---: |\n| **A** | 1 |\n| B | 2 |";
+    const d = markdownToQuillDelta(md);
+
+    expect(ops(d)).toEqual([
+      { insert: "Name" },
+      { insert: "\n", attributes: { table: "row-md-1-1" } },
+      { insert: "Count" },
+      { insert: "\n", attributes: { table: "row-md-1-1", align: "right" } },
+      { insert: "A", attributes: { bold: true } },
+      { insert: "\n", attributes: { table: "row-md-1-2" } },
+      { insert: "1" },
+      { insert: "\n", attributes: { table: "row-md-1-2", align: "right" } },
+      { insert: "B" },
+      { insert: "\n", attributes: { table: "row-md-1-3" } },
+      { insert: "2" },
+      { insert: "\n", attributes: { table: "row-md-1-3", align: "right" } },
+    ]);
+    expect(quillDeltaToMarkdown(d)).toBe(md);
+  });
+
+  it("converts native Quill table attributes to GFM table Markdown", () => {
+    const d: QuillDelta = {
+      ops: [
+        { insert: "Task" },
+        { insert: "\n", attributes: { table: "row-a" } },
+        { insert: "Done" },
+        { insert: "\n", attributes: { table: "row-a", align: "center" } },
+        { insert: "One" },
+        { insert: "\n", attributes: { table: "row-b" } },
+        { insert: "Yes" },
+        { insert: "\n", attributes: { table: "row-b", align: "center" } },
+      ],
+    };
+
+    expect(quillDeltaToMarkdown(d)).toBe("| Task | Done |\n| --- | :---: |\n| One | Yes |");
+    expectDeltaSemEqual(roundTripDelta(d), d);
+  });
+
+  it("convertMemoContent preserves GFM tables between Markdown and Quill formats", () => {
+    const md = "| Name | Count |\n| --- | ---: |\n| A | 1 |";
+    const delta = convertMemoContent(md, "markdown", "quill") as QuillDelta;
+
+    expect(delta.ops.some((op) => op.attributes?.table)).toBe(true);
+    expect(convertMemoContent(delta, "quill", "markdown")).toBe(md);
   });
 });
 

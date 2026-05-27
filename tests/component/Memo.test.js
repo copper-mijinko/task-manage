@@ -13,8 +13,19 @@ vi.mock("quill", () => {
       this.options = options;
       this.root = document.createElement("div");
       this.root.className = "ql-editor";
+      this.toolbarContainer = document.createElement("div");
       this.theme = { tooltip: { hide: vi.fn() } };
       this.handlers = {};
+      this.tableModule = {
+        insertTable: vi.fn(),
+        insertRowAbove: vi.fn(),
+        insertRowBelow: vi.fn(),
+        insertColumnLeft: vi.fn(),
+        insertColumnRight: vi.fn(),
+        deleteRow: vi.fn(),
+        deleteColumn: vi.fn(),
+        deleteTable: vi.fn(),
+      };
       this.on = vi.fn((event, callback) => {
         this.handlers[event] = callback;
       });
@@ -28,7 +39,41 @@ vi.mock("quill", () => {
       this.setSelection = vi.fn();
       this.deleteText = vi.fn();
       this.insertText = vi.fn();
+      this.getModule = vi.fn((name) => {
+        if (name === "toolbar") return { container: this.toolbarContainer };
+        if (name === "table") return this.tableModule;
+        return null;
+      });
+      this.element?.appendChild(this.toolbarContainer);
       this.element?.appendChild(this.root);
+      for (const group of options.modules?.toolbar?.container ?? []) {
+        for (const control of Array.isArray(group) ? group : [group]) {
+          if (typeof control === "string") {
+            const button = document.createElement("button");
+            button.className = `ql-${control}`;
+            this.toolbarContainer.appendChild(button);
+            continue;
+          }
+          if (!control || typeof control !== "object") continue;
+          const [[format, value] = []] = Object.entries(control);
+          if (!format) continue;
+          if (Array.isArray(value)) {
+            const select = document.createElement("select");
+            select.className = `ql-${format}`;
+            for (const optionValue of value) {
+              const option = document.createElement("option");
+              option.value = optionValue === false ? "" : String(optionValue);
+              select.appendChild(option);
+            }
+            this.toolbarContainer.appendChild(select);
+            continue;
+          }
+          const button = document.createElement("button");
+          button.className = `ql-${format}`;
+          button.setAttribute("value", String(value));
+          this.toolbarContainer.appendChild(button);
+        }
+      }
       quillInstances.push(this);
     }
   }
@@ -63,6 +108,27 @@ async function renderMarkdownMemo(props = {}) {
   });
   await waitForMemoComponent();
   return result;
+}
+
+async function openMarkdownEditor(props = {}) {
+  await renderMarkdownMemo(props);
+  await fireEvent.click(document.querySelector(".edit-mode-btn"));
+  await waitFor(() => {
+    expect(document.querySelector(".cm-editor")).toBeInTheDocument();
+  });
+  return EditorView.findFromDOM(document.querySelector(".cm-editor"));
+}
+
+function markdownToolButton(label) {
+  return document.querySelector(`button[aria-label="${label}"]`);
+}
+
+async function chooseMarkdownTableAction(label) {
+  const select = document.querySelector('select[aria-label="Table"]');
+  expect(select).toBeInTheDocument();
+  const option = [...select.options].find((candidate) => candidate.textContent === label);
+  expect(option).toBeTruthy();
+  await fireEvent.change(select, { target: { value: option.value } });
 }
 
 describe("Memo mode routing", () => {
@@ -110,6 +176,47 @@ describe("Memo mode routing", () => {
     expect(document.querySelector(".preview h1")).toHaveTextContent("Markdown in db");
   });
 
+  test("uses a monospace-friendly font stack in the Markdown editor", async () => {
+    await openMarkdownEditor({ content: "| A | B |\n| --- | --- |\n| 1 | 2 |" });
+    const scroller = document.querySelector(".cm-scroller");
+
+    expect(getComputedStyle(scroller).fontFamily).toContain("BIZ UD");
+    expect(getComputedStyle(scroller).fontFamily).toContain("Consolas");
+  });
+
+  test("uses a Quill-like heading picker in the Markdown toolbar", async () => {
+    const view = await openMarkdownEditor({ content: "Title" });
+    const headingPicker = document.querySelector('select[aria-label="Heading"]');
+
+    expect(headingPicker).toBeInTheDocument();
+    expect(
+      [...document.querySelector(".toolbar").querySelectorAll("select, button")].map((control) =>
+        control.getAttribute("aria-label")
+      )
+    ).toEqual([
+      "Heading",
+      "Bold",
+      "Italic",
+      "Inline code",
+      "Link",
+      "Bullet list",
+      "Quote",
+      "Code block",
+      "Table",
+    ]);
+    expect(markdownToolButton("Heading 1")).not.toBeInTheDocument();
+    expect([...headingPicker.options].map((option) => option.value)).toEqual(["normal", "1", "2"]);
+    expect(markdownToolButton("Checklist")).not.toBeInTheDocument();
+    expect(markdownToolButton("表を挿入")).not.toBeInTheDocument();
+
+    await fireEvent.change(headingPicker, { target: { value: "2" } });
+    expect(view.state.doc.toString()).toBe("## Title");
+    expect(headingPicker.value).toBe("2");
+
+    await fireEvent.change(headingPicker, { target: { value: "normal" } });
+    expect(view.state.doc.toString()).toBe("Title");
+  });
+
   test("uses Quill editor for workspace memo when its format is quill", async () => {
     await renderMemo({
       saveMemo: vi.fn(),
@@ -120,6 +227,82 @@ describe("Memo mode routing", () => {
 
     expect(quillInstances).toHaveLength(1);
     expect(document.querySelector(".cm-editor")).not.toBeInTheDocument();
+    expect(quillInstances[0].options.modules.table).toBe(true);
+    expect(quillInstances[0].options.modules.toolbar.container).toEqual([
+      [{ header: [1, 2, false] }],
+      ["bold", "italic", "code"],
+      ["link", { list: "bullet" }, "blockquote", "code-block"],
+    ]);
+    expect(
+      quillInstances[0].toolbarContainer.querySelector('select[aria-label="Table"]')
+    ).toBeInTheDocument();
+  });
+
+  test("limits the Quill toolbar to shared Markdown-compatible controls", async () => {
+    await renderMemo({ saveMemo: vi.fn(), content: "", isWorkspaceProject: false });
+    const toolbar = JSON.stringify(quillInstances[0].options.modules.toolbar.container);
+
+    for (const unsupported of [
+      "font",
+      "color",
+      "background",
+      "underline",
+      "strike",
+      "script",
+      "indent",
+      "align",
+      "image",
+      "ordered",
+      "clean",
+    ]) {
+      expect(toolbar).not.toContain(unsupported);
+    }
+
+    expect(toolbar).toContain("header");
+    expect(toolbar).toContain("bold");
+    expect(toolbar).toContain("italic");
+    expect(toolbar).toContain("code");
+    expect(toolbar).toContain("blockquote");
+    expect(toolbar).toContain("bullet");
+    expect(toolbar).toContain("link");
+    expect(quillInstances[0].toolbarContainer.querySelectorAll("button.ql-table")).toHaveLength(0);
+    expect(
+      quillInstances[0].toolbarContainer.querySelector('select[aria-label="Table"]')
+    ).toBeInTheDocument();
+  });
+
+  test("uses a Quill table dropdown with all table actions", async () => {
+    await renderMemo({ saveMemo: vi.fn(), content: "", isWorkspaceProject: false });
+    const select = quillInstances[0].toolbarContainer.querySelector('select[aria-label="Table"]');
+
+    expect(select).toBeInTheDocument();
+    expect([...select.options].map((option) => option.textContent)).toEqual([
+      "Table",
+      "表を挿入",
+      "行を上に追加",
+      "行を下に追加",
+      "列を左に追加",
+      "列を右に追加",
+      "行を削除",
+      "列を削除",
+      "表を削除",
+    ]);
+    expect(quillInstances[0].toolbarContainer.querySelectorAll("button.ql-table")).toHaveLength(0);
+
+    await fireEvent.change(select, { target: { value: "delete-column" } });
+
+    expect(quillInstances[0].tableModule.deleteColumn).toHaveBeenCalledTimes(1);
+    expect(select.value).toBe("");
+  });
+
+  test("adds distinct Quill inline and block code toolbar buttons", async () => {
+    await renderMemo({ saveMemo: vi.fn(), content: "", isWorkspaceProject: false });
+    const inlineCode = quillInstances[0].toolbarContainer.querySelector("button.ql-code");
+    const codeBlock = quillInstances[0].toolbarContainer.querySelector("button.ql-code-block");
+
+    expect(inlineCode).toHaveAttribute("title", "インラインコード");
+    expect(codeBlock).toHaveAttribute("title", "コードブロック");
+    expect(inlineCode.innerHTML).not.toBe(codeBlock.innerHTML);
   });
 
   test("db.json Projects save Quill Delta content", async () => {
@@ -131,6 +314,51 @@ describe("Memo mode routing", () => {
     await tick();
 
     expect(saveMemo).toHaveBeenCalledWith({ ops: [{ insert: "changed\n" }] });
+  });
+
+  test("does not reapply matching Quill Delta after a user edit", async () => {
+    const saveMemo = vi.fn();
+    const result = await renderMemo({
+      saveMemo,
+      content: { ops: [{ insert: "before\n" }] },
+      isWorkspaceProject: false,
+    });
+    const quill = quillInstances.at(-1);
+
+    try {
+      vi.useFakeTimers();
+      class MockDelta {
+        constructor(ops) {
+          this.ops = ops;
+        }
+      }
+
+      quill.setContents.mockClear();
+      quill.setSelection.mockClear();
+      quill.hasFocus = vi.fn(() => true);
+      quill.getSelection = vi.fn(() => ({ index: 8, length: 0 }));
+      quill.getLength = vi.fn(() => 9);
+      quill.getContents = vi.fn(() => new MockDelta([{ insert: "changed\n" }]));
+
+      quill.handlers["text-change"]({}, {}, "user");
+      await tick();
+
+      expect(saveMemo).toHaveBeenCalledWith({ ops: [{ insert: "changed\n" }] });
+
+      await result.rerender({
+        saveMemo,
+        content: { ops: [{ insert: "changed\n" }] },
+        isWorkspaceProject: false,
+      });
+      await tick();
+      vi.advanceTimersByTime(150);
+      await tick();
+
+      expect(quill.setContents).not.toHaveBeenCalled();
+      expect(quill.setSelection).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
@@ -235,6 +463,109 @@ describe("Markdown Memo - edit mode", () => {
     await waitFor(() => {
       expect(document.querySelector(".cm-editor")).toBeInTheDocument();
     });
+  });
+
+  test("inserts a Markdown table from the edit toolbar", async () => {
+    const view = await openMarkdownEditor({ saveMemo, content: "" });
+
+    await chooseMarkdownTableAction("表を挿入");
+    await tick();
+
+    expect(view.state.doc.toString()).toBe(
+      "| Column 1 | Column 2 |\n| -------- | -------- |\n|          |          |"
+    );
+  });
+
+  test("edits Markdown table rows and columns from the edit toolbar", async () => {
+    const initialTable = "| A | B |\n| --- | --- |\n| 1 | 2 |";
+    const view = await openMarkdownEditor({ saveMemo, content: initialTable });
+
+    view.dispatch({ selection: { anchor: initialTable.indexOf("2") } });
+    await chooseMarkdownTableAction("列を右に追加");
+    await tick();
+    expect(view.state.doc.toString()).toBe(
+      "| A   | B   |     |\n| --- | --- | --- |\n| 1   | 2   |     |"
+    );
+
+    await chooseMarkdownTableAction("列を削除");
+    await tick();
+    expect(view.state.doc.toString()).toBe("| A   | B   |\n| --- | --- |\n| 1   | 2   |");
+
+    await chooseMarkdownTableAction("行を下に追加");
+    await tick();
+    expect(view.state.doc.toString()).toBe(
+      "| A   | B   |\n| --- | --- |\n| 1   | 2   |\n|     |     |"
+    );
+
+    await chooseMarkdownTableAction("行を削除");
+    await tick();
+    expect(view.state.doc.toString()).toBe("| A   | B   |\n| --- | --- |\n| 1   | 2   |");
+
+    await chooseMarkdownTableAction("表を削除");
+    await tick();
+    expect(view.state.doc.toString()).toBe("");
+  });
+
+  test("inserts Markdown table rows above and columns left from the edit toolbar", async () => {
+    const initialTable = "| A | B |\n| --- | --- |\n| 1 | 2 |";
+    const view = await openMarkdownEditor({ saveMemo, content: initialTable });
+
+    view.dispatch({ selection: { anchor: initialTable.indexOf("2") } });
+    await chooseMarkdownTableAction("行を上に追加");
+    await tick();
+    expect(view.state.doc.toString()).toBe(
+      "| A   | B   |\n| --- | --- |\n|     |     |\n| 1   | 2   |"
+    );
+
+    await chooseMarkdownTableAction("列を左に追加");
+    await tick();
+    expect(view.state.doc.toString()).toBe(
+      "| A   |     | B   |\n| --- | --- | --- |\n|     |     |     |\n| 1   |     | 2   |"
+    );
+  });
+
+  test("keeps Markdown table controls working for one-column tables", async () => {
+    const initialTable = "| A |\n| --- |\n| 1 |";
+    const view = await openMarkdownEditor({ saveMemo, content: initialTable });
+
+    view.dispatch({ selection: { anchor: initialTable.indexOf("1") } });
+    await chooseMarkdownTableAction("行を下に追加");
+    await tick();
+    expect(view.state.doc.toString()).toBe("| A   |\n| --- |\n| 1   |\n|     |");
+
+    await chooseMarkdownTableAction("列を右に追加");
+    await tick();
+    expect(view.state.doc.toString()).toBe(
+      "| A   |     |\n| --- | --- |\n| 1   |     |\n|     |     |"
+    );
+
+    await chooseMarkdownTableAction("列を削除");
+    await tick();
+    expect(view.state.doc.toString()).toBe("| A   |\n| --- |\n| 1   |\n|     |");
+
+    await chooseMarkdownTableAction("行を削除");
+    await tick();
+    expect(view.state.doc.toString()).toBe("| A   |\n| --- |\n| 1   |");
+
+    await chooseMarkdownTableAction("表を削除");
+    await tick();
+    expect(view.state.doc.toString()).toBe("");
+  });
+
+  test("formats Markdown tables and moves cells with Tab", async () => {
+    const initialTable = "| Name | 値 |\n| --- | --- |\n| A | 12 |";
+    const view = await openMarkdownEditor({ saveMemo, content: initialTable });
+
+    view.dispatch({ selection: { anchor: initialTable.indexOf("12") } });
+    await fireEvent.keyDown(view.contentDOM, { key: "Tab" });
+    await tick();
+
+    expect(view.state.doc.toString()).toBe(
+      "| Name | 値  |\n| ---- | --- |\n| A    | 12  |\n|      |     |"
+    );
+
+    const newRowCellPosition = view.state.doc.toString().lastIndexOf("|      |");
+    expect(view.state.selection.main.from).toBeGreaterThan(newRowCellPosition);
   });
 
   test("suggests memo titles after a wiki-link opener", async () => {
