@@ -506,6 +506,18 @@ export function memoContentForSearch(val: unknown): string {
   return toMarkdown(val).replace(/data:[^)]+/g, "");
 }
 
+// lodash の isEqual は constructor を比較するため、Quill の Delta インスタンスと
+// IPC 越しに受け取ったプレーンな `{ops}` を「異なる」と判定する。
+// Quill エディタの編集中に workspace の保存→反映ラウンドトリップが走るたびに
+// 比較が false 化して `setContents` が呼び直され、カーソルが先頭に飛んでいた。
+// 中身 (ops) が一致しているかだけ知りたい比較は、必ずこのヘルパで正規化してから渡す。
+export function memoContentForCompare(value: unknown): unknown {
+  if (isQuillDelta(value)) {
+    return { ops: value.ops };
+  }
+  return value;
+}
+
 // 将来 elasticlunr 等のインデックス型エンジンに差し替え可能な検索ポイント
 export function searchMemoEntries(memos: Array<{ content: unknown }>, keywords: string[]): boolean {
   return memos.some((entry) =>
