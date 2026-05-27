@@ -138,6 +138,7 @@ function deltaToLines(ops) {
 }
 
 const BLOCK_ATTR_KEYS = new Set([
+  "table",
   "header",
   "list",
   "blockquote",
@@ -154,6 +155,7 @@ function pickBlockAttrs(attrs) {
 }
 
 function getBlockType(attrs) {
+  if (attrs.table) return "table";
   if (attrs["code-block"]) return "code-block";
   if (attrs.list) return "list";
   if (attrs.blockquote) return "blockquote";
@@ -162,7 +164,7 @@ function getBlockType(attrs) {
 }
 
 function shouldGroupAdjacent(type) {
-  return type === "list" || type === "blockquote" || type === "code-block";
+  return type === "list" || type === "blockquote" || type === "code-block" || type === "table";
 }
 
 function groupBlocks(lines) {
@@ -194,6 +196,75 @@ function renderListBlock(block) {
     .join("\n");
 }
 
+function escapeTableCell(value) {
+  return String(value || "")
+    .replace(/\r?\n/g, "<br>")
+    .replace(/\|/g, "\\|");
+}
+
+function tableRowId(attrs) {
+  if (!attrs || attrs.table == null) return null;
+  return String(attrs.table);
+}
+
+function normalizeTableAlign(value) {
+  return value === "left" || value === "center" || value === "right" ? value : undefined;
+}
+
+function tableDividerCell(align) {
+  switch (normalizeTableAlign(align)) {
+    case "left":
+      return ":---";
+    case "center":
+      return ":---:";
+    case "right":
+      return "---:";
+    default:
+      return "---";
+  }
+}
+
+function renderTableRow(cells) {
+  return `| ${cells.join(" | ")} |`;
+}
+
+function renderTableBlock(block) {
+  const rows = [];
+  let currentRowId = null;
+
+  for (const line of block.lines) {
+    const rowId = tableRowId(line.attrs);
+    if (!rowId) continue;
+    if (rowId !== currentRowId) {
+      rows.push([]);
+      currentRowId = rowId;
+    }
+    rows[rows.length - 1].push(line);
+  }
+
+  if (rows.length === 0) return "";
+
+  const columnCount = Math.max(1, ...rows.map((row) => row.length));
+  const normalizedRows = rows.map((row) =>
+    Array.from({ length: columnCount }, (_, index) => row[index] || { inline: "", attrs: {} })
+  );
+  const columnAligns = Array.from({ length: columnCount }, (_, index) => {
+    for (const row of normalizedRows) {
+      const align = normalizeTableAlign(row[index].attrs.align);
+      if (align) return align;
+    }
+    return undefined;
+  });
+
+  const header = renderTableRow(normalizedRows[0].map((cell) => escapeTableCell(cell.inline)));
+  const divider = renderTableRow(columnAligns.map(tableDividerCell));
+  const body = normalizedRows
+    .slice(1)
+    .map((row) => renderTableRow(row.map((cell) => escapeTableCell(cell.inline))));
+
+  return [header, divider, ...body].join("\n");
+}
+
 function renderBlock(block) {
   switch (block.type) {
     case "heading": {
@@ -207,6 +278,8 @@ function renderBlock(block) {
       return block.lines.map(({ inline }) => `> ${inline}`).join("\n");
     case "code-block":
       return "```\n" + block.lines.map((l) => l.inline).join("\n") + "\n```";
+    case "table":
+      return renderTableBlock(block);
     case "paragraph":
     default:
       // 仕様: リスト外の Quill indent は Md に出力しない(諦める)。
@@ -383,6 +456,36 @@ function appendListToken(ops, list, level) {
   }
 }
 
+function appendTableCell(ops, cell) {
+  if (cell && cell.tokens && cell.tokens.length > 0) {
+    appendInlineMdTokens(ops, cell.tokens, {});
+    return;
+  }
+  if (typeof cell?.text === "string") {
+    pushDeltaText(ops, decodeMdEntities(cell.text), {});
+  }
+}
+
+function appendTableToken(ops, token) {
+  const header = Array.isArray(token.header) ? token.header : [];
+  const bodyRows = Array.isArray(token.rows) ? token.rows : [];
+  const rows = [header, ...bodyRows];
+  const columnCount = Math.max(1, ...rows.map((row) => row.length));
+  const align = Array.isArray(token.align) ? token.align : [];
+  const rowIdPrefix = `row-md-${ops.length + 1}`;
+
+  rows.forEach((row, rowIndex) => {
+    const rowId = `${rowIdPrefix}-${rowIndex + 1}`;
+    for (let columnIndex = 0; columnIndex < columnCount; columnIndex += 1) {
+      const cell = row[columnIndex];
+      const cellAlign = normalizeTableAlign(cell?.align ?? align[columnIndex]);
+      const attributes = cellAlign ? { table: rowId, align: cellAlign } : { table: rowId };
+      appendTableCell(ops, cell);
+      ops.push({ insert: "\n", attributes });
+    }
+  });
+}
+
 function appendBlockToken(ops, token) {
   switch (token.type) {
     case "heading":
@@ -414,6 +517,9 @@ function appendBlockToken(ops, token) {
     }
     case "list":
       appendListToken(ops, token, 0);
+      return;
+    case "table":
+      appendTableToken(ops, token);
       return;
     case "html": {
       const raw = token.raw || "";

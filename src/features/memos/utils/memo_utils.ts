@@ -110,6 +110,7 @@ function deltaToLines(ops: QuillDelta["ops"]): DeltaLine[] {
 }
 
 const BLOCK_ATTR_KEYS = new Set([
+  "table",
   "header",
   "list",
   "blockquote",
@@ -125,7 +126,7 @@ function pickBlockAttrs(attrs: QuillAttrs): QuillAttrs {
   return out;
 }
 
-type BlockType = "heading" | "paragraph" | "list" | "blockquote" | "code-block";
+type BlockType = "heading" | "paragraph" | "list" | "blockquote" | "code-block" | "table";
 
 type Block = {
   type: BlockType;
@@ -133,6 +134,7 @@ type Block = {
 };
 
 function getBlockType(attrs: QuillAttrs): BlockType {
+  if (attrs.table) return "table";
   if (attrs["code-block"]) return "code-block";
   if (attrs.list) return "list";
   if (attrs.blockquote) return "blockquote";
@@ -143,7 +145,7 @@ function getBlockType(attrs: QuillAttrs): BlockType {
 // listとblockquoteとcode-blockは隣接する同種行を1つのMdブロックにまとめる。
 // heading/paragraphはMd上で空行区切りが必要なので、行ごとに別ブロックに分ける。
 function shouldGroupAdjacent(type: BlockType): boolean {
-  return type === "list" || type === "blockquote" || type === "code-block";
+  return type === "list" || type === "blockquote" || type === "code-block" || type === "table";
 }
 
 function groupBlocks(lines: DeltaLine[]): Block[] {
@@ -175,6 +177,74 @@ function renderListBlock(block: Block): string {
     .join("\n");
 }
 
+function escapeTableCell(value: string): string {
+  return value.replace(/\r?\n/g, "<br>").replace(/\|/g, "\\|");
+}
+
+function tableRowId(attrs: QuillAttrs): string | null {
+  if (attrs.table == null) return null;
+  return String(attrs.table);
+}
+
+function normalizeTableAlign(value: unknown): "left" | "center" | "right" | undefined {
+  if (value === "left" || value === "center" || value === "right") return value;
+  return undefined;
+}
+
+function tableDividerCell(align: unknown): string {
+  switch (normalizeTableAlign(align)) {
+    case "left":
+      return ":---";
+    case "center":
+      return ":---:";
+    case "right":
+      return "---:";
+    default:
+      return "---";
+  }
+}
+
+function renderTableRow(cells: string[]): string {
+  return `| ${cells.join(" | ")} |`;
+}
+
+function renderTableBlock(block: Block): string {
+  const rows: Array<Array<{ inline: string; attrs: QuillAttrs }>> = [];
+  let currentRowId: string | null = null;
+
+  for (const line of block.lines) {
+    const rowId = tableRowId(line.attrs);
+    if (!rowId) continue;
+    if (rowId !== currentRowId) {
+      rows.push([]);
+      currentRowId = rowId;
+    }
+    rows[rows.length - 1].push(line);
+  }
+
+  if (rows.length === 0) return "";
+
+  const columnCount = Math.max(1, ...rows.map((row) => row.length));
+  const normalizedRows = rows.map((row) =>
+    Array.from({ length: columnCount }, (_, index) => row[index] ?? { inline: "", attrs: {} })
+  );
+  const columnAligns = Array.from({ length: columnCount }, (_, index) => {
+    for (const row of normalizedRows) {
+      const align = normalizeTableAlign(row[index].attrs.align);
+      if (align) return align;
+    }
+    return undefined;
+  });
+
+  const header = renderTableRow(normalizedRows[0].map((cell) => escapeTableCell(cell.inline)));
+  const divider = renderTableRow(columnAligns.map(tableDividerCell));
+  const body = normalizedRows
+    .slice(1)
+    .map((row) => renderTableRow(row.map((cell) => escapeTableCell(cell.inline))));
+
+  return [header, divider, ...body].join("\n");
+}
+
 function renderBlock(block: Block): string {
   switch (block.type) {
     case "heading": {
@@ -188,6 +258,8 @@ function renderBlock(block: Block): string {
       return block.lines.map(({ inline }) => `> ${inline}`).join("\n");
     case "code-block":
       return "```\n" + block.lines.map((l) => l.inline).join("\n") + "\n```";
+    case "table":
+      return renderTableBlock(block);
     case "paragraph":
     default: {
       // 仕様: リスト外の Quill indent は Md に出力しない(諦める)。
@@ -361,6 +433,50 @@ function appendListToken(ops: QuillOp[], list: Tokens.List, level: number): void
   }
 }
 
+type MarkedTableCell = {
+  text?: string;
+  tokens?: Tokens.Generic[];
+  align?: string | null;
+};
+
+type MarkedTableToken = Tokens.Generic & {
+  header?: MarkedTableCell[];
+  rows?: MarkedTableCell[][];
+  align?: Array<string | null>;
+};
+
+function appendTableCell(ops: QuillOp[], cell: MarkedTableCell | undefined): void {
+  if (cell?.tokens && cell.tokens.length > 0) {
+    appendInlineTokens(ops, cell.tokens, {});
+    return;
+  }
+  if (typeof cell?.text === "string") {
+    pushText(ops, decodeEntities(cell.text), {});
+  }
+}
+
+function appendTableToken(ops: QuillOp[], token: MarkedTableToken): void {
+  const header = Array.isArray(token.header) ? token.header : [];
+  const bodyRows = Array.isArray(token.rows) ? token.rows : [];
+  const rows = [header, ...bodyRows];
+  const columnCount = Math.max(1, ...rows.map((row) => row.length));
+  const align = Array.isArray(token.align) ? token.align : [];
+  const rowIdPrefix = `row-md-${ops.length + 1}`;
+
+  rows.forEach((row, rowIndex) => {
+    const rowId = `${rowIdPrefix}-${rowIndex + 1}`;
+    for (let columnIndex = 0; columnIndex < columnCount; columnIndex += 1) {
+      const cell = row[columnIndex];
+      const cellAlign = normalizeTableAlign(cell?.align ?? align[columnIndex]);
+      const attributes: QuillAttrs = cellAlign
+        ? { table: rowId, align: cellAlign }
+        : { table: rowId };
+      appendTableCell(ops, cell);
+      ops.push({ insert: "\n", attributes });
+    }
+  });
+}
+
 function appendBlockToken(ops: QuillOp[], token: Tokens.Generic): void {
   switch (token.type) {
     case "heading": {
@@ -401,6 +517,9 @@ function appendBlockToken(ops: QuillOp[], token: Tokens.Generic): void {
     }
     case "list":
       appendListToken(ops, token as Tokens.List, 0);
+      return;
+    case "table":
+      appendTableToken(ops, token as MarkedTableToken);
       return;
     case "html": {
       // 仕様外の HTML ブロックは生テキストとして取り込む。<u> はインラインで underline 化されるためここでは扱わない。

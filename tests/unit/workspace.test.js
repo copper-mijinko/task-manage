@@ -1228,6 +1228,25 @@ describe("migrateProjectData", () => {
     expect(memoFile).not.toContain('"ops"');
   });
 
+  it("exports Quill table Delta content as GFM Markdown table", () => {
+    const delta = {
+      ops: [
+        { insert: "Task" },
+        { insert: "\n", attributes: { table: "row-a" } },
+        { insert: "Done" },
+        { insert: "\n", attributes: { table: "row-a", align: "center" } },
+        { insert: "One" },
+        { insert: "\n", attributes: { table: "row-b" } },
+        { insert: "Yes" },
+        { insert: "\n", attributes: { table: "row-b", align: "center" } },
+      ],
+    };
+
+    expect(legacyMemoContentToMarkdown(delta, "Table")).toBe(
+      "| Task | Done |\n| --- | :---: |\n| One | Yes |"
+    );
+  });
+
   it("exports memo format unchanged by default", () => {
     const delta = { ops: [{ insert: "Keep rich\n", attributes: { italic: true } }] };
     const projectData = {
