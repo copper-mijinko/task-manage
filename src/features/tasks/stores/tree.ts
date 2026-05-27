@@ -8,6 +8,7 @@ import {
   workspaceToProjectData,
 } from "@features/workspace/utils/workspace_tree";
 import { filter } from "@features/search/stores/search";
+import { memoContentForCompare } from "@features/memos/utils/memo_utils";
 import { project_ids } from "@features/projects/stores/project";
 import {
   selected_type,
@@ -133,7 +134,7 @@ function comparableWorkspaceTask(task: WorkspaceTask) {
     memos: (task.memos ?? []).map((memo) => ({
       id: memo.id,
       title: memo.title,
-      content: memo.content,
+      content: memoContentForCompare(memo.content),
       tags: memo.tags ?? [],
       format: memo.format ?? "markdown",
       order: memo.order ?? null,

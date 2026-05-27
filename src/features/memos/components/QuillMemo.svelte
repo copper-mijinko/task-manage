@@ -3,6 +3,7 @@
   import Quill from "quill";
   import "quill/dist/quill.snow.css";
   import { isEqual } from "lodash";
+  import { memoContentForCompare } from "@features/memos/utils/memo_utils";
 
   export let saveMemo;
   export let content = "";
@@ -195,7 +196,8 @@
     const lastSavedIsEmpty = isEmptyContent(lastSavedContent);
     const needsUpdate =
       contentIsEmpty !== lastSavedIsEmpty ||
-      (!contentIsEmpty && !isEqual(content, lastSavedContent));
+      (!contentIsEmpty &&
+        !isEqual(memoContentForCompare(content), memoContentForCompare(lastSavedContent)));
 
     if (needsUpdate) {
       isEditing = true;
