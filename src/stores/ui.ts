@@ -348,6 +348,69 @@ export let closed_node_ids: ClosedNodeIdsStore = createClosedNodeIds(new Set<str
 // eslint-disable-next-line prefer-const
 export let selected_id: SelectedIdStore = createSelectedID(undefined);
 
+export interface ShowArchivedStore extends Writable<boolean> {
+  init: () => void;
+}
+
+/**
+ * 「アーカイブを表示する」トグルのプロジェクトごとの状態。
+ * `meta.json` に `show_archived_<projectId>` として永続化する。
+ */
+function createShowArchived(): ShowArchivedStore {
+  const cache = new Map<string, boolean>();
+  const { subscribe, set, update } = writable<boolean>(false);
+
+  const loadState = async (projectId: string) => {
+    if (!projectId) return;
+    try {
+      const result = await platform.getMetaData(`show_archived_${projectId}`);
+      const value = result === true;
+      cache.set(projectId, value);
+      set(value);
+    } catch {
+      set(false);
+    }
+  };
+
+  const saveState = (projectId: string, value: boolean) => {
+    if (!projectId) return;
+    try {
+      platform.setMetaData(`show_archived_${projectId}`, value);
+    } catch {
+      // ignore save error
+    }
+  };
+
+  return {
+    subscribe,
+    set: (value: boolean) => {
+      const projectId = get(selected_id);
+      if (projectId) {
+        cache.set(projectId, value);
+        saveState(projectId, value);
+      }
+      set(value);
+    },
+    update,
+    init: () => {
+      selected_id.subscribe(async (projectId) => {
+        if (projectId) {
+          if (cache.has(projectId)) {
+            set(cache.get(projectId)!);
+          } else {
+            await loadState(projectId);
+          }
+        } else {
+          set(false);
+        }
+      });
+    },
+  };
+}
+
+// eslint-disable-next-line prefer-const
+export let show_archived: ShowArchivedStore = createShowArchived();
+
 // Multi-select state for the task tree.
 // `selected_ids` holds the live set; `selection_anchor_id` is the pivot used
 // for Shift-range expansion. `table_selected_id` continues to act as the

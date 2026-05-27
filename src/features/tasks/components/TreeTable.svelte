@@ -45,6 +45,10 @@
     areAllSiblings,
     isContiguousSiblingBlock,
     getTopLevelSelection,
+    archiveNode,
+    restoreNode,
+    bulkArchiveNodes,
+    bulkRestoreNodes,
   } from "@features/tasks/utils/tree_control";
   import {
     copied_task,
@@ -57,6 +61,7 @@
     selectRange,
     selectAll,
     pruneSelection,
+    show_archived,
   } from "@stores/ui";
   import { navigation_history } from "@stores/navigation_history";
 
@@ -76,7 +81,9 @@
     { name: "attachments", default_ratio: 1.5 },
   ];
 
-  $: rows = $filtered_data ? flattenVisibleTree($filtered_data, $closed_node_ids) : [];
+  $: rows = $filtered_data
+    ? flattenVisibleTree($filtered_data, $closed_node_ids, $show_archived)
+    : [];
   $: inheritedDueDateMap = buildInheritedDueDateMap(rows);
   $: nodePathMap = buildNodePathMap(rows);
   $: lineNumberMap = buildLineNumberMap($filtered_data);
@@ -133,6 +140,11 @@
   let deleteTargetName = "";
   let bulkDeleteCount = 0;
   let bulkDeleteIsBulk = false;
+  /** 単発時のモード: "archive" | "permanent"。bulk のときは見ない。 */
+  let deleteMode = "archive";
+  /** bulk のときの振り分け結果。 */
+  let bulkArchiveTargetIds = [];
+  let bulkPermanentTargetIds = [];
   let taskFolderOpenError = "";
   let taskFolderOpenErrorTimer;
 
@@ -837,6 +849,17 @@
     const rootId = $tree_data.data.id;
     const targetIds = Array.from(selectionSet).filter((id) => id !== rootId);
     if (targetIds.length === 0) return;
+    // active 分はアーカイブ、archived 分は完全削除に自動振り分け（仕様）。
+    const archiveIds = [];
+    const permanentIds = [];
+    for (const id of targetIds) {
+      const n = getNode(id, $tree_data.data);
+      if (!n) continue;
+      if (n.archived) permanentIds.push(id);
+      else archiveIds.push(id);
+    }
+    bulkArchiveTargetIds = archiveIds;
+    bulkPermanentTargetIds = permanentIds;
     bulkDeleteCount = targetIds.length;
     bulkDeleteIsBulk = true;
     deleteTargetId = undefined;
@@ -889,6 +912,7 @@
   function requestDelete(event) {
     const { id } = event.detail;
     if (isInMultiSelection(id)) {
+      // bulk は自動振り分けに統一（active→archive、archived→完全削除）
       handleBulkDelete();
       return;
     }
@@ -897,11 +921,52 @@
       return;
     }
 
+    deleteMode = "archive";
     deleteTargetId = id;
     deleteTargetName = node.data.name;
     bulkDeleteIsBulk = false;
     bulkDeleteCount = 0;
+    bulkArchiveTargetIds = [];
+    bulkPermanentTargetIds = [];
     showDeleteConfirm = true;
+  }
+
+  function requestPermanentDelete(event) {
+    const { id } = event.detail;
+    if (isInMultiSelection(id)) {
+      handleBulkDelete();
+      return;
+    }
+    const node = getNode(id, $tree_data.data);
+    if (!node || node.id === $tree_data.data.id) {
+      return;
+    }
+
+    deleteMode = "permanent";
+    deleteTargetId = id;
+    deleteTargetName = node.data.name;
+    bulkDeleteIsBulk = false;
+    bulkDeleteCount = 0;
+    bulkArchiveTargetIds = [];
+    bulkPermanentTargetIds = [];
+    showDeleteConfirm = true;
+  }
+
+  function requestRestore(event) {
+    const { id } = event.detail;
+    if (isInMultiSelection(id)) {
+      if (!$tree_data?.data || selectionSize === 0) return;
+      const rootId = $tree_data.data.id;
+      const targets = new Set(Array.from(selectionSet).filter((tid) => tid !== rootId));
+      if (targets.size === 0) return;
+      const data = bulkRestoreNodes($tree_data.data, targets);
+      $tree_data = { ...$tree_data, data };
+      return;
+    }
+    const node = getNode(id, $tree_data.data);
+    if (!node || node.id === $tree_data.data.id) return;
+    $tree_data.data = restoreNode(id, $tree_data.data);
+    $tree_data = { ...$tree_data, data: $tree_data.data };
   }
 
   function toggleDeleteConfirm() {
@@ -909,36 +974,78 @@
     if (!showDeleteConfirm) {
       bulkDeleteIsBulk = false;
       bulkDeleteCount = 0;
+      deleteMode = "archive";
+      bulkArchiveTargetIds = [];
+      bulkPermanentTargetIds = [];
     }
   }
 
   function confirmDelete() {
     if (bulkDeleteIsBulk) {
-      if (!$tree_data?.data || selectionSize === 0) return;
-      const rootId = $tree_data.data.id;
-      const targets = new Set(Array.from(selectionSet).filter((id) => id !== rootId));
-      if (targets.size === 0) return;
-      const data = bulkRemoveNodes($tree_data.data, targets);
-      if (data && data !== $tree_data.data) {
-        $tree_data = { ...$tree_data, data };
+      if (!$tree_data?.data) return;
+      let data = $tree_data.data;
+      if (bulkArchiveTargetIds.length > 0) {
+        data = bulkArchiveNodes(data, new Set(bulkArchiveTargetIds));
       }
+      if (bulkPermanentTargetIds.length > 0) {
+        const removed = bulkRemoveNodes(data, new Set(bulkPermanentTargetIds));
+        if (removed) data = removed;
+      }
+      $tree_data = { ...$tree_data, data };
       clearSelection();
       bulkDeleteIsBulk = false;
       bulkDeleteCount = 0;
+      deleteMode = "archive";
+      bulkArchiveTargetIds = [];
+      bulkPermanentTargetIds = [];
       return;
     }
     if (!deleteTargetId) {
       return;
     }
-
-    const data = rmNode(deleteTargetId, $tree_data.data);
-    $tree_data = { ...$tree_data, data };
+    if (deleteMode === "permanent") {
+      const data = rmNode(deleteTargetId, $tree_data.data);
+      $tree_data = { ...$tree_data, data };
+    } else {
+      const data = archiveNode(deleteTargetId, $tree_data.data);
+      $tree_data = { ...$tree_data, data };
+    }
     if ($table_selected_id === deleteTargetId) {
       clearSelection();
     }
     deleteTargetId = undefined;
     deleteTargetName = "";
+    deleteMode = "archive";
   }
+
+  $: deleteDialogHeader = (() => {
+    if (bulkDeleteIsBulk) {
+      if (bulkArchiveTargetIds.length > 0 && bulkPermanentTargetIds.length > 0) {
+        return "アーカイブと完全削除の確認";
+      }
+      return bulkPermanentTargetIds.length > 0 ? "完全削除の確認" : "アーカイブの確認";
+    }
+    return deleteMode === "permanent" ? "完全削除の確認" : "アーカイブの確認";
+  })();
+
+  $: deleteDialogContent = (() => {
+    if (bulkDeleteIsBulk) {
+      const lines = [];
+      if (bulkArchiveTargetIds.length > 0)
+        lines.push(`${bulkArchiveTargetIds.length} 件をアーカイブ`);
+      if (bulkPermanentTargetIds.length > 0)
+        lines.push(`${bulkPermanentTargetIds.length} 件を完全削除`);
+      const body = lines.join(" / ");
+      if (bulkPermanentTargetIds.length > 0) {
+        return `${body} します。\n完全削除分は取り消せません。`;
+      }
+      return `${body} します。\n後でアーカイブ表示から復元できます。`;
+    }
+    if (deleteMode === "permanent") {
+      return `"${deleteTargetName}" を完全に削除しますか？\nこの操作は取り消せません。`;
+    }
+    return `"${deleteTargetName}" をアーカイブしますか？\n後でアーカイブ表示から復元できます。`;
+  })();
 </script>
 
 <svelte:window on:keydown={handleGlobalKeydown} />
@@ -1019,6 +1126,8 @@
         on:addBelow={handleAddBelow}
         on:addChild={handleAddChild}
         on:deleteTask={requestDelete}
+        on:restoreTask={requestRestore}
+        on:permanentDeleteTask={requestPermanentDelete}
         on:copyTask={handleCopyTask}
         on:pasteTask={handlePasteTask}
         on:openTaskFolder={handleOpenTaskFolder}
@@ -1064,10 +1173,8 @@
 <Dialog
   show={showDeleteConfirm}
   toggle={toggleDeleteConfirm}
-  header="Confirm."
-  content={bulkDeleteIsBulk
-    ? `選択中の ${bulkDeleteCount} 件を削除しますか？\n子タスクも一緒に削除されます。`
-    : `Do you really delete "${deleteTargetName}"?\nThis may delete child nodes.`}
+  header={deleteDialogHeader}
+  content={deleteDialogContent}
   callback={confirmDelete}
 />
 

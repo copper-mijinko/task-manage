@@ -32,6 +32,10 @@ export interface WorkspaceTask {
   attachments?: WorkspaceAttachment[];
   createdAt: string; // YYYY-MM-DD
   order?: number;
+  /** Archived (soft-deleted) flag. Persisted in `_task.md` frontmatter. */
+  archived?: boolean;
+  /** ISO 8601 timestamp set when archived. */
+  archivedAt?: string;
 }
 
 export interface WorkspaceInfo {

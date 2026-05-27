@@ -20,6 +20,11 @@
   export let nodePath = "";
   /** When >1, the menu acts on the whole multi-selection (label gets count prefix). */
   export let selectionCount = 1;
+  /**
+   * 行が archived 状態かどうか。true のときメニューは
+   * delete (= archive) ではなく restore / permanently delete を出す。
+   */
+  export let archived = false;
   $: countPrefix = selectionCount > 1 ? `${selectionCount}件 ` : "";
   let draftText = text ?? "";
   let input;
@@ -42,26 +47,26 @@
   $: isMulti = selectionCount > 1;
 
   $: menuItems = withSeparators([
-    // 1. Rename — anchor-only; disabled in multi-select.
+    // 1. Rename — anchor-only; disabled in multi-select / archived.
     [
       {
         title: "rename",
         action: "rename",
-        disabled: isMulti,
+        disabled: isMulti || archived,
         icon: {
           viewBox: "-4 -4 32 32",
           path: "M18.111,2.293,9.384,11.021a.977.977,0,0,0-.241.39L8.052,14.684A1,1,0,0,0,9,16a.987.987,0,0,0,.316-.052l3.273-1.091a.977.977,0,0,0,.39-.241l8.728-8.727a1,1,0,0,0,0-1.414L19.525,2.293A1,1,0,0,0,18.111,2.293Z",
         },
       },
     ],
-    // 2. Add — anchor-only; disabled in multi-select.
+    // 2. Add — anchor-only; disabled in multi-select / archived.
     [
       ...(!isRoot
         ? [
             {
               title: "add task below",
               action: "addBelow",
-              disabled: isMulti,
+              disabled: isMulti || archived,
               icon: {
                 viewBox: "0 0 24 24",
                 path: "M12 5V19M5 12H19",
@@ -72,15 +77,15 @@
       {
         title: "add child task",
         action: "addChild",
-        disabled: isMulti,
+        disabled: isMulti || archived,
         icon: {
           viewBox: "0 0 24 24",
           path: "M5 5V14H15M11 10L15 14L11 18M19 5V9M17 7H21",
         },
       },
     ],
-    // 3. Clipboard — copy is bulk-aware; paste pastes the clipboard at the
-    // clicked row (works for both single and multi clipboards).
+    // 3. Clipboard — copy is bulk-aware; paste disallowed onto archived
+    // (archived は読み取り専用なので子追加が禁止扱い)。
     [
       ...(!isRoot
         ? [
@@ -97,7 +102,7 @@
       {
         title: "paste as child",
         action: "pasteTask",
-        disabled: $copied_task === null && $copied_tasks.length === 0,
+        disabled: archived || ($copied_task === null && $copied_tasks.length === 0),
         icon: {
           viewBox: "0 0 24 24",
           path: "M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2",
@@ -119,11 +124,12 @@
         ]
       : [],
     // 5. Move — bulk-aware when the row is part of the multi-selection.
+    // archived 行はツリー位置の変更も禁止。
     [
       {
         title: `${countPrefix}move up`,
         action: "moveUp",
-        disabled: !canMoveUp,
+        disabled: !canMoveUp || archived,
         icon: {
           viewBox: "0 0 24 24",
           path: "M12 5L6 11H10V19H14V11H18L12 5Z",
@@ -132,7 +138,7 @@
       {
         title: `${countPrefix}move down`,
         action: "moveDown",
-        disabled: !canMoveDown,
+        disabled: !canMoveDown || archived,
         icon: {
           viewBox: "0 0 24 24",
           path: "M12 19L18 13H14V5H10V13H6L12 19Z",
@@ -141,7 +147,7 @@
       {
         title: `${countPrefix}move right`,
         action: "indentTask",
-        disabled: !canIndent,
+        disabled: !canIndent || archived,
         icon: {
           viewBox: "0 0 24 24",
           path: "M4 6H14V8H4V6ZM4 11H14V13H4V11ZM4 16H14V18H4V16ZM12 9L17 14L12 19V16H8V12H12V9Z",
@@ -150,7 +156,7 @@
       {
         title: `${countPrefix}move left`,
         action: "outdentTask",
-        disabled: !canOutdent,
+        disabled: !canOutdent || archived,
         icon: {
           viewBox: "0 0 24 24",
           path: "M10 9L5 14L10 19V16H16V12H10V9ZM10 6H20V8H10V6ZM10 16H20V18H10V16Z",
@@ -175,18 +181,39 @@
           ]
         : []),
     ],
-    // 7. Delete — bulk-aware when the row is part of the multi-selection.
+    // 7. Delete / Restore — bulk-aware when the row is part of the multi-selection.
+    // archived 行では「復元」「完全に削除」を出す。それ以外は通常の delete
+    // （実体としては archive に振り替えられる）。
     !isRoot
-      ? [
-          {
-            title: `${countPrefix}delete`,
-            action: "deleteTask",
-            icon: {
-              viewBox: "0 0 48 48",
-              path: "M13.05 42q-1.25 0-2.125-.875T10.05 39V10.5H8v-3h9.4V6h13.2v1.5H40v3h-2.05V39q0 1.2-.9 2.1-.9.9-2.1.9Zm21.9-31.5h-21.9V39h21.9Zm-16.6 24.2h3V14.75h-3Zm8.3 0h3V14.75h-3Zm-13.6-24.2V39Z",
+      ? archived
+        ? [
+            {
+              title: `${countPrefix}restore`,
+              action: "restoreTask",
+              icon: {
+                viewBox: "0 0 24 24",
+                path: "M3 12a9 9 0 1 1 3.6 7.2M3 12V6M3 12h6",
+              },
             },
-          },
-        ]
+            {
+              title: `${countPrefix}delete permanently`,
+              action: "permanentDeleteTask",
+              icon: {
+                viewBox: "0 0 48 48",
+                path: "M13.05 42q-1.25 0-2.125-.875T10.05 39V10.5H8v-3h9.4V6h13.2v1.5H40v3h-2.05V39q0 1.2-.9 2.1-.9.9-2.1.9Zm21.9-31.5h-21.9V39h21.9Zm-16.6 24.2h3V14.75h-3Zm8.3 0h3V14.75h-3Zm-13.6-24.2V39Z",
+              },
+            },
+          ]
+        : [
+            {
+              title: `${countPrefix}delete`,
+              action: "deleteTask",
+              icon: {
+                viewBox: "0 0 48 48",
+                path: "M13.05 42q-1.25 0-2.125-.875T10.05 39V10.5H8v-3h9.4V6h13.2v1.5H40v3h-2.05V39q0 1.2-.9 2.1-.9.9-2.1.9Zm21.9-31.5h-21.9V39h21.9Zm-16.6 24.2h3V14.75h-3Zm8.3 0h3V14.75h-3Zm-13.6-24.2V39Z",
+              },
+            },
+          ]
       : [],
   ]);
 
@@ -253,6 +280,9 @@
   };
 
   const toggle = async () => {
+    // archived 行は読み取り専用（仕様）。rename を no-op にして
+    // 編集モードへ入らせない。double-click / メニュー rename どちらも経路は同じ。
+    if (archived && !isEditing) return;
     isEditing = !isEditing;
     if (isEditing) {
       await tick();
@@ -448,6 +478,8 @@
     on:outdentTask={handleMenuAction}
     on:openTaskFolder={handleMenuAction}
     on:deleteTask={handleMenuAction}
+    on:restoreTask={handleMenuAction}
+    on:permanentDeleteTask={handleMenuAction}
     on:copyTask={handleMenuAction}
     on:pasteTask={handleMenuAction}
     on:close={closeMenu}

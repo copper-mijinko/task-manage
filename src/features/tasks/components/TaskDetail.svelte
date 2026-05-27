@@ -44,6 +44,7 @@
   $: name = node ? node.data["name"] : "Select Task";
   $: memo = node ? node.data["memo"] : [];
   $: attachments = node ? (node.data["attachments"] ?? []) : [];
+  $: isArchived = !!node?.archived;
   $: isWorkspaceProject = $selected_type === "WorkspaceProject";
   $: workspaceProjectDir = isWorkspaceProject ? $workspace_store.activeProjectDir : null;
   $: defaultMemoFormat = isWorkspaceProject ? "markdown" : "quill";
@@ -560,7 +561,27 @@
       bind:this={splitBody}
       style={`--detail-pane-size: ${detailPaneSize}`}
     >
-      <div class="detail-pane" class:auto-detail={detailPaneSize === "auto"} bind:this={detailPane}>
+      <div
+        class="detail-pane"
+        class:auto-detail={detailPaneSize === "auto"}
+        class:archived={isArchived}
+        bind:this={detailPane}
+      >
+        {#if isArchived}
+          <div class="archived-banner" role="status">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M3 7h18v3H3V7zM5 10v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-9M10 14h4"
+                stroke="currentColor"
+                stroke-width="1.6"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                fill="none"
+              />
+            </svg>
+            <span>このタスクはアーカイブ済みです。編集するには復元してください。</span>
+          </div>
+        {/if}
         <div class="detail-container">
           <label class="detail-field">
             <span class="detail-label">Name</span>
@@ -652,7 +673,7 @@
         on:keydown={handleCardResizeKeydown}
       ></div>
 
-      <div class="memo-pane" bind:this={memoPane}>
+      <div class="memo-pane" class:archived={isArchived} bind:this={memoPane}>
         <div class="memotab-container">
           <MemoTab
             {memo}
@@ -709,6 +730,29 @@
   }
   .detail-pane.auto-detail {
     flex-basis: auto;
+  }
+  /* archived タスクの右ペイン: バナーを除く入力系をすべて非活性化。
+     pointer-events: none で入力フォーカス自体を阻止し、視覚的にも mute する。 */
+  .detail-pane.archived .detail-container,
+  .memo-pane.archived {
+    pointer-events: none;
+    opacity: 0.55;
+    user-select: text;
+  }
+  .archived-banner {
+    display: flex;
+    align-items: center;
+    gap: var(--sp2);
+    padding: var(--sp1) var(--sp3);
+    background-color: color-mix(in srgb, var(--theme-color-Sub-main) 12%, transparent);
+    color: var(--theme-color-Sub-main);
+    font-size: var(--font-label-md);
+    border-bottom: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 25%, transparent);
+  }
+  .archived-banner svg {
+    width: 1rem;
+    height: 1rem;
+    flex-shrink: 0;
   }
   .memo-pane {
     display: flex;

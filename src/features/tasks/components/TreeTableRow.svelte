@@ -104,6 +104,9 @@
   }
 
   function commitData(key, value) {
+    // archived 行は読み取り専用（仕様）。subscribe 経路で誤って入った
+    // commit を捨て、データ層を変えない。
+    if (node.archived) return;
     dispatch("commit", {
       id,
       patch: {
@@ -215,6 +218,7 @@
   class:DragOverBelow={dragOverType === "DragOverBelow"}
   class:OverdueRow={dueDateUrgency === "overdue"}
   class:DueSoonRow={dueDateUrgency === "due-soon"}
+  class:ArchivedRow={!!node.archived}
   use:ripple
   tabindex="0"
   draggable="true"
@@ -306,6 +310,7 @@
           {canOpenTaskFolder}
           selectionCount={selectionCountForMenu}
           {nodePath}
+          archived={!!node.archived}
           on:commit={(e) => {
             commitData("name", e.detail.value);
           }}
@@ -333,6 +338,12 @@
           on:deleteTask={() => {
             dispatch("deleteTask", { id });
           }}
+          on:restoreTask={() => {
+            dispatch("restoreTask", { id });
+          }}
+          on:permanentDeleteTask={() => {
+            dispatch("permanentDeleteTask", { id });
+          }}
           on:copyTask={() => {
             dispatch("copyTask", { id });
           }}
@@ -349,6 +360,7 @@
       {:else if header.name == "status"}
         <StatusSelect
           status={data[header.name]}
+          disabled={!!node.archived}
           on:change={(e) => {
             commitData("status", e.detail.value);
           }}
@@ -359,6 +371,7 @@
           id="start-date"
           backgroundColor={"var(--backgroundColor)"}
           value={data[header.name]}
+          disabled={!!node.archived}
           on:change={(e) => {
             commitData("start date", e.target.value);
           }}
@@ -370,6 +383,7 @@
           backgroundColor={"var(--backgroundColor)"}
           value={data[header.name]}
           inheritedDate={inheritedDueDate}
+          disabled={!!node.archived}
           on:change={(e) => {
             commitData("due date", e.target.value);
           }}
@@ -490,6 +504,23 @@
       var(--theme-color-Warning-main) 10%,
       var(--theme-color-Main-light)
     );
+  }
+  /* Archived rows: muted, with subtle diagonal striping to visually flag
+     "this is in the archive view". Stronger than urgency tints so it reads
+     even when the row is also overdue. */
+  .TableRow.ArchivedRow {
+    opacity: 0.55;
+    font-style: italic;
+    background-image: repeating-linear-gradient(
+      135deg,
+      transparent,
+      transparent 6px,
+      color-mix(in srgb, var(--theme-color-Sub-main) 12%, transparent) 6px,
+      color-mix(in srgb, var(--theme-color-Sub-main) 12%, transparent) 7px
+    );
+  }
+  .TableRow.ArchivedRow:hover {
+    opacity: 0.85;
   }
   .TableRow:focus-visible {
     outline: 2px solid var(--theme-color-Primary-main);
