@@ -47,6 +47,7 @@ interface PersistContext {
   activeProjectDir: string | null;
   activeWorkspaceProject: WorkspaceProjectListItem | undefined;
   cachedWorkspaceTasks: Record<string, WorkspaceTask>;
+  workspaceRevision?: number;
 }
 
 const MAX_HISTORY = 50;
@@ -54,8 +55,30 @@ let undoStack: ProjectData[] = [];
 let redoStack: ProjectData[] = [];
 let skipSnapshot = false;
 let pendingSkipSnapshot = false;
+const workspaceProjectRevisions = new Map<string, number>();
 
 export const cancelPendingOperations = writable<number>(0);
+
+function getWorkspaceProjectRevision(projectDir: string | null | undefined): number {
+  return projectDir ? (workspaceProjectRevisions.get(projectDir) ?? 0) : 0;
+}
+
+function rememberWorkspaceProjectRevision(
+  projectDir: string | null | undefined,
+  revision: unknown
+) {
+  if (!projectDir || typeof revision !== "number" || !Number.isFinite(revision)) return;
+  workspaceProjectRevisions.set(
+    projectDir,
+    Math.max(getWorkspaceProjectRevision(projectDir), revision)
+  );
+}
+
+function nextWorkspaceProjectRevision(projectDir: string): number {
+  const revision = getWorkspaceProjectRevision(projectDir) + 1;
+  workspaceProjectRevisions.set(projectDir, revision);
+  return revision;
+}
 
 function captureSnapshot(data: ProjectData) {
   undoStack.push(_.cloneDeep(data));
@@ -208,7 +231,15 @@ function broadcastWorkspaceSnapshot(
     return;
   }
 
-  platform.wsBroadcastProjectSnapshot(context.activeProjectDir, workspaceTasksToRecord(allTasks));
+  const options =
+    typeof context.workspaceRevision === "number"
+      ? { revision: context.workspaceRevision }
+      : undefined;
+  platform.wsBroadcastProjectSnapshot(
+    context.activeProjectDir,
+    workspaceTasksToRecord(allTasks),
+    options
+  );
 }
 
 function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
@@ -326,10 +357,16 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
         }
         try {
           const forceLocal = isPreferMemoryActive();
-          const options = forceLocal ? { forceLocal: true } : undefined;
+          const options = {
+            ...(forceLocal ? { forceLocal: true } : {}),
+            ...(typeof context.workspaceRevision === "number"
+              ? { revision: context.workspaceRevision }
+              : {}),
+          };
+          const writeOptions = Object.keys(options).length > 0 ? options : undefined;
           const writePromise = fullSnapshot
-            ? platform.wsWriteProject(activeProjectDir, allTasks, options)
-            : platform.wsWriteProjectPatch(activeProjectDir, patch, options);
+            ? platform.wsWriteProject(activeProjectDir, allTasks, writeOptions)
+            : platform.wsWriteProjectPatch(activeProjectDir, patch, writeOptions);
           writePromise
             .then((result) => {
               if (!result?.success) {
@@ -405,6 +442,23 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
             return;
           }
 
+          const eventRevision = event.revision;
+          const alreadySeenLocalWrite =
+            event.reason === "local-write" &&
+            typeof eventRevision === "number" &&
+            Number.isFinite(eventRevision) &&
+            eventRevision <= getWorkspaceProjectRevision(event.projectDir);
+
+          if (alreadySeenLocalWrite) {
+            return;
+          }
+
+          if (typeof eventRevision === "number") {
+            rememberWorkspaceProjectRevision(event.projectDir, eventRevision);
+          } else if (event.reason === "external-update" || event.reason === "conflict-reload") {
+            nextWorkspaceProjectRevision(event.projectDir);
+          }
+
           workspace_tasks_cache.set(event.tasks);
           skipPersistOnce = true;
           set(workspaceToProjectData(event.tasks, currentSelectedId));
@@ -447,7 +501,7 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
         const currentSelectedType = get(selected_type);
         const currentSelectedId = get(selected_id);
         const workspaceState = get(workspace_store);
-        const persistContext = {
+        const persistContext: PersistContext = {
           selectedType: currentSelectedType,
           selectedId: currentSelectedId,
           activeProjectDir: workspaceState.activeProjectDir,
@@ -504,6 +558,16 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
           skipSnapshot = false;
         } else if (current !== undefined) {
           pendingSkipSnapshot = false;
+        }
+
+        if (
+          current !== undefined &&
+          currentSelectedType === "WorkspaceProject" &&
+          workspaceState.activeProjectDir
+        ) {
+          persistContext.workspaceRevision = nextWorkspaceProjectRevision(
+            workspaceState.activeProjectDir
+          );
         }
 
         if (current !== undefined) {

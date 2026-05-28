@@ -93,6 +93,18 @@ main process 側では `WorkspaceWriteQueue` が同一 projectDir の pending pa
 
 初回保存や前回データがない場合は、互換性と安全性のため `ws:write-project` の全体保存にフォールバックする。
 
+### 5.1 保存完了イベントと revision
+
+Workspace 保存では、renderer の `tree_data` を編集中の正本として扱う。
+保存が遅い環境では、古い snapshot の書込が後から完了することがあるため、保存完了時の `local-write` をそのまま画面へ戻すと Quill やメモ表示が古い内容へ巻き戻る。
+
+これを防ぐため、renderer は WorkspaceProject のローカル編集ごとに projectDir 単位の `revision` を増やす。
+`revision` は `wsBroadcastProjectSnapshot` と `wsWriteProject` / `wsWriteProjectPatch` の options に載せ、main process の `WorkspaceWriteQueue` が保存完了時の `local-write` payload に返す。
+renderer は現在保持している revision 以下の `local-write` を保存完了通知として扱い、`tree_data` へ再反映しない。
+
+この設計により、OneDrive などでファイル書込が遅れても、古い保存完了が現在のメモリ状態を上書きしない。
+一方で、ディスク上の正規化結果を画面へ即時反映したい場合は `local-write` ではなく、明示的な reload または `external-update` / `conflict-reload` 経路で扱う。
+
 ## 6. 守るべき境界
 
 性能を保つため、次の境界を維持する。

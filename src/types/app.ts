@@ -58,6 +58,7 @@ export interface WorkspaceProjectUpdatedEvent {
   projectDir: string;
   tasks: Record<string, WorkspaceTask>;
   reason: "external-update" | "conflict-reload" | "local-update" | "local-write";
+  revision?: number;
 }
 
 export interface WorkspaceConflictEvent {
@@ -181,14 +182,18 @@ export interface ElectronAPI {
   wsWriteProject: (
     projectDir: string,
     tasks: WorkspaceTask[],
-    options?: { forceLocal?: boolean }
+    options?: { forceLocal?: boolean; revision?: number }
   ) => Promise<{ success: boolean; queued?: boolean; error?: string }>;
   wsWriteProjectPatch: (
     projectDir: string,
     patch: WorkspaceProjectPatch,
-    options?: { forceLocal?: boolean }
+    options?: { forceLocal?: boolean; revision?: number }
   ) => Promise<{ success: boolean; queued?: boolean; noop?: boolean; error?: string }>;
-  wsBroadcastProjectSnapshot: (projectDir: string, tasks: Record<string, WorkspaceTask>) => void;
+  wsBroadcastProjectSnapshot: (
+    projectDir: string,
+    tasks: Record<string, WorkspaceTask>,
+    options?: { revision?: number }
+  ) => void;
   wsDeleteTask: (
     projectDir: string,
     taskId: string

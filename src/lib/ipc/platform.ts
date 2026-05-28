@@ -336,7 +336,7 @@ export function wsOpenTaskAttachmentWith(
 export function wsWriteProject(
   projectDir: string,
   tasks: WorkspaceTask[],
-  options?: { forceLocal?: boolean }
+  options?: { forceLocal?: boolean; revision?: number }
 ): Promise<{ success: boolean; queued?: boolean; error?: string }> {
   return (
     api()?.wsWriteProject?.(projectDir, tasks, options) ??
@@ -347,7 +347,7 @@ export function wsWriteProject(
 export function wsWriteProjectPatch(
   projectDir: string,
   patch: WorkspaceProjectPatch,
-  options?: { forceLocal?: boolean }
+  options?: { forceLocal?: boolean; revision?: number }
 ): Promise<{ success: boolean; queued?: boolean; noop?: boolean; error?: string }> {
   return (
     api()?.wsWriteProjectPatch?.(projectDir, patch, options) ??
@@ -357,9 +357,10 @@ export function wsWriteProjectPatch(
 
 export function wsBroadcastProjectSnapshot(
   projectDir: string,
-  tasks: Record<string, WorkspaceTask>
+  tasks: Record<string, WorkspaceTask>,
+  options?: { revision?: number }
 ): void {
-  api()?.wsBroadcastProjectSnapshot?.(projectDir, tasks);
+  api()?.wsBroadcastProjectSnapshot?.(projectDir, tasks, options);
 }
 
 export function wsDeleteTask(

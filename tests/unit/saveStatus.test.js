@@ -213,7 +213,8 @@ describe("saveStatus store", () => {
           id: "task-a",
           name: "Task A edited",
         }),
-      })
+      }),
+      expect.objectContaining({ revision: expect.any(Number) })
     );
 
     await vi.runAllTimersAsync();

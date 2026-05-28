@@ -495,13 +495,17 @@ app.on("ready", () => {
       return updated;
     },
     onStatus: sendWorkspaceSaveStatus,
-    onWritten: ({ projectDir, result }) => {
+    onWritten: ({ projectDir, result, revision }) => {
       if (!result?.tasks) return;
-      sendWorkspaceProjectUpdated({
+      const payload = {
         projectDir,
         tasks: Object.fromEntries(result.tasks),
         reason: "local-write",
-      });
+      };
+      if (Number.isFinite(revision)) {
+        payload.revision = revision;
+      }
+      sendWorkspaceProjectUpdated(payload);
     },
     onError: ({ projectDir, error }) => {
       log.error(`workspace write failed (${projectDir}):`, error.message);
@@ -1394,7 +1398,7 @@ app.on("ready", () => {
     }
   });
 
-  ipcMain.on("ws:broadcast-project-snapshot", (event, { projectDir, tasks }) => {
+  ipcMain.on("ws:broadcast-project-snapshot", (event, { projectDir, tasks, options }) => {
     try {
       if (!projectDir || !isInsideKnownWorkspace(projectDir)) {
         return;
@@ -1403,14 +1407,17 @@ app.on("ready", () => {
       const cached = primeWorkspaceProjectSnapshot(projectDir, tasks);
       if (!cached) return;
 
-      sendWorkspaceProjectUpdated(
-        {
-          projectDir,
-          tasks: Object.fromEntries(cached.tasks),
-          reason: "local-update",
-        },
-        event.sender
-      );
+      const payload = {
+        projectDir,
+        tasks: Object.fromEntries(cached.tasks),
+        reason: "local-update",
+      };
+      const revision = Number(options?.revision);
+      if (Number.isFinite(revision)) {
+        payload.revision = revision;
+      }
+
+      sendWorkspaceProjectUpdated(payload, event.sender);
     } catch (err) {
       log.error("ws:broadcast-project-snapshot error:", err.message);
     }

@@ -47,6 +47,7 @@ Electron アプリ全体を起動して確認する。
 | `src/features/tasks/utils/tree_control.ts` | `buildStickyTrail switches scope when scrolling across subtrees`                                  | サブツリーをまたいでスクロールするとパンくずがその場の祖先に切り替わる          |
 | `src/features/tasks/utils/tree_control.ts` | `buildStickyTrail hides the trail at the very top (only root in scope)`                           | プロジェクト直下しか見えていない時はパンくずを表示しない                        |
 | `src/features/search/stores/search.ts`     | `updates visible tree data when tree_data changes without filter changes`                         | ワークスペース読み込みなどで `tree_data` だけが変わっても表示用ツリーを同期する |
+| `src/features/tasks/stores/tree.ts`        | `ignores stale local-write events so slow saves cannot rewind local edits`                        | 古い revision の `local-write` が後から届いても、現在の `tree_data` を巻き戻さない |
 | `electron/workspace.js`             | `atomicWriteFile replaces files without leaving temp files`                                       | 一時ファイル経由 → `rename` の原子的書込で `.tmp` が残らない                    |
 | `electron/workspace.js`             | `writeFileIfChanged skips unchanged content`                                                      | 既存ファイルと内容一致の場合に書込をスキップし mtime を維持する                 |
 | `electron/workspace.js`             | `retryFileOperation retries temporary OneDrive-style filesystem errors`                           | `EBUSY` / `EPERM` などのリトライ可能エラーを指数バックオフで再試行する          |
@@ -190,6 +191,7 @@ Electron アプリ全体を起動して確認する。
 | `src/features/tasks/utils/tree_control.ts` | 不正入力時の安全性                  | 実装済み | [tests/unit/tree_control.test.js](../tests/unit/tree_control.test.js) |
 | `src/features/tasks/utils/tree_control.ts` | スティッキー パンくず計算           | 実装済み | [tests/unit/tree_control.test.js](../tests/unit/tree_control.test.js) |
 | `src/features/search/stores/search.ts`     | 表示用ツリー同期                    | 実装済み | [tests/unit/search.test.js](../tests/unit/search.test.js)             |
+| `src/features/tasks/stores/tree.ts`        | Workspace `local-write` revision ガード | 実装済み | [tests/unit/workspace_revision.test.ts](../tests/unit/workspace_revision.test.ts) |
 | `electron/workspace.js`             | 原子的・増分書込・リトライ・`*Async` 経路  | 実装済み | [tests/unit/workspace.test.js](../tests/unit/workspace.test.js)       |
 | `electron/workspace.js`             | 添付ファイル保存 / 削除 / 安全なパス解決    | 実装済み | [tests/unit/workspace.test.js](../tests/unit/workspace.test.js)       |
 | `electron/workspace-write-queue.js` | latest-wins / 上限 / ステータス通知        | 実装済み | [tests/unit/workspace-write-queue.test.js](../tests/unit/workspace-write-queue.test.js) |
