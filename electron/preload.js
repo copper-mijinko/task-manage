@@ -140,8 +140,8 @@ const electronAPI = {
     ipcRenderer.invoke("ws:write-project", { projectDir, tasks, options }),
   wsWriteProjectPatch: (projectDir, patch, options) =>
     ipcRenderer.invoke("ws:write-project-patch", { projectDir, patch, options }),
-  wsBroadcastProjectSnapshot: (projectDir, tasks) =>
-    ipcRenderer.send("ws:broadcast-project-snapshot", { projectDir, tasks }),
+  wsBroadcastProjectSnapshot: (projectDir, tasks, options) =>
+    ipcRenderer.send("ws:broadcast-project-snapshot", { projectDir, tasks, options }),
   wsDeleteTask: (projectDir, taskId) =>
     ipcRenderer.invoke("ws:delete-task", { projectDir, taskId }),
   wsCreateProject: (workspacePath, name, id, order) =>

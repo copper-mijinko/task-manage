@@ -6,8 +6,10 @@ function sleep(ms) {
 }
 
 function normalizeOptions(options = {}) {
+  const revision = Number(options?.revision);
   return {
     forceLocal: Boolean(options?.forceLocal),
+    revision: Number.isFinite(revision) ? revision : undefined,
   };
 }
 
@@ -31,8 +33,10 @@ function normalizePatch(patch = {}) {
 }
 
 function mergeOptions(a, b) {
+  const revisions = [a?.revision, b?.revision].filter((value) => Number.isFinite(value));
   return {
     forceLocal: Boolean(a?.forceLocal || b?.forceLocal),
+    revision: revisions.length > 0 ? Math.max(...revisions) : undefined,
   };
 }
 
@@ -240,7 +244,11 @@ class WorkspaceWriteQueue {
                   deletedTaskIds: entry.deletedTaskIds,
                 })
               : await this.writeProject(projectDir, tasks);
-          this.onWritten({ projectDir, tasks, result });
+          const writtenEvent = { projectDir, tasks, result };
+          if (Number.isFinite(options.revision)) {
+            writtenEvent.revision = options.revision;
+          }
+          this.onWritten(writtenEvent);
           this.emitStatus(projectDir, "saved");
           succeeded = true;
           break;
