@@ -836,4 +836,21 @@ describe("buildStickyTrail", () => {
       "L3",
     ]);
   });
+
+  test("a precomputed id→row map yields the same trail as the internal build", () => {
+    // TreeTable passes a rows-memoized map so scrolling does not rebuild it per
+    // frame; the precomputed-map path must match the self-contained path.
+    const rows = flattenVisibleTree(makeStickyTree());
+    const rowById = new Map(rows.map((row) => [row.id, row]));
+    for (const scrollTop of [0, 1 * ROW_HEIGHT, 2 * ROW_HEIGHT, 5 * ROW_HEIGHT]) {
+      const withMap = buildStickyTrail(rows, scrollTop, ROW_HEIGHT, rowById);
+      const withoutMap = buildStickyTrail(rows, scrollTop, ROW_HEIGHT);
+      expect(namesOf(withMap)).toEqual(namesOf(withoutMap));
+    }
+    // Spot-check an expected value so the equality above isn't vacuous.
+    expect(namesOf(buildStickyTrail(rows, 1 * ROW_HEIGHT, ROW_HEIGHT, rowById))).toEqual([
+      "Root",
+      "A",
+    ]);
+  });
 });

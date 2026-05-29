@@ -49,6 +49,7 @@ Electron アプリ全体を起動して確認する。
 | `src/features/tasks/stores/tree.ts`        | `workspace project saves only dirty tasks through a patch`                                        | 楽観 broadcast は全タスクのフルスナップショット、disk patch は dirty タスクのみ |
 | `src/features/tasks/utils/tree_control.ts` | `buildStickyTrail hides the trail at the very top (only root in scope)`                           | プロジェクト直下しか見えていない時はパンくずを表示しない                        |
 | `src/features/search/stores/search.ts`     | `updates visible tree data when tree_data changes without filter changes`                         | ワークスペース読み込みなどで `tree_data` だけが変わっても表示用ツリーを同期する |
+| `src/features/search/stores/search.ts`     | `filtered_data tracks tree edits without an explicit filter re-set`                               | ツリー編集が filter 自身の tree_data 購読だけで filtered_data に反映される      |
 | `src/features/tasks/stores/tree.ts`        | `ignores stale local-write events so slow saves cannot rewind local edits`                        | 古い revision の `local-write` が後から届いても、現在の `tree_data` を巻き戻さない |
 | `electron/workspace.js`             | `atomicWriteFile replaces files without leaving temp files`                                       | 一時ファイル経由 → `rename` の原子的書込で `.tmp` が残らない                    |
 | `electron/workspace.js`             | `writeFileIfChanged skips unchanged content`                                                      | 既存ファイルと内容一致の場合に書込をスキップし mtime を維持する                 |
