@@ -1223,6 +1223,14 @@
     min-width: var(--minWidth);
     overflow-y: auto;
     position: relative;
+    /* Establish a stacking context so the absolutely-positioned column
+       resizers (z-index: 10000) and the sticky header/trail are scoped to
+       this subtree. Without it those high z-indexes compete globally and the
+       resizer lines render ABOVE a Modal's body-level mask (z-index: 9999),
+       making the column dividers show through an open modal. A low z-index
+       keeps the whole tree below modals/overlays while preserving the
+       internal ordering of header > resizer > rows. */
+    z-index: 0;
   }
   .StickyTrail {
     /* Pinned breadcrumb sits flush under the 3rem tree header. No margin,
