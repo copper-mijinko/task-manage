@@ -234,6 +234,46 @@ describe("WorkspaceReconciler", () => {
     await reconciler.stop();
   });
 
+  test("skips reconcile when the changed file matches known by the time the debounced reconcile fires", async () => {
+    // Race scenario covered by the targeted re-check: at event time the file
+    // diverged from known (so a reconcile is scheduled), but before the
+    // debounced timer fires our own write records the new hash, so the changed
+    // path now matches known. The reconcile must bail out without reading the
+    // project (and without re-hashing the whole tree).
+    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
+    const projectFile = path.join(projectDir, "_project.md");
+    const updates = [];
+    const conflicts = [];
+    const notices = [];
+    const reconciler = new WorkspaceReconciler({
+      readProject: () => {
+        throw new Error("should not read when the changed path matches known");
+      },
+      hasPendingWrite: () => true,
+      onProjectUpdated: (event) => updates.push(event),
+      onConflict: (event) => conflicts.push(event),
+      onNotice: (event) => notices.push(event),
+      stateRootDir: stateDir,
+      watchFactory: () => makeWatcher(),
+    });
+    await reconciler.start(tmpDir);
+
+    // Diverge on disk so handleFileEvent schedules a reconcile (known still
+    // holds the original baseline at this point).
+    const updated = stringifyFrontmatter({ id: "root-id", name: "Updated" });
+    fs.writeFileSync(projectFile, updated);
+    await reconciler.handleFileEvent("change", projectFile);
+
+    // Before the debounced reconcile fires, our own write records the new hash.
+    reconciler.recordWrite(projectFile, updated);
+    await vi.runAllTimersAsync();
+
+    expect(updates).toEqual([]);
+    expect(conflicts).toEqual([]);
+    expect(notices.map((event) => event.kind)).not.toContain("error");
+    await reconciler.stop();
+  });
+
   test("markProjectWritten clears entries for files that no longer exist", async () => {
     const { projectDir } = createProject(tmpDir, "Proj", "root-id");
     const projectFile = path.join(projectDir, "_project.md");

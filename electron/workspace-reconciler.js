@@ -48,35 +48,6 @@ async function collectFileHashes(rootDir) {
   return result;
 }
 
-function collectFileHashesSync(rootDir) {
-  const result = new Map();
-
-  function walk(dir) {
-    let entries = [];
-    try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-
-    for (const entry of entries) {
-      const fullPath = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        walk(fullPath);
-      } else if (entry.isFile() && !entry.name.includes(".tmp")) {
-        try {
-          result.set(fullPath, hashBuffer(fs.readFileSync(fullPath)));
-        } catch {
-          // Ignore files that disappear during a scan.
-        }
-      }
-    }
-  }
-
-  walk(rootDir);
-  return result;
-}
-
 function isFileWithinDir(filePath, dirPath) {
   const dir = path.resolve(dirPath);
   const file = path.resolve(filePath);
@@ -115,6 +86,11 @@ class WorkspaceReconciler {
     // "external update" / "conflict" notifications.
     this.knownFileHashes = new Map();
     this.projectTimers = new Map();
+    // projectDir -> Set<resolvedPath>. The files whose watcher events have
+    // accumulated since the last reconcile for that project. Consumed (and
+    // cleared) when the debounced reconcile fires; used to re-verify only the
+    // paths that actually changed instead of re-hashing the whole project.
+    this.pendingChangedPaths = new Map();
     this.workspacePath = null;
     this.watcher = null;
   }
@@ -147,6 +123,7 @@ class WorkspaceReconciler {
       clearTimeout(timer);
     }
     this.projectTimers.clear();
+    this.pendingChangedPaths.clear();
 
     if (this.watcher) {
       await this.watcher.close();
@@ -259,7 +236,17 @@ class WorkspaceReconciler {
     const projectDir = this.resolveProjectDir(resolvedPath);
     if (!projectDir) return;
 
+    this.trackPendingChange(projectDir, resolvedPath);
     this.scheduleProjectReconcile(projectDir);
+  }
+
+  trackPendingChange(projectDir, resolvedPath) {
+    let paths = this.pendingChangedPaths.get(projectDir);
+    if (!paths) {
+      paths = new Set();
+      this.pendingChangedPaths.set(projectDir, paths);
+    }
+    paths.add(resolvedPath);
   }
 
   scheduleProjectReconcile(projectDir) {
@@ -277,12 +264,18 @@ class WorkspaceReconciler {
   }
 
   async reconcileProject(projectDir) {
-    // Re-check at reconcile time: if everything matches knownFileHashes by
-    // now, the triggering event was stale (e.g. raced with our own write
-    // batch that has since completed and called markProjectWritten). This
-    // check is intentionally synchronous so the subsequent side effects
+    const changedPaths = this.pendingChangedPaths.get(projectDir);
+    this.pendingChangedPaths.delete(projectDir);
+
+    // Re-check at reconcile time: if every path that triggered this reconcile
+    // now matches knownFileHashes, the triggering events were stale (e.g. they
+    // raced with our own write batch that has since completed and called
+    // markProjectWritten). Only the changed paths can have diverged, so we
+    // verify just those instead of re-hashing the whole project on the main
+    // thread — keeping large workspaces from janking the UI on every event.
+    // This check is intentionally synchronous so the subsequent side effects
     // (onConflict / onProjectUpdated) run before any await yields control.
-    if (this.projectMatchesKnown(projectDir)) {
+    if (changedPaths && changedPaths.size > 0 && this.changedPathsMatchKnown(changedPaths)) {
       return;
     }
 
@@ -332,33 +325,29 @@ class WorkspaceReconciler {
     }
   }
 
-  projectMatchesKnown(projectDir) {
-    const resolvedProject = path.resolve(projectDir);
-    let currentHashes;
-    try {
-      currentHashes = collectFileHashesSync(projectDir);
-    } catch {
-      return false;
-    }
-
-    if (currentHashes.size !== this.countKnownFilesIn(resolvedProject)) {
-      return false;
-    }
-
-    for (const [filePath, hash] of currentHashes) {
-      if (this.knownFileHashes.get(path.resolve(filePath)) !== hash) {
+  /**
+   * Return true iff every changed path matches its recorded hash (treating a
+   * missing file and an untracked file as equal "absent" states). A mismatch —
+   * a modified file, a deleted file we knew about, a newly added file, or a
+   * read error — returns false so the caller proceeds to reconcile. Reads only
+   * the handful of files that triggered the reconcile; no full-tree walk.
+   */
+  changedPathsMatchKnown(changedPaths) {
+    for (const filePath of changedPaths) {
+      const resolved = path.resolve(filePath);
+      const known = this.knownFileHashes.get(resolved) ?? null;
+      let current = null;
+      try {
+        if (fs.existsSync(resolved)) {
+          current = hashBuffer(fs.readFileSync(resolved));
+        }
+      } catch {
+        // Cannot read it right now — treat as divergence and reconcile.
         return false;
       }
+      if (current !== known) return false;
     }
     return true;
-  }
-
-  countKnownFilesIn(resolvedProjectDir) {
-    let count = 0;
-    for (const filePath of this.knownFileHashes.keys()) {
-      if (isFileWithinDir(filePath, resolvedProjectDir)) count += 1;
-    }
-    return count;
   }
 
   resolveProjectDir(filePath) {
