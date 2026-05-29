@@ -133,7 +133,17 @@
     return parseFloat(window.getComputedStyle(document.documentElement).fontSize) * 2.5;
   };
 
-  $: stickyTrail = buildStickyTrail(rows, scrollTop, getRowHeightPx());
+  // Memoize the id→row map against `rows` so scrolling (which only changes
+  // scrollTop) does not rebuild it for every frame. Likewise cache the row
+  // height and only recompute it when the theme changes, avoiding a forced
+  // style recalc (getComputedStyle) on every scroll event.
+  $: rowById = new Map(rows.map((row) => [row.id, row]));
+  let stickyRowHeightPx = 0;
+  $: {
+    void $theme;
+    stickyRowHeightPx = getRowHeightPx();
+  }
+  $: stickyTrail = buildStickyTrail(rows, scrollTop, stickyRowHeightPx, rowById);
 
   let showDeleteConfirm = false;
   let deleteTargetId;

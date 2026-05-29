@@ -457,7 +457,12 @@ export function buildLineNumberMap(tree: TreeData | null | undefined): Map<strin
 export function buildStickyTrail(
   visibleRows: VisibleTreeRow[],
   scrollTop: number,
-  rowHeightPx: number
+  rowHeightPx: number,
+  // Optional precomputed id→row map. Callers that recompute the trail on every
+  // scroll event (TreeTable) should pass a map memoized against `visibleRows`
+  // so scrolling does not rebuild it for every frame. When omitted the map is
+  // built locally, keeping the function self-contained for tests/other callers.
+  rowById?: Map<string, VisibleTreeRow>
 ): VisibleTreeRow[] {
   if (!visibleRows?.length) return [];
   if (!rowHeightPx || rowHeightPx <= 0) return [];
@@ -469,14 +474,14 @@ export function buildStickyTrail(
   const topVisibleRow = visibleRows[topVisibleIndex];
   if (!topVisibleRow || topVisibleRow.depth <= 1) return [];
 
-  const rowById = new Map(visibleRows.map((row) => [row.id, row]));
+  const byId = rowById ?? new Map(visibleRows.map((row) => [row.id, row]));
   const trail: VisibleTreeRow[] = [];
   let cursor: VisibleTreeRow | undefined = topVisibleRow.parentId
-    ? rowById.get(topVisibleRow.parentId)
+    ? byId.get(topVisibleRow.parentId)
     : undefined;
   while (cursor) {
     trail.unshift(cursor);
-    cursor = cursor.parentId ? rowById.get(cursor.parentId) : undefined;
+    cursor = cursor.parentId ? byId.get(cursor.parentId) : undefined;
   }
   return trail;
 }
