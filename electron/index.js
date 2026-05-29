@@ -278,6 +278,22 @@ app.on("ready", () => {
     return workspace.readProject(projectDir, { includeMemoContent: false });
   }
 
+  // Async mirror used by interactive IPC handlers so a slow disk does not block
+  // the main event loop (which would freeze ALL IPC, window controls included).
+  function readProjectSummaryAsync(projectDir) {
+    return workspace.readProjectAsync(projectDir, { includeMemoContent: false });
+  }
+
+  async function ensureWorkspaceCacheAsync(projectDir) {
+    let cached = wsCache.get(projectDir);
+    if (!cached) {
+      const { tasks, taskDirs } = await readProjectSummaryAsync(projectDir);
+      cached = { tasks, taskDirs };
+      wsCache.set(projectDir, cached);
+    }
+    return cached;
+  }
+
   function ensureWorkspaceCache(projectDir) {
     let cached = wsCache.get(projectDir);
     if (!cached) {
@@ -381,7 +397,7 @@ app.on("ready", () => {
     return nextCached;
   }
 
-  function readWorkspaceProjectForRenderer(projectDir) {
+  async function readWorkspaceProjectForRendererAsync(projectDir) {
     const cached = wsCache.get(projectDir);
     if (
       cached &&
@@ -390,7 +406,7 @@ app.on("ready", () => {
       return cached;
     }
 
-    const { tasks, taskDirs } = readProjectSummary(projectDir);
+    const { tasks, taskDirs } = await readProjectSummaryAsync(projectDir);
     const fresh = { tasks, taskDirs };
     wsCache.set(projectDir, fresh);
     optimisticWorkspaceProjectDirs.delete(projectDir);
@@ -1056,7 +1072,7 @@ app.on("ready", () => {
 
   ipcMain.handle("ws:list-projects", async (event, { workspacePath }) => {
     try {
-      return workspace.listProjects(workspacePath);
+      return await workspace.listProjectsAsync(workspacePath);
     } catch (err) {
       log.error("ws:list-projects error:", err.message);
       return [];
@@ -1107,9 +1123,9 @@ app.on("ready", () => {
         await workspaceWriteQueue.flush();
       }
 
-      let cached = ensureWorkspaceCache(projectDir);
+      let cached = await ensureWorkspaceCacheAsync(projectDir);
       if (!cached.taskDirs?.has(taskId)) {
-        const { tasks, taskDirs } = readProjectSummary(projectDir);
+        const { tasks, taskDirs } = await readProjectSummaryAsync(projectDir);
         cached = { tasks, taskDirs };
         wsCache.set(projectDir, cached);
       }
@@ -1161,7 +1177,7 @@ app.on("ready", () => {
 
   ipcMain.handle("ws:read-project", async (event, { projectDir }) => {
     try {
-      const { tasks } = readWorkspaceProjectForRenderer(projectDir);
+      const { tasks } = await readWorkspaceProjectForRendererAsync(projectDir);
       // Map 竊・plain object for IPC serialisation
       return { tasks: Object.fromEntries(tasks) };
     } catch (err) {
@@ -1172,8 +1188,8 @@ app.on("ready", () => {
 
   ipcMain.handle("ws:read-task-memos", async (event, { projectDir, taskId }) => {
     try {
-      const cached = ensureWorkspaceCache(projectDir);
-      const memos = workspace.readTaskMemos(projectDir, taskId, cached.taskDirs);
+      const cached = await ensureWorkspaceCacheAsync(projectDir);
+      const memos = await workspace.readTaskMemosAsync(projectDir, taskId, cached.taskDirs);
       const task = cached.tasks.get(taskId);
       if (task) {
         task.memos = memos;
@@ -1187,16 +1203,22 @@ app.on("ready", () => {
 
   ipcMain.handle("ws:read-project-memos", async (event, { projectDir }) => {
     try {
-      const cached = ensureWorkspaceCache(projectDir);
+      const cached = await ensureWorkspaceCacheAsync(projectDir);
       const memosByTaskId = {};
-      for (const taskId of cached.taskDirs.keys()) {
-        const memos = workspace.readTaskMemos(projectDir, taskId, cached.taskDirs);
+      // Read every task's memos concurrently so per-file disk latency overlaps
+      // instead of serializing on the main event loop.
+      const taskIds = [...cached.taskDirs.keys()];
+      const memosList = await Promise.all(
+        taskIds.map((taskId) => workspace.readTaskMemosAsync(projectDir, taskId, cached.taskDirs))
+      );
+      taskIds.forEach((taskId, index) => {
+        const memos = memosList[index];
         memosByTaskId[taskId] = memos;
         const task = cached.tasks.get(taskId);
         if (task) {
           task.memos = memos;
         }
-      }
+      });
       return { memosByTaskId };
     } catch (err) {
       log.error("ws:read-project-memos error:", err.message);
@@ -1458,7 +1480,7 @@ app.on("ready", () => {
       }
 
       workspaceWriteQueue.discard(projectDir);
-      const { tasks, taskDirs } = workspace.readProject(projectDir);
+      const { tasks, taskDirs } = await workspace.readProjectAsync(projectDir);
       wsCache.set(projectDir, { tasks, taskDirs });
       optimisticWorkspaceProjectDirs.delete(projectDir);
       sendWorkspaceProjectUpdated({
@@ -1484,7 +1506,7 @@ app.on("ready", () => {
     const selected = result.filePaths[0];
     let entries;
     try {
-      entries = fs.readdirSync(selected, { withFileTypes: true });
+      entries = await fs.promises.readdir(selected, { withFileTypes: true });
     } catch (err) {
       log.error("ws:select-directory readdir error:", err.message);
       return {
@@ -1494,7 +1516,7 @@ app.on("ready", () => {
     }
 
     const isEmpty = entries.length === 0;
-    const hasProjects = workspace.listProjects(selected).length > 0;
+    const hasProjects = (await workspace.listProjectsAsync(selected)).length > 0;
 
     if (!isEmpty && !hasProjects) {
       return {
