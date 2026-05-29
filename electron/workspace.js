@@ -950,6 +950,224 @@ function readTaskMemos(projectDir, taskId, taskDirs) {
   });
 }
 
+// ── Async read mirrors ───────────────────────────────────────────────────
+// The sync readers above stay for batch/export, the reconciler, inbox helpers
+// and tests. The async mirrors below are used by the interactive IPC handlers
+// so that slow disks (e.g. OneDrive) cannot block the main process event loop —
+// which would otherwise stall *all* IPC, including window controls, and freeze
+// the whole UI. They use fs.promises and read sibling files concurrently.
+
+async function readFilePrefixAsync(filePath, maxBytes = 16 * 1024) {
+  const fh = await fs.promises.open(filePath, "r");
+  try {
+    const buffer = Buffer.alloc(maxBytes);
+    const { bytesRead } = await fh.read(buffer, 0, maxBytes, 0);
+    return buffer.subarray(0, bytesRead).toString("utf8");
+  } finally {
+    await fh.close();
+  }
+}
+
+function buildMemoEntry(file, fileIndex, raw, includeMemoContent) {
+  const { data, body } = parseFrontmatter(raw);
+  const id = data.id || crypto.randomUUID();
+  const headingMatch = body.match(/^#\s+(.+)/m);
+  const fileTitle = file.replace(/\.md$/, "");
+  let title = data.title;
+  if (!title) {
+    if (headingMatch) {
+      title = headingMatch[1].trim();
+    } else {
+      title = data.id === fileTitle ? "memo" : fileTitle;
+    }
+  }
+  const tags = Array.isArray(data.tags) ? data.tags.map(String) : [];
+  const format = normalizeMemoFormat(data.format, "markdown");
+  const content = includeMemoContent
+    ? format === "quill"
+      ? parseQuillMemoBody(body)
+      : body.trim()
+    : "";
+  return {
+    id,
+    title,
+    content,
+    tags,
+    format,
+    order: parseOrderValue(data.order),
+    bodyLoaded: includeMemoContent,
+    fileIndex,
+  };
+}
+
+function sortMemoEntries(memos) {
+  return memos
+    .sort((a, b) => {
+      const aHasOrder = typeof a.order === "number";
+      const bHasOrder = typeof b.order === "number";
+      if (aHasOrder && bHasOrder && a.order !== b.order) return a.order - b.order;
+      if (aHasOrder !== bHasOrder) return aHasOrder ? -1 : 1;
+      return a.fileIndex - b.fileIndex;
+    })
+    .map(({ fileIndex: _fileIndex, ...memo }) => memo);
+}
+
+async function readMemosAsync(taskDir, reservedFiles = ["_index.md"], options = {}) {
+  const includeMemoContent = options.includeMemoContent !== false;
+  const reserved = new Set(reservedFiles);
+  const files = (await fs.promises.readdir(taskDir))
+    .filter((f) => f.endsWith(".md") && !reserved.has(f))
+    .sort();
+  const memos = await Promise.all(
+    files.map(async (file, fileIndex) => {
+      const filePath = path.join(taskDir, file);
+      const raw = includeMemoContent
+        ? await fs.promises.readFile(filePath, "utf8")
+        : await readFilePrefixAsync(filePath);
+      return buildMemoEntry(file, fileIndex, raw, includeMemoContent);
+    })
+  );
+  return sortMemoEntries(memos);
+}
+
+async function readAttachmentsAsync(taskDir) {
+  const attachmentsDir = path.join(taskDir, "attachments");
+  let entries;
+  try {
+    entries = await fs.promises.readdir(attachmentsDir, { withFileTypes: true });
+  } catch (err) {
+    if (err.code === "ENOENT") return [];
+    throw err;
+  }
+
+  const fileNames = entries
+    .filter((entry) => entry.isFile())
+    .map((entry) => entry.name)
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
+
+  return Promise.all(
+    fileNames.map(async (fileName) => {
+      const filePath = path.join(attachmentsDir, fileName);
+      const stats = await fs.promises.stat(filePath);
+      return {
+        id: `./attachments/${fileName}`,
+        name: fileName,
+        relativePath: `./attachments/${fileName}`,
+        size: stats.size,
+        modifiedAt: stats.mtime.toISOString(),
+      };
+    })
+  );
+}
+
+function buildTaskFromFrontmatter(data, extra) {
+  const task = {
+    id: data.id,
+    name: data.name || "",
+    status: data.status || "Open",
+    startDate: data.start || undefined,
+    dueDate: data.due || undefined,
+    createdAt: data.created || "",
+    order: parseOrderValue(data.order),
+    ...extra,
+  };
+  if (parseArchivedValue(data.archived)) {
+    task.archived = true;
+    if (data.archived_at) task.archivedAt = String(data.archived_at);
+  }
+  return task;
+}
+
+async function readRootTaskAsync(projectDir, options = {}) {
+  const content = await fs.promises.readFile(path.join(projectDir, "_project.md"), "utf8");
+  const { data } = parseFrontmatter(content);
+  const [memos, attachments] = await Promise.all([
+    readMemosAsync(projectDir, ["_project.md"], options),
+    readAttachmentsAsync(projectDir),
+  ]);
+  return buildTaskFromFrontmatter(data, { parents: [], memos, attachments });
+}
+
+async function readTaskDirAsync(taskDir, options = {}) {
+  const content = await fs.promises.readFile(path.join(taskDir, "_index.md"), "utf8");
+  const { data } = parseFrontmatter(content);
+  const parents = Array.isArray(data.parents) ? data.parents : data.parents ? [data.parents] : [];
+  const [memos, attachments] = await Promise.all([
+    readMemosAsync(taskDir, ["_index.md"], options),
+    readAttachmentsAsync(taskDir),
+  ]);
+  return buildTaskFromFrontmatter(data, { parents, memos, attachments });
+}
+
+/**
+ * Async mirror of readProject. Returns { tasks: Map, taskDirs: Map }.
+ * Task directories are read concurrently so per-file disk latency overlaps
+ * instead of summing.
+ */
+async function readProjectAsync(projectDir, options = {}) {
+  const tasks = new Map();
+  const taskDirs = new Map();
+
+  let entries;
+  try {
+    entries = await fs.promises.readdir(projectDir, { withFileTypes: true });
+  } catch (err) {
+    if (err.code === "ENOENT") return { tasks, taskDirs };
+    throw err;
+  }
+
+  const hasRootFile = entries.some((entry) => entry.isFile() && entry.name === "_project.md");
+
+  const taskDirNames = entries
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith("_"))
+    .map((entry) => entry.name);
+
+  const [root, regularTasks] = await Promise.all([
+    hasRootFile ? readRootTaskAsync(projectDir, options).catch(() => null) : Promise.resolve(null),
+    Promise.all(
+      taskDirNames.map(async (name) => {
+        const taskDir = path.join(projectDir, name);
+        try {
+          await fs.promises.access(path.join(taskDir, "_index.md"));
+        } catch {
+          return null;
+        }
+        try {
+          const task = await readTaskDirAsync(taskDir, options);
+          return task.id ? { name, task } : null;
+        } catch {
+          // Skip malformed task directories (parity with sync readProject).
+          return null;
+        }
+      })
+    ),
+  ]);
+
+  if (root?.id) {
+    tasks.set(root.id, root);
+    taskDirs.set(root.id, "_project");
+  }
+
+  for (const entry of regularTasks) {
+    if (!entry) continue;
+    tasks.set(entry.task.id, entry.task);
+    taskDirs.set(entry.task.id, entry.name);
+  }
+
+  return { tasks, taskDirs };
+}
+
+async function readTaskMemosAsync(projectDir, taskId, taskDirs) {
+  const dirName = taskDirs.get(taskId);
+  if (!dirName) {
+    throw new Error("Task directory was not found");
+  }
+  const taskDir = dirName === "_project" ? projectDir : path.join(projectDir, dirName);
+  return readMemosAsync(taskDir, dirName === "_project" ? ["_project.md"] : ["_index.md"], {
+    includeMemoContent: true,
+  });
+}
+
 function writeMemoFiles(taskDir, indexFileName, memos) {
   const existing = fs.readdirSync(taskDir).filter((f) => f.endsWith(".md") && f !== indexFileName);
   for (const f of existing) fs.unlinkSync(path.join(taskDir, f));
@@ -1368,6 +1586,53 @@ function listProjects(workspacePath) {
   return projects.sort(compareProjectListItems);
 }
 
+/**
+ * Async mirror of listProjects. Reads every `_project.md` concurrently so a
+ * slow disk does not serialize one stat+read per project on the main event
+ * loop.
+ */
+async function listProjectsAsync(workspacePath) {
+  let entries;
+  try {
+    entries = await fs.promises.readdir(workspacePath, { withFileTypes: true });
+  } catch (err) {
+    if (err.code === "ENOENT") return [];
+    throw err;
+  }
+
+  const dirNames = entries
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith("_"))
+    .map((entry) => entry.name);
+
+  const projects = await Promise.all(
+    dirNames.map(async (dirName) => {
+      const projectFile = path.join(workspacePath, dirName, "_project.md");
+      let content;
+      try {
+        content = await fs.promises.readFile(projectFile, "utf8");
+      } catch {
+        // Missing _project.md (not a project dir) or unreadable — skip.
+        return null;
+      }
+      try {
+        const { data } = parseFrontmatter(content);
+        if (data.kind === "inbox") return null;
+        return {
+          name: data.name || dirName,
+          rootId: data.id,
+          dirName,
+          projectDir: path.join(workspacePath, dirName),
+          order: parseOrderValue(data.order),
+        };
+      } catch {
+        return null;
+      }
+    })
+  );
+
+  return projects.filter(Boolean).sort(compareProjectListItems);
+}
+
 function projectListIdentity(project) {
   return project?.rootId || project?.id || project?.dirName || project?.projectDir || null;
 }
@@ -1610,7 +1875,9 @@ module.exports = {
   writeFileIfChanged,
   retryFileOperation,
   readProject,
+  readProjectAsync,
   readTaskMemos,
+  readTaskMemosAsync,
   writeTask,
   writeTaskAsync,
   writeProjectAsync,
@@ -1628,6 +1895,7 @@ module.exports = {
   deleteProject,
   deleteProjectAsync,
   listProjects,
+  listProjectsAsync,
   setProjectOrderAsync,
   wouldCreateCycle,
   bfsFromRoot,

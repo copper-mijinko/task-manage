@@ -15,7 +15,9 @@ import {
   createProject,
   createProjectAsync,
   readProject,
+  readProjectAsync,
   readTaskMemos,
+  readTaskMemosAsync,
   writeTask,
   writeTaskAsync,
   writeProjectAsync,
@@ -31,6 +33,7 @@ import {
   deleteProject,
   deleteProjectAsync,
   listProjects,
+  listProjectsAsync,
   setProjectOrderAsync,
   exportProjectData,
   legacyMemoContentToMarkdown,
@@ -347,6 +350,101 @@ describe("file system operations", () => {
     expect(loaded.memos[0].id).toBe("root-memo");
     expect(loaded.memos[0].title).toBe("Root Notes");
     expect(loaded.memos[0].content).toContain("Stored here");
+  });
+
+  it("readProjectAsync matches readProject for a multi-task project with memos", async () => {
+    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
+    const taskDirs = new Map([["root-id", "_project"]]);
+    writeTask(
+      projectDir,
+      {
+        id: "root-id",
+        name: "Proj",
+        status: "Open",
+        parents: [],
+        memos: [{ id: "root-memo", title: "Root Notes", content: "# Root Notes\n\nbody" }],
+        createdAt: "2026-04-24",
+      },
+      taskDirs
+    );
+    writeTask(
+      projectDir,
+      {
+        id: "child-a",
+        name: "Child A",
+        status: "Open",
+        parents: ["root-id"],
+        memos: [{ id: "memo-a", title: "A", content: "alpha" }],
+        createdAt: "2026-04-24",
+      },
+      taskDirs
+    );
+    writeTask(
+      projectDir,
+      {
+        id: "child-b",
+        name: "Child B",
+        status: "Open",
+        parents: ["root-id"],
+        memos: [],
+        createdAt: "2026-04-24",
+      },
+      taskDirs
+    );
+
+    const sync = readProject(projectDir);
+    const asyncResult = await readProjectAsync(projectDir);
+
+    expect([...asyncResult.taskDirs.entries()].sort()).toEqual([...sync.taskDirs.entries()].sort());
+    expect([...asyncResult.tasks.keys()].sort()).toEqual([...sync.tasks.keys()].sort());
+    for (const [id, task] of sync.tasks) {
+      expect(asyncResult.tasks.get(id)).toEqual(task);
+    }
+  });
+
+  it("readProjectAsync returns empty maps for a missing project dir", async () => {
+    const result = await readProjectAsync(path.join(tmpDir, "does-not-exist"));
+    expect(result.tasks.size).toBe(0);
+    expect(result.taskDirs.size).toBe(0);
+  });
+
+  it("readTaskMemosAsync matches readTaskMemos", async () => {
+    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
+    const taskDirs = new Map([["root-id", "_project"]]);
+    writeTask(
+      projectDir,
+      {
+        id: "child-a",
+        name: "Child A",
+        status: "Open",
+        parents: ["root-id"],
+        memos: [
+          { id: "m1", title: "One", content: "first" },
+          { id: "m2", title: "Two", content: "second" },
+        ],
+        createdAt: "2026-04-24",
+      },
+      taskDirs
+    );
+
+    const sync = readTaskMemos(projectDir, "child-a", taskDirs);
+    const asyncResult = await readTaskMemosAsync(projectDir, "child-a", taskDirs);
+    expect(asyncResult).toEqual(sync);
+  });
+
+  it("listProjectsAsync matches listProjects including order", async () => {
+    createProject(tmpDir, "Alpha", "alpha-id", 1);
+    createProject(tmpDir, "Beta", "beta-id", 0);
+    createProject(tmpDir, "Gamma", "gamma-id", 2);
+
+    const sync = listProjects(tmpDir);
+    const asyncResult = await listProjectsAsync(tmpDir);
+    expect(asyncResult).toEqual(sync);
+  });
+
+  it("listProjectsAsync returns [] for a missing workspace dir", async () => {
+    const result = await listProjectsAsync(path.join(tmpDir, "nope"));
+    expect(result).toEqual([]);
   });
 
   it("writeTask + readProject preserves memo order independently of filenames", () => {
