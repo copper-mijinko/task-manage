@@ -7,7 +7,6 @@ import {
   projectDataToWorkspaceTasks,
   workspaceToProjectData,
 } from "@features/workspace/utils/workspace_tree";
-import { filter } from "@features/search/stores/search";
 import { memoContentForCompare } from "@features/memos/utils/memo_utils";
 import { project_ids } from "@features/projects/stores/project";
 import {
@@ -56,8 +55,24 @@ let redoStack: ProjectData[] = [];
 let skipSnapshot = false;
 let pendingSkipSnapshot = false;
 const workspaceProjectRevisions = new Map<string, number>();
+let lastActiveRevisionProjectDir: string | null = null;
 
 export const cancelPendingOperations = writable<number>(0);
+
+/**
+ * Drop revision entries for every project except the active one. Revisions are
+ * only consulted for the active project (onWorkspaceProjectUpdated returns
+ * early for non-active projectDirs), so entries for previously-opened projects
+ * are dead weight. Called when the active project changes to keep the map from
+ * growing unbounded over a long session.
+ */
+function pruneWorkspaceProjectRevisions(activeProjectDir: string | null) {
+  if (!activeProjectDir || activeProjectDir === lastActiveRevisionProjectDir) return;
+  lastActiveRevisionProjectDir = activeProjectDir;
+  for (const key of [...workspaceProjectRevisions.keys()]) {
+    if (key !== activeProjectDir) workspaceProjectRevisions.delete(key);
+  }
+}
 
 function getWorkspaceProjectRevision(projectDir: string | null | undefined): number {
   return projectDir ? (workspaceProjectRevisions.get(projectDir) ?? 0) : 0;
@@ -217,19 +232,18 @@ function workspaceTasksToRecord(tasks: WorkspaceTask[]): Record<string, Workspac
   return Object.fromEntries(tasks.map((task) => [task.id, task]));
 }
 
-function broadcastWorkspaceSnapshot(
-  current: ProjectData | undefined,
-  previous: ProjectData | null,
-  context: PersistContext
-) {
+function broadcastWorkspaceSnapshot(current: ProjectData | undefined, context: PersistContext) {
   if (context.selectedType !== "WorkspaceProject" || !context.activeProjectDir || !current?.data) {
     return;
   }
 
-  const { fullSnapshot, allTasks, patch } = buildWorkspacePatch(current, previous, context);
-  if (!fullSnapshot && patch.tasks.length === 0 && patch.deletedTaskIds.length === 0) {
-    return;
-  }
+  // Optimistic other-window sync only needs the current snapshot. Building it
+  // is a single tree→tasks conversion; we intentionally skip the previous-state
+  // diff (the second conversion + per-task deep-equal) that buildWorkspacePatch
+  // does — that work belongs to the throttled disk-persist path, not to this
+  // per-edit synchronous broadcast.
+  const allTasks = projectDataToWorkspaceTasks(current, context.cachedWorkspaceTasks);
+  applyWorkspaceRootOrder(allTasks, context.activeWorkspaceProject);
 
   const options =
     typeof context.workspaceRevision === "number"
@@ -341,7 +355,10 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
       }
 
       previousData = _.cloneDeep(current);
-      filter.set(get(filter));
+      // filtered_data is re-derived by the filter store's own tree_data
+      // subscription (see search.ts), which already fired when this tree_data
+      // value was set. Re-setting the filter here would refilter the same tree
+      // a second time, so it is intentionally omitted.
 
       if (isWorkspace) {
         const activeProjectDir = context.activeProjectDir;
@@ -543,7 +560,8 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
             pendingSkipSnapshot = true;
             skipSnapshot = false;
           }
-          filter.set(get(filter));
+          // The filter store's tree_data subscription already re-derived
+          // filtered_data from this set() call; no extra filter.set() needed.
           if (get(selected_type) !== "WorkspaceProject") {
             platform.getProjectIDs().then((result) => {
               project_ids.set(result);
@@ -565,6 +583,7 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
           currentSelectedType === "WorkspaceProject" &&
           workspaceState.activeProjectDir
         ) {
+          pruneWorkspaceProjectRevisions(workspaceState.activeProjectDir);
           persistContext.workspaceRevision = nextWorkspaceProjectRevision(
             workspaceState.activeProjectDir
           );
@@ -575,7 +594,7 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
         } else {
           saveStatus.set("idle");
         }
-        broadcastWorkspaceSnapshot(current, previousData, persistContext);
+        broadcastWorkspaceSnapshot(current, persistContext);
         persistTreeData(current, persistContext);
       });
     },
