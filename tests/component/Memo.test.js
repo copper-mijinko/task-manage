@@ -34,9 +34,13 @@ vi.mock("quill", () => {
       this.setText = vi.fn();
       this.getContents = vi.fn(() => ({ ops: [{ insert: "changed\n" }] }));
       this.getLength = vi.fn(() => 0);
-      this.getSelection = vi.fn(() => null);
+      this._selection = null;
+      this.getSelection = vi.fn(() => this._selection);
       this.hasFocus = vi.fn(() => false);
-      this.setSelection = vi.fn();
+      this.focus = vi.fn();
+      this.setSelection = vi.fn((index, length = 0) => {
+        this._selection = { index, length };
+      });
       this.deleteText = vi.fn();
       this.insertText = vi.fn();
       this.getModule = vi.fn((name) => {
@@ -289,8 +293,14 @@ describe("Memo mode routing", () => {
     ]);
     expect(quillInstances[0].toolbarContainer.querySelectorAll("button.ql-table")).toHaveLength(0);
 
+    // Regression: interacting with the dropdown blurs the editor, so
+    // getSelection() is null. The action must refocus + restore a selection so
+    // the table module (which no-ops on a null range) still runs.
+    expect(quillInstances[0].getSelection()).toBeNull();
     await fireEvent.change(select, { target: { value: "delete-column" } });
 
+    expect(quillInstances[0].focus).toHaveBeenCalled();
+    expect(quillInstances[0].setSelection).toHaveBeenCalled();
     expect(quillInstances[0].tableModule.deleteColumn).toHaveBeenCalledTimes(1);
     expect(select.value).toBe("");
   });

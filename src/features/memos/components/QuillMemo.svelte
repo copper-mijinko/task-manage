@@ -116,6 +116,21 @@
     const table = quill?.getModule?.("table");
     if (!table) return;
 
+    // Interacting with the toolbar <select> blurs the editor, so
+    // quill.getSelection() returns null at this point. Every table module
+    // method (insertTable / insertRow* / deleteTable …) early-returns when the
+    // selection is null, so the action would silently do nothing. Refocus the
+    // editor and restore the last known caret position (falling back to the
+    // end of the document) so the table module has a range to act on.
+    quill.focus?.();
+    if (!quill.getSelection()) {
+      const fallback = savedSelection ?? { index: quill.getLength(), length: 0 };
+      const index = Math.max(0, Math.min(fallback.index, quill.getLength()));
+      const length = Math.max(0, Math.min(fallback.length ?? 0, quill.getLength() - index));
+      quill.setSelection(index, length, "silent");
+    }
+    if (!quill.getSelection()) return;
+
     switch (value) {
       case "insert":
         table.insertTable(2, 2);
