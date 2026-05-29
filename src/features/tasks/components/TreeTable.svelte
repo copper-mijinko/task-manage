@@ -248,16 +248,31 @@
     if (taskFolderOpenErrorTimer) clearTimeout(taskFolderOpenErrorTimer);
   });
 
-  const syncResizerBounds = (targetResizers = resizers) => {
+  // Cached total height of all table rows. Measuring it walks every row with
+  // getBoundingClientRect (O(rows) forced reflow), so we only re-measure when
+  // rows or the container actually change — not on every scroll tick.
+  let cachedResizerContentHeight = 0;
+
+  const measureResizerContentHeight = () => {
+    if (!table_root) return 0;
+    const tableRows = Array.from(table_root.querySelectorAll(".TableRow"));
+    cachedResizerContentHeight = tableRows.reduce(
+      (height, row) => height + row.getBoundingClientRect().height,
+      0
+    );
+    return cachedResizerContentHeight;
+  };
+
+  // `remeasure` defaults to true so structural callers (createResizers, the
+  // ResizeObserver, column/row mutations) always reflect the latest layout.
+  // The scroll handler passes `false`: scrolling changes only the resizers'
+  // top/height derived from scrollTop, never the content height itself.
+  const syncResizerBounds = (targetResizers = resizers, { remeasure = true } = {}) => {
     if (!table_root) {
       return;
     }
 
-    const tableRows = Array.from(table_root.querySelectorAll(".TableRow"));
-    const contentHeight = tableRows.reduce(
-      (height, row) => height + row.getBoundingClientRect().height,
-      0
-    );
+    const contentHeight = remeasure ? measureResizerContentHeight() : cachedResizerContentHeight;
     const top = table_root.scrollTop;
     const height = Math.max(0, Math.min(table_root.clientHeight, contentHeight - top));
 
@@ -551,7 +566,9 @@
   function handleScroll(event) {
     scrollTop = event.currentTarget.scrollTop;
     $ganttScrollTop = scrollTop;
-    syncResizerBounds(resizers);
+    // Scrolling only shifts the resizers vertically; the content height is
+    // unchanged, so reuse the cached measurement instead of re-walking rows.
+    syncResizerBounds(resizers, { remeasure: false });
   }
 
   function handleToggleRow(event) {
