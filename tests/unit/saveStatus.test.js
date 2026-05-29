@@ -206,13 +206,18 @@ describe("saveStatus store", () => {
     edited.data.children[0].data.name = "Task A edited";
     tree_data.set(edited);
 
+    // The optimistic broadcast carries the FULL snapshot (all tasks), not just
+    // the dirty task — even unchanged siblings (root-id, task-b) are present.
+    // This locks in that the broadcast does not diff/reduce to a patch.
     expect(wsBroadcastProjectSnapshot).toHaveBeenCalledWith(
       "C:/workspace/project",
       expect.objectContaining({
+        "root-id": expect.objectContaining({ id: "root-id" }),
         "task-a": expect.objectContaining({
           id: "task-a",
           name: "Task A edited",
         }),
+        "task-b": expect.objectContaining({ id: "task-b" }),
       }),
       expect.objectContaining({ revision: expect.any(Number) })
     );

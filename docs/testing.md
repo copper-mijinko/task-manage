@@ -45,6 +45,8 @@ Electron アプリ全体を起動して確認する。
 | `src/features/tasks/utils/tree_control.ts` | `getNode returns undefined when the target does not exist`                                        | 存在しない ID に対して `undefined` を返す                                       |
 | `src/features/tasks/utils/tree_control.ts` | `buildStickyTrail does NOT show sibling row when topmost-visible is a sibling of covered row`     | スティッキー帯下に見える行の祖先のみを返し、兄弟ノードを誤って混入させない      |
 | `src/features/tasks/utils/tree_control.ts` | `buildStickyTrail switches scope when scrolling across subtrees`                                  | サブツリーをまたいでスクロールするとパンくずがその場の祖先に切り替わる          |
+| `src/features/tasks/utils/tree_control.ts` | `a precomputed id→row map yields the same trail as the internal build`                            | スクロール毎の Map 再構築を避けるため事前構築 Map を渡しても結果が一致する      |
+| `src/features/tasks/stores/tree.ts`        | `workspace project saves only dirty tasks through a patch`                                        | 楽観 broadcast は全タスクのフルスナップショット、disk patch は dirty タスクのみ |
 | `src/features/tasks/utils/tree_control.ts` | `buildStickyTrail hides the trail at the very top (only root in scope)`                           | プロジェクト直下しか見えていない時はパンくずを表示しない                        |
 | `src/features/search/stores/search.ts`     | `updates visible tree data when tree_data changes without filter changes`                         | ワークスペース読み込みなどで `tree_data` だけが変わっても表示用ツリーを同期する |
 | `src/features/tasks/stores/tree.ts`        | `ignores stale local-write events so slow saves cannot rewind local edits`                        | 古い revision の `local-write` が後から届いても、現在の `tree_data` を巻き戻さない |
