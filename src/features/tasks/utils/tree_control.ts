@@ -68,6 +68,14 @@ export interface VisibleTreeRow {
   node: TreeData;
   hasChildren: boolean;
   expanded: boolean;
+  /**
+   * True when this row is archived OR sits under an archived ancestor. Only
+   * meaningful in the show-archived view (includeArchived=true); in the normal
+   * view archived subtrees are skipped entirely. Rows use this — not the row's
+   * own `node.archived` — to drive read-only / muted-row behaviour so children
+   * of an archived task are treated as archived too.
+   */
+  effectivelyArchived: boolean;
   canMoveUp: boolean;
   canMoveDown: boolean;
   canIndent: boolean;
@@ -387,6 +395,7 @@ export function flattenVisibleTree(
       node,
       hasChildren,
       expanded,
+      effectivelyArchived,
       canMoveUp: siblingIndex > 0,
       canMoveDown: siblingIndex < siblingCount - 1,
       canIndent: siblingIndex > 0,
