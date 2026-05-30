@@ -44,6 +44,11 @@
   $: data = node.data;
   $: hasChildren = row.hasChildren;
   $: expanded = row.expanded;
+  // A row is treated as archived if it is archived itself OR sits under an
+  // archived ancestor (computed by flattenVisibleTree). Children of an archived
+  // task don't carry their own `archived` flag, so relying on node.archived
+  // alone would wrongly let them be edited in the show-archived view.
+  $: isArchived = row.effectivelyArchived ?? !!node.archived;
 
   // When this row is part of an active multi-selection, the right-click menu
   // routes actions to the bulk handlers. Use bulk capability flags so the menu
@@ -105,8 +110,8 @@
 
   function commitData(key, value) {
     // archived 行は読み取り専用（仕様）。subscribe 経路で誤って入った
-    // commit を捨て、データ層を変えない。
-    if (node.archived) return;
+    // commit を捨て、データ層を変えない。archived 配下の子も対象に含める。
+    if (isArchived) return;
     dispatch("commit", {
       id,
       patch: {
@@ -218,7 +223,7 @@
   class:DragOverBelow={dragOverType === "DragOverBelow"}
   class:OverdueRow={dueDateUrgency === "overdue"}
   class:DueSoonRow={dueDateUrgency === "due-soon"}
-  class:ArchivedRow={!!node.archived}
+  class:ArchivedRow={isArchived}
   use:ripple
   tabindex="0"
   draggable="true"
@@ -310,7 +315,7 @@
           {canOpenTaskFolder}
           selectionCount={selectionCountForMenu}
           {nodePath}
-          archived={!!node.archived}
+          archived={isArchived}
           on:commit={(e) => {
             commitData("name", e.detail.value);
           }}
@@ -360,7 +365,7 @@
       {:else if header.name == "status"}
         <StatusSelect
           status={data[header.name]}
-          disabled={!!node.archived}
+          disabled={isArchived}
           on:change={(e) => {
             commitData("status", e.detail.value);
           }}
@@ -371,7 +376,7 @@
           id="start-date"
           backgroundColor={"var(--backgroundColor)"}
           value={data[header.name]}
-          disabled={!!node.archived}
+          disabled={isArchived}
           on:change={(e) => {
             commitData("start date", e.target.value);
           }}
@@ -383,7 +388,7 @@
           backgroundColor={"var(--backgroundColor)"}
           value={data[header.name]}
           inheritedDate={inheritedDueDate}
-          disabled={!!node.archived}
+          disabled={isArchived}
           on:change={(e) => {
             commitData("due date", e.target.value);
           }}

@@ -117,6 +117,26 @@ describe("archive / restore tree helpers", () => {
     expect(rows.map((r) => r.id)).toEqual(["root", "a", "a1", "a2", "b", "c"]);
   });
 
+  test("includeArchived=true で archived ノードの子孫も effectivelyArchived になる", () => {
+    const tree = makeTree();
+    // a だけを archive。a1/a2 は自身の archived フラグを持たない。
+    archiveNode("a", tree);
+    const rows = flattenVisibleTree(tree, new Set(), true);
+    const archivedFlag = Object.fromEntries(rows.map((r) => [r.id, r.effectivelyArchived]));
+    // a とその子孫はすべて effectivelyArchived。子は node.archived を持たないが、
+    // 祖先が archived なので連動して archived 扱いになる（これが回帰対象）。
+    expect(archivedFlag.a).toBe(true);
+    expect(archivedFlag.a1).toBe(true);
+    expect(archivedFlag.a2).toBe(true);
+    // 非 archived の枝は false のまま。
+    expect(archivedFlag.root).toBe(false);
+    expect(archivedFlag.b).toBe(false);
+    expect(archivedFlag.c).toBe(false);
+    // 子は自身の archived フラグは持っていないことも確認（連動表示であることの裏付け）。
+    const a1Node = rows.find((r) => r.id === "a1")!.node;
+    expect(a1Node.archived).toBeUndefined();
+  });
+
   test("stripArchivedNodes は archived の子孫を完全に取り除いた新ツリーを返す", () => {
     const tree = makeTree();
     archiveNode("a", tree);
