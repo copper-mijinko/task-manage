@@ -488,7 +488,7 @@
     display: flex;
     flex-direction: row;
     align-items: center;
-    height: var(--sp8);
+    height: 2.5rem;
     width: 100%;
   }
 
@@ -497,7 +497,7 @@
     flex-direction: row;
     align-items: center;
     height: 2rem;
-    padding: var(--sp2);
+    padding: var(--sp1);
     overflow-x: auto;
     flex: 1;
   }
@@ -515,6 +515,12 @@
     align-items: center;
     flex-shrink: 0;
     margin-left: auto;
+  }
+
+  .memotab-control :global(button) {
+    width: 1.75rem;
+    height: 1.75rem;
+    margin: 0;
   }
 
   input {
@@ -552,7 +558,7 @@
     height: 100%;
     min-width: 5rem;
     max-width: 10rem;
-    padding: var(--sp2);
+    padding: var(--sp1);
     flex: 1;
     justify-content: center;
     align-items: center;
@@ -592,10 +598,10 @@
   .tag-panel {
     display: flex;
     flex-direction: column;
-    gap: var(--sp2);
+    gap: 2px;
     box-sizing: border-box;
     min-width: 0;
-    padding: var(--sp3);
+    padding: 2px var(--sp2);
     border-bottom: 1px solid color-mix(in srgb, var(--theme-color-Sub-dark) 65%, transparent);
     background-color: transparent;
     container-type: inline-size;
@@ -605,20 +611,21 @@
   /* Tag area — 2-section layout (追加済み / 候補) */
   .tag-row {
     display: flex;
-    align-items: flex-start;
-    gap: var(--sp2);
+    align-items: center;
+    gap: var(--sp1);
     width: 100%;
     min-width: 0;
   }
 
   .tag-row-label {
     flex: 0 0 auto;
-    width: 4rem;
-    min-width: 4rem;
-    padding-top: var(--sp1);
+    width: 2.75rem;
+    min-width: 2.75rem;
+    padding-top: 0;
     color: var(--theme-color-Sub-main);
     font-size: var(--font-label-md);
     font-weight: 600;
+    line-height: 1.4;
     user-select: none;
   }
 
@@ -627,10 +634,10 @@
     flex: 1 1 auto;
     flex-wrap: wrap;
     align-items: center;
-    gap: var(--sp1);
+    gap: 2px var(--sp1);
     min-width: 0;
-    min-height: 2rem;
-    padding: var(--sp1) var(--sp2);
+    min-height: 1.5rem;
+    padding: 1px var(--sp1);
     border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 30%, transparent);
     border-radius: var(--shape-xs);
     background-color: var(--theme-color-Main-light);
@@ -647,7 +654,7 @@
   }
 
   .tag-chips.is-empty {
-    padding-left: var(--sp2);
+    padding-left: var(--sp1);
   }
 
   .tag-chip {
@@ -656,7 +663,8 @@
     gap: var(--sp1);
     min-width: 0;
     max-width: min(14rem, 100%);
-    padding: 0.1rem var(--sp1) 0.1rem var(--sp3);
+    min-height: 1.25rem;
+    padding: 0 var(--sp1);
     border-radius: var(--shape-pill);
     border: 1px solid var(--theme-color-Primary-main);
     background-color: color-mix(in srgb, var(--theme-color-Primary-main) 18%, transparent);
@@ -677,8 +685,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 1.05rem;
-    height: 1.05rem;
+    width: 1rem;
+    height: 1rem;
     padding: 0;
     margin: 0;
     border: none;
@@ -710,12 +718,15 @@
     border: none;
     color: var(--theme-color-Sub-main);
     font-size: var(--font-body-sm);
+    line-height: 1.35;
     min-width: 0;
     max-width: 100%;
-    flex: 1 1 5rem;
+    width: auto;
+    height: 1.25rem;
+    flex: 1 1 4rem;
     outline: 0;
-    padding: var(--sp1) 0;
-    margin-left: var(--sp2);
+    padding: 0;
+    margin-left: var(--sp1);
     text-align: left;
     cursor: text;
   }
@@ -730,10 +741,10 @@
     flex: 1 1 auto;
     flex-wrap: wrap;
     align-items: center;
-    gap: var(--sp1);
+    gap: 2px var(--sp1);
     min-width: 0;
-    min-height: 2rem;
-    padding: var(--sp1) var(--sp2);
+    min-height: 1.5rem;
+    padding: 1px var(--sp1);
     background-color: color-mix(in srgb, var(--theme-color-Sub-main) 6%, transparent);
     border-radius: var(--shape-sm);
   }
@@ -742,7 +753,8 @@
     display: inline-flex;
     align-items: center;
     gap: 0.2rem;
-    padding: 0.15rem var(--sp2);
+    min-height: 1.25rem;
+    padding: 0 var(--sp1);
     border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 35%, transparent);
     border-radius: var(--shape-pill);
     background: transparent;
@@ -774,8 +786,8 @@
 
   @media (max-width: 600px) {
     .tag-row-label {
-      width: 3rem;
-      min-width: 3rem;
+      width: 2.5rem;
+      min-width: 2.5rem;
       font-size: var(--font-label-sm);
     }
   }

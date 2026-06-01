@@ -29,9 +29,15 @@ vi.mock("quill", () => {
       this.on = vi.fn((event, callback) => {
         this.handlers[event] = callback;
       });
+      this.off = vi.fn();
       this.enable = vi.fn();
-      this.setContents = vi.fn();
-      this.setText = vi.fn();
+      this.setContents = vi.fn((value) => {
+        const ops = Array.isArray(value) ? value : (value?.ops ?? []);
+        this.root.textContent = ops.map((op) => op.insert ?? "").join("");
+      });
+      this.setText = vi.fn((value) => {
+        this.root.textContent = value;
+      });
       this.getContents = vi.fn(() => ({ ops: [{ insert: "changed\n" }] }));
       this.getLength = vi.fn(() => 0);
       this._selection = null;
@@ -41,8 +47,14 @@ vi.mock("quill", () => {
       this.setSelection = vi.fn((index, length = 0) => {
         this._selection = { index, length };
       });
-      this.deleteText = vi.fn();
-      this.insertText = vi.fn();
+      this.deleteText = vi.fn((index, length) => {
+        const current = this.root.textContent ?? "";
+        this.root.textContent = `${current.slice(0, index)}${current.slice(index + length)}`;
+      });
+      this.insertText = vi.fn((index, text) => {
+        const current = this.root.textContent ?? "";
+        this.root.textContent = `${current.slice(0, index)}${text}${current.slice(index)}`;
+      });
       this.getModule = vi.fn((name) => {
         if (name === "toolbar") return { container: this.toolbarContainer };
         if (name === "table") return this.tableModule;
@@ -81,6 +93,10 @@ vi.mock("quill", () => {
       quillInstances.push(this);
     }
   }
+  MockQuill.events = {
+    SCROLL_UPDATE: "scroll-update",
+    SCROLL_OPTIMIZE: "scroll-optimize",
+  };
   return { default: MockQuill };
 });
 
@@ -116,11 +132,20 @@ async function renderMarkdownMemo(props = {}) {
 
 async function openMarkdownEditor(props = {}) {
   await renderMarkdownMemo(props);
-  await fireEvent.click(document.querySelector(".edit-mode-btn"));
+  await chooseMarkdownMode("edit");
   await waitFor(() => {
     expect(document.querySelector(".cm-editor")).toBeInTheDocument();
   });
   return EditorView.findFromDOM(document.querySelector(".cm-editor"));
+}
+
+async function chooseMarkdownMode(mode) {
+  const trigger = document.querySelector(".memo-mode-trigger");
+  expect(trigger).toBeInTheDocument();
+  await fireEvent.click(trigger);
+  const option = document.querySelector(`.memo-mode-option[data-mode="${mode}"]`);
+  expect(option).toBeInTheDocument();
+  await fireEvent.click(option);
 }
 
 function markdownToolButton(label) {
@@ -305,6 +330,65 @@ describe("Memo mode routing", () => {
     expect(select.value).toBe("");
   });
 
+  test("installs a visible-space layer without replacing Quill editor text", async () => {
+    await renderMemo({
+      saveMemo: vi.fn(),
+      content: " leading　full",
+      isWorkspaceProject: false,
+    });
+
+    expect(document.querySelector(".quill-visible-space-layer")).toBeInTheDocument();
+    expect(quillInstances[0].root.textContent).toBe(" leading　full");
+  });
+
+  test("clears stale Quill visible-space markers while composing full-width text", async () => {
+    await renderMemo({
+      saveMemo: vi.fn(),
+      content: "a 　b",
+      isWorkspaceProject: false,
+    });
+    const quill = quillInstances[0];
+    const layer = document.querySelector(".quill-visible-space-layer");
+
+    expect(layer).toBeInTheDocument();
+    layer.appendChild(document.createElement("span"));
+    expect(layer.childElementCount).toBe(1);
+
+    await fireEvent.compositionStart(quill.root);
+    expect(layer.childElementCount).toBe(0);
+  });
+
+  test("observes Quill editor resizes for visible-space placement", async () => {
+    const originalResizeObserver = globalThis.ResizeObserver;
+    const observe = vi.fn();
+    const disconnect = vi.fn();
+    globalThis.ResizeObserver = vi.fn(function MockResizeObserver() {
+      this.observe = observe;
+      this.disconnect = disconnect;
+    });
+
+    try {
+      const result = await renderMemo({
+        saveMemo: vi.fn(),
+        content: " leading　full",
+        isWorkspaceProject: false,
+      });
+      const quill = quillInstances[0];
+
+      expect(observe).toHaveBeenCalledWith(quill.root.parentElement);
+      expect(observe).toHaveBeenCalledWith(quill.root);
+
+      result.unmount();
+      expect(disconnect).toHaveBeenCalled();
+    } finally {
+      if (originalResizeObserver) {
+        globalThis.ResizeObserver = originalResizeObserver;
+      } else {
+        delete globalThis.ResizeObserver;
+      }
+    }
+  });
+
   test("adds distinct Quill inline and block code toolbar buttons", async () => {
     await renderMemo({ saveMemo: vi.fn(), content: "", isWorkspaceProject: false });
     const inlineCode = quillInstances[0].toolbarContainer.querySelector("button.ql-code");
@@ -389,6 +473,14 @@ describe("Markdown Memo - view mode", () => {
     await renderMarkdownMemo({ saveMemo, content: "" });
     expect(document.querySelector(".cm-editor")).not.toBeInTheDocument();
     expect(document.querySelector(".preview-mode")).toBeInTheDocument();
+    const modeTrigger = document.querySelector(".memo-mode-trigger");
+    expect(modeTrigger).toHaveAttribute("aria-label", "Memo mode: Preview");
+    expect(modeTrigger.querySelector(".memo-mode-icon svg")).toBeInTheDocument();
+
+    await fireEvent.click(modeTrigger);
+    expect(
+      [...document.querySelectorAll(".memo-mode-option-label")].map((node) => node.textContent)
+    ).toEqual(["Preview", "Edit", "Split"]);
   });
 
   test("shows placeholder when content is empty", async () => {
@@ -467,12 +559,35 @@ describe("Markdown Memo - edit mode", () => {
     delete window.electronAPI;
   });
 
-  test("clicking edit mode switch shows CM6 editor", async () => {
+  test("choosing edit mode shows only the CM6 editor", async () => {
     await renderMarkdownMemo({ saveMemo, content: "hello" });
-    await fireEvent.click(document.querySelector(".edit-mode-btn"));
+    await chooseMarkdownMode("edit");
     await waitFor(() => {
       expect(document.querySelector(".cm-editor")).toBeInTheDocument();
     });
+    expect(document.querySelector(".markdown-split-resizer")).not.toBeInTheDocument();
+    expect(document.querySelector(".live-preview")).not.toBeInTheDocument();
+  });
+
+  test("installs a visible-space layer without replacing Markdown editor text", async () => {
+    await openMarkdownEditor({ saveMemo, content: " leading　full" });
+
+    expect(document.querySelector(".cm-visibleSpaceLayer")).toBeInTheDocument();
+    expect(document.querySelector(".cm-content").textContent).toBe(" leading　full");
+  });
+
+  test("keeps the caret after a full-width space in the Markdown editor", async () => {
+    const view = await openMarkdownEditor({ saveMemo, content: "" });
+
+    view.dispatch({
+      changes: { from: 0, insert: "　" },
+      selection: { anchor: 1 },
+      userEvent: "input.type",
+    });
+    await tick();
+
+    expect(view.state.doc.toString()).toBe("　");
+    expect(view.state.selection.main.from).toBe(1);
   });
 
   test("inserts a Markdown table from the edit toolbar", async () => {
@@ -584,7 +699,7 @@ describe("Markdown Memo - edit mode", () => {
       content: "",
       memoTitles: ["Daily Notes", "Research Log"],
     });
-    await fireEvent.click(document.querySelector(".edit-mode-btn"));
+    await chooseMarkdownMode("edit");
     await waitFor(() => {
       expect(document.querySelector(".cm-editor")).toBeInTheDocument();
     });
@@ -611,7 +726,7 @@ describe("Markdown Memo - edit mode", () => {
       memoTitles: ["Daily Notes", "Research Log"],
       currentMemoTitle: "Daily Notes",
     });
-    await fireEvent.click(document.querySelector(".edit-mode-btn"));
+    await chooseMarkdownMode("edit");
     await waitFor(() => {
       expect(document.querySelector(".cm-editor")).toBeInTheDocument();
     });
@@ -632,17 +747,30 @@ describe("Markdown Memo - edit mode", () => {
     });
   });
 
-  test("edit mode shows read mode switch", async () => {
+  test("edit mode shows the same mode dropdown", async () => {
     await renderMarkdownMemo({ saveMemo, content: "hello" });
-    await fireEvent.click(document.querySelector(".edit-mode-btn"));
+    await chooseMarkdownMode("edit");
     await waitFor(() => {
-      expect(document.querySelector(".read-mode-btn")).toBeInTheDocument();
+      expect(document.querySelector(".memo-mode-trigger")).toHaveAttribute(
+        "aria-label",
+        "Memo mode: Edit"
+      );
+    });
+  });
+
+  test("choosing split mode shows editor and live preview", async () => {
+    await renderMarkdownMemo({ saveMemo, content: "# hello" });
+    await chooseMarkdownMode("split");
+    await waitFor(() => {
+      expect(document.querySelector(".cm-editor")).toBeInTheDocument();
+      expect(document.querySelector(".markdown-split-resizer")).toBeInTheDocument();
+      expect(document.querySelector(".live-preview .preview h1")).toHaveTextContent("hello");
     });
   });
 
   test("lets the markdown editor and preview split be resized with the keyboard", async () => {
     await renderMarkdownMemo({ saveMemo, content: "hello" });
-    await fireEvent.click(document.querySelector(".edit-mode-btn"));
+    await chooseMarkdownMode("split");
     await waitFor(() => {
       expect(document.querySelector(".markdown-split-resizer")).toBeInTheDocument();
     });
@@ -659,12 +787,17 @@ describe("Markdown Memo - edit mode", () => {
     expect(editBody.getAttribute("style")).toContain("--editor-pane-width: 72%");
   });
 
-  test("clicking read mode switch returns to view mode", async () => {
+  test("choosing preview mode returns to view mode", async () => {
     await renderMarkdownMemo({ saveMemo, content: "hello" });
-    await fireEvent.click(document.querySelector(".edit-mode-btn"));
-    await waitFor(() => expect(document.querySelector(".read-mode-btn")).toBeInTheDocument());
+    await chooseMarkdownMode("edit");
+    await waitFor(() =>
+      expect(document.querySelector(".memo-mode-trigger")).toHaveAttribute(
+        "aria-label",
+        "Memo mode: Edit"
+      )
+    );
 
-    await fireEvent.click(document.querySelector(".read-mode-btn"));
+    await chooseMarkdownMode("preview");
     await tick();
 
     expect(document.querySelector(".cm-editor")).not.toBeInTheDocument();
@@ -686,12 +819,17 @@ describe("Markdown Memo - edit mode", () => {
     vi.useRealTimers();
   });
 
-  test("switching back to read mode without changes does not call saveMemo", async () => {
+  test("switching back to preview mode without changes does not call saveMemo", async () => {
     await renderMarkdownMemo({ saveMemo, content: "hello" });
-    await fireEvent.click(document.querySelector(".edit-mode-btn"));
-    await waitFor(() => expect(document.querySelector(".read-mode-btn")).toBeInTheDocument());
+    await chooseMarkdownMode("edit");
+    await waitFor(() =>
+      expect(document.querySelector(".memo-mode-trigger")).toHaveAttribute(
+        "aria-label",
+        "Memo mode: Edit"
+      )
+    );
 
-    await fireEvent.click(document.querySelector(".read-mode-btn"));
+    await chooseMarkdownMode("preview");
     await tick();
 
     expect(saveMemo).not.toHaveBeenCalled();
@@ -712,7 +850,7 @@ describe("Markdown Memo - edit mode", () => {
       taskId: "task-1",
     });
 
-    await fireEvent.click(document.querySelector(".edit-mode-btn"));
+    await chooseMarkdownMode("edit");
     await waitFor(() => {
       expect(document.querySelector(".cm-editor")).toBeInTheDocument();
     });
@@ -809,7 +947,7 @@ describe("Markdown Memo - link handling in preview", () => {
     expect(window.electronAPI.openExternalLink).toHaveBeenCalledWith("https://example.com/");
   });
 
-  test("clicking non-link preview area stays in read mode", async () => {
+  test("clicking non-link preview area stays in preview mode", async () => {
     await renderMarkdownMemo({ saveMemo, content: "plain text" });
     await fireEvent.click(document.querySelector(".preview-mode"));
     await tick();

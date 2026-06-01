@@ -69,9 +69,9 @@
     flex-direction: column;
     width: 100%;
     height: 100%;
-    padding: var(--sp4);
+    padding: var(--sp2);
     box-sizing: border-box;
-    gap: var(--sp4);
+    gap: var(--sp2);
     background: var(--theme-color-Main-dark);
     color: var(--theme-color-Sub-main);
   }
@@ -80,11 +80,14 @@
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    gap: var(--sp4);
+    gap: var(--sp2);
+    flex-shrink: 0;
   }
 
   .detail-meta h1 {
     margin: 0;
+    font-size: var(--font-title-md);
+    line-height: 1.2;
   }
 
   .detail-body {

@@ -458,7 +458,7 @@
     position: relative;
   }
   div.Header {
-    height: 3.5rem;
+    height: 2.75rem;
   }
   div.Body {
     display: flex;
@@ -466,7 +466,7 @@
     flex: 1;
     min-height: 0;
     width: 100%;
-    height: calc(100% - 3.5rem);
+    height: calc(100% - 2.75rem);
     overflow: hidden;
   }
   div.Body.DetailWindowBody {

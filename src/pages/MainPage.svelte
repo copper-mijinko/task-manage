@@ -36,6 +36,7 @@
     bulkOutdent,
     areAllSiblings,
     isContiguousSiblingBlock,
+    isNodeEffectivelyArchived,
     archiveNode,
     restoreNode,
     bulkArchiveNodes,
@@ -373,7 +374,7 @@
       for (const id of ids) {
         const n = getNode(id, $tree_data.data);
         if (!n) continue;
-        if (n.archived) permanentIds.push(id);
+        if (isNodeEffectivelyArchived(id, $tree_data.data)) permanentIds.push(id);
         else archiveIds.push(id);
       }
       archive_target_ids = archiveIds;
@@ -426,15 +427,13 @@
   // 選択中の anchor が archived かどうか（toolbar のアイコン切替に使う）
   $: anchorIsArchived = (() => {
     if (!$tree_data?.data || !$table_selected_id) return false;
-    const node = getNode($table_selected_id, $tree_data.data);
-    return !!node?.archived;
+    return isNodeEffectivelyArchived($table_selected_id, $tree_data.data);
   })();
   // 選択中のどこかに archived が含まれているか（restore ボタン表示の判定に使う）
   $: selectionHasArchived = (() => {
     if (!$tree_data?.data) return false;
     for (const id of $selected_ids) {
-      const node = getNode(id, $tree_data.data);
-      if (node?.archived) return true;
+      if (isNodeEffectivelyArchived(id, $tree_data.data)) return true;
     }
     return anchorIsArchived;
   })();
@@ -1059,12 +1058,17 @@
     box-sizing: border-box;
     flex: 0 0 auto;
   }
+  .TbGroup :global(button) {
+    width: 1.75rem;
+    height: 1.75rem;
+    margin: 0;
+  }
   .TbSearch {
     display: flex;
     flex: 1 1 auto;
     align-items: center;
     margin-left: auto;
-    height: 2rem;
+    height: 1.75rem;
     min-width: 8rem;
     max-width: 22rem;
   }
@@ -1075,7 +1079,7 @@
     gap: var(--sp2);
     width: 100%;
     min-width: 0;
-    padding: var(--sp2) var(--sp3);
+    padding: var(--sp1) var(--sp2);
     box-sizing: border-box;
     flex-wrap: wrap;
     border-bottom: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 12%, transparent);

@@ -41,7 +41,8 @@
     align-items: center;
     gap: var(--sp2);
     flex-shrink: 0;
-    padding: var(--sp2) var(--sp4);
+    min-height: 2.25rem;
+    padding: var(--sp1) var(--sp3);
     border-bottom: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 20%, transparent);
     background-color: color-mix(
       in srgb,
@@ -52,7 +53,7 @@
   .CardHeaderTitle {
     flex: 1 1 auto;
     min-width: 0;
-    font-size: var(--font-title-md);
+    font-size: var(--font-title-sm);
     font-weight: 600;
     color: var(--theme-color-Sub-main);
     line-height: 1.2;
@@ -60,6 +61,9 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .CardHeader :global(button) {
+    margin: 0;
   }
   .CardBody {
     display: flex;

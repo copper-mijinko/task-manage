@@ -1,6 +1,14 @@
 ﻿<script lang="ts">
   import { tick, onDestroy } from "svelte";
-  import { EditorView, keymap, lineNumbers } from "@codemirror/view";
+  import {
+    Direction,
+    EditorView,
+    keymap,
+    layer,
+    lineNumbers,
+    type LayerMarker,
+    type ViewUpdate,
+  } from "@codemirror/view";
   import { EditorState, type Text } from "@codemirror/state";
   import {
     autocompletion,
@@ -20,7 +28,6 @@
   import mermaid from "mermaid";
   import quillIcons from "quill/ui/icons.js";
   import { toMarkdown } from "@features/memos/utils/memo_utils";
-  import SegmentedControl from "@lib/primitives/SegmentedControl.svelte";
   import * as platform from "@lib/ipc/platform";
   import { theme } from "@stores/theme";
   import "@features/memos/styles/hljs-theme.css";
@@ -63,6 +70,7 @@
   let saveTimer: ReturnType<typeof setTimeout>;
   let savedTimer: ReturnType<typeof setTimeout>;
   let isEditing = false;
+  let markdownMode: MarkdownMemoMode = "preview";
   let hasChanges = false;
   let saveState: "clean" | "dirty" | "saved" = "clean";
   let currentContent = toMarkdown(content);
@@ -71,9 +79,11 @@
   let previewEl: HTMLElement | null = null;
   let livePreviewEl: HTMLElement | null = null;
   let editBody: HTMLElement | null = null;
+  let modeDropdownEl: HTMLElement | null = null;
   let markdownSplitPercent = 55;
   let currentHeadingLevel = "normal";
   let tableActionValue = "";
+  let modeMenuOpen = false;
 
   const SPLIT_MIN_PERCENT = 30;
   const SPLIT_MAX_PERCENT = 72;
@@ -109,10 +119,25 @@
     { value: "delete-table", label: "表を削除" },
   ] as const;
   type TableAction = (typeof tableActionOptions)[number]["value"];
+  type MarkdownMemoMode = "preview" | "edit" | "split";
+  type EditableMarkdownMemoMode = Exclude<MarkdownMemoMode, "preview">;
   const memoModeOptions = [
-    { value: "read", label: "Read", className: "read-mode-btn" },
-    { value: "edit", label: "Edit", className: "edit-mode-btn" },
-  ];
+    { value: "preview", label: "Preview" },
+    { value: "edit", label: "Edit" },
+    { value: "split", label: "Split" },
+  ] satisfies Array<{
+    value: MarkdownMemoMode;
+    label: string;
+  }>;
+  const memoModeIconSvg: Record<MarkdownMemoMode, string> = {
+    preview:
+      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/></svg>',
+    edit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4.5L19 9.5 14.5 5 4 15.5V20Z"/><path d="M13.5 6 18 10.5"/></svg>',
+    split:
+      '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M12 5v14"/></svg>',
+  };
+  const chevronDownIconSvg =
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>';
 
   function memoLinkCompletion(context: CompletionContext): CompletionResult | null {
     const line = context.state.doc.lineAt(context.pos);
@@ -1122,6 +1147,132 @@
   const markdownSourceFontFamily =
     '"BIZ UDゴシック", "BIZ UDGothic", "Cascadia Mono", "Cascadia Code", Consolas, "Courier New", monospace';
 
+  type VisibleSpaceKind = "half" | "full";
+
+  class VisibleSpaceMarker implements LayerMarker {
+    readonly kind: VisibleSpaceKind;
+    readonly left: number;
+    readonly top: number;
+    readonly width: number;
+    readonly height: number;
+
+    constructor(kind: VisibleSpaceKind, left: number, top: number, width: number, height: number) {
+      this.kind = kind;
+      this.left = left;
+      this.top = top;
+      this.width = width;
+      this.height = height;
+    }
+
+    eq(other: LayerMarker): boolean {
+      return (
+        other instanceof VisibleSpaceMarker &&
+        other.kind === this.kind &&
+        other.left === this.left &&
+        other.top === this.top &&
+        other.width === this.width &&
+        other.height === this.height
+      );
+    }
+
+    draw(): HTMLElement {
+      const element = document.createElement("div");
+      element.className = `cm-visible-space-marker cm-visible-${this.kind}-space-marker`;
+      this.adjust(element);
+      return element;
+    }
+
+    update(element: HTMLElement, previous: LayerMarker): boolean {
+      if (!(previous instanceof VisibleSpaceMarker) || previous.kind !== this.kind) {
+        return false;
+      }
+      this.adjust(element);
+      return true;
+    }
+
+    private adjust(element: HTMLElement) {
+      element.style.left = `${this.left}px`;
+      element.style.top = `${this.top}px`;
+      element.style.width = `${this.width}px`;
+      element.style.height = `${this.height}px`;
+    }
+  }
+
+  function getLayerBase(view: EditorView) {
+    const rect = view.scrollDOM.getBoundingClientRect();
+    const left =
+      view.textDirection === Direction.LTR
+        ? rect.left
+        : rect.right - view.scrollDOM.clientWidth * view.scaleX;
+    return {
+      left: left - view.scrollDOM.scrollLeft * view.scaleX,
+      top: rect.top - view.scrollDOM.scrollTop * view.scaleY,
+    };
+  }
+
+  function createVisibleSpaceMarker(
+    view: EditorView,
+    base: { left: number; top: number },
+    pos: number,
+    kind: VisibleSpaceKind
+  ) {
+    const rect = view.coordsForChar(pos);
+    if (!rect) return null;
+
+    const charLeft = rect.left - base.left;
+    const charTop = rect.top - base.top;
+    const charWidth = rect.right - rect.left;
+    const charHeight = rect.bottom - rect.top;
+
+    if (kind === "half") {
+      const size = Math.max(2, Math.min(charWidth, charHeight) * 0.14);
+      return new VisibleSpaceMarker(
+        kind,
+        charLeft + (charWidth - size) / 2,
+        charTop + (charHeight - size) * 0.56,
+        size,
+        size
+      );
+    }
+
+    const size = Math.max(8, Math.min(charWidth, charHeight) * 0.62);
+    return new VisibleSpaceMarker(
+      kind,
+      charLeft + (charWidth - size) / 2,
+      charTop + (charHeight - size) / 2,
+      size,
+      size
+    );
+  }
+
+  const visibleSpaces = layer({
+    above: true,
+    class: "cm-visibleSpaceLayer",
+    markers(view) {
+      const markers: LayerMarker[] = [];
+      const base = getLayerBase(view);
+      for (const range of view.visibleRanges) {
+        const text = view.state.doc.sliceString(range.from, range.to);
+        for (let offset = 0; offset < text.length; offset += 1) {
+          const character = text[offset];
+          if (character !== " " && character !== "\u3000") continue;
+
+          const marker = createVisibleSpaceMarker(
+            view,
+            base,
+            range.from + offset,
+            character === " " ? "half" : "full"
+          );
+          if (marker) markers.push(marker);
+        }
+      }
+      return markers;
+    },
+    update(update: ViewUpdate) {
+      return update.docChanged || update.viewportChanged || update.geometryChanged;
+    },
+  });
+
   const editorTheme = EditorView.theme({
     "&": {
       height: "100%",
@@ -1132,13 +1283,13 @@
       overflow: "auto",
       fontFamily: markdownSourceFontFamily,
       fontSize: "var(--font-body-md)",
-      lineHeight: "1.7",
+      lineHeight: "1.5",
       fontKerning: "none",
       fontVariantLigatures: "none",
       fontFeatureSettings: '"liga" 0, "calt" 0',
     },
     ".cm-content": {
-      padding: "var(--sp3) var(--sp4)",
+      padding: "var(--sp2) var(--sp3)",
       caretColor: "var(--theme-color-Sub-light)",
       minHeight: "100%",
     },
@@ -1152,6 +1303,19 @@
     ".cm-cursor, .cm-dropCursor": {
       borderLeftColor: "var(--theme-color-Sub-light)",
     },
+    ".cm-visibleSpaceLayer": {
+      pointerEvents: "none",
+    },
+    ".cm-visible-space-marker": {
+      boxSizing: "border-box",
+    },
+    ".cm-visible-half-space-marker": {
+      borderRadius: "50%",
+      backgroundColor: "color-mix(in srgb, var(--theme-color-Sub-main) 46%, transparent)",
+    },
+    ".cm-visible-full-space-marker": {
+      border: "1px solid color-mix(in srgb, var(--theme-color-Primary-main) 42%, transparent)",
+    },
     ".cm-activeLine": {
       backgroundColor: "rgba(255, 255, 255, 0.02)",
     },
@@ -1162,7 +1326,7 @@
       userSelect: "none",
     },
     ".cm-lineNumbers .cm-gutterElement": {
-      padding: "0 var(--sp2) 0 var(--sp3)",
+      padding: "0 var(--sp1) 0 var(--sp2)",
       minWidth: "2.25rem",
       fontVariantNumeric: "tabular-nums",
     },
@@ -1200,6 +1364,7 @@
     return [
       editorTheme,
       lineNumbers(),
+      visibleSpaces,
       markdown({ base: markdownLanguage, codeLanguages: languages }),
       autocompletion({
         override: [memoLinkCompletion],
@@ -1321,20 +1486,26 @@
     ];
   }
 
-  async function startEdit() {
-    if (readOnly || isEditing) return;
-    isEditing = true;
+  async function startEdit(nextMode: EditableMarkdownMemoMode) {
+    if (readOnly) return;
+    modeMenuOpen = false;
+    markdownMode = nextMode;
     await tick();
-    if (!container || view) return;
-    view = new EditorView({
-      state: EditorState.create({ doc: currentContent, extensions: buildExtensions() }),
-      parent: container,
-    });
-    syncHeadingLevel(view);
+    if (!container) return;
+    if (!view) {
+      view = new EditorView({
+        state: EditorState.create({ doc: currentContent, extensions: buildExtensions() }),
+        parent: container,
+      });
+      syncHeadingLevel(view);
+    }
+    view.requestMeasure();
     view.focus();
   }
 
   function stopEdit() {
+    modeMenuOpen = false;
+    stopSplitResize();
     if (view) {
       clearTimeout(saveTimer);
       currentContent = view.state.doc.toString();
@@ -1344,14 +1515,71 @@
       view.destroy();
       view = null;
     }
-    isEditing = false;
+    markdownMode = "preview";
   }
 
-  function handleModeChange(event: CustomEvent<{ value: string }>) {
-    if (event.detail.value === "edit") {
-      void startEdit();
-    } else {
+  function selectMarkdownMode(nextMode: MarkdownMemoMode) {
+    modeMenuOpen = false;
+    if (nextMode === markdownMode) {
+      return;
+    }
+    if (nextMode === "preview") {
       stopEdit();
+    } else {
+      void startEdit(nextMode);
+    }
+  }
+
+  function toggleModeMenu() {
+    modeMenuOpen = !modeMenuOpen;
+  }
+
+  function closeModeMenu() {
+    modeMenuOpen = false;
+  }
+
+  function handleModeTriggerKeydown(event: KeyboardEvent) {
+    if (event.key === "Enter" || event.key === " " || event.key === "ArrowDown") {
+      event.preventDefault();
+      modeMenuOpen = true;
+      void tick().then(() => {
+        const activeOption = modeDropdownEl?.querySelector<HTMLButtonElement>(
+          ".memo-mode-option.active"
+        );
+        activeOption?.focus();
+      });
+    } else if (event.key === "Escape") {
+      closeModeMenu();
+    }
+  }
+
+  function handleModeMenuKeydown(event: KeyboardEvent) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeModeMenu();
+      modeDropdownEl?.querySelector<HTMLButtonElement>(".memo-mode-trigger")?.focus();
+      return;
+    }
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") {
+      return;
+    }
+    event.preventDefault();
+    const options = Array.from(
+      modeDropdownEl?.querySelectorAll<HTMLButtonElement>(".memo-mode-option") ?? []
+    );
+    if (options.length === 0) return;
+    const currentIndex = Math.max(0, options.indexOf(document.activeElement as HTMLButtonElement));
+    const nextIndex =
+      event.key === "ArrowDown"
+        ? (currentIndex + 1) % options.length
+        : (currentIndex - 1 + options.length) % options.length;
+    options[nextIndex]?.focus();
+  }
+
+  function handleWindowClick(event: MouseEvent) {
+    if (!modeMenuOpen || !modeDropdownEl || !(event.target instanceof Node)) return;
+    if (!modeDropdownEl.contains(event.target)) {
+      closeModeMenu();
     }
   }
 
@@ -1447,6 +1675,9 @@
   }
 
   $: normalizedContent = toMarkdown(content);
+  $: isEditing = markdownMode !== "preview";
+  $: currentModeLabel =
+    memoModeOptions.find((mode) => mode.value === markdownMode)?.label ?? "Preview";
   $: hasRenderedContent = Boolean(currentContent.trim());
   $: if (!isEditing && normalizedContent !== currentContent) {
     currentContent = normalizedContent;
@@ -1464,6 +1695,8 @@
     void updateRenderedHtml(currentContent);
   }
 </script>
+
+<svelte:window on:click={handleWindowClick} />
 
 <div class="wrapper">
   {#if isEditing}
@@ -1575,50 +1808,96 @@
           <span class="save-status" aria-live="polite">
             {saveState === "dirty" ? "Unsaved" : saveState === "saved" ? "Saved" : ""}
           </span>
-          <SegmentedControl
-            options={memoModeOptions}
-            value="edit"
-            ariaLabel="Memo mode"
-            on:change={handleModeChange}
-          />
+          <!-- eslint-disable svelte/no-at-html-tags -->
+          <div class="memo-mode-dropdown" bind:this={modeDropdownEl}>
+            <button
+              type="button"
+              class="memo-mode-trigger"
+              aria-label={`Memo mode: ${currentModeLabel}`}
+              aria-haspopup="listbox"
+              aria-expanded={modeMenuOpen}
+              title={currentModeLabel}
+              on:click|stopPropagation={toggleModeMenu}
+              on:keydown={handleModeTriggerKeydown}
+            >
+              <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+              <span class="memo-mode-icon" aria-hidden="true"
+                >{@html memoModeIconSvg[markdownMode]}</span
+              >
+              <span class="memo-mode-hover-label" aria-hidden="true">{currentModeLabel}</span>
+              <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+              <span class="memo-mode-chevron" aria-hidden="true">{@html chevronDownIconSvg}</span>
+            </button>
+            {#if modeMenuOpen}
+              <div
+                class="memo-mode-menu"
+                role="listbox"
+                aria-label="Memo mode"
+                tabindex="-1"
+                on:keydown={handleModeMenuKeydown}
+              >
+                {#each memoModeOptions as mode}
+                  <button
+                    type="button"
+                    class="memo-mode-option"
+                    class:active={mode.value === markdownMode}
+                    data-mode={mode.value}
+                    role="option"
+                    aria-selected={mode.value === markdownMode}
+                    on:click|stopPropagation={() => selectMarkdownMode(mode.value)}
+                  >
+                    <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+                    <span class="memo-mode-icon" aria-hidden="true"
+                      >{@html memoModeIconSvg[mode.value]}</span
+                    >
+                    <span class="memo-mode-option-label">{mode.label}</span>
+                  </button>
+                {/each}
+              </div>
+            {/if}
+          </div>
+          <!-- eslint-enable svelte/no-at-html-tags -->
         </div>
       </div>
       <div
         class="edit-body"
+        class:split-mode={markdownMode === "split"}
         bind:this={editBody}
         style={`--editor-pane-width: ${markdownSplitPercent}%`}
       >
         <div class="editor-pane">
           <div class="editor" bind:this={container}></div>
         </div>
-        <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-        <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-        <div
-          class="markdown-split-resizer"
-          role="separator"
-          aria-label="Resize editor and preview"
-          aria-orientation="vertical"
-          aria-valuemin={SPLIT_MIN_PERCENT}
-          aria-valuemax={SPLIT_MAX_PERCENT}
-          aria-valuenow={Math.round(markdownSplitPercent)}
-          tabindex="0"
-          on:pointerdown={startSplitResize}
-          on:keydown={handleSplitKeydown}
-        ></div>
-        <!-- svelte-ignore a11y-no-static-element-interactions -->
-        <div
-          class="live-preview"
-          aria-label="Markdown preview"
-          on:click={handlePreviewClick}
-          on:keydown={handlePreviewKeydown}
-        >
-          {#if hasRenderedContent}
-            <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-            <div class="preview" bind:this={livePreviewEl}>{@html renderedHtml}</div>
-          {:else}
-            <div class="placeholder">Preview</div>
-          {/if}
-        </div>
+        {#if markdownMode === "split"}
+          <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+          <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+          <div
+            class="markdown-split-resizer"
+            role="separator"
+            aria-label="Resize editor and preview"
+            aria-orientation="vertical"
+            aria-valuemin={SPLIT_MIN_PERCENT}
+            aria-valuemax={SPLIT_MAX_PERCENT}
+            aria-valuenow={Math.round(markdownSplitPercent)}
+            tabindex="0"
+            on:pointerdown={startSplitResize}
+            on:keydown={handleSplitKeydown}
+          ></div>
+          <!-- svelte-ignore a11y-no-static-element-interactions -->
+          <div
+            class="live-preview"
+            aria-label="Markdown preview"
+            on:click={handlePreviewClick}
+            on:keydown={handlePreviewKeydown}
+          >
+            {#if hasRenderedContent}
+              <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+              <div class="preview" bind:this={livePreviewEl}>{@html renderedHtml}</div>
+            {:else}
+              <div class="placeholder">Preview</div>
+            {/if}
+          </div>
+        {/if}
       </div>
     </div>
   {:else}
@@ -1631,12 +1910,55 @@
     >
       {#if !readOnly}
         <div class="preview-bar">
-          <SegmentedControl
-            options={memoModeOptions}
-            value="read"
-            ariaLabel="Memo mode"
-            on:change={handleModeChange}
-          />
+          <!-- eslint-disable svelte/no-at-html-tags -->
+          <div class="memo-mode-dropdown" bind:this={modeDropdownEl}>
+            <button
+              type="button"
+              class="memo-mode-trigger"
+              aria-label={`Memo mode: ${currentModeLabel}`}
+              aria-haspopup="listbox"
+              aria-expanded={modeMenuOpen}
+              title={currentModeLabel}
+              on:click|stopPropagation={toggleModeMenu}
+              on:keydown={handleModeTriggerKeydown}
+            >
+              <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+              <span class="memo-mode-icon" aria-hidden="true"
+                >{@html memoModeIconSvg[markdownMode]}</span
+              >
+              <span class="memo-mode-hover-label" aria-hidden="true">{currentModeLabel}</span>
+              <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+              <span class="memo-mode-chevron" aria-hidden="true">{@html chevronDownIconSvg}</span>
+            </button>
+            {#if modeMenuOpen}
+              <div
+                class="memo-mode-menu"
+                role="listbox"
+                aria-label="Memo mode"
+                tabindex="-1"
+                on:keydown={handleModeMenuKeydown}
+              >
+                {#each memoModeOptions as mode}
+                  <button
+                    type="button"
+                    class="memo-mode-option"
+                    class:active={mode.value === markdownMode}
+                    data-mode={mode.value}
+                    role="option"
+                    aria-selected={mode.value === markdownMode}
+                    on:click|stopPropagation={() => selectMarkdownMode(mode.value)}
+                  >
+                    <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+                    <span class="memo-mode-icon" aria-hidden="true"
+                      >{@html memoModeIconSvg[mode.value]}</span
+                    >
+                    <span class="memo-mode-option-label">{mode.label}</span>
+                  </button>
+                {/each}
+              </div>
+            {/if}
+          </div>
+          <!-- eslint-enable svelte/no-at-html-tags -->
         </div>
       {/if}
       {#if hasRenderedContent}
@@ -1694,7 +2016,7 @@
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    padding: var(--sp2);
+    padding: var(--sp1) var(--sp2);
     background-color: var(--theme-color-Main-dark);
     flex-shrink: 0;
     gap: var(--sp2);
@@ -1884,6 +2206,148 @@
     margin-left: auto;
   }
 
+  .memo-mode-dropdown {
+    position: relative;
+    flex: 0 0 auto;
+  }
+
+  .memo-mode-trigger {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    width: 3.05rem;
+    height: var(--memo-quill-button-height);
+    padding: 0 7px;
+    margin: 0;
+    border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 34%, transparent);
+    border-radius: var(--shape-xs);
+    color: var(--theme-color-Sub-main);
+    background-color: var(--theme-color-Main-light);
+    cursor: pointer;
+  }
+
+  .memo-mode-trigger:hover,
+  .memo-mode-trigger:focus,
+  .memo-mode-trigger[aria-expanded="true"] {
+    border-color: var(--theme-color-Primary-main);
+    color: var(--theme-color-Primary-main);
+    outline: none;
+  }
+
+  .memo-mode-trigger:focus-visible {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--theme-color-Primary-main) 30%, transparent);
+  }
+
+  .memo-mode-icon,
+  .memo-mode-chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    pointer-events: none;
+  }
+
+  .memo-mode-icon :global(svg) {
+    width: 15px;
+    height: 15px;
+  }
+
+  .memo-mode-chevron :global(svg) {
+    width: 12px;
+    height: 12px;
+    transition: transform 120ms ease;
+  }
+
+  .memo-mode-icon :global(svg),
+  .memo-mode-chevron :global(svg) {
+    display: block;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .memo-mode-trigger[aria-expanded="true"] .memo-mode-chevron :global(svg) {
+    transform: rotate(180deg);
+  }
+
+  .memo-mode-hover-label {
+    position: absolute;
+    top: 50%;
+    right: calc(100% + var(--sp1));
+    z-index: 24;
+    padding: 4px 9px;
+    border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 30%, transparent);
+    border-radius: var(--shape-xs);
+    color: var(--theme-color-Sub-light);
+    background-color: var(--theme-color-Main-light);
+    box-shadow: var(--shadow-sm);
+    font-size: var(--font-label-sm);
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+    opacity: 0;
+    transform: translateY(-50%) translateX(3px);
+    transition:
+      opacity 120ms ease,
+      transform 120ms ease;
+    pointer-events: none;
+  }
+
+  .memo-mode-trigger:hover .memo-mode-hover-label,
+  .memo-mode-trigger:focus-visible .memo-mode-hover-label {
+    opacity: 1;
+    transform: translateY(-50%);
+  }
+
+  .memo-mode-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    z-index: 25;
+    display: flex;
+    flex-direction: column;
+    min-width: 8rem;
+    padding: 4px;
+    border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 28%, transparent);
+    border-radius: var(--shape-xs);
+    background-color: var(--theme-color-Main-light);
+    box-shadow: var(--shadow-md);
+  }
+
+  .memo-mode-option {
+    display: flex;
+    align-items: center;
+    gap: var(--sp1);
+    width: 100%;
+    min-height: 1.65rem;
+    padding: 0 var(--sp3);
+    border: 0;
+    border-radius: var(--shape-xs);
+    color: var(--theme-color-Sub-main);
+    background-color: transparent;
+    font-size: var(--font-label-md);
+    font-weight: 700;
+    line-height: 1;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .memo-mode-option:hover,
+  .memo-mode-option:focus,
+  .memo-mode-option.active {
+    color: var(--theme-color-Primary-main);
+    background-color: color-mix(in srgb, var(--theme-color-Primary-main) 14%, transparent);
+    outline: none;
+  }
+
+  .memo-mode-option-label {
+    white-space: nowrap;
+  }
+
   .save-status {
     min-width: 3rem;
     text-align: right;
@@ -1906,10 +2370,14 @@
 
   .editor-pane {
     display: flex;
-    flex: 0 0 var(--editor-pane-width);
+    flex: 1 1 auto;
     min-width: 0;
     min-height: 0;
     overflow: hidden;
+  }
+
+  .edit-body.split-mode .editor-pane {
+    flex: 0 0 var(--editor-pane-width);
   }
 
   .editor {
@@ -2021,7 +2489,7 @@
     z-index: 1;
     display: flex;
     justify-content: flex-end;
-    padding: var(--sp2) var(--sp2);
+    padding: 2px var(--sp2);
     border-bottom: 1px solid var(--theme-color-Shadow-main);
     background-color: color-mix(in srgb, var(--theme-color-Main-light) 94%, black);
   }
@@ -2029,7 +2497,7 @@
   .preview {
     flex: 1 1 auto;
     min-height: 0;
-    padding: var(--sp4);
+    padding: var(--sp2) var(--sp4);
     color: var(--theme-color-Sub-light);
     font-family: var(--memo-editor-font);
     font-size: var(--font-body-md);
@@ -2038,11 +2506,11 @@
     font-feature-settings:
       "liga" 0,
       "calt" 0;
-    line-height: 1.7;
+    line-height: 1.55;
   }
 
   @media (max-width: 900px) {
-    .editor-pane {
+    .edit-body.split-mode .editor-pane {
       flex-basis: 100%;
     }
 
@@ -2072,7 +2540,7 @@
     flex: 1 1 auto;
     min-height: 0;
     box-sizing: border-box;
-    padding: var(--sp4);
+    padding: var(--sp2);
     color: var(--theme-color-Sub-main);
     font-size: var(--font-body-md);
     font-style: italic;
@@ -2090,6 +2558,10 @@
     font-weight: 700;
     line-height: 1.3;
     color: var(--theme-color-Sub-light);
+  }
+
+  .preview :global(:first-child) {
+    margin-top: 0;
   }
 
   .preview :global(h1) {

@@ -4,6 +4,7 @@ import {
   bulkArchiveNodes,
   bulkRestoreNodes,
   flattenVisibleTree,
+  isNodeEffectivelyArchived,
   restoreNode,
   stripArchivedNodes,
   type TreeData,
@@ -80,6 +81,39 @@ describe("archive / restore tree helpers", () => {
     const before = tree.children.map((c) => c.id);
     restoreNode("b", tree);
     expect(tree.children.map((c) => c.id)).toEqual(before);
+  });
+
+  test("restoreNode restores archived ancestors for an effectively archived child", () => {
+    const tree = makeTree();
+    archiveNode("a", tree);
+
+    restoreNode("a1", tree);
+
+    const a = tree.children.find((c) => c.id === "a")!;
+    expect(tree.children.map((c) => c.id)).toEqual(["b", "c", "a"]);
+    expect(a.archived).toBeUndefined();
+    expect(a.archivedAt).toBeUndefined();
+    expect(a.children.map((c) => c.id)).toEqual(["a1", "a2"]);
+  });
+
+  test("bulkRestoreNodes restores archived ancestors for selected descendants", () => {
+    const tree = makeTree();
+    archiveNode("a", tree);
+
+    bulkRestoreNodes(tree, new Set(["a1"]));
+
+    const a = tree.children.find((c) => c.id === "a")!;
+    expect(tree.children.map((c) => c.id)).toEqual(["b", "c", "a"]);
+    expect(a.archived).toBeUndefined();
+  });
+
+  test("isNodeEffectivelyArchived includes archived ancestors", () => {
+    const tree = makeTree();
+    archiveNode("a", tree);
+
+    expect(isNodeEffectivelyArchived("a", tree)).toBe(true);
+    expect(isNodeEffectivelyArchived("a1", tree)).toBe(true);
+    expect(isNodeEffectivelyArchived("b", tree)).toBe(false);
   });
 
   test("bulkArchiveNodes は複数ノードに同じ archivedAt を一括で立てる", () => {
