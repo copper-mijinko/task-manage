@@ -531,6 +531,18 @@ describe("Markdown Memo - view mode", () => {
     });
   });
 
+  test("caps markdown preview image growth at the image's natural width", async () => {
+    await renderMarkdownMemo({ saveMemo, content: "![Diagram](data:image/png;base64,AAAA)" });
+
+    const image = document.querySelector(".preview img");
+    expect(image).toBeInTheDocument();
+
+    Object.defineProperty(image, "naturalWidth", { configurable: true, value: 640 });
+    await fireEvent.load(image);
+
+    expect(image.style.getPropertyValue("--memo-preview-image-max-width")).toBe("640px");
+  }, 30000);
+
   test("converts legacy Quill Delta object to readable markdown text in workspace view", async () => {
     const delta = { ops: [{ insert: "hello" }, { insert: "\nworld" }] };
     await renderMarkdownMemo({ saveMemo, content: delta });
