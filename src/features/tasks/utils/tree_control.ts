@@ -417,6 +417,42 @@ export function flattenVisibleTree(
   return rows;
 }
 
+type TreePathEntry = {
+  node: TreeData;
+  parent?: TreeData;
+};
+
+function findPathToNode(
+  target: string,
+  tree_data: TreeData | undefined
+): TreePathEntry[] | undefined {
+  if (!tree_data) return undefined;
+  const path: TreePathEntry[] = [];
+
+  function visit(node: TreeData, parent?: TreeData): boolean {
+    path.push({ node, parent });
+    if (node.id === target) return true;
+
+    for (const child of node.children) {
+      if (visit(child, node)) return true;
+    }
+
+    path.pop();
+    return false;
+  }
+
+  return visit(tree_data) ? path : undefined;
+}
+
+export function isNodeEffectivelyArchived(
+  target: string | undefined,
+  tree_data: TreeData | undefined
+): boolean {
+  if (!target) return false;
+  const path = findPathToNode(target, tree_data);
+  return !!path?.some(({ node }) => node.archived);
+}
+
 // 各行に対し、ルートから現在ノードまでの名前パス ("root / a / b / current") を返す。
 // 行は flattenVisibleTree の DFS 順 (親が子より先) なので、親のパスを引いて連結するだけで O(N)。
 export function buildNodePathMap(rows: VisibleTreeRow[]): Map<string, string> {
@@ -863,26 +899,36 @@ export function archiveNode(target: string, tree_data: TreeData): TreeData {
 /** ノードの archived を解除する。`archivedAt` も消す。 */
 export function restoreNode(target: string, tree_data: TreeData): TreeData {
   if (target === tree_data.id) return tree_data;
-  const parent = getParent(target, tree_data);
-  if (!parent) return tree_data;
-  for (const child of parent.children) {
-    if (child.id === target) {
-      if (!child.archived) return tree_data;
-      delete child.archived;
-      delete child.archivedAt;
-      // 復元時は元の親の末尾へ移動する。元親 ID をエントリに残していない
-      // 設計のため、archived 中も子は親の children 配列内にいる前提で、
-      // 末尾に詰め直す（同 parent の他の active 兄弟の後ろになるため、
-      // archived 表示時の並びと整合する）。
-      const index = parent.children.findIndex((c) => c.id === target);
-      if (index >= 0 && index !== parent.children.length - 1) {
-        const [moved] = parent.children.splice(index, 1);
-        parent.children.push(moved);
-      }
-      return tree_data;
+  const path = findPathToNode(target, tree_data);
+  if (!path) return tree_data;
+
+  for (const { node, parent } of path) {
+    if (!parent || !node.archived) continue;
+    delete node.archived;
+    delete node.archivedAt;
+    // 復元時は元の親の末尾へ移動する。元親 ID をエントリに残していない
+    // 設計のため、archived 中も子は親の children 配列内にいる前提で、
+    // 末尾に詰め直す（同 parent の他の active 兄弟の後ろになるため、
+    // archived 表示時の並びと整合する）。
+    const index = parent.children.findIndex((c) => c.id === node.id);
+    if (index >= 0 && index !== parent.children.length - 1) {
+      const [moved] = parent.children.splice(index, 1);
+      parent.children.push(moved);
     }
   }
+
   return tree_data;
+}
+
+function getRestoreNodeIds(target: string, tree_data: TreeData): Set<string> {
+  const path = findPathToNode(target, tree_data);
+  const ids = new Set<string>();
+  for (const entry of path ?? []) {
+    if (entry.parent && entry.node.archived) {
+      ids.add(entry.node.id);
+    }
+  }
+  return ids;
 }
 
 /** archived フラグを無視して、対象ノードをツリーから物理削除する。 */
@@ -910,11 +956,21 @@ export function bulkArchiveNodes(tree_data: TreeData, ids: Set<string>): TreeDat
 /** 複数まとめて restore する。 */
 export function bulkRestoreNodes(tree_data: TreeData, ids: Set<string>): TreeData {
   if (ids.size === 0) return tree_data;
+  const restoreIds = new Set<string>();
+
+  for (const id of ids) {
+    for (const restoreId of getRestoreNodeIds(id, tree_data)) {
+      restoreIds.add(restoreId);
+    }
+  }
+
+  if (restoreIds.size === 0) return tree_data;
+
   function visit(node: TreeData) {
     let i = 0;
     while (i < node.children.length) {
       const child = node.children[i];
-      if (ids.has(child.id) && child.archived) {
+      if (restoreIds.has(child.id) && child.archived) {
         delete child.archived;
         delete child.archivedAt;
         // 末尾へ移動

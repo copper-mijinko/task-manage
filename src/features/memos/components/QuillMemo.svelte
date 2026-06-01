@@ -17,9 +17,19 @@
   let lastSavedContent = null;
   let linkClickListener;
   let pasteListener;
+  let visibleSpaceLayer = null;
+  let visibleSpaceScrollListener = null;
+  let visibleSpaceResizeListener = null;
+  let visibleSpaceResizeObserver = null;
+  let visibleSpaceBeforeInputListener = null;
+  let visibleSpaceCompositionStartListener = null;
+  let visibleSpaceCompositionEndListener = null;
+  let visibleSpaceUpdateTimer = null;
+  let visibleSpaceAnimationFrame = null;
   let editReleaseTimer;
   let errorMessage = null;
   let isHandlingLink = false;
+  let isVisibleSpaceComposing = false;
 
   const codeBlockIconSvg =
     '<svg viewBox="0 0 18 18" aria-hidden="true" focusable="false">' +
@@ -97,15 +107,18 @@
 
     if (isEmptyContent(nextContent)) {
       quill.setContents([{ insert: "\n" }]);
+      scheduleVisibleSpaceOverlayUpdate();
       return;
     }
 
     if (typeof nextContent === "string") {
       quill.setText(nextContent);
+      scheduleVisibleSpaceOverlayUpdate();
       return;
     }
 
     quill.setContents(nextContent);
+    scheduleVisibleSpaceOverlayUpdate();
   }
 
   function openExternalLink(href) {
@@ -276,6 +289,337 @@
     quill.root.addEventListener("paste", pasteListener, true);
   }
 
+  function getVisibleTextRect(range, textNode, offset) {
+    if (typeof document.createRange !== "function") return null;
+    if (typeof range.getClientRects !== "function") return null;
+
+    range.setStart(textNode, offset);
+    range.setEnd(textNode, offset + 1);
+
+    for (const rect of Array.from(range.getClientRects())) {
+      if (rect.width > 0 && rect.height > 0) return rect;
+    }
+    const rect = range.getBoundingClientRect?.();
+    return rect && rect.width > 0 && rect.height > 0 ? rect : null;
+  }
+
+  function rectIntersectsRoot(rect, rootRect) {
+    return (
+      rect &&
+      rect.width > 0 &&
+      rect.height > 0 &&
+      rect.bottom >= rootRect.top &&
+      rect.top <= rootRect.bottom &&
+      rect.right >= rootRect.left &&
+      rect.left <= rootRect.right
+    );
+  }
+
+  function getVisibleEditorRect() {
+    const rootRect = quill.root.getBoundingClientRect();
+    const rootStyle = getComputedStyle(quill.root);
+    const paddingLeft = Number.parseFloat(rootStyle.paddingLeft) || 0;
+    const paddingRight = Number.parseFloat(rootStyle.paddingRight) || 0;
+    const paddingTop = Number.parseFloat(rootStyle.paddingTop) || 0;
+    const paddingBottom = Number.parseFloat(rootStyle.paddingBottom) || 0;
+
+    return {
+      top: rootRect.top + paddingTop,
+      right: rootRect.left + quill.root.clientWidth - paddingRight,
+      bottom: rootRect.top + quill.root.clientHeight - paddingBottom,
+      left: rootRect.left + paddingLeft,
+    };
+  }
+
+  function getElementContentRect(element) {
+    const rect = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    const paddingLeft = Number.parseFloat(style.paddingLeft) || 0;
+    const paddingRight = Number.parseFloat(style.paddingRight) || 0;
+    const paddingTop = Number.parseFloat(style.paddingTop) || 0;
+    const paddingBottom = Number.parseFloat(style.paddingBottom) || 0;
+
+    return {
+      top: rect.top + paddingTop,
+      right: rect.left + element.clientWidth - paddingRight,
+      bottom: rect.top + element.clientHeight - paddingBottom,
+      left: rect.left + paddingLeft,
+    };
+  }
+
+  function intersectRects(a, b) {
+    const rect = {
+      top: Math.max(a.top, b.top),
+      right: Math.min(a.right, b.right),
+      bottom: Math.min(a.bottom, b.bottom),
+      left: Math.max(a.left, b.left),
+    };
+
+    return rect.right > rect.left && rect.bottom > rect.top ? rect : null;
+  }
+
+  function getVisibleClipRectForTextNode(textNode, editorRect) {
+    let clipRect = editorRect;
+    let element = textNode.parentElement;
+
+    while (element && element !== quill.root) {
+      if (element.matches?.(".ql-code-block-container, td, th")) {
+        clipRect = intersectRects(clipRect, getElementContentRect(element));
+        if (!clipRect) return null;
+      }
+      element = element.parentElement;
+    }
+
+    return clipRect;
+  }
+
+  function rectCenterFitsVisibleClip(rect, clipRect) {
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+
+    return (
+      rect &&
+      clipRect &&
+      rect.width > 0 &&
+      rect.height > 0 &&
+      centerY >= clipRect.top &&
+      centerY <= clipRect.bottom &&
+      centerX >= clipRect.left &&
+      centerX <= clipRect.right
+    );
+  }
+
+  function textNodeIntersectsRoot(range, textNode, rootRect) {
+    range.selectNodeContents(textNode);
+
+    for (const rect of Array.from(range.getClientRects())) {
+      if (rectIntersectsRoot(rect, rootRect)) return true;
+    }
+
+    return rectIntersectsRoot(range.getBoundingClientRect?.(), rootRect);
+  }
+
+  function createVisibleSpaceMarker(character, rect, layerRect) {
+    const marker = document.createElement("div");
+    const kind = character === " " ? "half" : "full";
+    marker.className = `quill-visible-space-marker quill-visible-${kind}-space-marker`;
+
+    const charLeft = rect.left - layerRect.left;
+    const charTop = rect.top - layerRect.top;
+    const charWidth = rect.right - rect.left;
+    const charHeight = rect.bottom - rect.top;
+    const size =
+      kind === "half"
+        ? Math.max(2, Math.min(charWidth, charHeight) * 0.14)
+        : Math.max(8, Math.min(charWidth, charHeight) * 0.62);
+
+    marker.style.left = `${charLeft + (charWidth - size) / 2}px`;
+    marker.style.top =
+      kind === "half"
+        ? `${charTop + (charHeight - size) * 0.56}px`
+        : `${charTop + (charHeight - size) / 2}px`;
+    marker.style.width = `${size}px`;
+    marker.style.height = `${size}px`;
+    return marker;
+  }
+
+  function isVisibleSpaceTextNode(node) {
+    if (!node.textContent || !/[ \u3000]/.test(node.textContent)) return false;
+    const parent = node.parentElement;
+    if (!parent || parent.closest(".ql-cursor")) return false;
+    return true;
+  }
+
+  function renderVisibleSpaceOverlay() {
+    if (!quill?.root || !visibleSpaceLayer) return;
+    if (isVisibleSpaceComposing) return;
+    if (typeof document.createRange !== "function") return;
+
+    const layerRect = visibleSpaceLayer.getBoundingClientRect();
+    const rootRect = quill.root.getBoundingClientRect();
+    const visibleRect = getVisibleEditorRect();
+    if (
+      layerRect.width <= 0 ||
+      layerRect.height <= 0 ||
+      rootRect.width <= 0 ||
+      rootRect.height <= 0
+    ) {
+      return;
+    }
+
+    const range = document.createRange();
+    const fragment = document.createDocumentFragment();
+    const walker = document.createTreeWalker(quill.root, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        return isVisibleSpaceTextNode(node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+      },
+    });
+
+    let textNode = walker.nextNode();
+    while (textNode) {
+      const text = textNode.textContent ?? "";
+      if (!textNodeIntersectsRoot(range, textNode, rootRect)) {
+        textNode = walker.nextNode();
+        continue;
+      }
+      const clipRect = getVisibleClipRectForTextNode(textNode, visibleRect);
+      if (!clipRect) {
+        textNode = walker.nextNode();
+        continue;
+      }
+
+      for (let offset = 0; offset < text.length; offset += 1) {
+        const character = text[offset];
+        if (character !== " " && character !== "\u3000") continue;
+
+        const rect = getVisibleTextRect(range, textNode, offset);
+        if (!rectIntersectsRoot(rect, rootRect)) continue;
+        if (!rectCenterFitsVisibleClip(rect, clipRect)) continue;
+
+        fragment.appendChild(createVisibleSpaceMarker(character, rect, layerRect));
+      }
+      textNode = walker.nextNode();
+    }
+
+    range.detach?.();
+    visibleSpaceLayer.replaceChildren(fragment);
+  }
+
+  function cancelVisibleSpaceOverlayUpdate() {
+    if (visibleSpaceUpdateTimer !== null) {
+      clearTimeout(visibleSpaceUpdateTimer);
+      visibleSpaceUpdateTimer = null;
+    }
+    if (visibleSpaceAnimationFrame !== null) {
+      if (typeof cancelAnimationFrame === "function") {
+        cancelAnimationFrame(visibleSpaceAnimationFrame);
+      } else {
+        clearTimeout(visibleSpaceAnimationFrame);
+      }
+      visibleSpaceAnimationFrame = null;
+    }
+  }
+
+  function clearVisibleSpaceOverlay() {
+    visibleSpaceLayer?.replaceChildren();
+  }
+
+  function scheduleVisibleSpaceOverlayUpdate(delay = 0) {
+    if (!quill?.root || !visibleSpaceLayer) return;
+    if (isVisibleSpaceComposing) return;
+
+    if (visibleSpaceUpdateTimer !== null) {
+      clearTimeout(visibleSpaceUpdateTimer);
+      visibleSpaceUpdateTimer = null;
+    }
+
+    const requestUpdate = () => {
+      visibleSpaceUpdateTimer = null;
+      if (visibleSpaceAnimationFrame !== null) return;
+
+      const runUpdate = () => {
+        visibleSpaceAnimationFrame = null;
+        renderVisibleSpaceOverlay();
+      };
+
+      visibleSpaceAnimationFrame =
+        typeof requestAnimationFrame === "function"
+          ? requestAnimationFrame(runUpdate)
+          : setTimeout(runUpdate, 16);
+    };
+
+    if (delay > 0) {
+      visibleSpaceUpdateTimer = setTimeout(requestUpdate, delay);
+      return;
+    }
+
+    requestUpdate();
+  }
+
+  function scheduleVisibleSpaceTypingUpdate() {
+    scheduleVisibleSpaceOverlayUpdate();
+  }
+
+  function scheduleVisibleSpaceLayoutUpdate() {
+    scheduleVisibleSpaceOverlayUpdate();
+  }
+
+  function installVisibleSpaceOverlay() {
+    if (!quill?.root || visibleSpaceLayer) return;
+
+    const host = quill.root.parentElement;
+    if (!host) return;
+
+    host.classList.add("quill-visible-space-host");
+
+    visibleSpaceLayer = document.createElement("div");
+    visibleSpaceLayer.className = "quill-visible-space-layer";
+    visibleSpaceLayer.setAttribute("aria-hidden", "true");
+
+    host.appendChild(visibleSpaceLayer);
+
+    visibleSpaceScrollListener = scheduleVisibleSpaceLayoutUpdate;
+    quill.root.addEventListener("scroll", visibleSpaceScrollListener, { passive: true });
+    visibleSpaceBeforeInputListener = (event) => {
+      if (event.isComposing || event.inputType === "insertCompositionText") {
+        clearVisibleSpaceOverlay();
+      }
+    };
+    quill.root.addEventListener("beforeinput", visibleSpaceBeforeInputListener, true);
+    visibleSpaceCompositionStartListener = () => {
+      isVisibleSpaceComposing = true;
+      cancelVisibleSpaceOverlayUpdate();
+      clearVisibleSpaceOverlay();
+    };
+    quill.root.addEventListener("compositionstart", visibleSpaceCompositionStartListener, true);
+    visibleSpaceCompositionEndListener = () => {
+      isVisibleSpaceComposing = false;
+      scheduleVisibleSpaceLayoutUpdate();
+    };
+    quill.root.addEventListener("compositionend", visibleSpaceCompositionEndListener, true);
+    visibleSpaceResizeListener = scheduleVisibleSpaceLayoutUpdate;
+    window.addEventListener("resize", visibleSpaceResizeListener, { passive: true });
+    if (typeof ResizeObserver === "function") {
+      visibleSpaceResizeObserver = new ResizeObserver(scheduleVisibleSpaceLayoutUpdate);
+      visibleSpaceResizeObserver.observe(host);
+      visibleSpaceResizeObserver.observe(quill.root);
+    }
+    scheduleVisibleSpaceLayoutUpdate();
+  }
+
+  function removeVisibleSpaceOverlay() {
+    cancelVisibleSpaceOverlayUpdate();
+    if (visibleSpaceScrollListener && quill?.root) {
+      quill.root.removeEventListener("scroll", visibleSpaceScrollListener);
+    }
+    if (visibleSpaceBeforeInputListener && quill?.root) {
+      quill.root.removeEventListener("beforeinput", visibleSpaceBeforeInputListener, true);
+    }
+    if (visibleSpaceCompositionStartListener && quill?.root) {
+      quill.root.removeEventListener(
+        "compositionstart",
+        visibleSpaceCompositionStartListener,
+        true
+      );
+    }
+    if (visibleSpaceCompositionEndListener && quill?.root) {
+      quill.root.removeEventListener("compositionend", visibleSpaceCompositionEndListener, true);
+    }
+    if (visibleSpaceResizeListener) {
+      window.removeEventListener("resize", visibleSpaceResizeListener);
+    }
+    visibleSpaceResizeObserver?.disconnect();
+    visibleSpaceResizeObserver = null;
+    visibleSpaceBeforeInputListener = null;
+    visibleSpaceCompositionStartListener = null;
+    visibleSpaceCompositionEndListener = null;
+    visibleSpaceScrollListener = null;
+    visibleSpaceResizeListener = null;
+    isVisibleSpaceComposing = false;
+    visibleSpaceLayer?.remove();
+    visibleSpaceLayer = null;
+  }
+
   onMount(() => {
     quill = new Quill(editor, {
       theme: "snow",
@@ -295,6 +639,7 @@
 
     const initialContent = normalizeContent(content);
     applyContent(initialContent);
+    installVisibleSpaceOverlay();
     lastSavedContent = initialContent;
     quill.enable(!readOnly);
 
@@ -319,6 +664,7 @@
           saveMemo(contents);
         }
 
+        scheduleVisibleSpaceTypingUpdate();
         releaseEditingAfter(100);
       });
 
@@ -349,6 +695,7 @@
         clearTimeout(editReleaseTimer);
         editReleaseTimer = null;
       }
+      removeVisibleSpaceOverlay();
       isEditing = false;
       savedSelection = null;
       lastSavedContent = null;
@@ -374,6 +721,7 @@
       applyContent(normalizedContent);
       restoreSelection(savedSelection);
       lastSavedContent = normalizedContent;
+      scheduleVisibleSpaceOverlayUpdate();
       releaseEditingAfter(50);
     }
   }
@@ -398,8 +746,8 @@
 <style>
   .wrapper {
     --memo-editor-font:
-      "BIZ UDゴシック", "BIZ UDGothic", "Cascadia Mono", "Cascadia Code", Consolas, "Courier New",
-      monospace;
+      "BIZ UDゴシック", "BIZ UDGothic", "ＭＳ ゴシック", "MS Gothic", "Cascadia Mono",
+      "Cascadia Code", Consolas, "Courier New", monospace;
 
     display: flex;
     flex-direction: column;
@@ -460,8 +808,13 @@
 
   .wrapper :global(.ql-toolbar) {
     flex-shrink: 0;
+    padding: var(--sp1) var(--sp2) !important;
     border-color: var(--theme-color-Sub-dark) !important;
     background-color: var(--theme-color-Main-dark);
+  }
+
+  .wrapper :global(.ql-toolbar .ql-formats) {
+    margin-right: var(--sp1) !important;
   }
 
   .wrapper :global(.ql-toolbar .memo-table-picker) {
@@ -514,11 +867,13 @@
   }
 
   .wrapper :global(.ql-editor) {
+    position: relative;
+    z-index: 1;
     flex: 1 1 auto;
     height: auto;
     min-height: 0;
     overflow-y: auto;
-    padding: var(--sp3) var(--sp4);
+    padding: var(--sp2) var(--sp3);
     color: var(--theme-color-Sub-light);
     font-family: var(--memo-editor-font);
     font-size: var(--font-body-md);
@@ -527,7 +882,38 @@
     font-feature-settings:
       "liga" 0,
       "calt" 0;
-    line-height: 1.7;
+    line-height: 1.55;
+    white-space: break-spaces;
+    word-wrap: break-word;
+    overflow-wrap: anywhere;
+    word-break: normal;
+  }
+
+  .wrapper :global(.quill-visible-space-host) {
+    position: relative;
+  }
+
+  .wrapper :global(.quill-visible-space-layer) {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  .wrapper :global(.quill-visible-space-marker) {
+    position: absolute;
+    box-sizing: border-box;
+    pointer-events: none;
+  }
+
+  .wrapper :global(.quill-visible-half-space-marker) {
+    border-radius: 50%;
+    background-color: color-mix(in srgb, var(--theme-color-Sub-main) 46%, transparent);
+  }
+
+  .wrapper :global(.quill-visible-full-space-marker) {
+    border: 1px solid color-mix(in srgb, var(--theme-color-Primary-main) 42%, transparent);
   }
 
   .wrapper :global(.ql-editor code),
@@ -547,15 +933,20 @@
   .wrapper :global(.ql-editor .ql-code-block-container) {
     color: var(--theme-color-Sub-light);
     background-color: var(--theme-color-Main-dark);
-    padding: var(--sp3) var(--sp4);
+    padding: var(--sp2) var(--sp3);
     border-radius: var(--shape-sm);
-    overflow-x: auto;
+    overflow-x: visible;
     margin: 0.75em 0;
     border: 1px solid color-mix(in srgb, var(--theme-color-Sub-dark) 25%, transparent);
+    white-space: break-spaces;
+    word-wrap: break-word;
+    overflow-wrap: anywhere;
+    word-break: normal;
   }
 
   .wrapper :global(.ql-editor table) {
     border-collapse: collapse;
+    table-layout: fixed;
     width: 100%;
     margin: 0.5em 0;
     color: var(--theme-color-Sub-light);
@@ -568,6 +959,17 @@
     padding: 0.3em 0.6em;
     min-width: 2.5rem;
     vertical-align: top;
+    white-space: break-spaces;
+    word-wrap: break-word;
+    overflow-wrap: anywhere;
+    word-break: normal;
+  }
+
+  .wrapper :global(.ql-editor .ql-code-block) {
+    white-space: break-spaces;
+    word-wrap: break-word;
+    overflow-wrap: anywhere;
+    word-break: normal;
   }
 
   .wrapper :global(.ql-editor table th),

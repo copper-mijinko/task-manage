@@ -44,6 +44,7 @@
     bulkDuplicate,
     areAllSiblings,
     isContiguousSiblingBlock,
+    isNodeEffectivelyArchived,
     getTopLevelSelection,
     archiveNode,
     restoreNode,
@@ -882,7 +883,7 @@
     for (const id of targetIds) {
       const n = getNode(id, $tree_data.data);
       if (!n) continue;
-      if (n.archived) permanentIds.push(id);
+      if (isNodeEffectivelyArchived(id, $tree_data.data)) permanentIds.push(id);
       else archiveIds.push(id);
     }
     bulkArchiveTargetIds = archiveIds;

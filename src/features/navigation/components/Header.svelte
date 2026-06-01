@@ -130,7 +130,7 @@
     use_ripple={false}
     activeColor={"transparent"}
     normalColor={"transparent"}
-    style={"box-shadow: none; height:3rem; width: 3rem"}
+    style={"box-shadow: none; height:2.5rem; width: 2.5rem; margin: 0;"}
   >
     {#if $sidebarCollapsed}
       <!-- Hamburger when the sidebar is hidden — clicking opens it. -->
@@ -455,8 +455,8 @@
 
 <style>
   h1.Title {
-    margin: 0 var(--sp4);
-    font-size: var(--font-title-lg);
+    margin: 0 var(--sp2);
+    font-size: var(--font-title-md);
     font-weight: 500;
   }
   .Container {
@@ -464,7 +464,7 @@
     flex-direction: row;
     justify-content: left;
     align-items: center;
-    gap: var(--sp3);
+    gap: var(--sp2);
     box-shadow: var(--elevation-2);
     width: 100%;
     height: 100%;
@@ -488,13 +488,13 @@
   .Menu {
     flex-shrink: 0;
     flex-grow: 0;
-    margin: var(--sp4);
+    margin: var(--sp2);
     height: 100%;
   }
   .Title {
     flex-shrink: 0;
     flex-grow: 0;
-    margin: var(--sp4);
+    margin: var(--sp2);
   }
 
   /* Browser-style back/forward navigation through the visited-page history. */
@@ -508,8 +508,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 2rem;
-    height: 2rem;
+    width: 1.75rem;
+    height: 1.75rem;
     padding: 0;
     margin: 0;
     border: 1px solid rgba(255, 255, 255, 0.25);
@@ -551,7 +551,7 @@
     flex: 1 1 auto;
     max-width: 25rem;
     min-width: 8rem;
-    padding: var(--sp1) var(--sp2);
+    padding: 2px var(--sp2);
     border: 1px solid rgba(255, 255, 255, 0.25);
     border-radius: var(--shape-sm);
     background-color: rgba(255, 255, 255, 0.12);
@@ -648,8 +648,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 2rem;
-    height: 2rem;
+    width: 1.75rem;
+    height: 1.75rem;
     flex-shrink: 0;
     border: 1px solid rgba(255, 255, 255, 0.25);
     border-radius: var(--shape-sm);
@@ -698,14 +698,14 @@
   .HeaderRight {
     display: flex;
     align-items: center;
-    gap: var(--sp3);
+    gap: var(--sp2);
     margin-left: auto;
   }
   .SaveIndicator {
     display: flex;
     align-items: center;
     gap: var(--sp1);
-    padding: var(--sp1) var(--sp2);
+    padding: 0 var(--sp2);
     border-radius: var(--shape-xs);
     font-size: var(--font-label-md);
     color: rgba(255, 255, 255, 0.92);
@@ -730,12 +730,18 @@
   .ToggleSwitchContainer {
     flex-shrink: 0;
   }
+  .ToggleSwitchContainer :global(> div) {
+    margin: 0;
+  }
+  .ToggleSwitchContainer :global(span) {
+    margin: 0 var(--sp1);
+  }
   .SettingsBtn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 2rem;
-    height: 2rem;
+    width: 1.75rem;
+    height: 1.75rem;
     flex-shrink: 0;
     padding: 0;
     margin: 0;
@@ -768,9 +774,9 @@
     -webkit-app-region: no-drag;
   }
   .WinCtrlBtn {
-    width: 2.75rem;
+    width: 2.5rem;
     height: 100%;
-    min-height: 2.5rem;
+    min-height: 2.25rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;

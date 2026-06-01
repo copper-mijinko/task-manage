@@ -1,5 +1,9 @@
 ﻿<script>
-  import { getNode, updateNodeDataById } from "@features/tasks/utils/tree_control";
+  import {
+    getNode,
+    isNodeEffectivelyArchived,
+    updateNodeDataById,
+  } from "@features/tasks/utils/tree_control";
   import { uuidV4 } from "@lib/utils/uuid";
   import {
     tree_data,
@@ -44,7 +48,7 @@
   $: name = node ? node.data["name"] : "Select Task";
   $: memo = node ? node.data["memo"] : [];
   $: attachments = node ? (node.data["attachments"] ?? []) : [];
-  $: isArchived = !!node?.archived;
+  $: isArchived = isNodeEffectivelyArchived($table_selected_id, $tree_data?.data);
   $: isWorkspaceProject = $selected_type === "WorkspaceProject";
   $: workspaceProjectDir = isWorkspaceProject ? $workspace_store.activeProjectDir : null;
   $: defaultMemoFormat = isWorkspaceProject ? "markdown" : "quill";
@@ -534,6 +538,7 @@
         variant="text"
         normalColor={"var(--theme-color-Sub-main)"}
         activeColor={"var(--theme-color-Primary-main)"}
+        style={"width: 1.75rem; height: 1.75rem; margin: 0;"}
         on:click={openTaskDetailInWindow}
       >
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -836,13 +841,13 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     align-content: start;
-    gap: var(--sp2) var(--sp4);
+    gap: var(--sp1) var(--sp3);
     flex: 1;
     width: 100%;
     height: 100%;
     min-height: 0;
     box-sizing: border-box;
-    padding: var(--sp3);
+    padding: var(--sp2);
     overflow: auto;
     container-type: inline-size;
   }
@@ -855,7 +860,7 @@
     display: flex;
     flex-direction: column;
     align-items: stretch;
-    gap: 0.2rem;
+    gap: 0.1rem;
     min-width: 0;
     color: var(--theme-color-Sub-main);
   }
@@ -888,7 +893,7 @@
     align-items: center;
     flex: 1 1 auto;
     min-width: 0;
-    height: 2rem;
+    height: 1.75rem;
     box-sizing: border-box;
     border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 30%, transparent);
     border-radius: var(--shape-sm);
@@ -932,7 +937,7 @@
     min-height: 0;
     box-sizing: border-box;
     margin: 0;
-    padding: var(--sp3);
+    padding: var(--sp1);
     overflow: hidden;
   }
   .memotab-container > :global(.container) {
