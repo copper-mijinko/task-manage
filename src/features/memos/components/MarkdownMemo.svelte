@@ -78,6 +78,8 @@
   const SPLIT_MIN_PERCENT = 30;
   const SPLIT_MAX_PERCENT = 72;
   const SPLIT_KEY_STEP = 5;
+  const PREVIEW_IMAGE_MAX_WIDTH_VAR = "--memo-preview-image-max-width";
+  const measuredPreviewImages = new WeakSet<HTMLImageElement>();
 
   const EXTERNAL_LINK_PATTERN = /^(https?:\/\/|mailto:|file:\/\/)/i;
   // Quill 標準の `code` と `code-block` は同じ SVG (`<>`) で視覚的に区別できないため、
@@ -989,6 +991,24 @@
     });
   }
 
+  function syncPreviewImageNaturalWidth(image: HTMLImageElement) {
+    if (image.naturalWidth > 0) {
+      image.style.setProperty(PREVIEW_IMAGE_MAX_WIDTH_VAR, `${image.naturalWidth}px`);
+    }
+  }
+
+  function applyPreviewImageNaturalWidths(root: HTMLElement | null) {
+    if (!root) return;
+
+    root.querySelectorAll<HTMLImageElement>("img").forEach((image) => {
+      syncPreviewImageNaturalWidth(image);
+
+      if (measuredPreviewImages.has(image)) return;
+      measuredPreviewImages.add(image);
+      image.addEventListener("load", () => syncPreviewImageNaturalWidth(image), { once: true });
+    });
+  }
+
   // mermaid の初期化はテーマに依存する。最初の renderMermaidBlocks 呼び出し
   // および theme 変更時に setupMermaidTheme で再初期化する。
   let mermaidThemeApplied: "dark" | "default" | null = null;
@@ -1044,6 +1064,8 @@
     }) as string;
     renderedHtml = baseHtml;
     await tick();
+    applyPreviewImageNaturalWidths(previewEl);
+    applyPreviewImageNaturalWidths(livePreviewEl);
     injectCopyButtons(previewEl);
     injectCopyButtons(livePreviewEl);
     await renderMermaidBlocks(previewEl);
@@ -1053,6 +1075,8 @@
     if (sequence === renderSequence) {
       renderedHtml = nextHtml;
       await tick();
+      applyPreviewImageNaturalWidths(previewEl);
+      applyPreviewImageNaturalWidths(livePreviewEl);
       injectCopyButtons(previewEl);
       injectCopyButtons(livePreviewEl);
       await renderMermaidBlocks(previewEl);
@@ -2118,7 +2142,9 @@
 
   .preview :global(img) {
     display: block;
-    max-width: min(100%, 48rem);
+    box-sizing: border-box;
+    width: min(100%, var(--memo-preview-image-max-width, 100%));
+    max-width: 100%;
     height: auto;
     margin: var(--sp3) 0;
     border-radius: var(--shape-md);
