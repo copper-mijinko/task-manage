@@ -65,9 +65,11 @@ async function openTaskDetailWindow(
   }, detailData);
 
   const detailWindow = await detailWindowPromise;
-  // The standalone TaskDetail window no longer carries a redundant
-  // "Task Detail" eyebrow above the heading — the task-name H1 is enough.
-  await expect(detailWindow.getByRole("heading", { name: detailData.taskName })).toBeVisible();
+  // The standalone TaskDetail window renders the same pure Card as the main
+  // pane, so the task name lives in the Card title rather than a separate H1.
+  await expect(
+    detailWindow.locator(".CardHeaderTitle", { hasText: detailData.taskName })
+  ).toBeVisible();
 
   return detailWindow;
 }
@@ -183,7 +185,7 @@ test("opens the task detail window for the selected task", async () => {
   }
 });
 
-test("keeps the task detail window heading in sync when the task name changes", async () => {
+test("keeps the task detail window Card title in sync when the task name changes", async () => {
   const app = await launchSeededApp();
 
   try {
@@ -195,7 +197,9 @@ test("keeps the task detail window heading in sync when the task name changes", 
       window.electronAPI.setTreeData(project);
     });
 
-    await expect(detailWindow.getByRole("heading", { name: "Renamed Task" })).toBeVisible();
+    await expect(
+      detailWindow.locator(".CardHeaderTitle", { hasText: "Renamed Task" })
+    ).toBeVisible();
   } finally {
     await closeSeededApp(app);
   }

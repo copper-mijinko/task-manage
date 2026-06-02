@@ -1,7 +1,6 @@
 ﻿<script>
   import { getNode } from "@features/tasks/utils/tree_control";
   import { selected_id, tree_data } from "@stores";
-  import Button from "@lib/primitives/Button.svelte";
   import Loading from "@lib/primitives/Loading.svelte";
   import TaskDetail from "@features/tasks/components/TaskDetail.svelte";
 
@@ -10,8 +9,31 @@
   export let initialProjectId = "";
   export let ready = false;
 
+  function getNodePathName(targetId, root) {
+    const names = [];
+
+    function visit(node) {
+      names.push(node?.data?.name || "");
+      if (node?.id === targetId) return true;
+
+      for (const child of node?.children ?? []) {
+        if (visit(child)) return true;
+      }
+
+      names.pop();
+      return false;
+    }
+
+    return root && visit(root) ? names.filter(Boolean).join(" / ") : "";
+  }
+
   $: node = initialTaskId && $tree_data ? getNode(initialTaskId, $tree_data.data) : undefined;
-  $: taskName = node?.data?.name || initialTaskName;
+  $: taskPathName =
+    initialTaskId && $tree_data ? getNodePathName(initialTaskId, $tree_data.data) : "";
+  $: taskName = taskPathName || node?.data?.name || initialTaskName;
+  $: if (ready && taskName && typeof document !== "undefined") {
+    document.title = `${taskName} | Task Detail`;
+  }
   $: isProjectDeleted = ready && initialProjectId && $selected_id !== initialProjectId;
   $: isTaskDeleted =
     ready &&
@@ -23,25 +45,6 @@
 </script>
 
 <div class="detail-window">
-  <div class="detail-header">
-    <div class="detail-meta">
-      <!--
-        The dedicated TaskDetail window already shows the task name as its
-        OS-level title and as the H1 below — repeating "Task Detail" as an
-        eyebrow above it is redundant and adds vertical clutter. Keep only
-        the task name. The inner panes likewise skip their card titles
-        (see `hideDetailTitle` below).
-      -->
-      <h1>{taskName}</h1>
-    </div>
-    <Button
-      content="閉じる"
-      on:click={() => {
-        window.close();
-      }}
-    />
-  </div>
-
   <div class="detail-body">
     {#if !ready}
       <div class="empty-state">
@@ -58,7 +61,7 @@
         <p>The target task was deleted. Rename is still tracked by task ID.</p>
       </div>
     {:else}
-      <TaskDetail hideDetailTitle />
+      <TaskDetail titleOverride={taskName} showOpenWindowAction={false} />
     {/if}
   </div>
 </div>
@@ -71,23 +74,8 @@
     height: 100%;
     padding: var(--sp2);
     box-sizing: border-box;
-    gap: var(--sp2);
     background: var(--theme-color-Main-dark);
     color: var(--theme-color-Sub-main);
-  }
-
-  .detail-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: var(--sp2);
-    flex-shrink: 0;
-  }
-
-  .detail-meta h1 {
-    margin: 0;
-    font-size: var(--font-title-md);
-    line-height: 1.2;
   }
 
   .detail-body {

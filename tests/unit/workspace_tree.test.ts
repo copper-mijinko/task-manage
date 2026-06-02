@@ -151,4 +151,32 @@ describe("workspace tree conversion", () => {
 
     expect(tasks[0].attachments).toEqual([attachment]);
   });
+
+  it("uses the workspace root task when the requested root id is stale", () => {
+    const projectData = workspaceToProjectData(
+      {
+        "actual-root": {
+          id: "actual-root",
+          name: "Actual Project",
+          status: "Open",
+          parents: [],
+          memos: [],
+          createdAt: "2026-05-20",
+        },
+        "task-1": {
+          id: "task-1",
+          name: "Task One",
+          status: "Open",
+          parents: ["actual-root"],
+          memos: [],
+          createdAt: "2026-05-21",
+        },
+      },
+      "stale-root"
+    );
+
+    expect(projectData.data.id).toBe("actual-root");
+    expect(projectData.data.data.name).toBe("Actual Project");
+    expect(projectData.data.children.map((child) => child.id)).toEqual(["task-1"]);
+  });
 });

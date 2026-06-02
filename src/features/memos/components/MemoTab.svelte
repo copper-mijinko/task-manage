@@ -506,15 +506,17 @@
     display: inline-flex;
     align-items: center;
     flex: 0 0 auto;
-    margin: 0 var(--sp1);
+    margin: 0 var(--sp2);
   }
 
   .memotab-control {
     display: flex;
     flex-direction: row;
     align-items: center;
+    gap: var(--sp2);
     flex-shrink: 0;
     margin-left: auto;
+    padding-right: var(--sp2);
   }
 
   .memotab-control :global(button) {

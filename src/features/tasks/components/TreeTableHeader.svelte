@@ -885,7 +885,7 @@
   .HeaderUtilityButtons {
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: var(--sp1);
     flex-shrink: 0;
   }
 

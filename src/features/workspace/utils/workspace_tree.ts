@@ -20,6 +20,10 @@ export function workspaceToProjectData(
   tasks: Record<string, WorkspaceTask>,
   rootId: string
 ): ProjectData {
+  const resolvedRootId =
+    tasks[rootId] !== undefined
+      ? rootId
+      : (Object.values(tasks).find((task) => task.parents.length === 0)?.id ?? rootId);
   const childrenMap = new Map<string, string[]>();
   for (const [id, task] of Object.entries(tasks)) {
     for (const parent of task.parents) {
@@ -72,7 +76,7 @@ export function workspaceToProjectData(
     return node;
   }
 
-  if (!tasks[rootId]) {
+  if (!tasks[resolvedRootId]) {
     return {
       headers: DEFAULT_HEADERS,
       data: {
@@ -89,7 +93,7 @@ export function workspaceToProjectData(
     };
   }
 
-  return { headers: DEFAULT_HEADERS, data: buildNode(rootId) };
+  return { headers: DEFAULT_HEADERS, data: buildNode(resolvedRootId) };
 }
 
 /**

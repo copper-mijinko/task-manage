@@ -10,6 +10,7 @@
   export let variant = "filled"; // "outlined", "text"
   export let tooltipContent = undefined;
   export let ariaLabel = undefined;
+  export let type = "button";
   // tooltip
   let use_tooltip = tooltipContent === undefined ? false : true;
   let afcolor = "gray";
@@ -55,6 +56,7 @@
 </script>
 
 <button
+  {type}
   {disabled}
   aria-label={ariaLabel}
   use:ripple={{
@@ -85,7 +87,7 @@
     min-height: 2rem;
     border-radius: var(--shape-pill);
     border: 1px solid var(--borderColor);
-    margin: var(--sp1);
+    margin: var(--button-margin, 0);
     padding: var(--sp1) var(--sp4);
     font-size: var(--font-body-sm);
     font-weight: 500;

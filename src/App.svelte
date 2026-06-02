@@ -89,12 +89,27 @@
 
         const workspaceProject = await platform.wsReadProject(detailWindowProjectDir);
         if (workspaceProject) {
+          const workspaceRootTask = Object.values(workspaceProject.tasks ?? {}).find(
+            (task) => task.parents.length === 0
+          );
+          const effectiveProjectId = workspaceRootTask?.id || detailWindowProjectId;
+
+          detailWindowProjectId = effectiveProjectId;
+          setTaskDetailWindowTarget(effectiveProjectId, detailWindowTaskId, {
+            selectedType: "WorkspaceProject",
+            projectDir: detailWindowProjectDir,
+          });
+          workspace_store.syncProjectListItem(detailWindowProjectDir, {
+            rootId: effectiveProjectId,
+            name: workspaceRootTask?.name || detailWindowTaskName,
+            order: workspaceRootTask?.order,
+          });
           workspace_tasks_cache.set(workspaceProject.tasks);
           tree_data.setFromSource(
-            workspaceToProjectData(workspaceProject.tasks, detailWindowProjectId)
+            workspaceToProjectData(workspaceProject.tasks, effectiveProjectId)
           );
           selected_type.set("WorkspaceProject");
-          selected_id.set(detailWindowProjectId);
+          selected_id.set(effectiveProjectId);
           table_selected_id.set(detailWindowTaskId);
         }
         return;

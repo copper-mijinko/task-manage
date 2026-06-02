@@ -1053,7 +1053,7 @@
     display: flex;
     flex-direction: row;
     align-items: center;
-    gap: 2px;
+    gap: var(--sp2);
     margin: 0;
     box-sizing: border-box;
     flex: 0 0 auto;
