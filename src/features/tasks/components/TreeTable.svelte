@@ -65,6 +65,11 @@
     show_archived,
   } from "@stores/ui";
   import { navigation_history } from "@stores/navigation_history";
+  import {
+    hasSelectedDocumentText,
+    hasSelectedMemoText,
+    isTextEditingTarget,
+  } from "@lib/utils/hotkey_priority";
 
   let table_root; // Bind
 
@@ -896,12 +901,19 @@
   }
 
   function isEditingText() {
-    const el = document.activeElement;
-    return el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
+    return isTextEditingTarget(document.activeElement);
+  }
+
+  function shouldPrioritizeSelectedText(e) {
+    if (!hasSelectedDocumentText()) return false;
+    if (hasSelectedMemoText()) return true;
+    return (
+      (e.ctrlKey || e.metaKey) && (e.key === "c" || e.key === "C" || e.key === "a" || e.key === "A")
+    );
   }
 
   function handleGlobalKeydown(e) {
-    if (isEditingText()) return;
+    if (isEditingText() || isTextEditingTarget(e.target) || shouldPrioritizeSelectedText(e)) return;
     // Selection-aware shortcuts (Esc / Ctrl+A / Delete) act on the multi-selection.
     if (e.key === "Escape") {
       if (selectionSize > 0) {
