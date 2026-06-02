@@ -127,6 +127,61 @@ describe("TaskDetail", () => {
     );
   });
 
+  test("collapses task fields to keep the memo pane wide", async () => {
+    table_selected_id.set("task-1");
+    const { container } = render(TaskDetail);
+
+    const body = container.querySelector(".task-detail-card-body");
+    const collapseButton = screen.getByRole("button", {
+      name: "詳細欄をたたんでメモを広げる",
+    });
+    expect(collapseButton).toHaveAttribute("aria-pressed", "false");
+
+    await fireEvent.click(collapseButton);
+    await tick();
+
+    expect(body).toHaveClass("detail-mini");
+    expect(screen.getByRole("button", { name: "詳細欄を表示" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+
+    table_selected_id.set("task-2");
+    await tick();
+
+    expect(body).toHaveClass("detail-mini");
+
+    await fireEvent.click(screen.getByRole("button", { name: "詳細欄を表示" }));
+    await tick();
+
+    expect(body).not.toHaveClass("detail-mini");
+    expect(screen.getByRole("button", { name: "詳細欄をたたんでメモを広げる" })).toHaveAttribute(
+      "aria-pressed",
+      "false"
+    );
+  });
+
+  test("uses a path title and hides the open-window action in the dedicated detail window layout", async () => {
+    table_selected_id.set("task-1");
+    const { container } = render(TaskDetail, {
+      props: {
+        titleOverride: "Sample Project / First Task",
+        showOpenWindowAction: false,
+      },
+    });
+
+    expect(screen.getByText("Sample Project / First Task")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "詳細欄をたたんでメモを広げる" })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "タスク詳細を別ウィンドウで開く" })).toBeNull();
+
+    await fireEvent.click(screen.getByRole("button", { name: "詳細欄をたたんでメモを広げる" }));
+    await tick();
+
+    expect(container.querySelector(".task-detail-card-body")).toHaveClass("detail-mini");
+  });
+
   test("hydrates workspace memo bodies for the selected task", async () => {
     const project = createProjectData();
     project.data.children[1].data.memo = [

@@ -34,18 +34,15 @@
     normalizeMemoFormat,
   } from "@features/memos/utils/memo_utils";
 
-  /**
-   * When TaskDetail is rendered inside its own dedicated window (TaskDetailPage),
-   * the card title is redundant with the OS-level title bar. Callers pass
-   * `hideDetailTitle` to suppress the local card header in that context.
-   */
-  export let hideDetailTitle = false;
+  export let titleOverride = "";
+  export let showOpenWindowAction = true;
 
   $: extraSelectedCount = Math.max(0, $selected_ids.size - 1);
   $: is_selected = $table_selected_id ? true : false;
   $: node =
     $table_selected_id && $tree_data ? getNode($table_selected_id, $tree_data.data) : undefined;
   $: name = node ? node.data["name"] : "Select Task";
+  $: cardTitle = titleOverride || name;
   $: memo = node ? node.data["memo"] : [];
   $: attachments = node ? (node.data["attachments"] ?? []) : [];
   $: isArchived = isNodeEffectivelyArchived($table_selected_id, $tree_data?.data);
@@ -69,6 +66,7 @@
   let detailPaneSize = "40%";
   let splitState = "open";
   let splitSnapping = false;
+  let memoFocusMode = false;
   let previousTaskDetailId = "";
   let snapTimer;
   let resizeStartY = 0;
@@ -76,6 +74,7 @@
   let startMemoSize = 0;
   let lastDesiredDetailSize = 0;
   let lastDesiredMemoSize = 0;
+  let lastOpenDetailSize = 0;
 
   const getEditContext = () => ({
     selectedType: $selected_type,
@@ -346,9 +345,15 @@
 
   function resetCardSplit() {
     clearTimeout(snapTimer);
-    detailPaneSize = "auto";
-    detailPanePercent = 0;
-    splitState = "open";
+    if (memoFocusMode) {
+      detailPaneSize = `${MINI_PANE_SIZE}px`;
+      detailPanePercent = 0;
+      splitState = "detail-mini";
+    } else {
+      detailPaneSize = "auto";
+      detailPanePercent = 0;
+      splitState = "open";
+    }
     splitSnapping = false;
   }
 
@@ -450,6 +455,7 @@
 
   function startCardResize(event) {
     event.preventDefault();
+    memoFocusMode = false;
     event.currentTarget.setPointerCapture?.(event.pointerId);
     clearTimeout(snapTimer);
     splitSnapping = false;
@@ -466,15 +472,53 @@
   }
 
   function setDetailPanePercent(nextPercent) {
+    memoFocusMode = false;
     detailPanePercent = Math.min(76, Math.max(24, nextPercent));
     detailPaneSize = `${detailPanePercent}%`;
     splitState = "open";
   }
 
   function snapCardSplit(nextState) {
+    memoFocusMode = nextState === "detail-mini";
     const { total } = getCurrentPaneSizes();
     const nextDetailSize = nextState === "detail-mini" ? MINI_PANE_SIZE : total - MINI_PANE_SIZE;
     applyDetailSize(nextDetailSize, total, nextState, true);
+  }
+
+  function getRestoredDetailSize(totalHeight) {
+    const safeTotal =
+      totalHeight > 0 ? totalHeight : DETAIL_MIN_HEIGHT + MEMO_MIN_HEIGHT + RESIZER_SIZE;
+    const maxDetailSize = Math.max(MINI_PANE_SIZE, safeTotal - MEMO_MIN_HEIGHT);
+    const preferredDetailSize = lastOpenDetailSize || safeTotal * 0.4;
+
+    if (maxDetailSize < DETAIL_MIN_HEIGHT) {
+      return Math.max(MINI_PANE_SIZE, safeTotal * 0.4);
+    }
+
+    return Math.min(Math.max(preferredDetailSize, DETAIL_MIN_HEIGHT), maxDetailSize);
+  }
+
+  function collapseDetailForMemo() {
+    const { total, detailHeight } = getCurrentPaneSizes();
+    if (detailHeight >= SNAP_THRESHOLD) {
+      lastOpenDetailSize = detailHeight;
+    }
+    memoFocusMode = true;
+    applyDetailSize(MINI_PANE_SIZE, total, "detail-mini", true);
+  }
+
+  function restoreDetailPane() {
+    const { total } = getCurrentPaneSizes();
+    memoFocusMode = false;
+    applyDetailSize(getRestoredDetailSize(total), total, "open", true);
+  }
+
+  function toggleMemoFocusMode() {
+    if (splitState === "detail-mini") {
+      restoreDetailPane();
+    } else {
+      collapseDetailForMemo();
+    }
   }
 
   function handleCardResizeKeydown(event) {
@@ -498,6 +542,7 @@
       case "Enter":
       case " ":
         event.preventDefault();
+        memoFocusMode = false;
         splitState = "open";
         break;
     }
@@ -526,31 +571,85 @@
 </script>
 
 {#if is_selected && node}
-  <Card
-    title={hideDetailTitle ? "" : name}
-    padded={false}
-    style={"height: 100%; width: 100%; overflow: hidden;"}
-  >
+  <Card title={cardTitle} padded={false} style={"height: 100%; width: 100%; overflow: hidden;"}>
     <svelte:fragment slot="header-actions">
-      <IconButton
-        tooltipContent="別ウィンドウで開く"
-        ariaLabel="タスク詳細を別ウィンドウで開く"
-        variant="text"
-        normalColor={"var(--theme-color-Sub-main)"}
-        activeColor={"var(--theme-color-Primary-main)"}
-        style={"width: 1.75rem; height: 1.75rem; margin: 0;"}
-        on:click={openTaskDetailInWindow}
-      >
-        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path
-            d="M14 3h7v7M21 3l-9 9M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
-        </svg>
-      </IconButton>
+      <div class="task-detail-actions">
+        <IconButton
+          tooltipContent={splitState === "detail-mini"
+            ? "詳細欄を表示"
+            : "詳細欄をたたんでメモを広げる"}
+          ariaLabel={splitState === "detail-mini" ? "詳細欄を表示" : "詳細欄をたたんでメモを広げる"}
+          ariaPressed={splitState === "detail-mini" ? "true" : "false"}
+          variant="text"
+          normalColor={splitState === "detail-mini"
+            ? "var(--theme-color-Primary-main)"
+            : "var(--theme-color-Sub-main)"}
+          activeColor={"var(--theme-color-Primary-main)"}
+          on:click={toggleMemoFocusMode}
+        >
+          {#if splitState === "detail-mini"}
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <rect
+                x="3"
+                y="4"
+                width="18"
+                height="16"
+                rx="2"
+                stroke="currentColor"
+                stroke-width="1.8"
+              />
+              <path d="M3 10H21" stroke="currentColor" stroke-width="1.8" />
+              <path
+                d="M8 14L12 10L16 14"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          {:else}
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <rect
+                x="3"
+                y="4"
+                width="18"
+                height="16"
+                rx="2"
+                stroke="currentColor"
+                stroke-width="1.8"
+              />
+              <path d="M3 10H21" stroke="currentColor" stroke-width="1.8" />
+              <path
+                d="M8 7L12 11L16 7"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          {/if}
+        </IconButton>
+        {#if showOpenWindowAction}
+          <IconButton
+            tooltipContent="別ウィンドウで開く"
+            ariaLabel="タスク詳細を別ウィンドウで開く"
+            variant="text"
+            normalColor={"var(--theme-color-Sub-main)"}
+            activeColor={"var(--theme-color-Primary-main)"}
+            on:click={openTaskDetailInWindow}
+          >
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path
+                d="M14 3h7v7M21 3l-9 9M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </IconButton>
+        {/if}
+      </div>
     </svelte:fragment>
 
     {#if extraSelectedCount > 0}
@@ -726,6 +825,12 @@
     font-size: var(--font-label-md);
     font-weight: 600;
     border-bottom: 1px solid color-mix(in srgb, var(--theme-color-Primary-main) 30%, transparent);
+  }
+  .task-detail-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp2);
+    flex: 0 0 auto;
   }
   .detail-pane {
     flex: 0 0 var(--detail-pane-size);

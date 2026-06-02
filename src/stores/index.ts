@@ -41,9 +41,14 @@ let initStoreReady: Promise<void> | null = null;
 export function init_store(): Promise<void> {
   if (initStoreReady) return initStoreReady;
 
+  const isTaskDetailWindow =
+    typeof window !== "undefined" && window.location.hash === "#task-detail-window";
+
   tree_data.init();
   const projectIdsReady = project_ids.init();
-  selected_id.init();
+  if (!isTaskDetailWindow) {
+    selected_id.init();
+  }
   sort_state.init();
   filter.init();
   theme.init();
@@ -58,8 +63,6 @@ export function init_store(): Promise<void> {
   // 履歴記録は selected_type / selected_id への subscribe を張る。
   // タスク詳細サブウィンドウ (`#task-detail-window`) では戻る/進むの概念が
   // 不要なため、メインウィンドウのときだけ初期化する。
-  const isTaskDetailWindow =
-    typeof window !== "undefined" && window.location.hash === "#task-detail-window";
   if (!isTaskDetailWindow) {
     navigation_history.init();
   }

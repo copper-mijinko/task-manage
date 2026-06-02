@@ -9,6 +9,8 @@
   export let variant = "filled"; // "outlined", "text"
   export let tooltipContent = undefined;
   export let ariaLabel = undefined;
+  export let ariaPressed = undefined;
+  export let type = "button";
   // tooltip — keep reactive so a parent toggling tooltipContent (e.g. the
   // sidebar hamburger flipping its label between "open" and "close") is
   // picked up by the tooltip action's `update()` lifecycle.
@@ -62,8 +64,10 @@
 
 <button
   class="IconButton"
+  {type}
   {disabled}
   aria-label={ariaLabel}
+  aria-pressed={ariaPressed}
   use:ripple={{
     duration: 350,
     color: disabled ? "var(--theme-color-Sub-dark)" : rippleColor,
@@ -88,12 +92,12 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    height: 2rem;
-    width: 2rem;
-    padding: 2px;
-    border-radius: 50%;
+    height: var(--icon-button-size, 2rem);
+    width: var(--icon-button-size, 2rem);
+    padding: var(--icon-button-padding, 2px);
+    border-radius: var(--icon-button-radius, var(--shape-sm));
     border: 1px solid var(--borderColor);
-    margin: var(--sp1);
+    margin: var(--button-margin, 0);
     cursor: pointer;
     background-color: var(--backgroundColor);
     color: var(--fontColor);
