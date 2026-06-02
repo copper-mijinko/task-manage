@@ -29,7 +29,7 @@ import {
   theme,
   tree_data,
 } from "@stores";
-import { clearSelection, selected_ids } from "@stores/ui";
+import { clearSelection, copied_task, copied_tasks, selected_ids } from "@stores/ui";
 import { workspace_store } from "@features/workspace/stores/workspace";
 
 function createProjectData() {
@@ -113,6 +113,8 @@ describe("TreeTable", () => {
     clearSelection();
     selected_type.set("Projects");
     table_selected_id.set(undefined);
+    copied_task.set(null);
+    copied_tasks.set([]);
     closed_node_ids.set(new Set());
     column_settings.set([
       { id: "name", label: "タスク名", visible: true },
@@ -206,6 +208,53 @@ describe("TreeTable", () => {
     await fireEvent.click(screen.getByTestId("open-folder-task-1"));
 
     expect(wsOpenTaskFolder).toHaveBeenCalledWith("C:/workspace/project", "task-1");
+  });
+
+  test("lets selected text copy before the task copy shortcut", async () => {
+    render(TreeTable);
+
+    await fireEvent.click(screen.getByTestId("select-task-1"));
+    await tick();
+
+    const memoHost = document.createElement("div");
+    memoHost.className = "memo-host";
+    const preview = document.createElement("div");
+    preview.className = "preview";
+    const paragraph = document.createElement("p");
+    paragraph.textContent = "Selected markdown text";
+    preview.appendChild(paragraph);
+    memoHost.appendChild(preview);
+    document.body.appendChild(memoHost);
+
+    const range = document.createRange();
+    range.selectNodeContents(paragraph);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+
+    try {
+      await fireEvent.keyDown(window, { key: "c", ctrlKey: true });
+      await tick();
+
+      expect(get(copied_task)).toBeNull();
+      expect(get(copied_tasks)).toEqual([]);
+    } finally {
+      selection.removeAllRanges();
+      memoHost.remove();
+    }
+  });
+
+  test("copies the selected task when no document text is selected", async () => {
+    render(TreeTable);
+
+    await fireEvent.click(screen.getByTestId("select-task-1"));
+    await tick();
+
+    await fireEvent.keyDown(window, { key: "c", ctrlKey: true });
+    await tick();
+
+    expect(get(copied_task)?.id).toBe("task-1");
+    expect(get(copied_tasks).map((task) => task.id)).toEqual(["task-1"]);
   });
 
   test("positions resizers after the selection checkbox column", async () => {
