@@ -813,6 +813,14 @@
     background-color: var(--theme-color-Main-dark);
   }
 
+  /* Compact (flat) mode strips Quill's internal frame so the editor
+     runs edge-to-edge inside the Card, matching MarkdownMemo's
+     --memo-wrapper-border: none behavior. */
+  :global(.density-compact) .wrapper :global(.ql-container.ql-snow),
+  :global(.density-compact) .wrapper :global(.ql-toolbar) {
+    border: none !important;
+  }
+
   .wrapper :global(.ql-toolbar .ql-formats) {
     margin-right: var(--sp1) !important;
   }

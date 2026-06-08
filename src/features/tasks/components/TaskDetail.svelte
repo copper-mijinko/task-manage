@@ -15,6 +15,7 @@
     workspace_tasks_cache,
     tag_index,
     theme,
+    ui_density,
   } from "@stores";
   import { selected_ids } from "@stores/ui";
   import { debounce } from "lodash";
@@ -66,7 +67,19 @@
   let detailPaneSize = "40%";
   let splitState = "open";
   let splitSnapping = false;
+  // Compact (flat) mode hides the task-name / status / dates header by
+  // default — the user explicitly asked for a memo-first view when the
+  // UI is in VSCode mode. The reactive below keeps this in sync if they
+  // flip density mid-session: switching to compact collapses the detail
+  // pane, switching back opens it. Manual toggle still wins within a mode
+  // (we only overwrite when $ui_density itself changes).
   let memoFocusMode = false;
+  let previousUiDensity = undefined;
+  $: if ($ui_density !== previousUiDensity) {
+    previousUiDensity = $ui_density;
+    memoFocusMode = $ui_density === "compact";
+    resetCardSplit();
+  }
   let previousTaskDetailId = "";
   let snapTimer;
   let resizeStartY = 0;
@@ -889,6 +902,15 @@
   .task-detail-card-body.memo-mini .memotab-container {
     display: none;
   }
+  /* When one pane is collapsed to zero the resizer is unreachable anyway
+     — drop the 5px strip so the visible pane butts up against the
+     CardHeader. This is what keeps the right-Card chrome height aligned
+     with the left-Card chrome height (toolbar's 2 rows). Re-opening via
+     the toggle button restores the resizer naturally. */
+  .task-detail-card-body.detail-mini .card-split-resizer,
+  .task-detail-card-body.memo-mini .card-split-resizer {
+    display: none;
+  }
   .card-split-resizer {
     position: relative;
     display: flex;
@@ -1042,7 +1064,7 @@
     min-height: 0;
     box-sizing: border-box;
     margin: 0;
-    padding: var(--sp1);
+    padding: var(--memotab-pad);
     overflow: hidden;
   }
   .memotab-container > :global(.container) {

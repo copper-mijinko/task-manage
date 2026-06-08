@@ -11,6 +11,7 @@
   import SearchBox from "@lib/primitives/SearchBox.svelte";
   import Loading from "@lib/primitives/Loading.svelte";
   import ActiveFilterBar from "@features/search/components/ActiveFilterBar.svelte";
+  import TaskMenu from "@features/tasks/components/TaskMenu.svelte";
   import { tick } from "svelte";
   import {
     table_selected_id,
@@ -18,6 +19,7 @@
     closed_node_ids,
     ganttVisible,
     selected_type,
+    ui_density,
   } from "@stores";
   import { convertMemoContent, normalizeMemoFormat } from "@features/memos/utils/memo_utils";
   import {
@@ -499,6 +501,157 @@
   };
   const handleExpandAll = () => closed_node_ids.expandAll();
   const handleCollapseAll = () => closed_node_ids.collapseAll();
+
+  // Overflow ("kebab") menu — collapses the secondary action groups into
+  // a single trigger. Only enabled in compact (flat) mode; comfortable
+  // mode keeps the full toolbar inline so power users don't lose any
+  // one-click affordance.
+  $: isCompact = $ui_density === "compact";
+  let showOverflowMenu = false;
+  let overflowMenuPosition = { x: 0, y: 0, position: "left" };
+  // If the user flips back to comfortable while the menu is open, the
+  // kebab trigger disappears and the floating menu would orphan — close it.
+  $: if (!isCompact && showOverflowMenu) {
+    showOverflowMenu = false;
+  }
+
+  $: markdownConvertCount = countProjectMemosForFormat(
+    $tree_data?.data,
+    "markdown",
+    defaultMemoFormat
+  );
+  $: quillConvertCount = countProjectMemosForFormat($tree_data?.data, "quill", defaultMemoFormat);
+
+  $: overflowMenuItems = (() => {
+    const moveGroup = [
+      {
+        id: "moveUp",
+        action: "overflowAction",
+        title: "上に移動",
+        disabled: anchorIsArchived || (isMultiSelect && !canMultiSiblingMove),
+      },
+      {
+        id: "moveDown",
+        action: "overflowAction",
+        title: "下に移動",
+        disabled: anchorIsArchived || (isMultiSelect && !canMultiSiblingMove),
+      },
+      {
+        id: "outdent",
+        action: "overflowAction",
+        title: "アウトデント",
+        disabled: anchorIsArchived || (isMultiSelect && (!canMultiTreeOp || !canMultiOutdent)),
+      },
+      {
+        id: "indent",
+        action: "overflowAction",
+        title: "インデント",
+        disabled: anchorIsArchived || (isMultiSelect && !canMultiTreeOp),
+      },
+    ];
+    const expandGroup = [
+      { id: "expandAll", action: "overflowAction", title: "すべて展開" },
+      { id: "collapseAll", action: "overflowAction", title: "すべて折りたたみ" },
+    ];
+    const memoGroup = [
+      {
+        id: "memoMarkdown",
+        action: "overflowAction",
+        title: "全メモをMarkdownへ変換",
+        disabled: markdownConvertCount === 0,
+      },
+      {
+        id: "memoQuill",
+        action: "overflowAction",
+        title: "全メモをQuillへ変換",
+        disabled: quillConvertCount === 0,
+      },
+    ];
+    const viewGroup = [
+      {
+        id: "toggleGantt",
+        action: "overflowAction",
+        title: $ganttVisible ? "ガントチャートを閉じる" : "ガントチャートを表示",
+      },
+      {
+        id: "toggleDetail",
+        action: "overflowAction",
+        title: detailPaneVisible ? "詳細欄を隠す" : "詳細欄を表示",
+      },
+      {
+        id: "toggleArchived",
+        action: "overflowAction",
+        title: $show_archived ? "アーカイブ済みを隠す" : "アーカイブ済みを表示",
+      },
+    ];
+    const groups = [moveGroup, expandGroup, memoGroup, viewGroup];
+    const out = [];
+    for (const g of groups) {
+      if (out.length) out.push({ type: "separator" });
+      out.push(...g);
+    }
+    return out;
+  })();
+
+  function openOverflowMenu(e) {
+    e.stopPropagation();
+    if (showOverflowMenu) {
+      showOverflowMenu = false;
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    overflowMenuPosition = { x: rect.right, y: rect.bottom, position: "left" };
+    showOverflowMenu = true;
+  }
+
+  function closeOverflowMenu() {
+    showOverflowMenu = false;
+  }
+
+  function handleOverflowAction(event) {
+    const id = event.detail?.id;
+    switch (id) {
+      case "moveUp":
+        handleMoveUp();
+        break;
+      case "moveDown":
+        handleMoveDown();
+        break;
+      case "indent":
+        handleIndent();
+        break;
+      case "outdent":
+        handleOutdent();
+        break;
+      case "undo":
+        undoHistory();
+        break;
+      case "redo":
+        redoHistory();
+        break;
+      case "expandAll":
+        handleExpandAll();
+        break;
+      case "collapseAll":
+        handleCollapseAll();
+        break;
+      case "memoMarkdown":
+        requestBulkMemoFormat("markdown");
+        break;
+      case "memoQuill":
+        requestBulkMemoFormat("quill");
+        break;
+      case "toggleGantt":
+        $ganttVisible = !$ganttVisible;
+        break;
+      case "toggleDetail":
+        detailPaneVisible = !detailPaneVisible;
+        break;
+      case "toggleArchived":
+        show_archived.set(!$show_archived);
+        break;
+    }
+  }
 </script>
 
 {#if $tree_data}
@@ -508,99 +661,88 @@
         <Card title={projectName} padded={false} style={"height: 100%; width: 100%;"}>
           <span slot="header-actions" class="storage-badge">{projectStorageLabel}</span>
           <div class="TaskListToolbar">
-            <!-- Group 1: Add / Delete -->
-            <div class="TbGroup">
-              <IconButton
-                tooltipContent={anchorIsArchived
-                  ? "アーカイブ済みタスクには追加できません"
-                  : "タスク追加"}
-                ariaLabel="タスク追加"
-                disabled={anchorIsArchived}
-                activeColor={"var(--theme-color-Primary-dark)"}
-                normalColor={"var(--theme-color-Primary-main)"}
-                on:click={(e) => handleAdd(e, "insert_after")}
-              >
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
-                  ><path
-                    d="M12 5V19M5 12H19"
-                    stroke="var(--theme-color-Main-main)"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  ></path></svg
-                >
-              </IconButton>
-              <IconButton
-                tooltipContent={anchorIsArchived
-                  ? "アーカイブ済みタスクには追加できません"
-                  : "子タスク追加"}
-                ariaLabel="子タスク追加"
-                disabled={anchorIsArchived}
-                variant="outlined"
-                activeColor={"var(--theme-color-Primary-main)"}
-                normalColor={"var(--theme-color-Primary-main)"}
-                on:click={(e) => handleAdd(e, "append")}
-              >
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path
-                    d="M5 4V12C5 13.1 5.9 14 7 14H14"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                  />
-                  <path
-                    d="M11 11L14 14L11 17"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  />
-                  <path
-                    d="M18 14V18M16 16H20"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                  />
-                </svg>
-              </IconButton>
-              <IconButton
-                tooltipContent={isMultiSelect
-                  ? `${selectionSize}件を削除（アーカイブ／完全削除を自動振り分け）`
-                  : anchorIsArchived
-                    ? "完全に削除"
-                    : "アーカイブ"}
-                ariaLabel={isMultiSelect
-                  ? `${selectionSize}件を削除`
-                  : anchorIsArchived
-                    ? "完全に削除"
-                    : "アーカイブ"}
-                variant="text"
-                activeColor={"var(--theme-color-Error-main)"}
-                normalColor={"var(--theme-color-Error-main)"}
-                on:click={(e) => handleRemove(e, anchorIsArchived ? "permanent" : "archive")}
-              >
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path
-                    d="M3 6H21M8 6V4C8 3.4 8.4 3 9 3H15C15.6 3 16 3.4 16 4V6M10 11V17M14 11V17M5 6L6 20C6 20.6 6.4 21 7 21H17C17.6 21 18 20.6 18 20L19 6"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  />
-                </svg>
-              </IconButton>
-              {#if selectionHasArchived}
+            <!-- Two-row layout: buttons on top, filter search on the
+                 bottom. Splitting these into separate rows pads out the
+                 toolbar height so it matches the memo tab strip on the
+                 TaskDetail side, keeping the two Cards visually aligned. -->
+            <div class="TbRow TbButtonsRow" class:TbButtonsRowCompact={isCompact}>
+              <!-- Primary actions: add / add-child / delete (+ restore when
+                   the selection contains archived rows). Everything else
+                   lives in the overflow ("⋯") menu so the toolbar stays
+                   readable at any width. -->
+              <div class="TbGroup">
                 <IconButton
-                  tooltipContent={isMultiSelect ? "選択中のアーカイブ済みタスクを復元" : "復元"}
-                  ariaLabel="アーカイブから復元"
-                  variant="text"
+                  tooltipContent={anchorIsArchived
+                    ? "アーカイブ済みタスクには追加できません"
+                    : "タスク追加"}
+                  ariaLabel="タスク追加"
+                  disabled={anchorIsArchived}
+                  activeColor={"var(--theme-color-Primary-dark)"}
+                  normalColor={"var(--theme-color-Primary-main)"}
+                  on:click={(e) => handleAdd(e, "insert_after")}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
+                    ><path
+                      d="M12 5V19M5 12H19"
+                      stroke="var(--theme-color-Main-main)"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    ></path></svg
+                  >
+                </IconButton>
+                <IconButton
+                  tooltipContent={anchorIsArchived
+                    ? "アーカイブ済みタスクには追加できません"
+                    : "子タスク追加"}
+                  ariaLabel="子タスク追加"
+                  disabled={anchorIsArchived}
+                  variant="outlined"
                   activeColor={"var(--theme-color-Primary-main)"}
                   normalColor={"var(--theme-color-Primary-main)"}
-                  on:click={handleRestore}
+                  on:click={(e) => handleAdd(e, "append")}
                 >
                   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path
-                      d="M3 12a9 9 0 1 1 3.6 7.2M3 12V6M3 12h6"
+                      d="M5 4V12C5 13.1 5.9 14 7 14H14"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                    />
+                    <path
+                      d="M11 11L14 14L11 17"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                    <path
+                      d="M18 14V18M16 16H20"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                    />
+                  </svg>
+                </IconButton>
+                <IconButton
+                  tooltipContent={isMultiSelect
+                    ? `${selectionSize}件を削除（アーカイブ／完全削除を自動振り分け）`
+                    : anchorIsArchived
+                      ? "完全に削除"
+                      : "アーカイブ"}
+                  ariaLabel={isMultiSelect
+                    ? `${selectionSize}件を削除`
+                    : anchorIsArchived
+                      ? "完全に削除"
+                      : "アーカイブ"}
+                  variant="text"
+                  activeColor={"var(--theme-color-Error-main)"}
+                  normalColor={"var(--theme-color-Error-main)"}
+                  on:click={(e) => handleRemove(e, anchorIsArchived ? "permanent" : "archive")}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path
+                      d="M3 6H21M8 6V4C8 3.4 8.4 3 9 3H15C15.6 3 16 3.4 16 4V6M10 11V17M14 11V17M5 6L6 20C6 20.6 6.4 21 7 21H17C17.6 21 18 20.6 18 20L19 6"
                       stroke="currentColor"
                       stroke-width="2"
                       stroke-linecap="round"
@@ -608,310 +750,351 @@
                     />
                   </svg>
                 </IconButton>
+                {#if selectionHasArchived}
+                  <IconButton
+                    tooltipContent={isMultiSelect ? "選択中のアーカイブ済みタスクを復元" : "復元"}
+                    ariaLabel="アーカイブから復元"
+                    variant="text"
+                    activeColor={"var(--theme-color-Primary-main)"}
+                    normalColor={"var(--theme-color-Primary-main)"}
+                    on:click={handleRestore}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path
+                        d="M3 12a9 9 0 1 1 3.6 7.2M3 12V6M3 12h6"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  </IconButton>
+                {/if}
+              </div>
+              <span class="TbSep" aria-hidden="true"></span>
+
+              {#if !isCompact}
+                <!-- Move / Indent -->
+                <div class="TbGroup">
+                  <IconButton
+                    tooltipContent={isMultiSelect
+                      ? canMultiSiblingMove
+                        ? `${selectionSize}件 上に移動`
+                        : "同じ親の連続した兄弟のみ移動できます"
+                      : "上に移動 (Alt+↑)"}
+                    ariaLabel={isMultiSelect ? `${selectionSize}件 上に移動` : "上に移動"}
+                    variant="text"
+                    normalColor={"var(--theme-color-Sub-main)"}
+                    activeColor={"var(--theme-color-Primary-main)"}
+                    disabled={anchorIsArchived || (isMultiSelect && !canMultiSiblingMove)}
+                    on:click={handleMoveUp}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path
+                        d="M12 19V5M5 12L12 5L19 12"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  </IconButton>
+                  <IconButton
+                    tooltipContent={isMultiSelect
+                      ? canMultiSiblingMove
+                        ? `${selectionSize}件 下に移動`
+                        : "同じ親の連続した兄弟のみ移動できます"
+                      : "下に移動 (Alt+↓)"}
+                    ariaLabel={isMultiSelect ? `${selectionSize}件 下に移動` : "下に移動"}
+                    variant="text"
+                    normalColor={"var(--theme-color-Sub-main)"}
+                    activeColor={"var(--theme-color-Primary-main)"}
+                    disabled={anchorIsArchived || (isMultiSelect && !canMultiSiblingMove)}
+                    on:click={handleMoveDown}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path
+                        d="M12 5V19M5 12L12 19L19 12"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  </IconButton>
+                  <IconButton
+                    tooltipContent={isMultiSelect
+                      ? canMultiTreeOp && canMultiOutdent
+                        ? `${selectionSize}件 アウトデント`
+                        : canMultiTreeOp
+                          ? "これ以上アウトデントできません"
+                          : "同じ親の兄弟のみアウトデントできます"
+                      : "アウトデント (Shift+Tab)"}
+                    ariaLabel={isMultiSelect ? `${selectionSize}件 アウトデント` : "アウトデント"}
+                    variant="text"
+                    normalColor={"var(--theme-color-Sub-main)"}
+                    activeColor={"var(--theme-color-Primary-main)"}
+                    disabled={anchorIsArchived ||
+                      (isMultiSelect && (!canMultiTreeOp || !canMultiOutdent))}
+                    on:click={handleOutdent}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path
+                        d="M21 4H10M21 12H10M21 20H10M7 8L3 12L7 16"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  </IconButton>
+                  <IconButton
+                    tooltipContent={isMultiSelect
+                      ? canMultiTreeOp
+                        ? `${selectionSize}件 インデント`
+                        : "同じ親の兄弟のみインデントできます"
+                      : "インデント (Tab)"}
+                    ariaLabel={isMultiSelect ? `${selectionSize}件 インデント` : "インデント"}
+                    variant="text"
+                    normalColor={"var(--theme-color-Sub-main)"}
+                    activeColor={"var(--theme-color-Primary-main)"}
+                    disabled={anchorIsArchived || (isMultiSelect && !canMultiTreeOp)}
+                    on:click={handleIndent}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path
+                        d="M3 4H14M3 12H14M3 20H14M17 8L21 12L17 16"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  </IconButton>
+                </div>
+                <span class="TbSep" aria-hidden="true"></span>
+
+                <!-- Expand / Collapse -->
+                <div class="TbGroup">
+                  <IconButton
+                    tooltipContent="すべて展開"
+                    ariaLabel="すべて展開"
+                    variant="text"
+                    normalColor={"var(--theme-color-Sub-main)"}
+                    activeColor={"var(--theme-color-Primary-main)"}
+                    on:click={handleExpandAll}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path
+                        d="M8 10L12 6L16 10M8 14L12 18L16 14"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  </IconButton>
+                  <IconButton
+                    tooltipContent="すべて折りたたみ"
+                    ariaLabel="すべて折りたたみ"
+                    variant="text"
+                    normalColor={"var(--theme-color-Sub-main)"}
+                    activeColor={"var(--theme-color-Primary-main)"}
+                    on:click={handleCollapseAll}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path
+                        d="M8 6L12 10L16 6M8 18L12 14L16 18"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  </IconButton>
+                </div>
+                <span class="TbSep" aria-hidden="true"></span>
+              {/if}
+
+              <!-- Edit history: Undo / Redo. Kept visible because Ctrl+Z/Y
+                 also relies on these being the canonical "edit" affordance. -->
+              <div class="TbGroup">
+                <IconButton
+                  tooltipContent="元に戻す (Ctrl+Z)"
+                  ariaLabel="元に戻す"
+                  variant="text"
+                  normalColor={"var(--theme-color-Sub-main)"}
+                  activeColor={"var(--theme-color-Primary-main)"}
+                  on:click={undoHistory}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path
+                      d="M3 7L7 3M3 7L7 11M3 7H15C18.3 7 21 9.7 21 13C21 16.3 18.3 19 15 19H9"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </IconButton>
+                <IconButton
+                  tooltipContent="やり直し (Ctrl+Y)"
+                  ariaLabel="やり直し"
+                  variant="text"
+                  normalColor={"var(--theme-color-Sub-main)"}
+                  activeColor={"var(--theme-color-Primary-main)"}
+                  on:click={redoHistory}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path
+                      d="M21 7L17 3M21 7L17 11M21 7H9C5.7 7 3 9.7 3 13C3 16.3 5.7 19 9 19H15"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </IconButton>
+              </div>
+              <span class="TbSep" aria-hidden="true"></span>
+
+              {#if !isCompact}
+                <!-- Bulk memo format conversion -->
+                <div class="TbGroup">
+                  <IconButton
+                    tooltipContent="全メモをMarkdownへ変換"
+                    ariaLabel="全メモをMarkdownへ変換"
+                    variant="text"
+                    normalColor={"var(--theme-color-Sub-main)"}
+                    activeColor={"var(--theme-color-Primary-main)"}
+                    disabled={markdownConvertCount === 0}
+                    on:click={() => requestBulkMemoFormat("markdown")}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path
+                        d="M4 17V7L8 13L12 7V17M17 7V15M14 12L17 15L20 12"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  </IconButton>
+                  <IconButton
+                    tooltipContent="全メモをQuillへ変換"
+                    ariaLabel="全メモをQuillへ変換"
+                    variant="text"
+                    normalColor={"var(--theme-color-Sub-main)"}
+                    activeColor={"var(--theme-color-Primary-main)"}
+                    disabled={quillConvertCount === 0}
+                    on:click={() => requestBulkMemoFormat("quill")}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path
+                        d="M12 4C7.6 4 4 7.2 4 11.5S7.6 19 12 19H16M12 8C9.8 8 8 9.6 8 11.5S9.8 15 12 15H14.5L17.5 19"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  </IconButton>
+                </div>
+              {/if}
+
+              {#if !isCompact}
+                <!-- View toggles: Gantt / detail pane / archived rows -->
+                <div class="TbGroup">
+                  <IconButton
+                    tooltipContent={$ganttVisible
+                      ? "ガントチャートを閉じる"
+                      : "ガントチャートを表示"}
+                    ariaLabel="ガントチャートの表示切替"
+                    variant="text"
+                    normalColor={$ganttVisible
+                      ? "var(--theme-color-Primary-main)"
+                      : "var(--theme-color-Sub-main)"}
+                    activeColor={"var(--theme-color-Primary-main)"}
+                    on:click={() => ($ganttVisible = !$ganttVisible)}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <rect x="3" y="4" width="4" height="3" rx="0.5" fill="currentColor" />
+                      <rect x="3" y="10.5" width="7" height="3" rx="0.5" fill="currentColor" />
+                      <rect x="3" y="17" width="5" height="3" rx="0.5" fill="currentColor" />
+                    </svg>
+                  </IconButton>
+                  <IconButton
+                    tooltipContent={detailPaneVisible ? "Hide detail pane" : "Show detail pane"}
+                    ariaLabel={detailPaneVisible ? "Hide detail pane" : "Show detail pane"}
+                    variant="text"
+                    normalColor={detailPaneVisible
+                      ? "var(--theme-color-Primary-main)"
+                      : "var(--theme-color-Sub-main)"}
+                    activeColor={"var(--theme-color-Primary-main)"}
+                    on:click={() => (detailPaneVisible = !detailPaneVisible)}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <rect
+                        x="3"
+                        y="4"
+                        width="18"
+                        height="16"
+                        rx="2"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                      />
+                      <path d="M15 4V20" stroke="currentColor" stroke-width="1.8" />
+                    </svg>
+                  </IconButton>
+                  <IconButton
+                    tooltipContent={$show_archived
+                      ? "アーカイブ済みタスクを隠す"
+                      : "アーカイブ済みタスクを表示"}
+                    ariaLabel="アーカイブ表示の切替"
+                    variant="text"
+                    normalColor={$show_archived
+                      ? "var(--theme-color-Primary-main)"
+                      : "var(--theme-color-Sub-main)"}
+                    activeColor={"var(--theme-color-Primary-main)"}
+                    on:click={() => show_archived.set(!$show_archived)}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path
+                        d="M3 7h18v3H3V7zM5 10v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-9M10 14h4"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  </IconButton>
+                </div>
+              {:else}
+                <!-- Overflow menu (compact only): move/indent, expand/collapse,
+                   memo format conversion, and view toggles. The wrapping
+                   span carries data-task-menu-trigger so TaskMenu's
+                   outside-click handler doesn't fight the toggle click. -->
+                <span class="TbGroup" data-task-menu-trigger="overflow">
+                  <IconButton
+                    tooltipContent="その他の操作"
+                    ariaLabel="その他の操作"
+                    variant="text"
+                    normalColor={"var(--theme-color-Sub-main)"}
+                    activeColor={"var(--theme-color-Primary-main)"}
+                    on:click={openOverflowMenu}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <circle cx="5" cy="12" r="1.6" fill="currentColor" />
+                      <circle cx="12" cy="12" r="1.6" fill="currentColor" />
+                      <circle cx="19" cy="12" r="1.6" fill="currentColor" />
+                    </svg>
+                  </IconButton>
+                </span>
               {/if}
             </div>
-            <span class="TbSep" aria-hidden="true"></span>
-
-            <!-- Group 2: Move / Indent -->
-            <div class="TbGroup">
-              <IconButton
-                tooltipContent={isMultiSelect
-                  ? canMultiSiblingMove
-                    ? `${selectionSize}件 上に移動`
-                    : "同じ親の連続した兄弟のみ移動できます"
-                  : "上に移動 (Alt+↑)"}
-                ariaLabel={isMultiSelect ? `${selectionSize}件 上に移動` : "上に移動"}
-                variant="text"
-                normalColor={"var(--theme-color-Sub-main)"}
-                activeColor={"var(--theme-color-Primary-main)"}
-                disabled={anchorIsArchived || (isMultiSelect && !canMultiSiblingMove)}
-                on:click={handleMoveUp}
-              >
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path
-                    d="M12 19V5M5 12L12 5L19 12"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  />
-                </svg>
-              </IconButton>
-              <IconButton
-                tooltipContent={isMultiSelect
-                  ? canMultiSiblingMove
-                    ? `${selectionSize}件 下に移動`
-                    : "同じ親の連続した兄弟のみ移動できます"
-                  : "下に移動 (Alt+↓)"}
-                ariaLabel={isMultiSelect ? `${selectionSize}件 下に移動` : "下に移動"}
-                variant="text"
-                normalColor={"var(--theme-color-Sub-main)"}
-                activeColor={"var(--theme-color-Primary-main)"}
-                disabled={anchorIsArchived || (isMultiSelect && !canMultiSiblingMove)}
-                on:click={handleMoveDown}
-              >
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path
-                    d="M12 5V19M5 12L12 19L19 12"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  />
-                </svg>
-              </IconButton>
-              <IconButton
-                tooltipContent={isMultiSelect
-                  ? canMultiTreeOp && canMultiOutdent
-                    ? `${selectionSize}件 アウトデント`
-                    : canMultiTreeOp
-                      ? "これ以上アウトデントできません"
-                      : "同じ親の兄弟のみアウトデントできます"
-                  : "アウトデント (Shift+Tab)"}
-                ariaLabel={isMultiSelect ? `${selectionSize}件 アウトデント` : "アウトデント"}
-                variant="text"
-                normalColor={"var(--theme-color-Sub-main)"}
-                activeColor={"var(--theme-color-Primary-main)"}
-                disabled={anchorIsArchived ||
-                  (isMultiSelect && (!canMultiTreeOp || !canMultiOutdent))}
-                on:click={handleOutdent}
-              >
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path
-                    d="M21 4H10M21 12H10M21 20H10M7 8L3 12L7 16"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  />
-                </svg>
-              </IconButton>
-              <IconButton
-                tooltipContent={isMultiSelect
-                  ? canMultiTreeOp
-                    ? `${selectionSize}件 インデント`
-                    : "同じ親の兄弟のみインデントできます"
-                  : "インデント (Tab)"}
-                ariaLabel={isMultiSelect ? `${selectionSize}件 インデント` : "インデント"}
-                variant="text"
-                normalColor={"var(--theme-color-Sub-main)"}
-                activeColor={"var(--theme-color-Primary-main)"}
-                disabled={anchorIsArchived || (isMultiSelect && !canMultiTreeOp)}
-                on:click={handleIndent}
-              >
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path
-                    d="M3 4H14M3 12H14M3 20H14M17 8L21 12L17 16"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  />
-                </svg>
-              </IconButton>
-            </div>
-            <span class="TbSep" aria-hidden="true"></span>
-
-            <!-- Group 3: Expand / Collapse -->
-            <div class="TbGroup">
-              <IconButton
-                tooltipContent="すべて展開"
-                ariaLabel="すべて展開"
-                variant="text"
-                normalColor={"var(--theme-color-Sub-main)"}
-                activeColor={"var(--theme-color-Primary-main)"}
-                on:click={handleExpandAll}
-              >
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path
-                    d="M8 10L12 6L16 10M8 14L12 18L16 14"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  />
-                </svg>
-              </IconButton>
-              <IconButton
-                tooltipContent="すべて折りたたみ"
-                ariaLabel="すべて折りたたみ"
-                variant="text"
-                normalColor={"var(--theme-color-Sub-main)"}
-                activeColor={"var(--theme-color-Primary-main)"}
-                on:click={handleCollapseAll}
-              >
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path
-                    d="M8 6L12 10L16 6M8 18L12 14L16 18"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  />
-                </svg>
-              </IconButton>
-            </div>
-            <span class="TbSep" aria-hidden="true"></span>
-
-            <!-- Group 4: Undo / Redo -->
-            <div class="TbGroup">
-              <IconButton
-                tooltipContent="元に戻す (Ctrl+Z)"
-                ariaLabel="元に戻す"
-                variant="text"
-                normalColor={"var(--theme-color-Sub-main)"}
-                activeColor={"var(--theme-color-Primary-main)"}
-                on:click={undoHistory}
-              >
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path
-                    d="M3 7L7 3M3 7L7 11M3 7H15C18.3 7 21 9.7 21 13C21 16.3 18.3 19 15 19H9"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  />
-                </svg>
-              </IconButton>
-              <IconButton
-                tooltipContent="やり直し (Ctrl+Y)"
-                ariaLabel="やり直し"
-                variant="text"
-                normalColor={"var(--theme-color-Sub-main)"}
-                activeColor={"var(--theme-color-Primary-main)"}
-                on:click={redoHistory}
-              >
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path
-                    d="M21 7L17 3M21 7L17 11M21 7H9C5.7 7 3 9.7 3 13C3 16.3 5.7 19 9 19H15"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  />
-                </svg>
-              </IconButton>
-            </div>
-            <span class="TbSep" aria-hidden="true"></span>
-
-            <!-- Group 5: Bulk memo format conversion -->
-            <div class="TbGroup">
-              <IconButton
-                tooltipContent="全メモをMarkdownへ変換"
-                ariaLabel="全メモをMarkdownへ変換"
-                variant="text"
-                normalColor={"var(--theme-color-Sub-main)"}
-                activeColor={"var(--theme-color-Primary-main)"}
-                disabled={countProjectMemosForFormat(
-                  $tree_data?.data,
-                  "markdown",
-                  defaultMemoFormat
-                ) === 0}
-                on:click={() => requestBulkMemoFormat("markdown")}
-              >
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path
-                    d="M4 17V7L8 13L12 7V17M17 7V15M14 12L17 15L20 12"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  />
-                </svg>
-              </IconButton>
-              <IconButton
-                tooltipContent="全メモをQuillへ変換"
-                ariaLabel="全メモをQuillへ変換"
-                variant="text"
-                normalColor={"var(--theme-color-Sub-main)"}
-                activeColor={"var(--theme-color-Primary-main)"}
-                disabled={countProjectMemosForFormat(
-                  $tree_data?.data,
-                  "quill",
-                  defaultMemoFormat
-                ) === 0}
-                on:click={() => requestBulkMemoFormat("quill")}
-              >
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path
-                    d="M12 4C7.6 4 4 7.2 4 11.5S7.6 19 12 19H16M12 8C9.8 8 8 9.6 8 11.5S9.8 15 12 15H14.5L17.5 19"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  />
-                </svg>
-              </IconButton>
-            </div>
-
-            <!-- Tree filter search (filters rows by name) -->
-            <div class="TbSearch">
+            <!-- Filter row: SearchBox stretches to the full toolbar width. -->
+            <div class="TbRow TbSearchRow">
               <SearchBox />
-            </div>
-
-            <!-- Group 5: View toggles -->
-            <div class="TbGroup">
-              <IconButton
-                tooltipContent={$ganttVisible ? "ガントチャートを閉じる" : "ガントチャートを表示"}
-                ariaLabel="ガントチャートの表示切替"
-                variant="text"
-                normalColor={$ganttVisible
-                  ? "var(--theme-color-Primary-main)"
-                  : "var(--theme-color-Sub-main)"}
-                activeColor={"var(--theme-color-Primary-main)"}
-                on:click={() => ($ganttVisible = !$ganttVisible)}
-              >
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <rect x="3" y="4" width="4" height="3" rx="0.5" fill="currentColor" />
-                  <rect x="3" y="10.5" width="7" height="3" rx="0.5" fill="currentColor" />
-                  <rect x="3" y="17" width="5" height="3" rx="0.5" fill="currentColor" />
-                </svg>
-              </IconButton>
-              <IconButton
-                tooltipContent={detailPaneVisible ? "Hide detail pane" : "Show detail pane"}
-                ariaLabel={detailPaneVisible ? "Hide detail pane" : "Show detail pane"}
-                variant="text"
-                normalColor={detailPaneVisible
-                  ? "var(--theme-color-Primary-main)"
-                  : "var(--theme-color-Sub-main)"}
-                activeColor={"var(--theme-color-Primary-main)"}
-                on:click={() => (detailPaneVisible = !detailPaneVisible)}
-              >
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <rect
-                    x="3"
-                    y="4"
-                    width="18"
-                    height="16"
-                    rx="2"
-                    stroke="currentColor"
-                    stroke-width="1.8"
-                  />
-                  <path d="M15 4V20" stroke="currentColor" stroke-width="1.8" />
-                </svg>
-              </IconButton>
-              <IconButton
-                tooltipContent={$show_archived
-                  ? "アーカイブ済みタスクを隠す"
-                  : "アーカイブ済みタスクを表示"}
-                ariaLabel="アーカイブ表示の切替"
-                variant="text"
-                normalColor={$show_archived
-                  ? "var(--theme-color-Primary-main)"
-                  : "var(--theme-color-Sub-main)"}
-                activeColor={"var(--theme-color-Primary-main)"}
-                on:click={() => show_archived.set(!$show_archived)}
-              >
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path
-                    d="M3 7h18v3H3V7zM5 10v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-9M10 14h4"
-                    stroke="currentColor"
-                    stroke-width="1.8"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  />
-                </svg>
-              </IconButton>
             </div>
           </div>
           <ActiveFilterBar />
@@ -956,6 +1139,13 @@
     content={alert_content}
     ok={false}
     cancel={"close"}
+  />
+  <TaskMenu
+    menuItems={overflowMenuItems}
+    position={overflowMenuPosition}
+    show={showOverflowMenu}
+    on:close={closeOverflowMenu}
+    on:overflowAction={handleOverflowAction}
   />
   <Modal
     show={show_memo_format_confirm}
@@ -1063,27 +1253,60 @@
     height: 1.75rem;
     margin: 0;
   }
-  .TbSearch {
-    display: flex;
-    flex: 1 1 auto;
-    align-items: center;
-    margin-left: auto;
-    height: 1.75rem;
-    min-width: 8rem;
-    max-width: 22rem;
-  }
   .TaskListToolbar {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--sp1);
+    width: 100%;
+    min-width: 0;
+    padding: var(--sp1) var(--sp2);
+    box-sizing: border-box;
+    border-bottom: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 12%, transparent);
+    flex-shrink: 0;
+  }
+  .TbRow {
     display: flex;
     flex-direction: row;
     align-items: center;
     gap: var(--sp2);
     width: 100%;
     min-width: 0;
-    padding: var(--sp1) var(--sp2);
-    box-sizing: border-box;
+  }
+  .TbButtonsRow {
     flex-wrap: wrap;
-    border-bottom: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 12%, transparent);
-    flex-shrink: 0;
+  }
+  /* Compact (flat) mode: lock the row to a single line and scroll
+     horizontally instead of wrapping. Wrapping would grow the toolbar
+     height at narrow widths, throwing off the height alignment with the
+     TaskDetail Card next door. Comfortable mode keeps the natural wrap
+     behavior because button density is lower there. */
+  .TbButtonsRowCompact {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+  }
+  .TbButtonsRowCompact::-webkit-scrollbar {
+    height: 4px;
+  }
+  .TbButtonsRowCompact::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--theme-color-Sub-main) 35%, transparent);
+    border-radius: 2px;
+  }
+  .TbButtonsRowCompact::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .TbSearchRow {
+    /* SearchBox sits alone on the second row; let it use its natural
+       2rem height (defined in SearchBox.svelte). This adds the row
+       height that brings the toolbar in line with the memo tab strip
+       on the TaskDetail side. */
+    min-height: 2rem;
+  }
+  .TbSearchRow :global(> *) {
+    flex: 1 1 auto;
+    min-width: 0;
   }
   .storage-badge {
     flex: 0 0 auto;

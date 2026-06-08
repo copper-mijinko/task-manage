@@ -24,11 +24,12 @@
     display: flex;
     flex-direction: column;
     box-shadow: var(--elevation-2);
-    border-radius: var(--shape-sm);
+    border-radius: var(--card-radius);
     overflow: hidden;
     box-sizing: border-box;
     background-color: var(--theme-color-Main-main);
-    border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 12%, transparent);
+    border: 1px solid
+      color-mix(in srgb, var(--theme-color-Sub-main) var(--card-border-alpha), transparent);
     transition:
       box-shadow 0.18s ease,
       transform 0.18s ease;
@@ -41,19 +42,15 @@
     align-items: center;
     gap: var(--sp2);
     flex-shrink: 0;
-    min-height: 2.25rem;
-    padding: var(--sp1) var(--sp3);
+    min-height: var(--card-header-min-h);
+    padding: var(--card-header-pad-y) var(--sp3);
     border-bottom: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 20%, transparent);
-    background-color: color-mix(
-      in srgb,
-      var(--theme-color-Primary-main) 12%,
-      var(--theme-color-Main-main)
-    );
+    background-color: var(--card-header-bg);
   }
   .CardHeaderTitle {
     flex: 1 1 auto;
     min-width: 0;
-    font-size: var(--font-title-sm);
+    font-size: var(--card-header-font);
     font-weight: 600;
     color: var(--theme-color-Sub-main);
     line-height: 1.2;
@@ -73,6 +70,6 @@
     overflow: auto;
   }
   .CardBody.padded {
-    padding: var(--sp3);
+    padding: var(--card-pad);
   }
 </style>

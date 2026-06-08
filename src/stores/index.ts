@@ -33,7 +33,7 @@ import { workspace_conflict_policy } from "@features/workspace/stores/policy";
 import { active_tag } from "@features/memos/stores/tags";
 import { sort_state } from "@features/tasks/stores/sort";
 import { inbox_store } from "@features/inbox/stores/inbox";
-import { date_time_format } from "./preferences";
+import { date_time_format, ui_density } from "./preferences";
 import { navigation_history } from "./navigation_history";
 
 let initStoreReady: Promise<void> | null = null;
@@ -59,6 +59,7 @@ export function init_store(): Promise<void> {
   workspace_conflict_policy.init();
   inbox_store.init();
   date_time_format.init();
+  ui_density.init();
 
   // 履歴記録は selected_type / selected_id への subscribe を張る。
   // タスク詳細サブウィンドウ (`#task-detail-window`) では戻る/進むの概念が

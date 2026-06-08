@@ -1,13 +1,18 @@
 <script lang="ts">
   import Modal from "@lib/primitives/Modal.svelte";
   import SegmentedControl from "@lib/primitives/SegmentedControl.svelte";
-  import { date_time_format, type DateFormat } from "@stores/preferences";
+  import {
+    date_time_format,
+    ui_density,
+    type DateFormat,
+    type UiDensity,
+  } from "@stores/preferences";
   import { formatDate, formatTime } from "@lib/utils/datetime_shortcuts";
 
   export let show = false;
   export let toggle: () => void;
 
-  type CategoryId = "datetime-format" | "about";
+  type CategoryId = "appearance" | "datetime-format" | "about";
 
   type Category = {
     id: CategoryId;
@@ -17,6 +22,11 @@
   };
 
   const categories: Category[] = [
+    {
+      id: "appearance",
+      label: "外観",
+      description: "表示密度・フラットモード",
+    },
     {
       id: "datetime-format",
       label: "日時フォーマット",
@@ -47,11 +57,20 @@
     { value: "japanese", label: "2026年5月26日" },
   ];
 
+  const densityOptions = [
+    { value: "comfortable", label: "Comfortable" },
+    { value: "compact", label: "Compact (Flat)" },
+  ];
+
   $: previewDate = formatDate(now, $date_time_format);
   $: previewTime = formatTime(now, $date_time_format);
 
   function handleFormatChange(event: CustomEvent<{ value: string }>) {
     date_time_format.set(event.detail.value as DateFormat);
+  }
+
+  function handleDensityChange(event: CustomEvent<{ value: string }>) {
+    ui_density.set(event.detail.value as UiDensity);
   }
 </script>
 
@@ -96,7 +115,31 @@
       </nav>
 
       <section class="Detail" aria-live="polite">
-        {#if selected === "datetime-format"}
+        {#if selected === "appearance"}
+          <header class="DetailHeader">
+            <h3 class="DetailTitle">外観</h3>
+            <p class="DetailHint">
+              <strong>Comfortable</strong> はカードに影と丸みを付けた既定の見た目。
+              <strong>Compact (Flat)</strong> はVSCode風のフラットレイアウトで、影と角の丸みを消し、余白を詰めて密度を上げます。
+            </p>
+          </header>
+
+          <div class="Field">
+            <span class="FieldLabel">表示密度</span>
+            <SegmentedControl
+              options={densityOptions}
+              value={$ui_density}
+              ariaLabel="表示密度"
+              size="md"
+              on:change={handleDensityChange}
+            />
+          </div>
+
+          <p class="Note">
+            <strong>補足:</strong>
+            切り替えは即時反映され、次回起動時にも復元されます。テーマ（Dark / Light）の選択とは独立して機能します。
+          </p>
+        {:else if selected === "datetime-format"}
           <header class="DetailHeader">
             <h3 class="DetailTitle">日時フォーマット</h3>
             <p class="DetailHint">

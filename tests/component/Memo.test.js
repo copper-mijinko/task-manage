@@ -531,7 +531,14 @@ describe("Markdown Memo - view mode", () => {
     });
   });
 
-  test("caps markdown preview image growth at the image's natural width", async () => {
+  test("markdown preview image relies on the static CSS cap, not a JS-set per-image variable", async () => {
+    // Image sizing was previously driven by a JS path that measured each
+    // image's naturalWidth and pushed it into a `--memo-preview-image-max-width`
+    // inline custom property. That created a visible size mismatch between
+    // Preview-only and Split modes (different containers, different
+    // computed widths) and was replaced with a static `max-width: min(100%, 32rem)`
+    // rule in CSS. This regression test fails fast if the per-image JS hook
+    // is reintroduced.
     await renderMarkdownMemo({ saveMemo, content: "![Diagram](data:image/png;base64,AAAA)" });
 
     const image = document.querySelector(".preview img");
@@ -540,7 +547,7 @@ describe("Markdown Memo - view mode", () => {
     Object.defineProperty(image, "naturalWidth", { configurable: true, value: 640 });
     await fireEvent.load(image);
 
-    expect(image.style.getPropertyValue("--memo-preview-image-max-width")).toBe("640px");
+    expect(image.style.getPropertyValue("--memo-preview-image-max-width")).toBe("");
   }, 30000);
 
   test("converts legacy Quill Delta object to readable markdown text in workspace view", async () => {

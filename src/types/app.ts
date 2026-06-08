@@ -102,6 +102,7 @@ export interface ElectronAPI {
   deleteProject: (projectId: string) => void;
   message: (message: string) => void;
   openExternalLink: (url: string) => void;
+  openImageWindow: (src: string) => void;
   openTaskDetailWindow: (detailData: TaskDetailWindowData) => void;
   findInPage: (text: string, options?: Record<string, unknown>) => Promise<FindInPageResult | void>;
   findInPageNext: (text: string) => Promise<void>;
