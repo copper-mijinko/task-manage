@@ -24,6 +24,6 @@
     align-items: stretch;
     justify-content: stretch;
     overflow: hidden;
-    padding: var(--sp4);
+    padding: var(--pane-pad);
   }
 </style>

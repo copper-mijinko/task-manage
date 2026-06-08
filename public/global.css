@@ -50,6 +50,87 @@
   --on-theme-primary: #42a5f5;
   --on-theme-tooltip-bg: #e8edf0;
   --on-theme-tooltip-fg: #262d32;
+
+  /* Card body padding — overridable by density mode so we don't squash
+     every other --sp3 consumer. Defaults to the comfortable 12px. */
+  --card-pad: var(--sp3);
+  /* Card border tint — same intent: overridable so flat mode can make the
+     hairline a bit stronger as the only remaining zoning cue. */
+  --card-border-alpha: 12%;
+  /* Card corner radius — separate from --shape-* so flat mode can square
+     off cards without also squaring buttons / inputs / chips that share
+     --shape-sm/-xs. */
+  --card-radius: var(--shape-sm);
+  /* CardHeader chrome — slim height + tinted strip + 14px title is the
+     comfortable default. Compact collapses to a content-sized strip with
+     a 12px title and no tint so it reads as a hairline label, not a bar. */
+  --card-header-min-h: 2.25rem;
+  --card-header-pad-y: var(--sp1);
+  --card-header-font: var(--font-title-sm);
+  --card-header-bg: color-mix(
+    in srgb,
+    var(--theme-color-Primary-main) 12%,
+    var(--theme-color-Main-main)
+  );
+  /* Gap around each SplitPane child that hosts a Card. In comfortable mode
+     this is the 16px gutter that gives Cards their "floating" feel.
+     Compact mode collapses it to 0 for an edge-to-edge VSCode layout. */
+  --pane-pad: var(--sp4);
+  /* Outer padding inside the standalone Task Detail window. Separate from
+     --pane-pad because it sits at 8px (comfortable) vs 16px — both go to
+     0 in compact. */
+  --detail-window-pad: var(--sp2);
+  /* Inner padding around the MemoTab container inside TaskDetail's memo
+     pane. 4px in comfortable, 0 in compact (memo runs edge-to-edge). */
+  --memotab-pad: var(--sp1);
+  /* Outer frame around the Markdown editor wrapper. Compact drops it so
+     the memo bleeds into the Card edge. Quill's own frame is removed
+     separately via a :global(.density-compact) override in QuillMemo
+     because its internal frame comes from the Quill library CSS. */
+  --memo-wrapper-border: 1px solid color-mix(in srgb, var(--theme-color-Sub-dark) 45%, transparent);
+}
+
+/* ============================================================
+   Compact / flat density — VSCode-like layout.
+   Toggled by ui_density store via class on <html>. Strategy:
+     - kill all elevation halos (flat surfaces)
+     - sharp corners (2-4px instead of 8-16px)
+     - tighter card padding via dedicated --card-pad token
+     - stronger hairline border on cards to keep zone identifiable
+   We intentionally do NOT shrink the base --sp* tokens: that would
+   collapse button heights and header gaps. Only Card-scoped padding
+   gets tightened, plus the visual flat treatment.
+   ============================================================ */
+.density-compact {
+  --elevation-1: none;
+  --elevation-2: none;
+  --elevation-3: none;
+
+  /* NOTE: we intentionally do NOT override --shape-xs/sm/md/lg here.
+     Buttons, inputs, chips, and segmented controls all read those tokens
+     and should keep their rounded corners in compact mode. Only Cards
+     (and Card-like placeholders) get squared off, via --card-radius. */
+  --card-radius: 2px;
+  --card-pad: var(--sp1);
+  --card-border-alpha: 28%;
+
+  /* Slim the CardHeader: pin min-height to the IconButton size (2rem) so
+     left/right Card headers stay the same height regardless of slot
+     content (text-only vs IconButton-filled), zero vertical pad to drop
+     the 8px of unused padding, smaller 12px label.
+     NOTE: --card-header-bg is intentionally NOT overridden — the Primary
+     12% tint stays so the title strip reads as a header in either mode. */
+  --card-header-min-h: 2rem;
+  --card-header-pad-y: 0px;
+  --card-header-font: var(--font-label-md);
+
+  --memotab-pad: 0px;
+  --memo-wrapper-border: none;
+
+  /* Collapse the Card gutter: panes butt up against each other separated
+     only by the 5px resizer (and Card's own 1px border). */
+  --pane-pad: 0px;
+  --detail-window-pad: 0px;
 }
 
 html,

@@ -609,6 +609,11 @@
     container-type: inline-size;
     flex-shrink: 0;
   }
+  /* Compact mode drops the divider between the tag bar and the editor
+     so the memo area reads as one continuous edge-to-edge surface. */
+  :global(.density-compact) .tag-panel {
+    border-bottom: none;
+  }
 
   /* Tag area — 2-section layout (追加済み / 候補) */
   .tag-row {

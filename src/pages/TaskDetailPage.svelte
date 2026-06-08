@@ -72,7 +72,7 @@
     flex-direction: column;
     width: 100%;
     height: 100%;
-    padding: var(--sp2);
+    padding: var(--detail-window-pad);
     box-sizing: border-box;
     background: var(--theme-color-Main-dark);
     color: var(--theme-color-Sub-main);

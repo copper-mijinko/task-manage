@@ -95,6 +95,10 @@ export function openExternalLink(url: string): void {
   api()?.openExternalLink?.(url);
 }
 
+export function openImageWindow(src: string): void {
+  api()?.openImageWindow?.(src);
+}
+
 export function openTaskDetailWindow(detailData: TaskDetailWindowData): void {
   api()?.openTaskDetailWindow?.(detailData);
 }

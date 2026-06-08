@@ -475,10 +475,12 @@
   }
   /* Mini pane: overflow hidden so nothing bleeds out, and force padding so
      the placeholder Card has breathing room regardless of whether the pane's
-     original child was a Card (which would have applied padding via :has). */
+     original child was a Card (which would have applied padding via :has).
+     Uses the same --pane-pad token as the normal Card-hosting pane, so flat
+     mode collapses both consistently. */
   .SplitPaneRoot > :global(.Pane.PaneMini) {
     overflow: hidden;
-    padding: var(--sp4);
+    padding: var(--pane-pad);
   }
 
   .SplitPaneRoot > :global(.Pane.PaneMini > :not(.PaneMiniPlaceholder)) {
@@ -499,7 +501,7 @@
       var(--theme-color-Main-main)
     );
     border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 12%, transparent);
-    border-radius: var(--shape-sm);
+    border-radius: var(--card-radius);
     box-shadow: var(--elevation-2);
     box-sizing: border-box;
   }

@@ -121,12 +121,55 @@ function shouldOpenDevTools() {
   return !app.isPackaged && !testLikeEnvironment;
 }
 
+// Page-zoom wiring shared by every BrowserWindow we create. Ctrl/Cmd
+// modifiers + = / + / - / 0 step the zoom level, and Ctrl + mouse wheel
+// is forwarded by Chromium as zoom-changed once setVisualZoomLevelLimits
+// is opened up. We clamp to [MIN_LEVEL, MAX_LEVEL] so a fast scroll
+// can't drift past the usable range. allowEscapeClose=true makes the
+// window dismissible with Esc — appropriate for the image-viewer popup,
+// not for the main / task-detail windows.
+function attachZoomControls(win, { allowEscapeClose = false } = {}) {
+  const ZOOM_STEP = 0.5;
+  const MIN_LEVEL = -5;
+  const MAX_LEVEL = 5;
+  const clamp = (level) => Math.max(MIN_LEVEL, Math.min(MAX_LEVEL, level));
+
+  win.webContents.setVisualZoomLevelLimits(1, 5).catch(() => {});
+
+  win.webContents.on("before-input-event", (event, input) => {
+    if (input.type !== "keyDown") return;
+    const mod = input.control || input.meta;
+    if (mod) {
+      if (input.key === "=" || input.key === "+") {
+        win.webContents.setZoomLevel(clamp(win.webContents.getZoomLevel() + ZOOM_STEP));
+        event.preventDefault();
+      } else if (input.key === "-") {
+        win.webContents.setZoomLevel(clamp(win.webContents.getZoomLevel() - ZOOM_STEP));
+        event.preventDefault();
+      } else if (input.key === "0") {
+        win.webContents.setZoomLevel(0);
+        event.preventDefault();
+      }
+    } else if (allowEscapeClose && input.key === "Escape") {
+      win.close();
+      event.preventDefault();
+    }
+  });
+
+  win.webContents.on("zoom-changed", (_, zoomDirection) => {
+    const cur = win.webContents.getZoomLevel();
+    const next = clamp(cur + (zoomDirection === "in" ? ZOOM_STEP : -ZOOM_STEP));
+    win.webContents.setZoomLevel(next);
+  });
+}
+
 app.on("ready", () => {
   const t0 = Date.now();
 
   let mainWindow = new BrowserWindow({
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
+      zoomFactor: 1.0,
     },
     width: 1000,
     height: 800,
@@ -136,6 +179,8 @@ app.on("ready", () => {
     titleBarStyle: "hidden",
   });
   log.info(`[perf] BrowserWindow created: ${Date.now() - t0}ms`);
+
+  attachZoomControls(mainWindow);
 
   function sendWindowState(win) {
     if (!win || win.isDestroyed()) return;
@@ -767,6 +812,41 @@ app.on("ready", () => {
     }
   });
 
+  // Memo image enlarged view: open the image in a dedicated BrowserWindow.
+  // We load the image URL directly (no HTML wrapper) because a wrapping
+  // data:text/html page lives in a different origin and Chromium blocks
+  // cross-origin file:// resource loads by default — which would silently
+  // fail for workspace memo images served as file://. Loading the image
+  // URL as the page itself avoids that restriction; Chromium auto-fits
+  // the image to the window and shows scrollbars for larger images.
+  // Zoom wiring (Ctrl+= / Ctrl+- / Ctrl+0 / Ctrl+wheel) and Esc-to-close
+  // are delegated to attachZoomControls — the same helper used by the
+  // main and task-detail windows, keeping zoom behavior consistent.
+  ipcMain.on("open-image-window", (event, src) => {
+    if (!src || typeof src !== "string") return;
+    try {
+      const win = new BrowserWindow({
+        width: 960,
+        height: 720,
+        title: "Image",
+        autoHideMenuBar: true,
+        backgroundColor: "#1f1f1f",
+        webPreferences: {
+          sandbox: true,
+          contextIsolation: true,
+          nodeIntegration: false,
+          zoomFactor: 1.0,
+        },
+      });
+      attachZoomControls(win, { allowEscapeClose: true });
+      win.loadURL(src).catch((err) => {
+        log.error("Failed to load image window:", err);
+      });
+    } catch (err) {
+      log.error("Failed to open image window:", err);
+    }
+  });
+
   // 繧ｿ繧ｹ繧ｯ隧ｳ邏ｰ繧ｦ繧｣繝ｳ繝峨え縺ｮ螟画焚
   const taskDetailWindows = new Map(); // taskId -> BrowserWindow
 
@@ -923,8 +1003,11 @@ app.on("ready", () => {
           preload: path.join(__dirname, "preload.js"),
           nodeIntegration: false,
           contextIsolation: true,
+          zoomFactor: 1.0,
         },
       });
+
+      attachZoomControls(win);
 
       if (process.env.VITE_DEV === "true") {
         const params = new URLSearchParams(safeDetailData);

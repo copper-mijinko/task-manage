@@ -23,6 +23,9 @@ const electronAPI = {
   openExternalLink: (url) => {
     ipcRenderer.send("open-external-link", url);
   },
+  openImageWindow: (src) => {
+    ipcRenderer.send("open-image-window", src);
+  },
   // タスク詳細ウィンドウを開く
   openTaskDetailWindow: (detailData) => {
     ipcRenderer.send("open-task-detail-window", detailData);

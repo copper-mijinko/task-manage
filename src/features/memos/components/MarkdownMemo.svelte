@@ -88,8 +88,6 @@
   const SPLIT_MIN_PERCENT = 30;
   const SPLIT_MAX_PERCENT = 72;
   const SPLIT_KEY_STEP = 5;
-  const PREVIEW_IMAGE_MAX_WIDTH_VAR = "--memo-preview-image-max-width";
-  const measuredPreviewImages = new WeakSet<HTMLImageElement>();
 
   const EXTERNAL_LINK_PATTERN = /^(https?:\/\/|mailto:|file:\/\/)/i;
   // Quill 標準の `code` と `code-block` は同じ SVG (`<>`) で視覚的に区別できないため、
@@ -1016,24 +1014,6 @@
     });
   }
 
-  function syncPreviewImageNaturalWidth(image: HTMLImageElement) {
-    if (image.naturalWidth > 0) {
-      image.style.setProperty(PREVIEW_IMAGE_MAX_WIDTH_VAR, `${image.naturalWidth}px`);
-    }
-  }
-
-  function applyPreviewImageNaturalWidths(root: HTMLElement | null) {
-    if (!root) return;
-
-    root.querySelectorAll<HTMLImageElement>("img").forEach((image) => {
-      syncPreviewImageNaturalWidth(image);
-
-      if (measuredPreviewImages.has(image)) return;
-      measuredPreviewImages.add(image);
-      image.addEventListener("load", () => syncPreviewImageNaturalWidth(image), { once: true });
-    });
-  }
-
   // mermaid の初期化はテーマに依存する。最初の renderMermaidBlocks 呼び出し
   // および theme 変更時に setupMermaidTheme で再初期化する。
   let mermaidThemeApplied: "dark" | "default" | null = null;
@@ -1089,8 +1069,6 @@
     }) as string;
     renderedHtml = baseHtml;
     await tick();
-    applyPreviewImageNaturalWidths(previewEl);
-    applyPreviewImageNaturalWidths(livePreviewEl);
     injectCopyButtons(previewEl);
     injectCopyButtons(livePreviewEl);
     await renderMermaidBlocks(previewEl);
@@ -1100,8 +1078,6 @@
     if (sequence === renderSequence) {
       renderedHtml = nextHtml;
       await tick();
-      applyPreviewImageNaturalWidths(previewEl);
-      applyPreviewImageNaturalWidths(livePreviewEl);
       injectCopyButtons(previewEl);
       injectCopyButtons(livePreviewEl);
       await renderMermaidBlocks(previewEl);
@@ -1690,6 +1666,16 @@
       platform.openExternalLink(link.href);
       return;
     }
+    // Click an image in the rendered preview → open it in a dedicated
+    // BrowserWindow at its natural size. Skipped when the click came
+    // from inside a link (handled above) and skipped for missing/broken
+    // images so a placeholder doesn't pop a blank window.
+    const img = target?.closest("img") as HTMLImageElement | null;
+    if (img?.src && img.dataset.missingImage !== "true") {
+      e.preventDefault();
+      platform.openImageWindow(img.src);
+      return;
+    }
   }
 
   function handlePreviewKeydown(e: KeyboardEvent) {
@@ -2012,7 +1998,7 @@
     min-height: 0;
     overflow: hidden;
     background-color: var(--theme-color-Main-light);
-    border: 1px solid color-mix(in srgb, var(--theme-color-Sub-dark) 45%, transparent);
+    border: var(--memo-wrapper-border);
     box-sizing: border-box;
   }
 
@@ -2615,14 +2601,21 @@
   .preview :global(img) {
     display: block;
     box-sizing: border-box;
-    width: min(100%, var(--memo-preview-image-max-width, 100%));
-    max-width: 100%;
+    /* Fixed cap (32rem) keeps the rendered size identical between
+       Preview-only and Split modes for any image wider than the cap,
+       so the layout doesn't visually jump when the user toggles the
+       view. Smaller images still display at their natural size in
+       both modes. Click opens the image in a dedicated window for
+       a full-resolution look. */
+    width: auto;
+    max-width: min(100%, 32rem);
     height: auto;
     margin: var(--sp3) 0;
     border-radius: var(--shape-md);
     border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 25%, transparent);
     background: color-mix(in srgb, var(--theme-color-Main-dark) 80%, transparent);
     box-shadow: var(--elevation-2);
+    cursor: zoom-in;
   }
 
   .preview :global(img[data-missing-image="true"]) {
