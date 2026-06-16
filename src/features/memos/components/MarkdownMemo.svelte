@@ -1,4 +1,9 @@
-﻿<script lang="ts">
+﻿<script context="module" lang="ts">
+  // marked.use() の設定はモジュール読込時に一度だけ行う (下の instance <script> 参照)。
+  let markedConfigured = false;
+</script>
+
+<script lang="ts">
   import { tick, onDestroy } from "svelte";
   import {
     Direction,
@@ -32,29 +37,38 @@
   import { theme } from "@stores/theme";
   import "@features/memos/styles/hljs-theme.css";
 
-  marked.use(
-    markedHighlight({
-      langPrefix: "hljs language-",
-      highlight(code, lang) {
-        const language = lang && hljs.getLanguage(lang) ? lang : "plaintext";
-        return hljs.highlight(code, { language, ignoreIllegals: true }).value;
-      },
-    }),
-    {
-      gfm: true,
-      breaks: false,
-      tokenizer: {
-        code() {
-          return undefined;
+  // marked は共有シングルトンで marked.use() は extension を「積み上げる」ため、
+  // この設定はコンポーネントのマウントごとではなく一度だけ実行する必要がある。
+  // 以前はこの呼び出しがインスタンス <script> にあり、マウントのたびに markedHighlight が
+  // 再登録され、その walkTokens によるコードブロックの hljs エスケープが 1 段ずつ重なっていた
+  // (`>` → `&gt;` → `&amp;gt;` → `&amp;amp;gt;` …)。本文(段落)は renderer が一度だけ
+  // エスケープするため影響を受けず、コードブロックだけで多重エスケープが顕在化していた。
+  if (!markedConfigured) {
+    markedConfigured = true;
+    marked.use(
+      markedHighlight({
+        langPrefix: "hljs language-",
+        highlight(code, lang) {
+          const language = lang && hljs.getLanguage(lang) ? lang : "plaintext";
+          return hljs.highlight(code, { language, ignoreIllegals: true }).value;
         },
-      },
-      renderer: {
-        checkbox({ checked }) {
-          return `<input type="checkbox"${checked ? " checked" : ""}>`;
+      }),
+      {
+        gfm: true,
+        breaks: false,
+        tokenizer: {
+          code() {
+            return undefined;
+          },
         },
-      },
-    }
-  );
+        renderer: {
+          checkbox({ checked }) {
+            return `<input type="checkbox"${checked ? " checked" : ""}>`;
+          },
+        },
+      }
+    );
+  }
 
   export let saveMemo: (content: string) => void;
   export let content: unknown = "";
