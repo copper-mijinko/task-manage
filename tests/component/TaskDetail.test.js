@@ -469,16 +469,85 @@ describe("TaskDetail", () => {
     ]);
   });
 
+  test("duplicates the selected memo with a copy title and inserts it right after the original", async () => {
+    const project = createProjectData();
+    project.data.children[0].data.memo = [
+      {
+        id: "memo-draft",
+        title: "draft",
+        content: "hello",
+        tags: ["design"],
+        format: "markdown",
+      },
+      { id: "memo-notes", title: "notes", content: "" },
+    ];
+    tree_data.set(project);
+    table_selected_id.set("task-1");
+
+    render(TaskDetail);
+
+    await fireEvent.click(screen.getByRole("button", { name: "Select memo draft" }));
+    await fireEvent.click(screen.getByRole("button", { name: "このメモを複製" }));
+    await tick();
+
+    const memo = get(tree_data).data.children[0].data.memo;
+    expect(memo).toHaveLength(3);
+    expect(memo[0]).toEqual(expect.objectContaining({ id: "memo-draft", title: "draft" }));
+    expect(memo[1]).toEqual(
+      expect.objectContaining({
+        title: "draft のコピー",
+        content: "hello",
+        tags: ["design"],
+        format: "markdown",
+      })
+    );
+    expect(memo[1].id).not.toBe("memo-draft");
+    expect(memo[2]).toEqual(expect.objectContaining({ id: "memo-notes", title: "notes" }));
+
+    expect(screen.getByRole("button", { name: "Select memo draft のコピー" })).toHaveClass(
+      "selected"
+    );
+  });
+
+  test("appends a numeric suffix when duplicating a memo whose copy title already exists", async () => {
+    const project = createProjectData();
+    project.data.children[0].data.memo = [
+      { id: "memo-draft", title: "draft", content: "" },
+      { id: "memo-draft-copy", title: "draft のコピー", content: "" },
+    ];
+    tree_data.set(project);
+    table_selected_id.set("task-1");
+
+    render(TaskDetail);
+
+    await fireEvent.click(screen.getByRole("button", { name: "Select memo draft" }));
+    await fireEvent.click(screen.getByRole("button", { name: "このメモを複製" }));
+    await tick();
+
+    const memo = get(tree_data).data.children[0].data.memo;
+    expect(memo.map((entry) => entry.title)).toEqual([
+      "draft",
+      "draft のコピー 2",
+      "draft のコピー",
+    ]);
+  });
+
+  test("disables the duplicate button when there are no memos", () => {
+    table_selected_id.set("task-1");
+    render(TaskDetail);
+
+    expect(screen.getByRole("button", { name: "このメモを複製" })).toBeDisabled();
+  });
+
   test("deletes the selected memo after confirmation", async () => {
     const project = createProjectData();
     project.data.children[0].data.memo = [{ id: "memo-draft", title: "draft", content: "" }];
     tree_data.set(project);
     table_selected_id.set("task-1");
 
-    const { container } = render(TaskDetail);
+    render(TaskDetail);
 
-    const buttons = container.querySelectorAll(".memotab-control button");
-    await fireEvent.click(buttons[1]);
+    await fireEvent.click(screen.getByRole("button", { name: "このメモを削除" }));
     expect(screen.getByText('Do you really delete "draft"?')).toBeInTheDocument();
 
     await fireEvent.click(screen.getByRole("button", { name: "ok" }));
