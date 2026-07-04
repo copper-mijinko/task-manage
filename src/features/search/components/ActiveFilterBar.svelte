@@ -3,19 +3,21 @@
   import { active_tag } from "@features/memos/stores/tags";
   import { tokenizeFullTextQuery } from "@features/tasks/utils/tree_control";
 
-  $: rawFullText = (
-    ($filter as Record<string, string[] | null | undefined>)?.full_text?.[0] ?? ""
-  ).trim();
-  $: fullTextTokens = rawFullText ? tokenizeFullTextQuery(rawFullText) : [];
+  // Each entry in $filter.full_text is one AND term / chip (see SearchBox.svelte).
+  // fullTextTokens keeps one displayable chip label per entry; tokenizeFullTextQuery
+  // is still used to trim quoting artifacts so labels match what the user typed.
+  $: fullTextEntries = (
+    ($filter as Record<string, string[] | null | undefined>)?.full_text ?? []
+  ).filter((entry) => entry.trim() !== "");
+  $: fullTextTokens = fullTextEntries.map((entry) => {
+    const parts = tokenizeFullTextQuery(entry.trim());
+    return parts.length > 0 ? parts.join(" ") : entry.trim();
+  });
   $: searchMemoOn =
     ((($filter as Record<string, string[] | null | undefined>)?.search_memo ?? []).length ?? 0) > 0;
   $: activeTag = $active_tag ?? "";
   $: hasFilters = fullTextTokens.length > 0 || Boolean(activeTag);
   $: showClearAll = fullTextTokens.length + (activeTag ? 1 : 0) > 1;
-
-  function serializeTokens(tokens: string[]): string {
-    return tokens.map((t) => (/\s/.test(t) ? `"${t}"` : t)).join(" ");
-  }
 
   function clearFullText() {
     filter.update((f) => {
@@ -26,17 +28,16 @@
   }
 
   function removeToken(index: number) {
-    const remaining = fullTextTokens.filter((_, i) => i !== index);
+    const remaining = fullTextEntries.filter((_, i) => i !== index);
     if (remaining.length === 0) {
       clearFullText();
       return;
     }
-    const serialized = serializeTokens(remaining);
     filter.update(
       (f) =>
         ({
           ...(f as Record<string, unknown>),
-          full_text: [serialized],
+          full_text: remaining,
         }) as typeof f
     );
   }

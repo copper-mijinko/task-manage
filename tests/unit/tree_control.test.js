@@ -130,6 +130,30 @@ describe("tree_control", () => {
     expect(filterTree(tree, { full_text: ["ship tests"] })).toBeNull();
   });
 
+  test("filterTree ANDs multiple full_text array entries (chip-based search)", () => {
+    const tree = createTree();
+
+    // Each array entry is a separate chip; both "ship" and "release" must
+    // match the same node, mirroring the single-string AND behavior above.
+    const both = filterTree(tree, { full_text: ["ship", "release"] });
+    expect(both.children).toHaveLength(1);
+    expect(both.children[0].id).toBe("task-2");
+
+    // Order of chips does not matter for AND
+    const reversed = filterTree(tree, { full_text: ["release", "ship"] });
+    expect(reversed.children).toHaveLength(1);
+    expect(reversed.children[0].id).toBe("task-2");
+
+    // No single task contains both "ship" and "tests"
+    expect(filterTree(tree, { full_text: ["ship", "tests"] })).toBeNull();
+
+    // A chip can itself contain multiple space-separated tokens (quoted phrase)
+    // combined with another chip — all tokens across all chips must match.
+    const mixed = filterTree(tree, { full_text: ['"ship release"', "pending"] });
+    expect(mixed.children).toHaveLength(1);
+    expect(mixed.children[0].id).toBe("task-2");
+  });
+
   test("filterTree treats double-quoted substrings as a single phrase", () => {
     const tree = createTree();
 
