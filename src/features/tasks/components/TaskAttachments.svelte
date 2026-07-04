@@ -26,6 +26,7 @@
     { title: "プログラムから開く", action: "openWith" },
   ];
   $: attachTooltip = canUseAttachments ? "添付を追加" : "ワークスペースプロジェクトで利用できます";
+  $: isDense = attachmentList.length > 8;
 
   function attachmentPath(attachment) {
     return attachment?.relativePath || attachment?.path || attachment?.id || "";
@@ -239,6 +240,9 @@
     <output class="attachment-count" aria-labelledby="lbl-attachment-count"
       >{attachmentList.length}</output
     >
+    {#if isDense}
+      <span class="attachment-dense-hint">多数の添付</span>
+    {/if}
     <IconButton
       tooltipContent={attachTooltip}
       ariaLabel="添付を追加"
@@ -301,25 +305,27 @@
               <span class="attachment-size">{formatBytes(attachment.size)}</span>
             {/if}
           </button>
-          <IconButton
-            tooltipContent={`添付を削除 ${attachment.name}`}
-            ariaLabel={`添付を削除 ${attachment.name}`}
-            variant="text"
-            disabled={!canUseAttachments || isBusy}
-            activeColor={"var(--theme-color-Error-main)"}
-            normalColor={"var(--theme-color-Sub-main)"}
-            on:click={() => deleteAttachment(attachment)}
-          >
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path
-                d="M3 6H21M8 6V4C8 3.4 8.4 3 9 3H15C15.6 3 16 3.4 16 4V6M10 11V17M14 11V17M5 6L6 20C6 20.6 6.4 21 7 21H17C17.6 21 18 20.6 18 20L19 6"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-          </IconButton>
+          <span class="attachment-delete">
+            <IconButton
+              tooltipContent={`添付を削除 ${attachment.name}`}
+              ariaLabel={`添付を削除 ${attachment.name}`}
+              variant="text"
+              disabled={!canUseAttachments || isBusy}
+              activeColor={"var(--theme-color-Error-main)"}
+              normalColor={"var(--theme-color-Sub-main)"}
+              on:click={() => deleteAttachment(attachment)}
+            >
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d="M3 6H21M8 6V4C8 3.4 8.4 3 9 3H15C15.6 3 16 3.4 16 4V6M10 11V17M14 11V17M5 6L6 20C6 20.6 6.4 21 7 21H17C17.6 21 18 20.6 18 20L19 6"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </IconButton>
+          </span>
         </li>
       {/each}
     </ul>
@@ -383,6 +389,7 @@
   }
   .attachment-list {
     display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
     gap: var(--sp1);
     min-width: 0;
     max-height: 12rem;
@@ -392,6 +399,7 @@
     overflow-y: auto;
   }
   .attachment-item {
+    position: relative;
     display: flex;
     align-items: center;
     min-width: 0;
@@ -439,6 +447,23 @@
   .attachment-size {
     color: var(--theme-color-Sub-main);
     opacity: 0.72;
+    font-size: var(--font-label-md);
+    white-space: nowrap;
+  }
+  .attachment-delete {
+    display: flex;
+    flex: 0 0 auto;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+  }
+  .attachment-item:hover .attachment-delete,
+  .attachment-item:focus-within .attachment-delete,
+  .attachment-delete:focus-within {
+    opacity: 1;
+  }
+  .attachment-dense-hint {
+    flex: 0 0 auto;
+    color: color-mix(in srgb, var(--theme-color-Sub-main) 68%, transparent);
     font-size: var(--font-label-md);
     white-space: nowrap;
   }
