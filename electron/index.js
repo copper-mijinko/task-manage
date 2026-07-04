@@ -43,10 +43,18 @@ function openPathWithProgramPicker(filePath) {
   }
 
   return new Promise((resolve, reject) => {
-    const child = spawn("rundll32.exe", ["shell32.dll,OpenAs_RunDLL", filePath], {
+    // OpenAs_RunDLL consumes the raw remainder of the command line as the file
+    // path and does NOT strip surrounding quotes. Node's default Windows arg
+    // quoting wraps any path containing spaces in double quotes, which makes
+    // OpenAs_RunDLL look for a literally-quoted path that does not exist, so the
+    // "Open with" dialog silently fails to appear. We therefore build the command
+    // line verbatim (windowsVerbatimArguments) and pass the path unquoted —
+    // OpenAs_RunDLL treats the rest of the line as the path, spaces included.
+    const child = spawn("rundll32.exe", [`shell32.dll,OpenAs_RunDLL ${filePath}`], {
       detached: true,
       stdio: "ignore",
       windowsHide: false,
+      windowsVerbatimArguments: true,
     });
     let settled = false;
 
@@ -61,6 +69,45 @@ function openPathWithProgramPicker(filePath) {
       settled = true;
       child.unref();
       resolve();
+    });
+  });
+}
+
+// Open a directory in the OS file manager. On Windows shell.openPath is known to
+// be slow (often 1–3+ seconds) because it goes through Electron's synchronous
+// shell integration. Launching explorer.exe directly is effectively instant.
+// The caller is responsible for validating `dir` (path resolution + known-
+// workspace security checks) before invoking this helper.
+function openDirectoryInExplorer(dir) {
+  if (process.platform !== "win32") {
+    // Non-Windows: fall back to Electron's shell integration.
+    return shell
+      .openPath(dir)
+      .then((openError) => (openError ? { success: false, error: openError } : { success: true }));
+  }
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const child = spawn("explorer.exe", [dir], {
+      detached: true,
+      stdio: "ignore",
+    });
+
+    // explorer.exe's exit code is unreliable — it frequently returns 1 even on
+    // success — so we do NOT treat a nonzero exit as failure. Only a spawn error
+    // (e.g. explorer.exe not found) is a real failure.
+    child.once("error", (err) => {
+      if (settled) return;
+      settled = true;
+      log.error("Failed to launch explorer.exe:", err.message);
+      resolve({ success: false, error: err.message });
+    });
+
+    child.once("spawn", () => {
+      if (settled) return;
+      settled = true;
+      child.unref();
+      resolve({ success: true });
     });
   });
 }
@@ -822,6 +869,7 @@ app.on("ready", () => {
   // Zoom wiring (Ctrl+= / Ctrl+- / Ctrl+0 / Ctrl+wheel) and Esc-to-close
   // are delegated to attachZoomControls — the same helper used by the
   // main and task-detail windows, keeping zoom behavior consistent.
+  let imageWindowSequence = 0;
   ipcMain.on("open-image-window", (event, src) => {
     if (!src || typeof src !== "string") return;
     try {
@@ -836,10 +884,39 @@ app.on("ready", () => {
           contextIsolation: true,
           nodeIntegration: false,
           zoomFactor: 1.0,
+          // Fresh in-memory session per window (no "persist:" prefix, unique
+          // name). The default shared session persists both the disk cache and
+          // the per-origin zoom level for file:// — a stale/evicted cache entry
+          // or a previously saved extreme zoom factor are the two known ways a
+          // 2nd+ open of the same image renders blank. An isolated throwaway
+          // session rules both out; headers alone can't (file:// loads ignore
+          // HTTP cache headers).
+          partition: `image-window-${++imageWindowSequence}`,
         },
       });
       attachZoomControls(win, { allowEscapeClose: true });
-      win.loadURL(src).catch((err) => {
+
+      // Defense-in-depth on top of the isolated session above: no-cache headers
+      // for http(s) sources, and a single retry if the initial load fails.
+      let retried = false;
+      win.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL) => {
+        // -3 (ERR_ABORTED) fires for benign cases (e.g. window closed mid-load).
+        if (errorCode === -3) return;
+        log.error(
+          `Image window load failed (${errorCode} ${errorDescription}) for ${validatedURL}`
+        );
+        if (retried || win.isDestroyed()) return;
+        retried = true;
+        log.info("Retrying image window load with cache bypass");
+        // Re-issue the load explicitly (rather than reloadIgnoringCache, which can
+        // no-op when the failed navigation left no committed URL). Chromium honors
+        // the no-cache header, so the retry fetches the resource fresh.
+        win.loadURL(src, { extraHeaders: "pragma: no-cache\n" }).catch((err) => {
+          log.error("Image window retry load failed:", err);
+        });
+      });
+
+      win.loadURL(src, { extraHeaders: "pragma: no-cache\n" }).catch((err) => {
         log.error("Failed to load image window:", err);
       });
     } catch (err) {
@@ -1178,12 +1255,7 @@ app.on("ready", () => {
         return { success: false, error: "Workspace path is not a directory" };
       }
 
-      const openError = await shell.openPath(requestedPath);
-      if (openError) {
-        return { success: false, error: openError };
-      }
-
-      return { success: true };
+      return openDirectoryInExplorer(requestedPath);
     } catch (err) {
       log.error("ws:open-workspace error:", err.message);
       return { success: false, error: err.message };
@@ -1202,12 +1274,14 @@ app.on("ready", () => {
         return { success: false, error: "Project is not inside a registered workspace" };
       }
 
-      if (workspaceWriteQueue.hasPending(projectDir)) {
-        await workspaceWriteQueue.flush();
-      }
-
+      // Opening a folder in Explorer should not block on the write queue or a full
+      // project re-read. Prefer the in-memory cache; only fall back to the slower
+      // flush + re-read path when the task dir is missing from the cache.
       let cached = await ensureWorkspaceCacheAsync(projectDir);
       if (!cached.taskDirs?.has(taskId)) {
+        if (workspaceWriteQueue.hasPending(projectDir)) {
+          await workspaceWriteQueue.flush();
+        }
         const { tasks, taskDirs } = await readProjectSummaryAsync(projectDir);
         cached = { tasks, taskDirs };
         wsCache.set(projectDir, cached);
@@ -1231,12 +1305,7 @@ app.on("ready", () => {
         return { success: false, error: "Task path is not a directory" };
       }
 
-      const openError = await shell.openPath(targetDir);
-      if (openError) {
-        return { success: false, error: openError };
-      }
-
-      return { success: true };
+      return openDirectoryInExplorer(targetDir);
     } catch (err) {
       log.error("ws:open-task-folder error:", err.message);
       return { success: false, error: err.message };
