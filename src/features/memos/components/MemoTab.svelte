@@ -11,6 +11,7 @@
   export let memo = [];
   export let saveMemo;
   export let addMemo;
+  export let copyMemo = null;
   export let deleteMemo;
   export let renameMemo;
   export let reorderMemo;
@@ -98,6 +99,16 @@
     if (addMemo(newMemoTitle)) {
       await tick();
       selectedMemoIndex = memo.length - 1;
+    }
+  };
+
+  const duplicateMemo = async () => {
+    if (!copyMemo || !hasSelectedMemo()) return;
+    const index = selectedMemoIndex;
+    if (copyMemo(index)) {
+      await tick();
+      selectedMemoIndex = index + 1;
+      edit = false;
     }
   };
 
@@ -308,6 +319,32 @@
             stroke-linejoin="round"
           ></path></svg
         >
+      </IconButton>
+      <IconButton
+        tooltipContent="このメモを複製"
+        ariaLabel="このメモを複製"
+        variant="text"
+        disabled={disabled || memo.length === 0}
+        activeColor={"var(--theme-color-Primary-dark)"}
+        normalColor={"var(--theme-color-Primary-main)"}
+        on:click={duplicateMemo}
+      >
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path
+            d="M8 8V5C8 4.4 8.4 4 9 4H19C19.6 4 20 4.4 20 5V15C20 15.6 19.6 16 19 16H16"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+          <path
+            d="M5 8H15C15.6 8 16 8.4 16 9V19C16 19.6 15.6 20 15 20H5C4.4 20 4 19.6 4 19V9C4 8.4 4.4 8 5 8Z"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
       </IconButton>
       <IconButton
         tooltipContent="このメモを削除"

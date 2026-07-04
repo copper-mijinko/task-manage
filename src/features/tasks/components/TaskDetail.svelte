@@ -254,6 +254,34 @@
       return true;
     }
   };
+  const copyMemo = (index) => {
+    const editContext = getEditContext();
+    const liveNode = getLiveNode(editContext);
+    if (!liveNode) return false;
+    const currentMemo = (liveNode.data.memo ?? [])[index];
+    if (!currentMemo) return false;
+
+    const existingTitles = new Set((liveNode.data.memo ?? []).map((entry) => entry.title));
+    const baseTitle = `${currentMemo.title} のコピー`;
+    let newTitle = baseTitle;
+    let suffix = 2;
+    while (existingTitles.has(newTitle)) {
+      newTitle = `${baseTitle} ${suffix}`;
+      suffix += 1;
+    }
+
+    const newMemo = {
+      ...currentMemo,
+      id: uuidV4(),
+      title: newTitle,
+      tags: [...(currentMemo.tags ?? [])],
+    };
+
+    const updatedMemo = [...(liveNode.data.memo ?? [])];
+    updatedMemo.splice(index + 1, 0, newMemo);
+    changeData(liveNode, "memo", updatedMemo, editContext);
+    return true;
+  };
   const deleteMemo = (index) => {
     const editContext = getEditContext();
     const liveNode = getLiveNode(editContext);
@@ -796,6 +824,7 @@
             {memo}
             {saveMemo}
             {addMemo}
+            {copyMemo}
             {deleteMemo}
             {renameMemo}
             {reorderMemo}
