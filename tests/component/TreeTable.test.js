@@ -257,6 +257,84 @@ describe("TreeTable", () => {
     expect(get(copied_tasks).map((task) => task.id)).toEqual(["task-1"]);
   });
 
+  function countNodes(node) {
+    return 1 + (node.children ?? []).reduce((sum, child) => sum + countNodes(child), 0);
+  }
+
+  test("pastes a copied project-root subtree as an ordinary task under another node", async () => {
+    render(TreeTable);
+
+    // Copy the whole project (the root row itself, id === tree_data.data.id).
+    // The context menu hides "copy" for the root row, but Ctrl+C on the
+    // selected root row is the (intentional) way to grab the entire project.
+    await fireEvent.click(screen.getByTestId("select-project-1"));
+    await tick();
+    await fireEvent.keyDown(window, { key: "c", ctrlKey: true });
+    await tick();
+
+    expect(get(copied_task)?.id).toBe("project-1");
+
+    // Paste it as a child of "task-1", an ordinary node inside the same tree.
+    await fireEvent.click(screen.getByTestId("select-task-1"));
+    await tick();
+    await fireEvent.keyDown(window, { key: "v", ctrlKey: true });
+    await tick();
+
+    const task1 = get(tree_data).data.children.find((c) => c.id === "task-1");
+    expect(task1.children).toHaveLength(2); // original "task-1-1" + the pasted clone
+    const pastedRoot = task1.children.find((c) => c.id !== "task-1-1");
+    expect(pastedRoot).toBeDefined();
+    // The pasted node is a plain task: nothing marks it as a project root, and
+    // (per workspace_tree.ts) its `parents` on save is derived purely from
+    // tree position, so it is written as a normal task, never as `_project.md`.
+    expect(pastedRoot.data.name).toBe("Sample Project");
+    expect(pastedRoot.id).not.toBe("project-1");
+    // The whole copied subtree (project-1 -> task-1 "Parent Task" -> task-1-1
+    // "Nested Task") comes along, with fresh ids at every level.
+    expect(pastedRoot.children.map((c) => c.data.name)).toEqual(["Parent Task"]);
+    expect(pastedRoot.children[0].children.map((c) => c.data.name)).toEqual(["Nested Task"]);
+    expect(pastedRoot.id).not.toBe("project-1");
+    expect(pastedRoot.children[0].id).not.toBe("task-1");
+    expect(pastedRoot.children[0].children[0].id).not.toBe("task-1-1");
+  });
+
+  test("repeated pastes of a copied project root do not compound in size", async () => {
+    // Regression test for the clipboard-aliasing bug: handleCopyTask stores a
+    // *live* reference into $tree_data.data. Because the project root's only
+    // possible paste targets are its own descendants, pasting it once used to
+    // leave the clipboard aliasing an now-larger live tree, so a second paste
+    // from the same clipboard entry re-cloned the already-grown tree instead
+    // of the original — turning "copy a project, paste it twice" into an
+    // ever-doubling write payload (a real-world save failure for big
+    // projects). handlePasteTask now refreshes the clipboard to a fresh,
+    // detached clone on every paste, so growth stays linear.
+    render(TreeTable);
+
+    await fireEvent.click(screen.getByTestId("select-project-1"));
+    await tick();
+    await fireEvent.keyDown(window, { key: "c", ctrlKey: true });
+    await tick();
+
+    const sizeBefore = countNodes(get(tree_data).data);
+
+    await fireEvent.click(screen.getByTestId("select-task-1"));
+    await tick();
+    await fireEvent.keyDown(window, { key: "v", ctrlKey: true });
+    await tick();
+    const sizeAfterFirstPaste = countNodes(get(tree_data).data);
+    const growthPerPaste = sizeAfterFirstPaste - sizeBefore;
+    expect(growthPerPaste).toBeGreaterThan(0);
+
+    // Paste again from the same (still-populated) clipboard entry without
+    // re-copying — a natural thing to do right after duplicating a project.
+    await fireEvent.keyDown(window, { key: "v", ctrlKey: true });
+    await tick();
+    const sizeAfterSecondPaste = countNodes(get(tree_data).data);
+
+    // Fixed behaviour: each paste adds the same, constant-size snapshot.
+    expect(sizeAfterSecondPaste - sizeAfterFirstPaste).toBe(growthPerPaste);
+  });
+
   test("positions resizers after the selection checkbox column", async () => {
     const rect = (width, height = 40) => ({
       x: 0,
