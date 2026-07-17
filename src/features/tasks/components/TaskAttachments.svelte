@@ -351,7 +351,6 @@
   .attachments-field {
     display: flex;
     flex-direction: column;
-    grid-column: 1 / -1;
     min-width: 0;
     gap: var(--sp1);
     border-radius: var(--shape-sm);
@@ -390,15 +389,17 @@
   .attachment-list {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+    /* Keep rows packed at the top when the list is given more height than
+       its content (fixed-split mode stretches it to fill the pane). */
+    align-content: start;
     gap: var(--sp1);
     min-width: 0;
     margin: 0;
     padding: 0;
-    /* No height cap here: in the fixed-split mode the surrounding
-       .detail-container (TaskDetail.svelte) scrolls, so the grid may grow
-       freely with the render area. The auto-detail mode, where nothing
-       above constrains height, gets its cap from TaskDetail.svelte via
-       `.detail-pane.auto-detail .detail-container :global(...)`. */
+    /* Height behavior is mode-dependent and owned by TaskDetail.svelte:
+       fixed-split mode gives the list the remaining pane height with an
+       internal overflow-y scroll; auto-detail mode caps it with a viewport
+       clamp. See the `.detail-pane... :global(.attachment-list)` rules. */
     list-style: none;
   }
   .attachment-item {
