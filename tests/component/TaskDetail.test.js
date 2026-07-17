@@ -1,4 +1,4 @@
-﻿import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
+﻿import { fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import { get } from "svelte/store";
 import { tick } from "svelte";
 import { vi } from "vitest";
@@ -489,6 +489,8 @@ describe("TaskDetail", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Select memo draft" }));
     await fireEvent.click(screen.getByRole("button", { name: "このメモを複製" }));
     await tick();
+    await fireEvent.click(screen.getByRole("menuitem", { name: "このタスク内に複製" }));
+    await tick();
 
     const memo = get(tree_data).data.children[0].data.memo;
     expect(memo).toHaveLength(3);
@@ -522,6 +524,8 @@ describe("TaskDetail", () => {
 
     await fireEvent.click(screen.getByRole("button", { name: "Select memo draft" }));
     await fireEvent.click(screen.getByRole("button", { name: "このメモを複製" }));
+    await tick();
+    await fireEvent.click(screen.getByRole("menuitem", { name: "このタスク内に複製" }));
     await tick();
 
     const memo = get(tree_data).data.children[0].data.memo;
@@ -767,5 +771,142 @@ describe("TaskDetail", () => {
     await new Promise((resolve) => setTimeout(resolve, 600));
 
     expect(get(tree_data).data.children[0].data.memo[0].content).toBe("project old");
+  });
+
+  test("duplicates a memo into another task via the cross-task picker", async () => {
+    const project = createProjectData();
+    project.data.children[0].data.memo = [
+      {
+        id: "memo-draft",
+        title: "draft",
+        content: "hello",
+        tags: ["design"],
+        format: "markdown",
+      },
+    ];
+    tree_data.set(project);
+    table_selected_id.set("task-1");
+
+    render(TaskDetail);
+
+    await fireEvent.click(screen.getByRole("button", { name: "Select memo draft" }));
+    await fireEvent.click(screen.getByRole("button", { name: "このメモを複製" }));
+    await tick();
+    await fireEvent.click(screen.getByRole("menuitem", { name: "別のタスクへ複製…" }));
+    await tick();
+
+    await fireEvent.click(within(screen.getByRole("dialog")).getByText("Second Task"));
+    await fireEvent.click(screen.getByRole("button", { name: "複製" }));
+    await tick();
+
+    // Source task is untouched — no in-place insert happened.
+    expect(get(tree_data).data.children[0].data.memo).toEqual([
+      expect.objectContaining({ id: "memo-draft", title: "draft" }),
+    ]);
+
+    // Target task gets an appended copy with a fresh id, the same title
+    // (no collision), and copied content/format/tags.
+    const targetMemo = get(tree_data).data.children[1].data.memo;
+    expect(targetMemo).toHaveLength(2);
+    expect(targetMemo[1]).toEqual(
+      expect.objectContaining({
+        title: "draft",
+        content: "hello",
+        tags: ["design"],
+        format: "markdown",
+      })
+    );
+    expect(targetMemo[1].id).not.toBe("memo-draft");
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  test("resolves title collisions against the target task's memos when duplicating across tasks", async () => {
+    const project = createProjectData();
+    project.data.children[0].data.memo = [
+      { id: "memo-draft", title: "draft", content: "hello", tags: [] },
+    ];
+    project.data.children[1].data.memo = [
+      { id: "memo-review", title: "review", content: "" },
+      { id: "memo-existing-draft", title: "draft", content: "existing" },
+    ];
+    tree_data.set(project);
+    table_selected_id.set("task-1");
+
+    render(TaskDetail);
+
+    await fireEvent.click(screen.getByRole("button", { name: "Select memo draft" }));
+    await fireEvent.click(screen.getByRole("button", { name: "このメモを複製" }));
+    await tick();
+    await fireEvent.click(screen.getByRole("menuitem", { name: "別のタスクへ複製…" }));
+    await tick();
+
+    await fireEvent.click(within(screen.getByRole("dialog")).getByText("Second Task"));
+    await fireEvent.click(screen.getByRole("button", { name: "複製" }));
+    await tick();
+
+    const targetMemo = get(tree_data).data.children[1].data.memo;
+    expect(targetMemo.map((entry) => entry.title)).toEqual(["review", "draft", "draft のコピー"]);
+  });
+
+  test("hides archived tasks from the cross-task duplicate picker", async () => {
+    const project = createProjectData();
+    project.data.children[0].data.memo = [{ id: "memo-draft", title: "draft", content: "" }];
+    project.data.children.push({
+      id: "task-archived",
+      data: { name: "Archived Task", status: "Open", "due date": undefined, memo: [] },
+      children: [],
+      archived: true,
+      archivedAt: new Date().toISOString(),
+    });
+    tree_data.set(project);
+    table_selected_id.set("task-1");
+
+    render(TaskDetail);
+
+    await fireEvent.click(screen.getByRole("button", { name: "Select memo draft" }));
+    await fireEvent.click(screen.getByRole("button", { name: "このメモを複製" }));
+    await tick();
+    await fireEvent.click(screen.getByRole("menuitem", { name: "別のタスクへ複製…" }));
+    await tick();
+
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Second Task")).toBeInTheDocument();
+    expect(within(dialog).queryByText("Archived Task")).not.toBeInTheDocument();
+  });
+
+  test("disables memo duplication while workspace memo bodies are still hydrating", async () => {
+    const project = createProjectData();
+    project.data.children[1].data.memo = [
+      {
+        id: "memo-review",
+        title: "review",
+        content: "",
+        tags: [],
+        format: "markdown",
+        bodyLoaded: false,
+      },
+    ];
+    tree_data.set(project);
+    workspace_store.set({
+      workspaces: [],
+      activeWorkspacePath: "C:\\workspace",
+      activeProjectDir: "C:\\workspace\\project-1",
+      projects: [],
+    });
+    selected_type.set("WorkspaceProject");
+    table_selected_id.set("task-2");
+    window.electronAPI = {
+      // Never resolves — simulates hydration still in flight.
+      wsReadTaskMemos: vi.fn().mockReturnValue(new Promise(() => {})),
+    };
+
+    render(TaskDetail);
+
+    await waitFor(() => {
+      expect(window.electronAPI.wsReadTaskMemos).toHaveBeenCalled();
+    });
+
+    expect(screen.getByRole("button", { name: "このメモを複製" })).toBeDisabled();
   });
 });
