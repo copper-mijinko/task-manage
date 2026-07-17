@@ -418,6 +418,102 @@ describe("tree_control", () => {
   });
 });
 
+describe("filterTree full-path matching", () => {
+  // root("tasks") -> one -> [aaa, bbb]
+  //               -> two -> [ccc]
+  function createPathTree() {
+    return {
+      id: "root",
+      data: { name: "tasks", status: "Open", memo: [] },
+      children: [
+        {
+          id: "one",
+          data: { name: "one", status: "Open", memo: [] },
+          children: [
+            {
+              id: "aaa",
+              data: { name: "aaa", status: "Open", memo: [] },
+              children: [],
+            },
+            {
+              id: "bbb",
+              data: { name: "bbb", status: "Open", memo: [] },
+              children: [],
+            },
+          ],
+        },
+        {
+          id: "two",
+          data: { name: "two", status: "Open", memo: [] },
+          children: [
+            {
+              id: "ccc",
+              data: { name: "ccc", status: "Open", memo: [] },
+              children: [],
+            },
+          ],
+        },
+      ],
+    };
+  }
+
+  test("full_text AND-chips match a deep descendant via its ancestor path (tasks/one/aaa)", () => {
+    const tree = createPathTree();
+    // "tasks" only matches via the root ancestor name; "aaa" matches the
+    // node's own name. Both must hold for the same node -> only aaa matches.
+    const filtered = filterTree(tree, { full_text: ["tasks", "aaa"] });
+
+    expect(filtered).not.toBeNull();
+    expect(filtered.children).toHaveLength(1);
+    expect(filtered.children[0].id).toBe("one");
+    expect(filtered.children[0].children).toHaveLength(1);
+    expect(filtered.children[0].children[0].id).toBe("aaa");
+  });
+
+  test("full_text chip with no match in own fields or any ancestor still fails the node", () => {
+    const tree = createPathTree();
+    // "tasks" matches (root ancestor), but "missing" matches nothing anywhere.
+    expect(filterTree(tree, { full_text: ["tasks", "missing"] })).toBeNull();
+  });
+
+  test("full_text path matching does not leak across sibling subtrees", () => {
+    const tree = createPathTree();
+    // "one" only appears in the "one" subtree's ancestor chain; "ccc" only
+    // exists under "two". No single node's path+fields contains both.
+    expect(filterTree(tree, { full_text: ["one", "ccc"] })).toBeNull();
+  });
+
+  test("name filter matches the node's own name directly (no regression)", () => {
+    const tree = createPathTree();
+    const filtered = filterTree(tree, { name: ["one"] });
+
+    expect(filtered.children).toHaveLength(1);
+    expect(filtered.children[0].id).toBe("one");
+    // "one" matches directly, so its whole subtree is included as-is.
+    expect(filtered.children[0].children.map((c) => c.id)).toEqual(["aaa", "bbb"]);
+  });
+
+  test("name filter also matches via an ancestor's name (full-path matching)", () => {
+    const tree = createPathTree();
+    // "aaa" doesn't match root/one's own names, but "tasks" matches the root.
+    // Only a node whose own name OR ancestor chain contains "aaa" should show.
+    const filtered = filterTree(tree, { name: ["aaa"] });
+
+    expect(filtered.children).toHaveLength(1);
+    expect(filtered.children[0].id).toBe("one");
+    expect(filtered.children[0].children).toHaveLength(1);
+    expect(filtered.children[0].children[0].id).toBe("aaa");
+  });
+
+  test("single-node matching still works unchanged when there is no nesting", () => {
+    // No-regression check against the flat tree used elsewhere: matching a
+    // top-level task's own name behaves exactly as before path matching.
+    const filtered = filterTree(createTree(), { name: ["ship"] });
+    expect(filtered.children).toHaveLength(1);
+    expect(filtered.children[0].id).toBe("task-2");
+  });
+});
+
 describe("cloneWithNewIds", () => {
   test("cloned root node has a different id", () => {
     const tree = createTree();

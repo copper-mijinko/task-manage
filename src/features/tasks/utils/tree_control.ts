@@ -102,7 +102,13 @@ export function tokenizeFullTextQuery(input: string): string[] {
   return tokens;
 }
 
-function fullTextMatches(data: TreeNodeData, keywords: string[], includeMemo: boolean): boolean {
+function fullTextMatches(
+  data: TreeNodeData,
+  ancestorNames: string[],
+  keywords: string[],
+  includeMemo: boolean
+): boolean {
+  const pathText = ancestorNames.filter(Boolean).join(" ");
   const fieldText = Object.entries(data)
     .filter(([key]) => key !== "memo")
     .map(([, value]) => valueForFullText(value))
@@ -116,7 +122,7 @@ function fullTextMatches(data: TreeNodeData, keywords: string[], includeMemo: bo
         )
         .join(" ")
     : "";
-  const text = `${fieldText} ${memoText}`.toLowerCase();
+  const text = `${pathText} ${fieldText} ${memoText}`.toLowerCase();
   const tokens = keywords.flatMap((keyword) => tokenizeFullTextQuery(keyword));
   if (tokens.length === 0) return true;
   return tokens.every((token) => text.includes(token.toLowerCase()));
@@ -124,7 +130,12 @@ function fullTextMatches(data: TreeNodeData, keywords: string[], includeMemo: bo
 
 export function filterTree(
   tree: TreeData | null | undefined,
-  filter: Record<string, string[]> | null | undefined
+  filter: Record<string, string[]> | null | undefined,
+  // 祖先ノードの name を根から現在ノードの親までの順で並べたもの。
+  // ルート呼び出し（既存の 2 引数呼び出し）では省略され空配列になる。
+  // 再帰時のみ [...親の ancestorNames, 親自身の name] を渡して 1 階層ずつ伸ばす
+  // ので、深さに比例した長さで止まり、無限に育つことはない。
+  ancestorNames: string[] = []
 ): TreeData | null | undefined {
   if (!tree || !filter) return tree;
 
@@ -148,13 +159,22 @@ export function filterTree(
 
     let keyMatch = false;
     if (key === "full_text") {
-      keyMatch = fullTextMatches(tree.data, keywords, (filter["search_memo"]?.length ?? 0) > 0);
+      keyMatch = fullTextMatches(
+        tree.data,
+        ancestorNames,
+        keywords,
+        (filter["search_memo"]?.length ?? 0) > 0
+      );
       fullTextFilterMatch = keyMatch;
     } else if (key === "name") {
-      // In case of name filter
-      keyMatch = keywords.some(
-        (keyword) => tree.data.name && tree.data.name.toLowerCase().includes(keyword.toLowerCase())
-      );
+      // In case of name filter: match against the node's own name OR any
+      // ancestor's name, so e.g. filtering by "tasks" also hits descendants
+      // nested under a task named "tasks" (full-path matching).
+      keyMatch = keywords.some((keyword) => {
+        const kw = keyword.toLowerCase();
+        if (tree.data.name && tree.data.name.toLowerCase().includes(kw)) return true;
+        return ancestorNames.some((name) => name && name.toLowerCase().includes(kw));
+      });
       nameFilterMatch = keyMatch; // Record if name filter matched
     } else if (key === "tags") {
       const tag = keywords[0].toLowerCase();
@@ -194,6 +214,7 @@ export function filterTree(
   }
 
   // Process child nodes
+  const childAncestorNames = [...ancestorNames, tree.data.name ?? ""];
   const matchedChildren: TreeData[] = [];
   for (const child of tree.children || []) {
     if ((nameFilterMatch || fullTextFilterMatch) && allFiltersMatch) {
@@ -201,8 +222,9 @@ export function filterTree(
       // include all child nodes (no filtering)
       matchedChildren.push(cloneTreeWithAllChildren(child));
     } else {
-      // Otherwise filter recursively
-      const filteredChild = filterTree(child, filter);
+      // Otherwise filter recursively, extending the ancestor-name chain by
+      // this node's own name so descendants can match on the full path.
+      const filteredChild = filterTree(child, filter, childAncestorNames);
       if (filteredChild) {
         matchedChildren.push(filteredChild);
       }
