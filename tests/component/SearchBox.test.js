@@ -50,6 +50,41 @@ describe("SearchBox", () => {
     expect(screen.getByText("urgent")).toBeInTheDocument();
   });
 
+  test("confirming a duplicate chip (case-insensitive) is ignored and just clears the input", async () => {
+    render(SearchBox);
+
+    const input = screen.getByPlaceholderText("filter tasks...");
+    await fireEvent.input(input, { target: { value: "release" } });
+    await fireEvent.keyDown(input, { key: "Enter" });
+    await tick();
+
+    expect(get(filter)).toEqual({
+      full_text: ["release"],
+    });
+
+    // Re-typing the same term (different casing) and confirming again should
+    // not add a second chip.
+    await fireEvent.input(input, { target: { value: "Release" } });
+    await fireEvent.keyDown(input, { key: "Enter" });
+    await tick();
+
+    expect(input).toHaveValue("");
+    expect(get(filter)).toEqual({
+      full_text: ["release"],
+    });
+    expect(screen.getAllByText(/release/i)).toHaveLength(1);
+  });
+
+  test("external store updates with a duplicate full_text entry collapse to a single chip", async () => {
+    render(SearchBox);
+
+    filter.set({ full_text: ["backlog", "Backlog", "urgent"] });
+    await tick();
+
+    expect(screen.getAllByText(/backlog/i)).toHaveLength(1);
+    expect(screen.getByText("urgent")).toBeInTheDocument();
+  });
+
   test("removes the last chip with Backspace when input is empty", async () => {
     render(SearchBox);
 

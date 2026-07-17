@@ -14,6 +14,20 @@
     return combined.length > 0 ? combined : null;
   };
 
+  // Case-insensitive dedupe (matching itself is case-insensitive), keeping
+  // the first occurrence's original casing/order.
+  const dedupeTerms = (values) => {
+    const seen = new Set();
+    const result = [];
+    for (const value of values) {
+      const key = String(value).toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push(value);
+    }
+    return result;
+  };
+
   const applyFilter = () => {
     $filter = {
       ...$filter,
@@ -24,7 +38,13 @@
   const confirmChip = () => {
     const value = search_text.trim();
     if (value === "") return;
-    terms = [...terms, value];
+    // Dedupe case-insensitively (matching is itself case-insensitive), so
+    // confirming a term that's already a chip just clears the input instead
+    // of adding a duplicate chip.
+    const isDuplicate = terms.some((term) => term.toLowerCase() === value.toLowerCase());
+    if (!isDuplicate) {
+      terms = [...terms, value];
+    }
     search_text = "";
     applyFilter();
   };
@@ -59,6 +79,12 @@
   // confirmed chips with no in-progress text to keep things simple and
   // avoid feedback loops with applyFilter() above.
   $: {
+    // Compare against the RAW stored value first (not deduped): while the
+    // user is actively typing, applyFilter() writes [...terms, search_text]
+    // verbatim, and search_text may legitimately equal an already-confirmed
+    // term for a moment before Enter/dedupe decides whether to keep it. If
+    // we deduped before this comparison, that in-progress state would look
+    // like a mismatch and get clobbered.
     const stored = $filter?.full_text ?? [];
     const isFocused =
       typeof document !== "undefined" &&
@@ -69,8 +95,19 @@
         stored.length === terms.length + (search_text !== "" ? 1 : 0) &&
         stored.every((v, i) => v === (i < terms.length ? terms[i] : search_text));
       if (!same) {
-        terms = [...stored];
+        // Only once we've established this is a real (external) change do we
+        // dedupe, so a store value carrying a duplicate (e.g. round-tripped
+        // through ActiveFilterBar) never renders as two identical chips.
+        // Write the deduped value back to the store too, so the comparison
+        // above converges instead of looping (a lingering raw duplicate
+        // would otherwise never match the deduped terms length again) and so
+        // ActiveFilterBar reflects the same de-duplicated list.
+        const deduped = dedupeTerms(stored);
+        terms = deduped;
         search_text = "";
+        if (deduped.length !== stored.length) {
+          $filter = { ...$filter, full_text: deduped.length > 0 ? deduped : null };
+        }
       }
     }
   }
