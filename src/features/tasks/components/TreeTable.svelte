@@ -776,11 +776,38 @@
     }
   }
 
+  // NOTE on clipboard aliasing: handleCopyTask (above) stores a *live* reference
+  // into $tree_data.data, not a snapshot (despite the "freshly cloned" wording
+  // in stores/ui.ts — that clone only actually happens here, at paste time).
+  // That's fine for a single paste, but it becomes a real bug when the paste
+  // target is a descendant of the copied node — which is ALWAYS the case when
+  // the copied node is the project root, since every other row in the tree is
+  // by definition its descendant. addNode/bulkAddNodes mutate $tree_data.data
+  // in place, so once a root-subtree copy is pasted once, the still-live
+  // copied_task/copied_tasks reference has *grown* to include that paste. A
+  // second paste from the same clipboard entry (very natural right after
+  // duplicating a whole project into more than one place) then clones the
+  // already-grown tree, and each further paste roughly doubles the payload —
+  // this is what turns "copy a project, paste it a couple of times" into a
+  // save failure (huge, ever-growing write batch), not the paste failing on
+  // structural grounds (parents/order are always recomputed correctly from
+  // tree position, so a pasted root converts into an ordinary task cleanly).
+  //
+  // Fix: whenever we clone-for-insertion, also refresh the clipboard to a
+  // second, independent clone taken from the same pre-mutation source. That
+  // second clone is never attached to the live tree, so it can't alias future
+  // mutations — repeated pastes from one copy stay O(1) per paste instead of
+  // compounding. This is the single choke point for every paste trigger
+  // (context-menu "paste as child", Ctrl+V, and bulk paste all call this
+  // function), so fixing it here covers all of them.
   function handlePasteTask(event) {
     const { id } = event.detail;
     if (!id || !$tree_data?.data) return;
     if ($copied_tasks && $copied_tasks.length > 1) {
-      const cloned = $copied_tasks.map((n) => cloneWithNewIds(n));
+      const sources = $copied_tasks;
+      const cloned = sources.map((n) => cloneWithNewIds(n));
+      $copied_tasks = sources.map((n) => cloneWithNewIds(n));
+      $copied_task = $copied_tasks[0] ?? null;
       const data = bulkAddNodes(cloned, id, $tree_data.data, "append");
       $tree_data = { ...$tree_data, data };
       if ($closed_node_ids.has(id)) closed_node_ids.delete(id);
@@ -790,6 +817,8 @@
     const source = $copied_task ?? $copied_tasks?.[0] ?? null;
     if (!source) return;
     const cloned = cloneWithNewIds(source);
+    $copied_task = cloneWithNewIds(source);
+    $copied_tasks = [$copied_task];
     const data = addNode(cloned, id, $tree_data.data, "append");
     $tree_data = { ...$tree_data, data };
     if ($closed_node_ids.has(id)) closed_node_ids.delete(id);

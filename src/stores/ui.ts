@@ -550,10 +550,17 @@ export const showQuickCapture = writable(false);
 
 export const saveStatus = writable<SaveStatus>("idle");
 
+// Populated with a *live* node reference at copy time (see TreeTable.svelte's
+// handleCopyTask) — not cloned yet. TreeTable.svelte's handlePasteTask clones
+// with fresh ids on every paste, both for the node actually inserted into the
+// tree AND to refresh this store to a new, still-detached snapshot. That
+// refresh matters: without it, pasting the project root (whose only possible
+// paste targets are its own descendants) would leave this store aliasing a
+// live subtree that grows with every paste, so a second paste from the same
+// copy would clone an already-grown tree instead of the original one.
 export const copied_task = writable<TreeData | null>(null);
 
 // Multi-selection clipboard. When non-empty, takes precedence over `copied_task`.
-// Each entry is a freshly cloned-with-new-ids subtree, ready to paste.
 export const copied_tasks = writable<TreeData[]>([]);
 
 /**
