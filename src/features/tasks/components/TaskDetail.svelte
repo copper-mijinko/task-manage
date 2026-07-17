@@ -46,6 +46,7 @@
   $: cardTitle = titleOverride || name;
   $: memo = node ? node.data["memo"] : [];
   $: attachments = node ? (node.data["attachments"] ?? []) : [];
+  $: projectTree = $tree_data?.data ?? null;
   $: isArchived = isNodeEffectivelyArchived($table_selected_id, $tree_data?.data);
   $: isWorkspaceProject = $selected_type === "WorkspaceProject";
   $: workspaceProjectDir = isWorkspaceProject ? $workspace_store.activeProjectDir : null;
@@ -281,6 +282,57 @@
     updatedMemo.splice(index + 1, 0, newMemo);
     changeData(liveNode, "memo", updatedMemo, editContext);
     return true;
+  };
+  // Cross-task duplicate: appends a copy of memo[index] (from the currently
+  // selected task) onto targetTaskId's memo list. Scoped to the current
+  // project — targetTaskId is looked up in the same tree_data as the source.
+  // Unlike copyMemo (in-place), title collision is checked against the
+  // TARGET task's memos, and the original title is kept unchanged when it
+  // doesn't collide there.
+  const copyMemoToTask = (index, targetTaskId) => {
+    const editContext = getEditContext();
+    const liveNode = getLiveNode(editContext);
+    if (!liveNode) return { success: false, error: "コピー元のタスクが見つかりません" };
+
+    const sourceMemo = (liveNode.data.memo ?? [])[index];
+    if (!sourceMemo) return { success: false, error: "コピー元のメモが見つかりません" };
+    if (sourceMemo.bodyLoaded === false) {
+      // Memo body not hydrated yet (workspace project) — copying now would
+      // duplicate a stub instead of the real content.
+      return { success: false, error: "メモを読み込み中です。しばらく待ってから複製してください" };
+    }
+
+    const liveTreeData = get(tree_data);
+    if (!liveTreeData?.data) return { success: false, error: "プロジェクトを読み込めませんでした" };
+
+    const targetNode = getNode(targetTaskId, liveTreeData.data);
+    if (!targetNode) return { success: false, error: "複製先のタスクが見つかりません" };
+    if (isNodeEffectivelyArchived(targetTaskId, liveTreeData.data)) {
+      return { success: false, error: "アーカイブ済みのタスクへは複製できません" };
+    }
+
+    const targetMemos = targetNode.data.memo ?? [];
+    const existingTitles = new Set(targetMemos.map((entry) => entry.title));
+    let newTitle = sourceMemo.title;
+    if (existingTitles.has(newTitle)) {
+      const baseTitle = `${sourceMemo.title} のコピー`;
+      newTitle = baseTitle;
+      let suffix = 2;
+      while (existingTitles.has(newTitle)) {
+        newTitle = `${baseTitle} ${suffix}`;
+        suffix += 1;
+      }
+    }
+
+    const newMemo = {
+      ...sourceMemo,
+      id: uuidV4(),
+      title: newTitle,
+      tags: [...(sourceMemo.tags ?? [])],
+    };
+
+    changeData(targetNode, "memo", [...targetMemos, newMemo], editContext);
+    return { success: true, targetTaskId, title: newTitle };
   };
   const deleteMemo = (index) => {
     const editContext = getEditContext();
@@ -825,6 +877,8 @@
             {saveMemo}
             {addMemo}
             {copyMemo}
+            {copyMemoToTask}
+            {projectTree}
             {deleteMemo}
             {renameMemo}
             {reorderMemo}

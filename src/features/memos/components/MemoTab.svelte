@@ -6,12 +6,18 @@
   import SegmentedControl from "@lib/primitives/SegmentedControl.svelte";
   import Memo from "@features/memos/components/Memo.svelte";
   import Dialog from "@lib/primitives/Dialog.svelte";
+  import TaskMenu from "@features/tasks/components/TaskMenu.svelte";
+  import TaskMemoTargetPicker from "@features/memos/components/TaskMemoTargetPicker.svelte";
   import { normalizeMemoFormat, isEmptyMemoContent } from "@features/memos/utils/memo_utils";
 
   export let memo = [];
   export let saveMemo;
   export let addMemo;
   export let copyMemo = null;
+  /** Cross-task duplicate: (index, targetTaskId) => { success, error? }. */
+  export let copyMemoToTask = null;
+  /** Current project's full tree ($tree_data.data), used by the cross-task picker. */
+  export let projectTree = null;
   export let deleteMemo;
   export let renameMemo;
   export let reorderMemo;
@@ -112,10 +118,73 @@
     }
   };
 
+  // 「このメモを複製」ボタンは直接複製せず、複製先（このタスク内 / 別のタスクへ）
+  // を選ぶ小さなメニューを開く。
+  let duplicateMenu = { show: false, position: { x: 0, y: 0, position: "right" } };
+  let showTargetPicker = false;
+  let duplicateBusy = false;
+  let duplicateError = "";
+
+  $: duplicateMenuItems = [
+    { title: "このタスク内に複製", action: "duplicateInPlace", disabled: !copyMemo },
+    { title: "別のタスクへ複製…", action: "duplicateToTask", disabled: !copyMemoToTask },
+  ];
+
+  function openDuplicateMenu(event) {
+    if (disabled || !hasSelectedMemo()) return;
+    duplicateError = "";
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = rect.left;
+    const y = rect.bottom + 4;
+    duplicateMenu = {
+      show: true,
+      position: { x, y, position: x > window.innerWidth - 240 ? "left" : "right" },
+    };
+  }
+
+  function closeDuplicateMenu() {
+    duplicateMenu = { ...duplicateMenu, show: false };
+  }
+
+  async function handleDuplicateInPlace() {
+    await duplicateMemo();
+  }
+
+  function handleDuplicateToTask() {
+    if (!copyMemoToTask || !hasSelectedMemo()) return;
+    duplicateError = "";
+    showTargetPicker = true;
+  }
+
+  function closeTargetPicker() {
+    if (duplicateBusy) return;
+    showTargetPicker = false;
+  }
+
+  async function handleTargetPickerConfirm(event) {
+    const targetTaskId = event.detail?.targetTaskId;
+    if (!targetTaskId || !copyMemoToTask) return;
+    duplicateBusy = true;
+    duplicateError = "";
+    try {
+      const result = copyMemoToTask(selectedMemoIndex, targetTaskId);
+      if (!result?.success) {
+        duplicateError = result?.error || "メモを複製できませんでした";
+        return;
+      }
+      showTargetPicker = false;
+    } finally {
+      duplicateBusy = false;
+    }
+  }
+
   $: if ($table_selected_id !== previousTaskId) {
     previousTaskId = $table_selected_id;
     selectedMemoIndex = 0;
     edit = false;
+    duplicateMenu = { ...duplicateMenu, show: false };
+    showTargetPicker = false;
+    duplicateError = "";
   }
 
   $: if (selectedMemoIndex >= memo.length && memo.length > 0) {
@@ -327,7 +396,7 @@
         disabled={disabled || memo.length === 0}
         activeColor={"var(--theme-color-Primary-dark)"}
         normalColor={"var(--theme-color-Primary-main)"}
-        on:click={duplicateMemo}
+        on:click={openDuplicateMenu}
       >
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path
@@ -346,6 +415,14 @@
           />
         </svg>
       </IconButton>
+      <TaskMenu
+        menuItems={duplicateMenuItems}
+        position={duplicateMenu.position}
+        show={duplicateMenu.show}
+        on:duplicateInPlace={handleDuplicateInPlace}
+        on:duplicateToTask={handleDuplicateToTask}
+        on:close={closeDuplicateMenu}
+      />
       <IconButton
         tooltipContent="このメモを削除"
         ariaLabel="このメモを削除"
@@ -399,6 +476,10 @@
       </IconButton>
     </div>
   </div>
+
+  {#if duplicateError && !showTargetPicker}
+    <div class="duplicate-error" role="alert">{duplicateError}</div>
+  {/if}
 
   {#if selectedMemo}
     <div class="tag-panel" aria-label="Memo tags">
@@ -496,6 +577,18 @@
   callback={callback_format_confirm}
 />
 
+{#if showTargetPicker}
+  <TaskMemoTargetPicker
+    tree={projectTree}
+    currentTaskId={taskId}
+    memoTitle={selectedMemo?.title ?? ""}
+    busy={duplicateBusy}
+    errorMessage={duplicateError}
+    on:confirm={handleTargetPickerConfirm}
+    on:close={closeTargetPicker}
+  />
+{/if}
+
 <style>
   button {
     border: none;
@@ -560,6 +653,14 @@
     width: 1.75rem;
     height: 1.75rem;
     margin: 0;
+  }
+
+  .duplicate-error {
+    flex-shrink: 0;
+    padding: var(--sp1) var(--sp3);
+    color: var(--theme-color-Error-main);
+    font-size: var(--font-label-md);
+    font-weight: 600;
   }
 
   input {
