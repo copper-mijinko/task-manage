@@ -780,65 +780,70 @@
           </div>
         {/if}
         <div class="detail-container">
-          <label class="detail-field">
-            <span class="detail-label">Name</span>
-            <div class="detail-control">
-              <input
-                class="detail-input"
-                type="text"
-                value={name}
-                aria-label="Task name"
-                on:input={handleNameInput}
-                on:blur={flushNameChange}
-              />
-            </div>
-          </label>
+          <div class="detail-fields">
+            <label class="detail-field">
+              <span class="detail-label">Name</span>
+              <div class="detail-control">
+                <input
+                  class="detail-input"
+                  type="text"
+                  value={name}
+                  aria-label="Task name"
+                  on:input={handleNameInput}
+                  on:blur={flushNameChange}
+                />
+              </div>
+            </label>
 
-          <label class="detail-field">
-            <span class="detail-label">Status</span>
-            <div class="detail-control">
-              <StatusSelect
-                status={node.data.status ?? "Open"}
-                style="height: 100%; font-size: var(--font-body-md);"
-                on:change={(event) => changeTaskField("status", event.detail.value)}
-              />
-            </div>
-          </label>
+            <label class="detail-field">
+              <span class="detail-label">Status</span>
+              <div class="detail-control">
+                <StatusSelect
+                  status={node.data.status ?? "Open"}
+                  style="height: 100%; font-size: var(--font-body-md);"
+                  on:change={(event) => changeTaskField("status", event.detail.value)}
+                />
+              </div>
+            </label>
 
-          <label class="detail-field">
-            <span class="detail-label">Start Date</span>
-            <div class="detail-control">
-              <DateInput
-                is_dark={isDark}
-                id="detail-start-date"
-                backgroundColor={"var(--theme-color-Main-light)"}
-                style={detailDateStyle}
-                value={node.data["start date"] ?? ""}
-                on:change={(event) =>
-                  changeTaskField("start date", event.target.value || undefined)}
-              />
-            </div>
-          </label>
+            <label class="detail-field">
+              <span class="detail-label">Start Date</span>
+              <div class="detail-control">
+                <DateInput
+                  is_dark={isDark}
+                  id="detail-start-date"
+                  backgroundColor={"var(--theme-color-Main-light)"}
+                  style={detailDateStyle}
+                  value={node.data["start date"] ?? ""}
+                  on:change={(event) =>
+                    changeTaskField("start date", event.target.value || undefined)}
+                />
+              </div>
+            </label>
 
-          <label class="detail-field">
-            <span class="detail-label">Due Date</span>
-            <div class="detail-control">
-              <DateInput
-                is_dark={isDark}
-                id="detail-due-date"
-                backgroundColor={"var(--theme-color-Main-light)"}
-                style={detailDateStyle}
-                value={node.data["due date"] ?? ""}
-                on:change={(event) => changeTaskField("due date", event.target.value || undefined)}
-              />
-            </div>
-          </label>
+            <label class="detail-field">
+              <span class="detail-label">Due Date</span>
+              <div class="detail-control">
+                <DateInput
+                  is_dark={isDark}
+                  id="detail-due-date"
+                  backgroundColor={"var(--theme-color-Main-light)"}
+                  style={detailDateStyle}
+                  value={node.data["due date"] ?? ""}
+                  on:change={(event) =>
+                    changeTaskField("due date", event.target.value || undefined)}
+                />
+              </div>
+            </label>
 
-          <div class="detail-field">
-            <span class="detail-label" id="lbl-memo-count">Memo 数</span>
-            <output class="detail-readonly" aria-labelledby="lbl-memo-count" aria-label="Memo count"
-              >{memo.length}</output
-            >
+            <div class="detail-field">
+              <span class="detail-label" id="lbl-memo-count">Memo 数</span>
+              <output
+                class="detail-readonly"
+                aria-labelledby="lbl-memo-count"
+                aria-label="Memo count">{memo.length}</output
+              >
+            </div>
           </div>
 
           <TaskAttachments
@@ -1047,11 +1052,13 @@
     outline: 2px solid var(--theme-color-Primary-main);
     outline-offset: -2px;
   }
+  /* Vertical split: the fixed fields block on top (natural height), then
+     the attachments field taking whatever height remains. overflow: auto is
+     only the fallback for panes too short to fit even the fixed fields. */
   .detail-container {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    align-content: start;
-    gap: var(--sp1) var(--sp3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp1);
     flex: 1;
     width: 100%;
     height: 100%;
@@ -1061,20 +1068,41 @@
     overflow: auto;
     container-type: inline-size;
   }
+  .detail-fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-content: start;
+    gap: var(--sp1) var(--sp3);
+    flex: 0 0 auto;
+    min-width: 0;
+  }
   .detail-pane.auto-detail .detail-container {
     height: auto;
     min-height: 0;
     overflow: visible;
   }
-  /* In auto-detail mode the container above is height:auto/overflow:visible,
-     so nothing bounds the attachment grid — a long list would inflate the
-     detail pane and push the memo pane out of view. Cap the list (rendered
-     by TaskAttachments.svelte, hence :global) and scroll inside it instead.
-     The viewport-relative clamp adapts to window height; cqh is not an
-     option because this container is inline-size only (switching to
-     container-type: size would defeat the height:auto above). In the
-     fixed-split mode the container itself scrolls, so no cap applies and
-     the grid stretches freely with the render area. */
+  /* Fixed-split mode (slider-controlled pane height): the attachments field
+     absorbs the remaining pane height and overflow scrolls INSIDE the
+     attachment list, so Name/Status/dates always stay visible instead of
+     the whole container scrolling. min-height on the list keeps a usable
+     strip when the pane gets very short; below that the container's
+     overflow: auto fallback takes over. */
+  .detail-pane:not(.auto-detail) .detail-container > :global(.attachments-field) {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  .detail-pane:not(.auto-detail) .detail-container :global(.attachment-list) {
+    flex: 1 1 auto;
+    min-height: 5rem;
+    overflow-y: auto;
+  }
+  /* Auto-detail mode: the container is height:auto/overflow:visible, so
+     nothing above bounds the attachment grid — a long list would inflate
+     the detail pane and push the memo pane out of view. Cap the list
+     (rendered by TaskAttachments.svelte, hence :global) and scroll inside
+     it instead. The viewport-relative clamp adapts to window height; cqh is
+     not an option because this container is inline-size only (switching to
+     container-type: size would defeat the height:auto above). */
   .detail-pane.auto-detail .detail-container :global(.attachment-list) {
     max-height: clamp(8rem, 28vh, 18rem);
     overflow-y: auto;
@@ -1169,12 +1197,12 @@
     min-height: 0;
   }
   @container (max-width: 28rem) {
-    .detail-container {
+    .detail-fields {
       grid-template-columns: 1fr;
     }
   }
   @media (max-width: 760px) {
-    .detail-container {
+    .detail-fields {
       grid-template-columns: 1fr;
     }
   }
