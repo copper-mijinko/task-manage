@@ -1012,6 +1012,19 @@
     min-height: 0;
     overflow: visible;
   }
+  /* In auto-detail mode the container above is height:auto/overflow:visible,
+     so nothing bounds the attachment grid — a long list would inflate the
+     detail pane and push the memo pane out of view. Cap the list (rendered
+     by TaskAttachments.svelte, hence :global) and scroll inside it instead.
+     The viewport-relative clamp adapts to window height; cqh is not an
+     option because this container is inline-size only (switching to
+     container-type: size would defeat the height:auto above). In the
+     fixed-split mode the container itself scrolls, so no cap applies and
+     the grid stretches freely with the render area. */
+  .detail-pane.auto-detail .detail-container :global(.attachment-list) {
+    max-height: clamp(8rem, 28vh, 18rem);
+    overflow-y: auto;
+  }
   .detail-field {
     display: flex;
     flex-direction: column;

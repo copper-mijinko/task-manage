@@ -394,6 +394,11 @@
     min-width: 0;
     margin: 0;
     padding: 0;
+    /* No height cap here: in the fixed-split mode the surrounding
+       .detail-container (TaskDetail.svelte) scrolls, so the grid may grow
+       freely with the render area. The auto-detail mode, where nothing
+       above constrains height, gets its cap from TaskDetail.svelte via
+       `.detail-pane.auto-detail .detail-container :global(...)`. */
     list-style: none;
   }
   .attachment-item {
