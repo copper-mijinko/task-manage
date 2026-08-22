@@ -88,10 +88,11 @@ upstream に修正版が存在しない。`npm audit` が言う "fix" は 2.0.2 
 NTLMv2 ハッシュ漏洩 (GHSA-v6wh-96g9-6wx3)。どちらも `npm run dev` の dev サーバに対するもので、
 配布物には含まれない。**対処**: `vite` を `^8.2.2` へ更新 (低コストなので実施推奨)。
 
-### electron-builder 系 6 パッケージ (high) — ビルド時のみ・実体は 2 件
+### electron-builder 系 7 パッケージ (high) — ビルド時のみ・実体は 2 件
 
-`app-builder-lib` / `builder-util` / `builder-util-runtime` / `dmg-builder` / `electron-publish` /
-`electron-builder-squirrel-windows` は同一チェーン。
+`electron-builder` / `app-builder-lib` / `builder-util` / `builder-util-runtime` / `dmg-builder` /
+`electron-publish` / `electron-builder-squirrel-windows` は同一チェーンで、警告 7 件の実体は
+アドバイザリ 2 件にすぎない。
 
 - GHSA-7g7r-gx96-252g (AppImage の search path 制御不備): 本アプリのビルドは Windows NSIS のみ
   (`electron-builder -w`)。AppImage を生成しないため **非該当**。
