@@ -134,33 +134,62 @@ fast-uri 3.1.5 / brace-expansion 5.0.9。**25 件 → 1 件** (非該当の quil
 
 ### 回帰テスト結果
 
-更新前にベースラインを取得し、更新後に同一項目を再実行して比較した。
+更新前にベースラインを取得し、更新後に同一項目を再実行して比較した。全テストスイートを実行している。
+
+| スイート | ファイル | 定義 | 成功 | 失敗 | スキップ | 成功率 (実行分) |
+| --- | --- | --- | --- | --- | --- | --- |
+| `test:unit` | 21 | 343 | 343 | 0 | 0 | 343/343 = 100% |
+| `test:component` | 19 | 156 | 149 | 0 | 7 | 149/149 = 100% |
+| E2E (Playwright + Electron) | 2 | 13 | 13 | 0 | 0 | 13/13 = 100% |
+| **合計** | **42** | **512** | **505** | **0** | **7** | **505/505 = 100%** |
+
+定義済みテスト全体に対する成功率は 505/512 = **98.6%**。差の 7 件はスキップで、失敗は 0 件。
+
+スキップ 7 件は `tests/component/App.test.js` の `describe.skip("App - save status indicator")`
+ブロックで、コミット `52f9308` (Inbox 機能追加) 時点から存在する既存のスキップである。
+セーブ状態インジケータが `Header.svelte` へ移動し、App テストでは Header をモックするため
+無効化されたもので、今回の依存更新とは無関係。更新前のベースラインでも同じ 7 件がスキップされている。
+
+静的チェックも全て pass。
 
 | 項目 | 更新前 | 更新後 |
 | --- | --- | --- |
-| `npm run lint` | pass | pass |
-| `npm run format:check` | pass | pass |
-| `npm run check` (svelte-check) | 0 errors / 0 warnings | 0 errors / 0 warnings |
-| `npm run test:unit` | 343 passed | 343 passed |
-| `npm run test:component` | 149 passed / 7 skipped | 149 passed / 7 skipped |
-| `npm run build` | 成功 | 成功 |
-| Playwright E2E (Electron 実起動) | 13 passed | 13 passed |
+| `npm run lint` (eslint) | pass | pass |
+| `npm run format:check` (prettier) | pass | pass |
+| `npm run check` (svelte-check) | 467 files / 0 errors / 0 warnings | 467 files / 0 errors / 0 warnings |
+| `npm run build` (vite) | 成功 | 成功 |
 
-E2E はヘッドレス環境だと Electron が SIGSEGV で落ちるため `xvfb-run` 経由で実行した。
-これは更新前後で共通の環境要因であり、依存更新とは無関係である。
+E2E はヘッドレス環境だと Electron が SIGSEGV で起動できないため `xvfb-run` 経由で実行した。
+これは更新前後で共通の環境要因であり、依存更新とは無関係である
+(更新前のベースラインでも同様に 13 件全て SIGSEGV で落ち、`xvfb-run` 経由なら 13 件全て pass した)。
 
-### mermaid の追加検証
+### 画面テスト
 
-mermaid はテストが 1 件も存在せず、今回もっとも挙動が変わる箇所であるため、アプリと同一の初期化
-(`securityLevel: "strict"` / `theme` / `fontFamily: "inherit"`) と `mermaid.render()` 呼び出しを
-実ブラウザ上で再現し、11.15.0 と 11.17.0 を直接比較した。
+自動テストは mermaid を 1 件もカバーしていないため、実際の Electron アプリを起動し、
+mermaid ブロックを含むメモを実際に描画させて確認した。light / dark の両テーマで実施。
 
-- flowchart / sequence / class / state / gantt / pie / er / journey / mindmap /
-  xychart-beta / architecture-beta / radar-beta の 12 種すべてが両バージョンで描画成功。
-- 不正な図ソースは両バージョンとも catch 可能なパースエラーを投げる
-  (アプリ側の `mermaid-error` 表示が従来どおり機能する)。
-- 生成された SVG に `<script>` の混入なし。
-- 差分は pie チャートの生成要素数のみ (13 → 14)。描画は正常で、実害のある差ではない。
+| 確認項目 | 結果 |
+| --- | --- |
+| アプリ起動・ワークスペースプロジェクト表示・タスク選択 | 正常 |
+| Markdown 描画 (見出し / 強調 / インラインコード / リンク / リスト / 表 / 引用) | 正常 |
+| GFM チェックボックス (クリック可能な状態で出力) | 正常 |
+| コードブロックのシンタックスハイライト + 言語バッジ + Copy ボタン | 正常 |
+| mermaid ブロックの SVG 化 | 3 ブロック → SVG 3 個 |
+| `mermaid-error` (描画失敗) | 0 件 |
+| JavaScript エラー / console error | 0 件 |
+| dark テーマでの mermaid 再初期化 | 正常 (図がダークテーマで描画される) |
+
+#### 検出した見た目の問題 — 回帰ではない
+
+図中のノードラベルが途中で切れる (`Start` → `Star`、`Choice` → `Choic`)。ただしこれは
+**mermaid 11.15.0 に戻して同じ画面を撮り直しても完全に同一**であり、今回の更新による回帰ではない。
+原因は検証コンテナのフォント不足 (`fc-list` で 59 件、DejaVu / FreeSans のみで日本語フォントなし) で、
+`fontFamily: "inherit"` を指定している mermaid のテキスト実測値と実際の描画フォントがずれるため。
+Windows 上の実利用環境では再現しない見込み。
+
+スクリーンショットのバイト差分については、**同一バージョンを 2 回実行しても同じ差分パターンが出る**
+ことを確認済み (mermaid が生成する ID 等が実行ごとに変わるため)。したがってバイト差分は
+バージョン間の差ではなく実行ごとのゆらぎであり、視覚的な回帰は検出されなかった。
 
 ## 併せて検討すべき事項 (CVE 対応とは別)
 
