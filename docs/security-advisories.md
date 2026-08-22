@@ -118,21 +118,49 @@ NTLMv2 ハッシュ漏洩 (GHSA-v6wh-96g9-6wx3)。どちらも `npm run dev` の
 | nanoid | high | postcss | ビルド時の ID 生成のみ |
 | devalue | high | vite / svelte ツールチェーン | SSR 未使用 |
 
-## 対処手順 (検証済み)
+## 対処手順 (適用済み・回帰テスト済み)
 
-以下 5 行で **25 件 → 1 件** (非該当の quill のみ) になることを、ロックファイルを更新して
-`npm audit` を再実行し確認済み。すべて同一メジャー内のマイナー / パッチ更新である。
+以下の更新をコミット済み。すべて同一メジャー内のマイナー / パッチ更新で、破壊的変更はない。
 
 ```bash
 npm i -D electron@^41.10.6 electron-builder@^26.15.3 svelte@^5.56.10 vite@^8.2.2
 npm i mermaid@^11.16.1
 npm audit fix          # 残る dev 依存 (undici / js-yaml / fast-uri / brace-expansion / dompurify) を解消
-npm run lint && npm run test:all
 ```
 
-更新後に解決されるバージョン: electron 41.10.6 / electron-builder 26.15.3 / svelte 5.56.10 /
+解決されたバージョン: electron 41.10.6 / electron-builder 26.15.3 / svelte 5.56.10 /
 vite 8.2.2 / mermaid 11.17.0 / dompurify 3.4.14 / undici 7.29.0 / js-yaml 4.3.1 /
-fast-uri 3.1.5 / brace-expansion 5.0.9。
+fast-uri 3.1.5 / brace-expansion 5.0.9。**25 件 → 1 件** (非該当の quill のみ)。
+
+### 回帰テスト結果
+
+更新前にベースラインを取得し、更新後に同一項目を再実行して比較した。
+
+| 項目 | 更新前 | 更新後 |
+| --- | --- | --- |
+| `npm run lint` | pass | pass |
+| `npm run format:check` | pass | pass |
+| `npm run check` (svelte-check) | 0 errors / 0 warnings | 0 errors / 0 warnings |
+| `npm run test:unit` | 343 passed | 343 passed |
+| `npm run test:component` | 149 passed / 7 skipped | 149 passed / 7 skipped |
+| `npm run build` | 成功 | 成功 |
+| Playwright E2E (Electron 実起動) | 13 passed | 13 passed |
+
+E2E はヘッドレス環境だと Electron が SIGSEGV で落ちるため `xvfb-run` 経由で実行した。
+これは更新前後で共通の環境要因であり、依存更新とは無関係である。
+
+### mermaid の追加検証
+
+mermaid はテストが 1 件も存在せず、今回もっとも挙動が変わる箇所であるため、アプリと同一の初期化
+(`securityLevel: "strict"` / `theme` / `fontFamily: "inherit"`) と `mermaid.render()` 呼び出しを
+実ブラウザ上で再現し、11.15.0 と 11.17.0 を直接比較した。
+
+- flowchart / sequence / class / state / gantt / pie / er / journey / mindmap /
+  xychart-beta / architecture-beta / radar-beta の 12 種すべてが両バージョンで描画成功。
+- 不正な図ソースは両バージョンとも catch 可能なパースエラーを投げる
+  (アプリ側の `mermaid-error` 表示が従来どおり機能する)。
+- 生成された SVG に `<script>` の混入なし。
+- 差分は pie チャートの生成要素数のみ (13 → 14)。描画は正常で、実害のある差ではない。
 
 ## 併せて検討すべき事項 (CVE 対応とは別)
 
