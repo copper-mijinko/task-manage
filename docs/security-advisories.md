@@ -259,6 +259,43 @@ svelte は dev 依存だがコンパイル結果はバンドルに載るため�
 **全 Svelte コンポーネントが再コンパイルされる**。これは特定機能ではなく UI 全体に及ぶ変更だが、
 コンポーネントテスト 149 件と E2E 13 件が更新前と同じ結果で通過している。
 
+### F. 機能・仕様は変わったか — mermaid の実出力を新旧 diff
+
+**アプリのソースコードは 1 行も変更していない。** `main..HEAD` の差分は `package.json` と
+`package-lock.json` のみで、`src/` `electron/` `tests/` の変更行数はいずれも 0。
+したがって仕様変更・機能追加・機能削除はいずれも発生していない。
+
+挙動が変わり得るのはライブラリ側だけである。配布物に入るライブラリで変わったのは mermaid とその
+依存のみなので、**同一の図ソースを 11.15.0 と 11.17.0 の両方で `mermaid.render()` に通し、
+生成される SVG 文字列そのものを diff** して確認した (図種 18 種、実行毎に変わる生成 ID は正規化)。
+
+| 図種 | SVG 差分の内容 | 見た目 |
+| --- | --- | --- |
+| flowchart / sequence / state / gantt / er / journey / mindmap / xychart-beta / architecture-beta / quadrant / timeline / sankey-beta (12 種) | `<style>` ブロックのみ | 同一 |
+| gitgraph | コミットハッシュ (描画毎の乱数) | 同一 |
+| requirement | roughjs の手描き風パスの制御点 (乱数)。端点は一致 | 同一 |
+| pie | 空の `<g>` ラッパーが 1 つ増えるのみ | 同一 |
+| class | marker の内部 id / クラス名が `class-` → `classDiagram-` | 同一 |
+| **radar-beta** | 軸ラベルに `text-anchor` / `dominant-baseline` が追加、y 座標 −315 → −319、svg に `overflow="visible"` | **ラベル配置が変わる** |
+| **block-beta** | viewBox が 57×42 → 105×50、矢印マーカーが 12 → 8、`-margin` 系マーカーが追加 | **描画幅が約 2 倍になる** |
+
+追加された CSS ルール (`[data-look="neo"].swimlane.cluster rect` /
+`.node .collapsed-indicator` / `.pieCircle.highlighted` / `.pieCircle.highlightedOnHover:hover`) は、
+対応するクラスが実際の出力に一切付与されないことを確認済みで、現状では未使用＝無効である。
+
+class 図の内部クラス名変更も影響しない。アプリの CSS が参照しているのは
+`.mermaid-block` / `.mermaid-block svg` / `.mermaid-block.mermaid-error` という自前のラッパー
+クラスだけで、mermaid 内部のクラス名には一切依存していない
+(`MarkdownMemo.svelte` の `:global()` 定義)。
+
+**結論: 見た目が変わるのは radar-beta と block-beta の 2 図種のみ。** どちらも mermaid 側の
+描画改善であり、アプリの仕様ではない。加えて `.mermaid-block svg { max-width: 100%; height: auto }`
+が効くため、サイズが変わってもコンテナ幅に収まるようスケールされる。
+
+なお svelte 5.55.4 → 5.56.10 は 17 リリース分 (マイナー 1 つ) で、全 Svelte コンポーネントが
+再コンパイルされる。ただしユニット 343 件・コンポーネント 149 件・E2E 13 件が更新前と同一の結果で
+通過し、svelte-check も 0 errors、画面テストも同一であることから、観測可能な挙動変化は検出されていない。
+
 ### 残る未検証点
 
 1. **Windows NSIS インストーラの生成と Windows 実機での動作**。特に「プログラムから開く」
