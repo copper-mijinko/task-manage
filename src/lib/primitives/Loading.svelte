@@ -1,6 +1,6 @@
 <script lang="ts">
   export let variant: "h1" | "h2" | "note" = "h1";
-  export let text: string = "Loading...";
+  export let text: string = "読み込み中...";
 </script>
 
 {#if variant === "h1"}

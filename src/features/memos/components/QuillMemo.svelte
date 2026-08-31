@@ -182,12 +182,12 @@
 
     const select = document.createElement("select");
     select.className = "memo-toolbar-select memo-table-select";
-    select.setAttribute("aria-label", "Table");
-    select.setAttribute("title", "Table");
+    select.setAttribute("aria-label", "表");
+    select.setAttribute("title", "表");
 
     const placeholder = document.createElement("option");
     placeholder.value = "";
-    placeholder.textContent = "Table";
+    placeholder.textContent = "表";
     placeholder.disabled = true;
     placeholder.selected = true;
     select.appendChild(placeholder);

@@ -1,6 +1,7 @@
 <script>
   import { uuidV4 } from "@lib/utils/uuid";
   import Card from "@lib/primitives/Card.svelte";
+  import IconButton from "@lib/primitives/IconButton.svelte";
   import StatusSelect from "@features/tasks/components/StatusSelect.svelte";
   import DateInput from "@lib/primitives/DateInput.svelte";
   import MemoTab from "@features/memos/components/MemoTab.svelte";
@@ -11,6 +12,7 @@
   } from "@features/memos/utils/memo_utils";
   import { inbox_store } from "@features/inbox/stores/inbox";
   import { tag_index, theme } from "@stores";
+  import { ui_density } from "@stores/preferences";
 
   /** @type {import("@app-types/workspace").WorkspaceTask | null} */
   export let item = null;
@@ -26,6 +28,16 @@
   $: workspaceProjectDir = $inbox_store.projectDir ?? null;
   // Keep MemoTab focused on the current item when switching rows.
   $: detailKey = item?.id ?? "";
+  let detailCollapsed = false;
+  let previousUiDensity;
+  $: if ($ui_density !== previousUiDensity) {
+    previousUiDensity = $ui_density;
+    detailCollapsed = $ui_density === "compact";
+  }
+
+  function toggleDetail() {
+    detailCollapsed = !detailCollapsed;
+  }
 
   function updateField(key, value) {
     if (!item) return;
@@ -138,65 +150,94 @@
     padded={false}
     style="height: 100%; width: 100%; overflow: hidden;"
   >
+    <svelte:fragment slot="header-actions">
+      <IconButton
+        tooltipContent={detailCollapsed ? "詳細欄を表示" : "詳細欄をたたんでメモを広げる"}
+        ariaLabel={detailCollapsed ? "詳細欄を表示" : "詳細欄をたたんでメモを広げる"}
+        ariaPressed={detailCollapsed ? "true" : "false"}
+        variant="text"
+        normalColor={detailCollapsed
+          ? "var(--theme-color-Primary-main)"
+          : "var(--theme-color-Sub-main)"}
+        activeColor="var(--theme-color-Primary-main)"
+        on:click={toggleDetail}
+      >
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path
+            d={detailCollapsed ? "M5 8H19M5 12H19M5 16H13" : "M5 7H19M5 11H19M5 15H13"}
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+          />
+        </svg>
+      </IconButton>
+    </svelte:fragment>
     <div class="detail-body">
-      <div class="detail-pane">
-        <div class="detail-container">
-          <label class="detail-field">
-            <span class="detail-label">Name</span>
-            <div class="detail-control">
-              <input
-                class="detail-input"
-                type="text"
-                value={item.name}
-                aria-label="Task name"
-                on:input={handleNameInput}
-              />
-            </div>
-          </label>
+      {#if !detailCollapsed}
+        <div class="detail-pane">
+          <div class="detail-container">
+            <label class="detail-field">
+              <span class="detail-label">タスク名</span>
+              <div class="detail-control">
+                <input
+                  class="detail-input"
+                  type="text"
+                  value={item.name}
+                  aria-label="タスク名"
+                  on:input={handleNameInput}
+                />
+              </div>
+            </label>
 
-          <label class="detail-field">
-            <span class="detail-label">Status</span>
-            <div class="detail-control">
-              <StatusSelect
-                status={item.status ?? "Open"}
-                style="height: 100%; font-size: var(--font-body-md);"
-                on:change={handleStatusChange}
-              />
-            </div>
-          </label>
+            <label class="detail-field">
+              <span class="detail-label">ステータス</span>
+              <div class="detail-control">
+                <StatusSelect
+                  status={item.status ?? "Open"}
+                  ariaLabel="ステータス"
+                  style="height: 100%; font-size: var(--font-body-md);"
+                  on:change={handleStatusChange}
+                />
+              </div>
+            </label>
 
-          <label class="detail-field">
-            <span class="detail-label">Start Date</span>
-            <div class="detail-control">
-              <DateInput
-                is_dark={isDark}
-                backgroundColor={"var(--theme-color-Main-light)"}
-                style={DETAIL_DATE_STYLE}
-                value={item.startDate ?? ""}
-                on:change={handleStartChange}
-              />
-            </div>
-          </label>
+            <label class="detail-field">
+              <span class="detail-label">開始日</span>
+              <div class="detail-control">
+                <DateInput
+                  is_dark={isDark}
+                  backgroundColor={"var(--theme-color-Main-light)"}
+                  style={DETAIL_DATE_STYLE}
+                  value={item.startDate ?? ""}
+                  ariaLabel="開始日"
+                  on:change={handleStartChange}
+                />
+              </div>
+            </label>
 
-          <label class="detail-field">
-            <span class="detail-label">Due Date</span>
-            <div class="detail-control">
-              <DateInput
-                is_dark={isDark}
-                backgroundColor={"var(--theme-color-Main-light)"}
-                style={DETAIL_DATE_STYLE}
-                value={item.dueDate ?? ""}
-                on:change={handleDueChange}
-              />
-            </div>
-          </label>
+            <label class="detail-field">
+              <span class="detail-label">期限日</span>
+              <div class="detail-control">
+                <DateInput
+                  is_dark={isDark}
+                  backgroundColor={"var(--theme-color-Main-light)"}
+                  style={DETAIL_DATE_STYLE}
+                  value={item.dueDate ?? ""}
+                  ariaLabel="期限日"
+                  on:change={handleDueChange}
+                />
+              </div>
+            </label>
 
-          <div class="detail-field">
-            <span class="detail-label" id="lbl-memo-count">Memo 数</span>
-            <output class="detail-readonly" aria-labelledby="lbl-memo-count">{memos.length}</output>
+            <div class="detail-field">
+              <span class="detail-label" id="lbl-memo-count">メモ数</span>
+              <output class="detail-readonly" aria-labelledby="lbl-memo-count"
+                >{memos.length}</output
+              >
+            </div>
           </div>
         </div>
-      </div>
+      {/if}
 
       <div class="memo-pane">
         <div class="memotab-container">

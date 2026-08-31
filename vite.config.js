@@ -9,13 +9,23 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const pkg = JSON.parse(readFileSync(path.resolve(__dirname, "package.json"), "utf8"));
 
-function electronDevPlugin() {
+function electronDevPlugin({ agentUi = false } = {}) {
   return {
     name: "electron-dev",
     configureServer(server) {
       server.httpServer?.once("listening", () => {
+        const electronEnv = {
+          ...process.env,
+          VITE_DEV: "true",
+          TASK_MANAGE_AGENT_UI: agentUi ? "true" : "false",
+        };
+        if (agentUi) {
+          electronEnv.TASK_MANAGE_CDP_PORT = process.env.TASK_MANAGE_CDP_PORT || "9222";
+          electronEnv.TASK_MANAGE_OPEN_DEVTOOLS = "false";
+        }
+
         const electronProcess = spawn("npm", ["run", "start"], {
-          env: { ...process.env, VITE_DEV: "true" },
+          env: electronEnv,
           stdio: "inherit",
           shell: true,
         });
@@ -25,8 +35,8 @@ function electronDevPlugin() {
   };
 }
 
-export default defineConfig({
-  plugins: [svelte(), electronDevPlugin()],
+export default defineConfig(({ mode }) => ({
+  plugins: [svelte(), electronDevPlugin({ agentUi: mode === "agent" })],
   base: "./",
   publicDir: "public",
   define: {
@@ -47,4 +57,4 @@ export default defineConfig({
       "@app-types": path.resolve(__dirname, "src/types"),
     },
   },
-});
+}));

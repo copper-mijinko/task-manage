@@ -20,7 +20,8 @@ vi.mock("@pages/TaskDetailPage.svelte", async () => {
 });
 
 import App from "../../src/App.svelte";
-import { saveStatus } from "@stores";
+import { saveStatus, selected_id, selected_type, sidebarCollapsed } from "@stores";
+import { showWorkspaceSetup } from "@stores/ui";
 import { get } from "svelte/store";
 
 function makeElectronAPI(overrides = {}) {
@@ -48,6 +49,32 @@ async function renderApp(electronAPI = makeElectronAPI()) {
   await tick();
   await tick();
 }
+
+describe("App - empty workspace guidance", () => {
+  afterEach(() => {
+    selected_type.set(undefined);
+    selected_id.set(undefined);
+    sidebarCollapsed.set(true);
+    showWorkspaceSetup.set(false);
+    delete window.electronAPI;
+  });
+
+  test("opens workspace setup from the empty state", async () => {
+    selected_type.set(undefined);
+    selected_id.set(undefined);
+    sidebarCollapsed.set(true);
+    showWorkspaceSetup.set(false);
+    await renderApp();
+
+    expect(
+      screen.getByRole("heading", { name: "ワークスペースを追加して始めましょう" })
+    ).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "ワークスペースを設定" }));
+
+    expect(get(sidebarCollapsed)).toBe(false);
+    expect(get(showWorkspaceSetup)).toBe(true);
+  });
+});
 
 // Save status indicator is now rendered inside Header.svelte (which is mocked out in App tests).
 // These tests are skipped here; equivalent coverage should live in a Header-specific test.

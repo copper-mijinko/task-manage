@@ -50,7 +50,7 @@
     // 1. Rename — anchor-only; disabled in multi-select / archived.
     [
       {
-        title: "rename",
+        title: "名前を変更",
         action: "rename",
         disabled: isMulti || archived,
         icon: {
@@ -64,7 +64,7 @@
       ...(!isRoot
         ? [
             {
-              title: "add task below",
+              title: "下にタスクを追加",
               action: "addBelow",
               disabled: isMulti || archived,
               icon: {
@@ -75,7 +75,7 @@
           ]
         : []),
       {
-        title: "add child task",
+        title: "子タスクを追加",
         action: "addChild",
         disabled: isMulti || archived,
         icon: {
@@ -90,7 +90,7 @@
       ...(!isRoot
         ? [
             {
-              title: isMulti ? `${countPrefix}コピー` : "copy",
+              title: `${countPrefix}コピー`,
               action: "copyTask",
               icon: {
                 viewBox: "0 0 24 24",
@@ -100,7 +100,7 @@
           ]
         : []),
       {
-        title: "paste as child",
+        title: "子タスクとして貼り付け",
         action: "pasteTask",
         disabled: archived || ($copied_task === null && $copied_tasks.length === 0),
         icon: {
@@ -113,7 +113,7 @@
     hasChildren
       ? [
           {
-            title: expanded ? "collapse" : "expand",
+            title: expanded ? "折りたたむ" : "展開",
             action: "toggleExpand",
             disabled: isMulti,
             icon: {
@@ -127,7 +127,7 @@
     // archived 行はツリー位置の変更も禁止。
     [
       {
-        title: `${countPrefix}move up`,
+        title: `${countPrefix}上に移動`,
         action: "moveUp",
         disabled: !canMoveUp || archived,
         icon: {
@@ -136,7 +136,7 @@
         },
       },
       {
-        title: `${countPrefix}move down`,
+        title: `${countPrefix}下に移動`,
         action: "moveDown",
         disabled: !canMoveDown || archived,
         icon: {
@@ -145,7 +145,7 @@
         },
       },
       {
-        title: `${countPrefix}move right`,
+        title: `${countPrefix}インデント`,
         action: "indentTask",
         disabled: !canIndent || archived,
         icon: {
@@ -154,7 +154,7 @@
         },
       },
       {
-        title: `${countPrefix}move left`,
+        title: `${countPrefix}アウトデント`,
         action: "outdentTask",
         disabled: !canOutdent || archived,
         icon: {
@@ -170,7 +170,7 @@
       ...(canOpenTaskFolder
         ? [
             {
-              title: "open folder",
+              title: "フォルダーを開く",
               action: "openTaskFolder",
               disabled: isMulti,
               icon: {
@@ -188,7 +188,7 @@
       ? archived
         ? [
             {
-              title: `${countPrefix}restore`,
+              title: `${countPrefix}復元`,
               action: "restoreTask",
               icon: {
                 viewBox: "0 0 24 24",
@@ -196,7 +196,7 @@
               },
             },
             {
-              title: `${countPrefix}delete permanently`,
+              title: `${countPrefix}完全に削除`,
               action: "permanentDeleteTask",
               icon: {
                 viewBox: "0 0 48 48",
@@ -206,7 +206,7 @@
           ]
         : [
             {
-              title: `${countPrefix}delete`,
+              title: `${countPrefix}アーカイブ`,
               action: "deleteTask",
               icon: {
                 viewBox: "0 0 48 48",
@@ -451,7 +451,7 @@
 
   <button
     class="menu-button"
-    aria-label="Open task actions"
+    aria-label="タスク操作を開く"
     data-task-menu-trigger={menuOwnerId}
     use:ripple={{ duration: 350, color: color }}
     on:click={openMenu}

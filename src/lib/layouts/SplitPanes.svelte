@@ -1,8 +1,18 @@
 ﻿<script>
   import { onDestroy, onMount } from "svelte";
+  import * as platform from "@lib/ipc/platform";
 
   export let defaultRatio = [];
   export let direction = "horizontal";
+  // Collapse policy is opt-in so existing tree/gantt and inbox splits retain
+  // their current two-sided mini-pane behaviour. The project tree/detail split
+  // uses `end` with a zero-sized pane: the tree always wins when space runs out,
+  // while the boundary remains available to drag the detail pane open again.
+  export let collapsePriority = "both";
+  export let collapseSize = 64;
+  export let collapsedPane = null;
+  export let separatorLabel = "ペインのサイズを変更";
+  export let persistenceKey = "";
 
   let split_pane_root; // Bind
 
@@ -12,6 +22,10 @@
   let resize_observer;
   let mutation_observer;
   let paneCount = 0;
+  let mounted = false;
+  let syncedCollapsedPane;
+  let lastOpenSizes = [];
+  let restoredRatio = [];
 
   // Min width
   let minWidth = "auto";
@@ -21,9 +35,15 @@
   $: primaryDimension = isVertical ? "height" : "width";
   $: primaryClient = isVertical ? "clientY" : "clientX";
   $: primaryCursor = isVertical ? "row-resize" : "col-resize";
+  $: if (mounted && collapsedPane !== syncedCollapsedPane) {
+    syncCollapsedPane(collapsedPane);
+  }
 
   onMount(() => {
     refreshLayout();
+    mounted = true;
+    syncCollapsedPane(collapsedPane, false);
+    void restorePersistedLayout();
 
     mutation_observer = new MutationObserver((mutations) => {
       const paneChanged = mutations.some((mutation) =>
@@ -40,7 +60,58 @@
     });
   });
 
+  const isValidPersistedLayout = (value) =>
+    value &&
+    typeof value === "object" &&
+    Array.isArray(value.ratio) &&
+    value.ratio.length === 2 &&
+    value.ratio.every((item) => Number.isFinite(item) && item >= 0) &&
+    (value.collapsedPane === null ||
+      value.collapsedPane === "start" ||
+      value.collapsedPane === "end");
+
+  const restorePersistedLayout = async () => {
+    if (!persistenceKey) return;
+    try {
+      const value = await platform.getMetaData(persistenceKey);
+      if (!mounted || !isValidPersistedLayout(value)) return;
+      restoredRatio = value.ratio;
+      refreshLayout();
+      const canRestoreCollapsedPane =
+        value.collapsedPane === "start"
+          ? collapsePriority !== "end"
+          : value.collapsedPane === "end"
+            ? collapsePriority !== "start"
+            : true;
+      const nextCollapsedPane = canRestoreCollapsedPane ? value.collapsedPane : null;
+      setBoundCollapsedPane(nextCollapsedPane);
+      syncCollapsedPane(nextCollapsedPane, false);
+    } catch {
+      // レイアウト設定が読めなくても、既定比率でそのまま利用できる。
+    }
+  };
+
+  const persistLayout = (panes, measuredSizes = null) => {
+    if (!persistenceKey || panes.length !== 2) return;
+    const effectiveCollapsedPane =
+      panes[0].classList.contains("PaneMini") || panes[0].classList.contains("PaneCollapsed")
+        ? "start"
+        : panes[1].classList.contains("PaneMini") || panes[1].classList.contains("PaneCollapsed")
+          ? "end"
+          : null;
+    const sourceSizes =
+      effectiveCollapsedPane && lastOpenSizes.length === 2
+        ? lastOpenSizes
+        : (measuredSizes ?? panes.map((pane) => pane.getBoundingClientRect()[primaryDimension]));
+    const total = sourceSizes.reduce((sum, size) => sum + size, 0);
+    if (total <= 0) return;
+    const ratio = sourceSizes.map((size) => size / total);
+    restoredRatio = ratio;
+    platform.setMetaData(persistenceKey, { ratio, collapsedPane: effectiveCollapsedPane });
+  };
+
   onDestroy(() => {
+    mounted = false;
     mutation_observer?.disconnect();
     resize_observer?.disconnect();
     unsetResizerEvents(resizers, handlers);
@@ -74,6 +145,132 @@
     resizers = createResizers(panes, sizes);
     handlers = setResizersEvents(resizers, panes);
     observeRootResize(panes);
+    if (collapsedPane) {
+      syncCollapsedPane(collapsedPane);
+    }
+  };
+
+  const positionResizers = (paneSizes) => {
+    const rootSize = split_pane_root.getBoundingClientRect()[primaryDimension];
+    let offset = 0;
+    resizers.forEach((resizer, index) => {
+      offset += paneSizes[index];
+      // Keep the full 5px hit target inside the root even when the end pane
+      // is collapsed to zero at the far edge.
+      const position = Math.max(0, Math.min(rootSize - 5, offset - 3));
+      resizer.style[isVertical ? "top" : "left"] = `${position}px`;
+      const valueNow = rootSize > 0 ? Math.round((offset / rootSize) * 100) : 0;
+      resizer.setAttribute("aria-valuemin", "0");
+      resizer.setAttribute("aria-valuemax", "100");
+      resizer.setAttribute("aria-valuenow", String(Math.max(0, Math.min(100, valueNow))));
+      if (collapsedPane === "end") {
+        resizer.setAttribute(
+          "aria-valuetext",
+          isVertical
+            ? "後方のペインをたたんでいます。上へドラッグすると表示できます"
+            : "詳細欄をたたんでいます。左へドラッグすると表示できます"
+        );
+        resizer.title = isVertical
+          ? "上へドラッグして後方のペインを表示"
+          : "左へドラッグして詳細欄を表示";
+      } else {
+        resizer.setAttribute("aria-valuetext", separatorLabel);
+        resizer.title = separatorLabel;
+      }
+    });
+  };
+
+  const setBoundCollapsedPane = (next) => {
+    syncedCollapsedPane = next;
+    collapsedPane = next;
+  };
+
+  const applyPaneSize = (pane, sizeValue, collapsed = false) => {
+    const minPropertyKey = isVertical ? "minHeight" : "minWidth";
+    const minDatasetKey = isVertical ? "splitPaneMinHeight" : "splitPaneMinWidth";
+    const finalSize = collapsed ? collapseSize : sizeValue;
+    pane.style[primaryDimension] = `${finalSize}px`;
+
+    const directPlaceholder = pane.querySelector(":scope > .PaneMiniPlaceholder");
+    if (collapsed) {
+      if (!(minDatasetKey in pane.dataset)) {
+        pane.dataset[minDatasetKey] = pane.style[minPropertyKey] || "";
+      }
+      pane.style[minPropertyKey] = "0px";
+      pane.classList.toggle("PaneMini", collapseSize > 0);
+      pane.classList.toggle("PaneCollapsed", collapseSize === 0);
+      if (collapseSize > 0 && !directPlaceholder) {
+        const placeholder = document.createElement("div");
+        placeholder.classList.add("PaneMiniPlaceholder");
+        pane.appendChild(placeholder);
+      }
+      for (const child of pane.children) {
+        if (!child.classList.contains("PaneMiniPlaceholder")) child.style.display = "none";
+      }
+      return;
+    }
+
+    if (minDatasetKey in pane.dataset) {
+      pane.style[minPropertyKey] = pane.dataset[minDatasetKey];
+      delete pane.dataset[minDatasetKey];
+    }
+    pane.classList.remove("PaneMini", "PaneCollapsed");
+    directPlaceholder?.remove();
+    for (const child of pane.children) child.style.display = "";
+  };
+
+  const resolveMinimumSize = (cssValue, pane) => {
+    const numericValue = parseFloat(cssValue);
+    if (!Number.isFinite(numericValue)) return 10;
+    if (cssValue.endsWith("%")) {
+      return (numericValue / 100) * split_pane_root.getBoundingClientRect()[primaryDimension];
+    }
+    if (cssValue.endsWith("rem")) {
+      const rootFontSize = parseFloat(window.getComputedStyle(document.documentElement).fontSize);
+      return numericValue * (rootFontSize || 16);
+    }
+    if (cssValue.endsWith("em")) {
+      const paneFontSize = parseFloat(window.getComputedStyle(pane).fontSize);
+      return numericValue * (paneFontSize || 16);
+    }
+    return numericValue || 10;
+  };
+
+  const syncCollapsedPane = (next, persist = true) => {
+    if (!split_pane_root) return;
+    const panes = [...split_pane_root.querySelectorAll(":scope > .Pane")];
+    if (panes.length !== 2) {
+      syncedCollapsedPane = next;
+      return;
+    }
+
+    const rootSize = split_pane_root.getBoundingClientRect()[primaryDimension];
+    const currentSizes = panes.map((pane) => pane.getBoundingClientRect()[primaryDimension]);
+    const isCurrentlyCollapsed = panes.some(
+      (pane) => pane.classList.contains("PaneMini") || pane.classList.contains("PaneCollapsed")
+    );
+    if (next && !isCurrentlyCollapsed && currentSizes.every((size) => size > 0)) {
+      lastOpenSizes = currentSizes;
+    }
+
+    let sizes;
+    if (next === "start" && collapsePriority !== "end") {
+      sizes = [collapseSize, Math.max(0, rootSize - collapseSize)];
+    } else if (next === "end" && collapsePriority !== "start") {
+      sizes = [Math.max(0, rootSize - collapseSize), collapseSize];
+    } else {
+      const sourceSizes =
+        lastOpenSizes.length === 2 ? lastOpenSizes : getPaneSizes(panes, rootSize, false);
+      const sourceTotal = sourceSizes.reduce((sum, size) => sum + size, 0) || rootSize;
+      sizes = sourceSizes.map((size) => (size * rootSize) / sourceTotal);
+      next = null;
+    }
+
+    applyPaneSize(panes[0], sizes[0], next === "start");
+    applyPaneSize(panes[1], sizes[1], next === "end");
+    positionResizers(sizes);
+    syncedCollapsedPane = next;
+    if (persist) persistLayout(panes, sizes);
   };
 
   const getPaneSizes = (panes, rootSize, preserveWidths) => {
@@ -85,7 +282,7 @@
       }
     }
 
-    let ratios = defaultRatio;
+    let ratios = restoredRatio.length === panes.length ? restoredRatio : defaultRatio;
     if (panes.length > ratios.length) {
       ratios = ratios.concat(new Array(panes.length - ratios.length).fill(1));
     } else if (panes.length < ratios.length) {
@@ -105,6 +302,10 @@
       }
       const resizer = document.createElement("div");
       resizer.classList.add("Resizer");
+      resizer.setAttribute("role", "separator");
+      resizer.setAttribute("aria-orientation", isVertical ? "horizontal" : "vertical");
+      resizer.setAttribute("aria-label", separatorLabel);
+      resizer.tabIndex = 0;
       resizer.style[isVertical ? "top" : "left"] = `${offset + paneSizes[index - 1] - 3}px`;
       offset += paneSizes[index - 1];
       pane.parentNode.insertBefore(resizer, pane);
@@ -114,52 +315,70 @@
     return nextResizers;
   };
 
-  const MINI_PANE_SIZE = 64;
   const observeRootResize = (panes) => {
     resize_observer?.disconnect();
     if (typeof ResizeObserver === "undefined") {
       return;
     }
-    resize_observer = new ResizeObserver((entries) => {
-      // Primary-size setting. Mini panes must keep their fixed MINI_PANE_SIZE
+    let previousRootSize = split_pane_root.getBoundingClientRect()[primaryDimension];
+    const observer = new ResizeObserver((entries) => {
+      // Primary-size setting. Collapsed panes must keep their configured size
       // — only non-mini panes share the remaining space proportionally,
       // otherwise the placeholder Card would visibly shrink/grow with the
       // container.
       const mini_total = panes.reduce(
-        (sum, pane) => sum + (pane.classList.contains("PaneMini") ? MINI_PANE_SIZE : 0),
+        (sum, pane) =>
+          sum +
+          (pane.classList.contains("PaneMini") || pane.classList.contains("PaneCollapsed")
+            ? collapseSize
+            : 0),
         0
       );
       const non_mini_size = panes.reduce(
         (sum, pane) =>
           sum +
-          (pane.classList.contains("PaneMini")
+          (pane.classList.contains("PaneMini") || pane.classList.contains("PaneCollapsed")
             ? 0
             : pane.getBoundingClientRect()[primaryDimension]),
         0
       );
       const new_root_size = entries[0].contentRect[primaryDimension];
+      // ResizeObserver always delivers an initial notification. When a
+      // persisted ratio has just been applied, reading pane rectangles from
+      // that first callback can still return the pre-layout sizes and undo the
+      // restored ratio. Only redistribute panes after the root itself changed.
+      if (Math.abs(new_root_size - previousRootSize) < 0.5) {
+        requestAnimationFrame(() => {
+          if (mounted && resize_observer === observer) {
+            positionResizers(panes.map((pane) => pane.getBoundingClientRect()[primaryDimension]));
+          }
+        });
+        return;
+      }
+      previousRootSize = new_root_size;
       const non_mini_target = Math.max(0, new_root_size - mini_total);
       if (non_mini_size === 0 && non_mini_target === 0) {
         return;
       }
       const new_pane_sizes = panes.map((pane) => {
-        if (pane.classList.contains("PaneMini")) {
-          return MINI_PANE_SIZE;
+        if (pane.classList.contains("PaneMini") || pane.classList.contains("PaneCollapsed")) {
+          return collapseSize;
         }
         if (non_mini_size === 0) {
-          return non_mini_target / Math.max(1, panes.length - mini_total / MINI_PANE_SIZE);
+          const collapsedCount = panes.filter(
+            (pane) =>
+              pane.classList.contains("PaneMini") || pane.classList.contains("PaneCollapsed")
+          ).length;
+          return non_mini_target / Math.max(1, panes.length - collapsedCount);
         }
         return (pane.getBoundingClientRect()[primaryDimension] * non_mini_target) / non_mini_size;
       });
       panes.forEach((pane, index) => {
         pane.style[primaryDimension] = `${new_pane_sizes[index]}px`;
       });
-      let offset = 0;
-      resizers.forEach((resizer, index) => {
-        resizer.style[isVertical ? "top" : "left"] = `${offset + new_pane_sizes[index] - 3}px`;
-        offset += new_pane_sizes[index];
-      });
+      positionResizers(new_pane_sizes);
     });
+    resize_observer = observer;
     resize_observer.observe(split_pane_root);
   };
 
@@ -173,15 +392,9 @@
 
       const minProperty = isVertical ? "minHeight" : "minWidth";
       const style_min_w = window.getComputedStyle(pane)[minProperty];
-      const min_w = style_min_w.includes("%")
-        ? (parseFloat(style_min_w, 10) / 100) *
-          split_pane_root.getBoundingClientRect()[primaryDimension]
-        : parseFloat(style_min_w, 10) || 10;
+      const min_w = resolveMinimumSize(style_min_w, pane);
       const style_min_wr = window.getComputedStyle(pane_r)[minProperty];
-      const min_wr = style_min_wr.includes("%")
-        ? (parseFloat(style_min_wr, 10) / 100) *
-          split_pane_root.getBoundingClientRect()[primaryDimension]
-        : parseFloat(style_min_wr, 10) || 10;
+      const min_wr = resolveMinimumSize(style_min_wr, pane_r);
 
       // Track the current position of mouse
       let startPointer = 0;
@@ -207,6 +420,8 @@
         // Calculate the current size of pane
         size = pane.getBoundingClientRect()[primaryDimension];
         sizeR = pane_r.getBoundingClientRect()[primaryDimension];
+        lastDesiredSize = size;
+        lastDesiredSizeR = sizeR;
 
         // Calculate the current offset of resizer
         const resizerRect = resizer.getBoundingClientRect();
@@ -227,55 +442,8 @@
       // Snap only applies on mouseup; during drag the user is free to
       // move past the threshold without the pane sticking.
       const SNAP_THRESHOLD = 80;
-      const enableMini = min_w > SNAP_THRESHOLD;
-      const enableMiniR = min_wr > SNAP_THRESHOLD;
-
-      // Helper: apply a size to a pane.
-      // When mini=true the pane snaps to MINI_PANE_SIZE: its real content is
-      // hidden via inline style and a blank Card placeholder is injected.
-      // When mini=false (default, used during drag) real content is visible.
-      const minPropertyKey = isVertical ? "minHeight" : "minWidth";
-      function applyPaneSize(p, sizeVal, mini = false) {
-        // Safety: in mini mode the size is always MINI_PANE_SIZE — this
-        // protects against any caller (or stale ResizeObserver re-entry)
-        // accidentally passing the raw drag value instead.
-        if (mini) {
-          sizeVal = MINI_PANE_SIZE;
-        }
-        p.style[primaryDimension] = `${sizeVal}px`;
-        // Use :scope > to find ONLY the direct-child placeholder. Without
-        // this, nested SplitPanes would interfere: querying the outer pane
-        // would find the inner pane's placeholder and incorrectly skip
-        // creating its own (or wrongly delete the inner one on un-mini).
-        const directPlaceholder = p.querySelector(":scope > .PaneMiniPlaceholder");
-        if (mini) {
-          // Override CSS min-* so the pane can shrink below its declared minimum.
-          // Keep the pane's natural padding so the placeholder Card sits
-          // inside with the same breathing room a real Card would have.
-          p.style[minPropertyKey] = "0px";
-          p.classList.add("PaneMini");
-          if (!directPlaceholder) {
-            const placeholder = document.createElement("div");
-            placeholder.classList.add("PaneMiniPlaceholder");
-            p.appendChild(placeholder);
-          }
-          // Hide real children via inline style (CSS :global selectors can't
-          // reach grandchildren of SplitPaneRoot reliably).
-          for (const child of p.children) {
-            if (!child.classList.contains("PaneMiniPlaceholder")) {
-              child.style.display = "none";
-            }
-          }
-        } else {
-          p.style[minPropertyKey] = "";
-          p.classList.remove("PaneMini");
-          if (directPlaceholder) directPlaceholder.remove();
-          // Restore real children.
-          for (const child of p.children) {
-            child.style.display = "";
-          }
-        }
-      }
+      const enableMini = min_w > SNAP_THRESHOLD && collapsePriority !== "end";
+      const enableMiniR = min_wr > SNAP_THRESHOLD && collapsePriority !== "start";
 
       // Track the pointer's raw desired size for each pane during a drag.
       // Snap-to-collapse / clamp-to-min are deferred until mouseup so the
@@ -323,16 +491,16 @@
         let rightMini = false;
 
         if (enableMini && finalSize < SNAP_THRESHOLD) {
-          finalSize = MINI_PANE_SIZE;
-          finalSizeR = size + sizeR - MINI_PANE_SIZE;
+          finalSize = collapseSize;
+          finalSizeR = size + sizeR - collapseSize;
           leftMini = true;
         } else if (finalSize < min_w) {
           finalSize = min_w;
           finalSizeR = size + sizeR - min_w;
         }
         if (enableMiniR && finalSizeR < SNAP_THRESHOLD) {
-          finalSizeR = MINI_PANE_SIZE;
-          finalSize = size + sizeR - MINI_PANE_SIZE;
+          finalSizeR = collapseSize;
+          finalSize = size + sizeR - collapseSize;
           rightMini = true;
         } else if (finalSizeR < min_wr) {
           finalSizeR = min_wr;
@@ -346,7 +514,15 @@
 
         applyPaneSize(pane, finalSize, leftMini);
         applyPaneSize(pane_r, finalSizeR, rightMini);
-        resizer.style[isVertical ? "top" : "left"] = `${resizerOffset + (finalSize - size)}px`;
+
+        if (panes.length === 2) {
+          if (!leftMini && !rightMini) lastOpenSizes = [finalSize, finalSizeR];
+          setBoundCollapsedPane(leftMini ? "start" : rightMini ? "end" : null);
+        }
+        positionResizers(
+          panes.map((currentPane) => currentPane.getBoundingClientRect()[primaryDimension])
+        );
+        persistLayout(panes, [finalSize, finalSizeR]);
 
         setTimeout(() => {
           pane.classList.remove("PaneSnapping");
@@ -355,7 +531,73 @@
       };
 
       resizer.addEventListener("mousedown", mouseDownHandler);
-      handlers.push(mouseDownHandler);
+      const doubleClickHandler = () => {
+        const preferred = collapsePriority === "start" ? "start" : "end";
+        if (collapsedPane) {
+          setBoundCollapsedPane(null);
+          syncCollapsedPane(null);
+        } else if (collapsePriority !== "both") {
+          setBoundCollapsedPane(preferred);
+          syncCollapsedPane(preferred);
+        }
+      };
+      const applyKeyboardResize = (delta) => {
+        const rootSize = split_pane_root.getBoundingClientRect()[primaryDimension];
+        if (rootSize <= 0) return;
+        if (collapsedPane) {
+          setBoundCollapsedPane(null);
+          syncCollapsedPane(null, false);
+        }
+
+        const currentSize = pane.getBoundingClientRect()[primaryDimension];
+        const currentSizeR = pane_r.getBoundingClientRect()[primaryDimension];
+        const minStart = collapsePriority === "end" ? min_w : 0;
+        const minEnd = collapsePriority === "start" ? min_wr : 0;
+        const nextStart = Math.min(
+          rootSize - minEnd,
+          Math.max(minStart, currentSize + rootSize * delta)
+        );
+        const nextEnd = Math.max(0, currentSize + currentSizeR - nextStart);
+        applyPaneSize(pane, nextStart);
+        applyPaneSize(pane_r, nextEnd);
+        lastOpenSizes = [nextStart, nextEnd];
+        setBoundCollapsedPane(null);
+        positionResizers([nextStart, nextEnd]);
+        persistLayout(panes, [nextStart, nextEnd]);
+      };
+      const keyDownHandler = (event) => {
+        const decreaseKeys = isVertical ? ["ArrowUp"] : ["ArrowLeft"];
+        const increaseKeys = isVertical ? ["ArrowDown"] : ["ArrowRight"];
+        if (decreaseKeys.includes(event.key)) {
+          event.preventDefault();
+          applyKeyboardResize(-0.05);
+        } else if (increaseKeys.includes(event.key)) {
+          event.preventDefault();
+          applyKeyboardResize(0.05);
+        } else if (event.key === "Home") {
+          event.preventDefault();
+          if (collapsePriority !== "end") {
+            setBoundCollapsedPane("start");
+            syncCollapsedPane("start");
+          } else {
+            applyKeyboardResize(-1);
+          }
+        } else if (event.key === "End") {
+          event.preventDefault();
+          if (collapsePriority !== "start") {
+            setBoundCollapsedPane("end");
+            syncCollapsedPane("end");
+          } else {
+            applyKeyboardResize(1);
+          }
+        } else if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          doubleClickHandler();
+        }
+      };
+      resizer.addEventListener("dblclick", doubleClickHandler);
+      resizer.addEventListener("keydown", keyDownHandler);
+      handlers.push({ resizer, mouseDownHandler, doubleClickHandler, keyDownHandler });
     }
     return handlers;
   };
@@ -363,8 +605,12 @@
     if (!handlers) {
       return;
     }
-    resizers.forEach((resizer, index) => {
-      resizer.removeEventListener("mousedown", handlers[index]);
+    handlers.forEach((handler) => {
+      if (handler) {
+        handler.resizer.removeEventListener("mousedown", handler.mouseDownHandler);
+        handler.resizer.removeEventListener("dblclick", handler.doubleClickHandler);
+        handler.resizer.removeEventListener("keydown", handler.keyDownHandler);
+      }
     });
   };
 </script>
@@ -373,6 +619,7 @@
   bind:this={split_pane_root}
   class:SplitPaneRoot={true}
   class:Vertical={isVertical}
+  data-persistence-key={persistenceKey || undefined}
   style="--minWidth: {minWidth}; --minHeight: {minHeight}"
 >
   <slot />
@@ -481,6 +728,11 @@
   .SplitPaneRoot > :global(.Pane.PaneMini) {
     overflow: hidden;
     padding: var(--pane-pad);
+  }
+
+  .SplitPaneRoot > :global(.Pane.PaneCollapsed) {
+    overflow: hidden;
+    padding: 0;
   }
 
   .SplitPaneRoot > :global(.Pane.PaneMini > :not(.PaneMiniPlaceholder)) {

@@ -12,7 +12,7 @@ describe("SearchBox", () => {
   test("updates the full-text filter as the user types", async () => {
     render(SearchBox);
 
-    const input = screen.getByPlaceholderText("filter tasks...");
+    const input = screen.getByLabelText("タスク一覧を絞り込み");
     await fireEvent.input(input, { target: { value: "release" } });
 
     expect(get(filter)).toEqual({
@@ -23,7 +23,7 @@ describe("SearchBox", () => {
   test("confirms a chip on Enter and keeps typing further AND terms", async () => {
     render(SearchBox);
 
-    const input = screen.getByPlaceholderText("filter tasks...");
+    const input = screen.getByLabelText("タスク一覧を絞り込み");
     await fireEvent.input(input, { target: { value: "release" } });
     await fireEvent.keyDown(input, { key: "Enter" });
     await tick();
@@ -53,7 +53,7 @@ describe("SearchBox", () => {
   test("confirming a duplicate chip (case-insensitive) is ignored and just clears the input", async () => {
     render(SearchBox);
 
-    const input = screen.getByPlaceholderText("filter tasks...");
+    const input = screen.getByLabelText("タスク一覧を絞り込み");
     await fireEvent.input(input, { target: { value: "release" } });
     await fireEvent.keyDown(input, { key: "Enter" });
     await tick();
@@ -88,7 +88,7 @@ describe("SearchBox", () => {
   test("removes the last chip with Backspace when input is empty", async () => {
     render(SearchBox);
 
-    const input = screen.getByPlaceholderText("filter tasks...");
+    const input = screen.getByLabelText("タスク一覧を絞り込み");
     await fireEvent.input(input, { target: { value: "release" } });
     await fireEvent.keyDown(input, { key: "Enter" });
     await tick();
@@ -112,7 +112,7 @@ describe("SearchBox", () => {
   test("removes an individual chip via its x button", async () => {
     render(SearchBox);
 
-    const input = screen.getByPlaceholderText("filter tasks...");
+    const input = screen.getByLabelText("タスク一覧を絞り込み");
     await fireEvent.input(input, { target: { value: "release" } });
     await fireEvent.keyDown(input, { key: "Enter" });
     await tick();
@@ -151,7 +151,7 @@ describe("SearchBox", () => {
   test("Escape also clears already-confirmed chips, not just typed text", async () => {
     render(SearchBox);
 
-    const input = screen.getByPlaceholderText("filter tasks...");
+    const input = screen.getByLabelText("タスク一覧を絞り込み");
     await fireEvent.input(input, { target: { value: "release" } });
     await fireEvent.keyDown(input, { key: "Enter" });
     await tick();

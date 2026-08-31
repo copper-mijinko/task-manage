@@ -73,7 +73,8 @@
       id="name-filter-input"
       type="text"
       bind:value
-      placeholder="filter tasks..."
+      placeholder="タスク名を絞り込み"
+      aria-label="タスク名を絞り込み"
       on:input={handleChange}
     />
   </label>

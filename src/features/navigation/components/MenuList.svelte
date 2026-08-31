@@ -10,14 +10,23 @@
   import Dialog from "@lib/primitives/Dialog.svelte";
   import WorkspaceSetup from "@features/workspace/components/WorkspaceSetup.svelte";
   import { ripple, tooltip } from "@lib/actions";
-  import { project_ids, selected_type, selected_id, tag_index, active_tag } from "@stores";
+  import {
+    project_ids,
+    selected_type,
+    selected_id,
+    tag_index,
+    active_tag,
+    sidebarCollapsed,
+  } from "@stores";
   import { workspace_store } from "@features/workspace/stores/workspace";
+  import { showWorkspaceSetup } from "@stores/ui";
   import { getDefaultProject } from "@features/tasks/utils/tree_control";
 
   function selectWorkspaceProject(proj) {
     workspace_store.setActiveProject(proj.projectDir);
     $selected_type = "WorkspaceProject";
     $selected_id = proj.rootId;
+    $sidebarCollapsed = true;
   }
 
   async function addWorkspaceProject(e) {
@@ -29,6 +38,7 @@
       workspace_store.setActiveProject(result.projectDir);
       $selected_type = "WorkspaceProject";
       $selected_id = project.data.id;
+      $sidebarCollapsed = true;
     }
   }
 
@@ -53,8 +63,9 @@
     workspace_delete_target = null;
   };
 
-  let show_workspace_setup = false;
   let workspace_open_error = "";
+  let project_add_error = "";
+  let adding_in_app_project = false;
   let workspace_open_error_timer;
   let workspaceProjectsExpanded = true;
   let inAppProjectsExpanded = true;
@@ -89,6 +100,7 @@
     e.stopPropagation();
     $selected_type = section;
     $selected_id = id;
+    $sidebarCollapsed = true;
   }
   $: tagEntries = [...$tag_index.entries()].sort(([a], [b]) => a.localeCompare(b));
   $: normalizedTagQuery = tagQuery.trim().toLocaleLowerCase();
@@ -103,10 +115,23 @@
         : "Memo";
 
   // Add
-  const handleAdd = (e) => {
+  const handleAdd = async (e) => {
     e.stopPropagation();
     inAppProjectsExpanded = true;
-    project_ids.addProject();
+    if (adding_in_app_project) return;
+    adding_in_app_project = true;
+    project_add_error = "";
+    try {
+      const projectId = await project_ids.addProject();
+      $selected_type = "Projects";
+      $selected_id = projectId;
+      $sidebarCollapsed = true;
+    } catch (error) {
+      project_add_error =
+        error instanceof Error ? error.message : "プロジェクトを追加できませんでした";
+    } finally {
+      adding_in_app_project = false;
+    }
   };
   // Delete
   const handleDelete = (e, project_id) => {
@@ -302,9 +327,9 @@
 </script>
 
 <WorkspaceSetup
-  show={show_workspace_setup}
+  show={$showWorkspaceSetup}
   toggle={() => {
-    show_workspace_setup = !show_workspace_setup;
+    $showWorkspaceSetup = !$showWorkspaceSetup;
   }}
 />
 
@@ -367,7 +392,7 @@
     <button
       class="WorkspaceManageBtn"
       on:click={() => {
-        show_workspace_setup = true;
+        $showWorkspaceSetup = true;
       }}
       aria-label="ワークスペースを管理"
     >
@@ -397,7 +422,7 @@
         d="M23.87 11.882c.31.54.045 1.273-.595 1.643l-9.65 5.57c-.084.05-.176.086-.265.11l-2.656.66c-.37.092-.72-.035-.88-.314-.162-.278-.09-.65.17-.913l1.907-1.958c.063-.072.137-.123.214-.167.004-.01.012-.015.012-.015l9.65-5.57c.64-.37 1.408-.234 1.72.305l.374.65z"
       ></path></svg
     >
-    <span class:TextOverFlow={true}>Projects</span>
+    <span class:TextOverFlow={true}>プロジェクト</span>
   </div>
   <div class="ProjectSubsection" class:Expanded={workspaceProjectsExpanded}>
     <div class="ProjectSubsectionHeader">
@@ -407,8 +432,8 @@
         aria-expanded={workspaceProjectsExpanded}
         aria-controls="workspace-project-list"
         aria-label={workspaceProjectsExpanded
-          ? "Workspace Projectsを折りたたむ"
-          : "Workspace Projectsを展開"}
+          ? "Workspaceプロジェクトを折りたたむ"
+          : "Workspaceプロジェクトを展開"}
         use:tooltip={{
           color: "var(--on-theme-tooltip-fg)",
           backgroundColor: "var(--on-theme-tooltip-bg)",
@@ -434,14 +459,14 @@
             stroke-linejoin="round"
           />
         </svg>
-        <span class="SubsectionLabel TextOverFlow">Workspace Projects</span>
+        <span class="SubsectionLabel TextOverFlow">Workspaceプロジェクト</span>
         <span class="SubsectionCount">{$workspace_store.projects.length}</span>
       </button>
       <div class="AddButtonContainer">
         {#if $workspace_store.activeWorkspacePath}
           <IconButton
-            tooltipContent="Add a workspace project."
-            ariaLabel="Add a workspace project"
+            tooltipContent="Workspaceプロジェクトを追加"
+            ariaLabel="Workspaceプロジェクトを追加"
             normalColor="rgba(255,255,255,0.1)"
             activeColor="rgba(255,255,255,0.2)"
             on:click={addWorkspaceProject}
@@ -463,27 +488,33 @@
       <div id="workspace-project-list" class="Contents ProjectContents">
         {#if $workspace_store.projects.length > 0}
           {#each $workspace_store.projects as proj (proj.rootId)}
-            <button
+            <div
               class="MenuRow"
               class:Selected={proj.rootId === $selected_id && $selected_type === "WorkspaceProject"}
-              use:ripple
               data-id={proj.rootId}
               data-section="WorkspaceProject"
-              on:click={() => selectWorkspaceProject(proj)}
             >
-              <div class="TreeLine" style="flex-shrink: 0"></div>
-              <span
-                class="TextOverFlow"
-                use:tooltip={{
-                  color: "var(--on-theme-tooltip-fg)",
-                  backgroundColor: "var(--on-theme-tooltip-bg)",
-                  content: proj.name,
-                }}>{proj.name}</span
+              <button
+                type="button"
+                class="ProjectSelectButton"
+                use:ripple
+                aria-label={proj.name}
+                on:click={() => selectWorkspaceProject(proj)}
               >
+                <div class="TreeLine" style="flex-shrink: 0"></div>
+                <span
+                  class="TextOverFlow"
+                  use:tooltip={{
+                    color: "var(--on-theme-tooltip-fg)",
+                    backgroundColor: "var(--on-theme-tooltip-bg)",
+                    content: proj.name,
+                  }}>{proj.name}</span
+                >
+              </button>
               <div class="DeleteButtonContainer">
                 <IconButton
-                  tooltipContent="Delete this workspace project."
-                  ariaLabel="Delete workspace project"
+                  tooltipContent={`プロジェクト「${proj.name}」を削除`}
+                  ariaLabel={`プロジェクト「${proj.name}」を削除`}
                   style="height: 100%; margin:0; box-shadow:none;"
                   normalColor="transparent"
                   activeColor="rgba(255,255,255,0.2)"
@@ -497,13 +528,15 @@
                   >
                 </IconButton>
               </div>
-            </button>
+            </div>
           {/each}
         {:else}
           <div class="MenuRow EmptyProjectRow">
             <div class="TreeLine" style="flex-shrink: 0"></div>
             <span class="TextOverFlow">
-              {$workspace_store.activeWorkspacePath ? "No workspace projects" : "Workspace未設定"}
+              {$workspace_store.activeWorkspacePath
+                ? "Workspaceプロジェクトなし"
+                : "Workspace未設定"}
             </span>
           </div>
         {/if}
@@ -517,7 +550,9 @@
         type="button"
         aria-expanded={inAppProjectsExpanded}
         aria-controls="in-app-project-list"
-        aria-label={inAppProjectsExpanded ? "InApp Projectsを折りたたむ" : "InApp Projectsを展開"}
+        aria-label={inAppProjectsExpanded
+          ? "アプリ内プロジェクトを折りたたむ"
+          : "アプリ内プロジェクトを展開"}
         use:tooltip={{
           color: "var(--on-theme-tooltip-fg)",
           backgroundColor: "var(--on-theme-tooltip-bg)",
@@ -543,13 +578,16 @@
             stroke-linejoin="round"
           />
         </svg>
-        <span class="SubsectionLabel TextOverFlow">InApp Projects (db.json)</span>
+        <span class="SubsectionLabel TextOverFlow">アプリ内プロジェクト</span>
         <span class="SubsectionCount">{$project_ids?.length ?? 0}</span>
       </button>
       <div class="AddButtonContainer">
         <IconButton
-          tooltipContent="Add an InApp project."
-          ariaLabel="Add an InApp project"
+          tooltipContent={adding_in_app_project
+            ? "プロジェクトを追加中"
+            : "アプリ内プロジェクトを追加"}
+          ariaLabel={adding_in_app_project ? "プロジェクトを追加中" : "アプリ内プロジェクトを追加"}
+          disabled={adding_in_app_project}
           normalColor="rgba(255,255,255,0.1)"
           activeColor="rgba(255,255,255,0.2)"
           on:click={(e) => {
@@ -568,31 +606,40 @@
         </IconButton>
       </div>
     </div>
+    {#if project_add_error}
+      <div class="ProjectAddError" role="alert">{project_add_error}</div>
+    {/if}
     {#if inAppProjectsExpanded}
       <div id="in-app-project-list" class="Contents ProjectContents">
         {#each $project_ids ?? [] as child (child.id)}
-          <button
+          <div
             transition:slide={{ duration: 100 }}
             class:MenuRow={true}
             class:Selected={child.id == $selected_id && $selected_type === "Projects"}
-            use:ripple
             data-id={child.id}
             data-section="Projects"
-            on:click={(e) => select(e, child.id, "Projects")}
           >
-            <div class:TreeLine={true} style="flex-shrink: 0"></div>
-            <span
-              class:TextOverFlow={true}
-              use:tooltip={{
-                color: "var(--on-theme-tooltip-fg)",
-                backgroundColor: "var(--on-theme-tooltip-bg)",
-                content: child.name,
-              }}>{child.name}</span
+            <button
+              type="button"
+              class="ProjectSelectButton"
+              use:ripple
+              aria-label={child.name}
+              on:click={(e) => select(e, child.id, "Projects")}
             >
+              <div class:TreeLine={true} style="flex-shrink: 0"></div>
+              <span
+                class:TextOverFlow={true}
+                use:tooltip={{
+                  color: "var(--on-theme-tooltip-fg)",
+                  backgroundColor: "var(--on-theme-tooltip-bg)",
+                  content: child.name,
+                }}>{child.name}</span
+              >
+            </button>
             <div class="DeleteButtonContainer">
               <IconButton
-                tooltipContent="Delete the InApp project."
-                ariaLabel="Delete the InApp project"
+                tooltipContent={`プロジェクト「${child.name}」を削除`}
+                ariaLabel={`プロジェクト「${child.name}」を削除`}
                 style="height: 100%; margin:0; box-shadow:none;"
                 normalColor="transparent"
                 activeColor="rgba(255,255,255,0.2)"
@@ -608,7 +655,7 @@
                 >
               </IconButton>
             </div>
-          </button>
+          </div>
         {/each}
       </div>
     {/if}
@@ -628,11 +675,11 @@
       />
       <circle cx="7" cy="7" r="1.5" fill="white" />
     </svg>
-    <span class="TextOverFlow">Tags <span class="TagScope">({tagScopeLabel})</span></span>
+    <span class="TextOverFlow">タグ <span class="TagScope">({tagScopeLabel})</span></span>
     <div class="AddButtonContainer">
       <IconButton
-        tooltipContent={tagsExpanded ? "Tagsを折りたたむ" : "Tagsを展開"}
-        ariaLabel="Toggle tags section"
+        tooltipContent={tagsExpanded ? "タグを折りたたむ" : "タグを展開"}
+        ariaLabel={tagsExpanded ? "タグを折りたたむ" : "タグを展開"}
         normalColor="rgba(255,255,255,0.1)"
         activeColor="rgba(255,255,255,0.2)"
         on:click={() => (tagsExpanded = !tagsExpanded)}
@@ -668,8 +715,8 @@
         <input
           bind:value={tagQuery}
           type="text"
-          placeholder="Filter tags"
-          aria-label="Filter tags"
+          placeholder="タグを絞り込み"
+          aria-label="タグを絞り込み"
         />
       </label>
 
@@ -690,12 +737,12 @@
       {:else if $tag_index.size > 0}
         <div class="MenuRow EmptyTagRow">
           <div class="TreeLine" style="flex-shrink: 0"></div>
-          <span class="TextOverFlow">No matches</span>
+          <span class="TextOverFlow">一致するタグなし</span>
         </div>
       {:else}
         <div class="MenuRow EmptyTagRow">
           <div class="TreeLine" style="flex-shrink: 0"></div>
-          <span class="TextOverFlow">No tags</span>
+          <span class="TextOverFlow">タグなし</span>
         </div>
       {/if}
     </div>
@@ -704,15 +751,15 @@
 <Dialog
   show={show_confirm}
   toggle={toggle_confirm}
-  header="Confirm."
-  content={`Do you really delete "${project_name_confirm}"?`}
+  header="プロジェクトの削除"
+  content={`「${project_name_confirm}」を削除しますか？`}
   callback={callback_confirm}
 />
 <Dialog
   show={show_workspace_delete}
   toggle={toggle_workspace_delete}
-  header="Confirm."
-  content={`Do you really delete the workspace project "${workspace_delete_target?.name ?? ""}"?\nThis removes its folder from disk.`}
+  header="Workspaceプロジェクトの削除"
+  content={`「${workspace_delete_target?.name ?? ""}」を削除しますか？\n保存フォルダーもディスクから削除されます。`}
   callback={callback_workspace_delete}
 />
 
@@ -838,6 +885,10 @@
     margin-left: auto;
     height: 100%;
     aspect-ratio: 1;
+    flex: 0 0 auto;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.12s ease;
   }
   .MenuRow {
     display: flex;
@@ -863,6 +914,29 @@
     outline: 2px solid var(--on-theme-primary);
     outline-offset: -2px;
     z-index: 1;
+  }
+  .ProjectSelectButton {
+    display: flex;
+    flex: 1 1 auto;
+    align-items: center;
+    align-self: stretch;
+    min-width: 0;
+    color: inherit;
+    cursor: pointer;
+    text-align: left;
+  }
+  .ProjectSelectButton:focus-visible {
+    outline: 2px solid var(--on-theme-primary);
+    outline-offset: -2px;
+  }
+  .ProjectSelectButton .TextOverFlow {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .MenuRow:hover .DeleteButtonContainer,
+  .MenuRow:focus-within .DeleteButtonContainer {
+    opacity: 1;
+    pointer-events: auto;
   }
   .MenuRow:not(.Selected):hover {
     background-color: rgba(255, 255, 255, 0.08);
@@ -998,6 +1072,11 @@
     flex-shrink: 0;
   }
   .WorkspaceOpenError {
+    padding: 0 var(--sp2) var(--sp2) var(--sp4);
+    color: var(--theme-color-Error-light, #ffb4ab);
+    font-size: var(--font-label-md);
+  }
+  .ProjectAddError {
     padding: 0 var(--sp2) var(--sp2) var(--sp4);
     color: var(--theme-color-Error-light, #ffb4ab);
     font-size: var(--font-label-md);

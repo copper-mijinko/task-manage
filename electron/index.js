@@ -8,6 +8,12 @@ const workspace = require("./workspace");
 const inbox = require("./inbox");
 const { WorkspaceReconciler } = require("./workspace-reconciler");
 const { WorkspaceWriteQueue } = require("./workspace-write-queue");
+const { configureAgentDebugging } = require("./agent-debug");
+
+const agentDebugging = configureAgentDebugging(app);
+if (agentDebugging) {
+  log.info(`Agent UI debugging enabled at http://${agentDebugging.host}:${agentDebugging.port}`);
+}
 
 function countNodes(treeData) {
   if (!treeData) return 0;
@@ -217,6 +223,7 @@ app.on("ready", () => {
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       zoomFactor: 1.0,
+      ...(agentDebugging ? { backgroundThrottling: false } : {}),
     },
     width: 1000,
     height: 800,
@@ -797,11 +804,12 @@ app.on("ready", () => {
     });
   });
   // on add-project.
-  ipcMain.on("add-project", (event, arg) => {
+  ipcMain.handle("add-project", async (_event, arg) => {
     if (arg) {
       db.data.push(arg);
-      dbWriter.write();
+      await dbWriter.write();
     }
+    return { success: Boolean(arg) };
   });
   // on delete-project.
   ipcMain.on("delete-project", (event, arg) => {

@@ -14,7 +14,7 @@ import {
 
 export interface ProjectIdsStore extends Writable<ProjectListItem[] | undefined> {
   init: () => Promise<void>;
-  addProject: () => void;
+  addProject: () => Promise<string>;
   deleteProject: (projectId: string) => void;
   setProjectOrder: (projects: ProjectListItem[]) => void;
 }
@@ -67,12 +67,21 @@ function createProjectIds(initialValue: ProjectListItem[] | undefined): ProjectI
 
       return initialLoad;
     },
-    addProject: () => {
+    addProject: async () => {
       const newProject = getDefaultProject();
-      platform.addProject(newProject);
-      platform.getProjectIDs().then((result) => {
-        set(result);
-      });
+      const existingNames = new Set((get({ subscribe }) ?? []).map((project) => project.name));
+      const baseName = "新しいプロジェクト";
+      let projectName = baseName;
+      let suffix = 2;
+      while (existingNames.has(projectName)) {
+        projectName = `${baseName} ${suffix}`;
+        suffix += 1;
+      }
+      newProject.data.data.name = projectName;
+      await platform.addProject(newProject);
+      const result = await platform.getProjectIDs();
+      set(result);
+      return newProject.data.id;
     },
     deleteProject: (projectId: string) => {
       platform.deleteProject(projectId);

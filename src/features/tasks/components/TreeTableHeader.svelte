@@ -45,7 +45,7 @@
   }
 
   const STATUS_OPTIONS = ["Open", "Pending", "In Progress", "Completed", "Canceled"];
-  const EMPTY_FILTER_LABEL = "No filter";
+  const EMPTY_FILTER_LABEL = "条件なし";
   const FILTER_ICON_PATH =
     "M3 7C3 6.44772 3.44772 6 4 6H20C20.5523 6 21 6.44772 21 7C21 7.55228 20.5523 8 20 8H4C3.44772 8 3 7.55228 3 7ZM6 12C6 11.4477 6.44772 11 7 11H17C17.5523 11 18 11.4477 18 12C18 12.5523 17.5523 13 17 13H7C6.44772 13 6 12.5523 6 12ZM9 17C9 16.4477 9.44772 16 10 16H14C14.5523 16 15 16.4477 15 17C15 17.5523 14.5523 18 14 18H10C9.44772 18 9 17.5523 9 17Z";
   const FILTER_CLEAR_ICON_PATH =
@@ -126,10 +126,15 @@
   }
 
   function getSortButtonLabel(headerName) {
+    const label = getColumnLabel(headerName);
     const direction = getSortDirection(headerName);
-    if (direction === "asc") return `${headerName} sorted ascending`;
-    if (direction === "desc") return `${headerName} sorted descending`;
-    return `Sort ${headerName}`;
+    if (direction === "asc") return `${label}：昇順`;
+    if (direction === "desc") return `${label}：降順`;
+    return `${label}を並べ替え`;
+  }
+
+  function getColumnLabel(headerName) {
+    return $column_settings.find((column) => column.id === headerName)?.label ?? headerName;
   }
 
   function isFilterActive(headerName, currentFilter = $filter) {
@@ -304,7 +309,7 @@
   {#each headers as header}
     <div class:TableHeader={true} role="columnheader">
       <div class="HeaderLabelRow" class:sortActive={$sort_state?.column === header.name}>
-        <span class="HeaderLabelText TextOverFlow">{header.name}</span>
+        <span class="HeaderLabelText TextOverFlow">{getColumnLabel(header.name)}</span>
         {#if SORTABLE_COLUMNS.has(header.name)}
           <IconButton
             variant="text"
@@ -441,9 +446,9 @@
               class="HeaderFilterControl"
               class:active={filterActive[header.name]}
               on:click|stopPropagation={toggleStatusPanel}
-              aria-label="status フィルター"
+              aria-label="ステータスフィルター"
               aria-expanded={openStatusPanel}
-              title="Status フィルター"
+              title="ステータスフィルター"
               use:ripple
             >
               <span class="FilterIcon" aria-hidden="true">
@@ -456,7 +461,7 @@
             {#if filterActive[header.name]}
               <IconButton
                 style={"margin: 0rem; padding: var(--sp1); margin-left: auto; width: 1.5rem; height: 1.5rem; flex-shrink: 0;"}
-                ariaLabel="status フィルターをクリア"
+                ariaLabel="ステータスフィルターをクリア"
                 on:click={(e) => {
                   clearColumnFilter(header.name);
                   e.stopPropagation();
@@ -480,9 +485,9 @@
               class="HeaderFilterControl"
               class:active={filterActive[header.name]}
               on:click|stopPropagation={toggleNamePanel}
-              aria-label="{header.name} フィルター"
+              aria-label="タスク名フィルター"
               aria-expanded={openNamePanel}
-              title="Name フィルター"
+              title="タスク名フィルター"
               use:ripple
             >
               <span class="FilterIcon" aria-hidden="true">
@@ -495,7 +500,7 @@
             {#if filterActive[header.name]}
               <IconButton
                 style={"margin: 0rem; padding: var(--sp1); margin-left: auto; width: 1.5rem; height: 1.5rem; flex-shrink: 0;"}
-                ariaLabel={`${header.name} フィルターをクリア`}
+                ariaLabel="タスク名フィルターをクリア"
                 on:click={(e) => {
                   clearColumnFilter(header.name);
                   e.stopPropagation();
@@ -519,7 +524,7 @@
               class="HeaderFilterControl"
               class:active={filterActive[header.name]}
               on:click|stopPropagation={(e) => toggleDatePanel(e, header.name)}
-              aria-label="{header.name} 日付フィルター"
+              aria-label={`${getColumnLabel(header.name)}フィルター`}
               aria-expanded={openDatePanel === header.name}
               title="日付フィルター"
               use:ripple
@@ -534,7 +539,7 @@
             {#if filterActive[header.name]}
               <IconButton
                 style={"margin: 0rem; padding: var(--sp1); margin-left: auto; width: 1.5rem; height: 1.5rem; flex-shrink: 0;"}
-                ariaLabel={`${header.name} フィルターをクリア`}
+                ariaLabel={`${getColumnLabel(header.name)}フィルターをクリア`}
                 on:click={(e) => {
                   clearColumnFilter(header.name);
                   e.stopPropagation();
@@ -596,7 +601,7 @@
             <div
               class="HeaderFilterControl HeaderFilterSummary"
               class:active={filterActive[header.name]}
-              aria-label="{header.name} filter: {filterSummaries[header.name]}"
+              aria-label={`${getColumnLabel(header.name)}フィルター：${filterSummaries[header.name]}`}
             >
               <span class="FilterIcon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -608,7 +613,7 @@
             {#if filterActive[header.name]}
               <IconButton
                 style={"margin: 0rem; padding: var(--sp1); margin-left: auto; width: 1.5rem; height: 1.5rem; flex-shrink: 0;"}
-                ariaLabel={`${header.name} フィルターをクリア`}
+                ariaLabel={`${getColumnLabel(header.name)}フィルターをクリア`}
                 on:click={(e) => {
                   clearColumnFilter(header.name);
                   e.stopPropagation();
@@ -635,7 +640,7 @@
     variant="text"
     normalColor={showPanel ? "var(--theme-color-Primary-main)" : "var(--theme-color-Sub-main)"}
     activeColor={"var(--theme-color-Primary-main)"}
-    ariaLabel="Column settings"
+    ariaLabel="列の表示設定"
     tooltipContent="カラム設定"
     on:click={openPanel}
     style="margin: 0; width: var(--header-icon-size); height: var(--header-icon-size); box-shadow: none; position: absolute; top: 50%; right: var(--sp2); transform: translateY(-50%); z-index: 1;"

@@ -2,6 +2,7 @@
   import { afterUpdate, tick, createEventDispatcher } from "svelte";
   import { workspace_store } from "@features/workspace/stores/workspace";
   import { inbox_store } from "@features/inbox/stores/inbox";
+  import { modalLayer } from "@lib/actions/modal_layer";
 
   /**
    * Lightweight quick-capture overlay. Designed for "tap → type → enter →
@@ -84,6 +85,7 @@
 {#if show}
   <div
     class="QuickCaptureMask"
+    use:modalLayer
     on:mousedown={handleMaskMousedown}
     role="presentation"
     data-page-search-skip
@@ -108,7 +110,15 @@
           />
         </svg>
         <span>Inboxへ追加</span>
-        <button type="button" class="CloseBtn" on:click={close} aria-label="閉じる"> ✕ </button>
+        <button
+          type="button"
+          class="CloseBtn"
+          data-testid="quick-capture-close"
+          on:click={close}
+          aria-label="閉じる"
+        >
+          ✕
+        </button>
       </div>
 
       <input
@@ -117,6 +127,8 @@
         on:keydown={handleKeydown}
         placeholder="思いついたタスクを入力 ... Enterで追加、Shift+Enterで追加して閉じる"
         class="QuickCaptureInput"
+        data-testid="quick-capture-input"
+        data-modal-autofocus
         type="text"
         aria-label="追加するタスク名"
         disabled={!workspaceReady}

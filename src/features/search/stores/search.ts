@@ -10,7 +10,13 @@ import {
 } from "@features/tasks/utils/tree_control";
 import type { FilterState, SortState } from "@app-types/app";
 import { tree_data } from "@features/tasks/stores/tree";
-import { selected_id, selected_type, show_archived, table_selected_id } from "@stores/ui";
+import {
+  selectOnly,
+  selected_id,
+  selected_type,
+  show_archived,
+  table_selected_id,
+} from "@stores/ui";
 import { sort_state } from "@features/tasks/stores/sort";
 import { workspace_store, workspace_tasks_cache } from "@features/workspace/stores/workspace";
 import * as platform from "@lib/ipc/platform";
@@ -148,7 +154,10 @@ function createFilter(initialValue: FilterState): FilterStore {
         !nextTree ||
         !getNode(get(table_selected_id) as string, nextTree)
       ) {
-        table_selected_id.set(undefined);
+        // A filter can clear the focused row when it temporarily hides that row.
+        // When the full tree returns, focus the project root so the detail pane
+        // never remains in an orphaned "No data." state.
+        selectOnly(nextTree.id);
       }
 
       filtered_data.set(nextTree);

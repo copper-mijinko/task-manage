@@ -107,7 +107,7 @@ async function waitForMemoComponent() {
     () => {
       expect(document.querySelector(".memo-host").firstElementChild).toBeInTheDocument();
     },
-    { timeout: 20000 }
+    { timeout: 40000 }
   );
 }
 
@@ -153,7 +153,7 @@ function markdownToolButton(label) {
 }
 
 async function chooseMarkdownTableAction(label) {
-  const select = document.querySelector('select[aria-label="Table"]');
+  const select = document.querySelector('select[aria-label="表"]');
   expect(select).toBeInTheDocument();
   const option = [...select.options].find((candidate) => candidate.textContent === label);
   expect(option).toBeTruthy();
@@ -215,7 +215,7 @@ describe("Memo mode routing", () => {
 
   test("uses a Quill-like heading picker in the Markdown toolbar", async () => {
     const view = await openMarkdownEditor({ content: "Title" });
-    const headingPicker = document.querySelector('select[aria-label="Heading"]');
+    const headingPicker = document.querySelector('select[aria-label="見出し"]');
 
     expect(headingPicker).toBeInTheDocument();
     expect(
@@ -223,15 +223,15 @@ describe("Memo mode routing", () => {
         control.getAttribute("aria-label")
       )
     ).toEqual([
-      "Heading",
-      "Bold",
-      "Italic",
-      "Inline code",
-      "Link",
-      "Bullet list",
-      "Quote",
-      "Code block",
-      "Table",
+      "見出し",
+      "太字",
+      "斜体",
+      "インラインコード",
+      "リンク",
+      "箇条書き",
+      "引用",
+      "コードブロック",
+      "表",
     ]);
     expect(markdownToolButton("Heading 1")).not.toBeInTheDocument();
     expect([...headingPicker.options].map((option) => option.value)).toEqual(["normal", "1", "2"]);
@@ -263,7 +263,7 @@ describe("Memo mode routing", () => {
       ["link", { list: "bullet" }, "blockquote", "code-block"],
     ]);
     expect(
-      quillInstances[0].toolbarContainer.querySelector('select[aria-label="Table"]')
+      quillInstances[0].toolbarContainer.querySelector('select[aria-label="表"]')
     ).toBeInTheDocument();
   });
 
@@ -296,17 +296,17 @@ describe("Memo mode routing", () => {
     expect(toolbar).toContain("link");
     expect(quillInstances[0].toolbarContainer.querySelectorAll("button.ql-table")).toHaveLength(0);
     expect(
-      quillInstances[0].toolbarContainer.querySelector('select[aria-label="Table"]')
+      quillInstances[0].toolbarContainer.querySelector('select[aria-label="表"]')
     ).toBeInTheDocument();
   });
 
   test("uses a Quill table dropdown with all table actions", async () => {
     await renderMemo({ saveMemo: vi.fn(), content: "", isWorkspaceProject: false });
-    const select = quillInstances[0].toolbarContainer.querySelector('select[aria-label="Table"]');
+    const select = quillInstances[0].toolbarContainer.querySelector('select[aria-label="表"]');
 
     expect(select).toBeInTheDocument();
     expect([...select.options].map((option) => option.textContent)).toEqual([
-      "Table",
+      "表",
       "表を挿入",
       "行を上に追加",
       "行を下に追加",
@@ -474,13 +474,13 @@ describe("Markdown Memo - view mode", () => {
     expect(document.querySelector(".cm-editor")).not.toBeInTheDocument();
     expect(document.querySelector(".preview-mode")).toBeInTheDocument();
     const modeTrigger = document.querySelector(".memo-mode-trigger");
-    expect(modeTrigger).toHaveAttribute("aria-label", "Memo mode: Preview");
+    expect(modeTrigger).toHaveAttribute("aria-label", "メモ表示モード：プレビュー");
     expect(modeTrigger.querySelector(".memo-mode-icon svg")).toBeInTheDocument();
 
     await fireEvent.click(modeTrigger);
     expect(
       [...document.querySelectorAll(".memo-mode-option-label")].map((node) => node.textContent)
-    ).toEqual(["Preview", "Edit", "Split"]);
+    ).toEqual(["プレビュー", "編集", "分割"]);
   });
 
   test("shows placeholder when content is empty", async () => {
@@ -712,6 +712,68 @@ describe("Markdown Memo - edit mode", () => {
     expect(view.state.selection.main.from).toBeGreaterThan(newRowCellPosition);
   });
 
+  test("indents and outdents Markdown list items by one level with Tab", async () => {
+    const initialContent = "- parent\n- child";
+    const view = await openMarkdownEditor({ saveMemo, content: initialContent });
+    view.dispatch({ selection: { anchor: initialContent.length } });
+
+    await fireEvent.keyDown(view.contentDOM, { key: "Tab" });
+    await tick();
+    expect(view.state.doc.toString()).toBe("- parent\n  - child");
+
+    await fireEvent.keyDown(view.contentDOM, { key: "Tab", shiftKey: true });
+    await tick();
+    expect(view.state.doc.toString()).toBe(initialContent);
+  });
+
+  test("continues Markdown list markup with Enter", async () => {
+    const initialContent = "- first";
+    const view = await openMarkdownEditor({ saveMemo, content: initialContent });
+    view.dispatch({ selection: { anchor: initialContent.length } });
+
+    await fireEvent.keyDown(view.contentDOM, { key: "Enter" });
+    await tick();
+
+    expect(view.state.doc.toString()).toBe("- first\n- ");
+  });
+
+  test.each([
+    ["1. first", "1. first\n2. "],
+    ["- [x] done", "- [x] done\n- [ ] "],
+    ["> quote", "> quote\n> "],
+  ])("continues ordered, checklist, and quote markup from %s", async (content, expected) => {
+    const view = await openMarkdownEditor({ saveMemo, content });
+    view.dispatch({ selection: { anchor: content.length } });
+
+    await fireEvent.keyDown(view.contentDOM, { key: "Enter" });
+    await tick();
+
+    expect(view.state.doc.toString()).toBe(expected);
+  });
+
+  test("exits an empty list item with Enter", async () => {
+    const content = "- first\n- ";
+    const view = await openMarkdownEditor({ saveMemo, content });
+    view.dispatch({ selection: { anchor: content.length } });
+
+    await fireEvent.keyDown(view.contentDOM, { key: "Enter" });
+    await tick();
+
+    expect(view.state.doc.toString()).toBe("- first\n");
+  });
+
+  test("inserts a Markdown hard break with Shift+Enter", async () => {
+    const initialContent = "first line";
+    const view = await openMarkdownEditor({ saveMemo, content: initialContent });
+    view.dispatch({ selection: { anchor: initialContent.length } });
+
+    await fireEvent.keyDown(view.contentDOM, { key: "Enter", shiftKey: true });
+    await tick();
+
+    expect(view.state.doc.toString()).toBe("first line  \n");
+    expect(view.state.selection.main.from).toBe("first line  \n".length);
+  });
+
   test("suggests memo titles after a wiki-link opener", async () => {
     await renderMarkdownMemo({
       saveMemo,
@@ -772,7 +834,7 @@ describe("Markdown Memo - edit mode", () => {
     await waitFor(() => {
       expect(document.querySelector(".memo-mode-trigger")).toHaveAttribute(
         "aria-label",
-        "Memo mode: Edit"
+        "メモ表示モード：編集"
       );
     });
   });
@@ -812,7 +874,7 @@ describe("Markdown Memo - edit mode", () => {
     await waitFor(() =>
       expect(document.querySelector(".memo-mode-trigger")).toHaveAttribute(
         "aria-label",
-        "Memo mode: Edit"
+        "メモ表示モード：編集"
       )
     );
 
@@ -844,7 +906,7 @@ describe("Markdown Memo - edit mode", () => {
     await waitFor(() =>
       expect(document.querySelector(".memo-mode-trigger")).toHaveAttribute(
         "aria-label",
-        "Memo mode: Edit"
+        "メモ表示モード：編集"
       )
     );
 

@@ -150,6 +150,35 @@
     if (!parent) return false;
     return !!getParent(parent.id, $tree_data.data);
   })();
+  $: selectionTreeCapabilities = (() => {
+    const unavailable = { moveUp: false, moveDown: false, indent: false, outdent: false };
+    if (!$tree_data?.data || !$table_selected_id || anchorIsArchived || anchorIsRoot) {
+      return unavailable;
+    }
+
+    const ids = isMultiSelect ? $selected_ids : new Set([$table_selected_id]);
+    if (!areAllSiblings($tree_data.data, ids)) return unavailable;
+
+    const anyId = ids.values().next().value;
+    if (!anyId) return unavailable;
+    const parent = getParent(anyId, $tree_data.data);
+    if (!parent) return unavailable;
+
+    const indices = parent.children
+      .map((child, index) => (ids.has(child.id) ? index : -1))
+      .filter((index) => index >= 0);
+    if (indices.length !== ids.size) return unavailable;
+
+    const first = Math.min(...indices);
+    const last = Math.max(...indices);
+    const contiguous = !isMultiSelect || isContiguousSiblingBlock($tree_data.data, ids);
+    return {
+      moveUp: contiguous && first > 0,
+      moveDown: contiguous && last < parent.children.length - 1,
+      indent: first > 0,
+      outdent: !!getParent(parent.id, $tree_data.data),
+    };
+  })();
 
   let show_alert = false;
   let alert_content = "Cannot delete the root node.";
@@ -157,7 +186,8 @@
     show_alert = !show_alert;
   };
 
-  let detailPaneVisible = true;
+  let outerCollapsedPane = null;
+  $: detailPaneVisible = outerCollapsedPane !== "end";
   let show_memo_format_confirm = false;
   let bulkMemoTargetFormat = "markdown";
   let bulkMemoPhase = "ready";
@@ -172,6 +202,10 @@
 
   function getMemoFormatLabel(format) {
     return format === "markdown" ? "Markdown" : "Quill";
+  }
+
+  function toggleDetailPane() {
+    outerCollapsedPane = detailPaneVisible ? "end" : null;
   }
 
   function getBulkMemoId(node, entry, index) {
@@ -307,19 +341,8 @@
 
     const new_node = getDefaultNode();
     const rootId = $tree_data.data.id;
-    // Inserting a sibling next to the EXPLICITLY-selected project root is
-    // meaningless: the root has no parent to receive the new node. Surface
-    // that as an error rather than silently re-routing the add to "append
-    // as child", which used to confuse users into thinking the wrong button
-    // worked. (If nothing is selected, we still fall through to the friendly
-    // "append under root" behaviour so a single-click on an empty tree
-    // creates the first task.)
-    if ($table_selected_id === rootId && action === "insert_after") {
-      alert_content =
-        "Cannot insert a sibling at the project root.\nSelect a task, or use 子タスク追加 to add a child here.";
-      show_alert = true;
-      return;
-    }
+    // The project root cannot have siblings. Treat the primary add action as
+    // "add a top-level task" here so the most prominent add button always works.
     const selectedId = $table_selected_id ?? rootId;
     const addAction = selectedId === rootId ? "append" : action;
 
@@ -367,7 +390,7 @@
       const rootId = $tree_data.data.id;
       const ids = Array.from($selected_ids).filter((id) => id !== rootId);
       if (ids.length === 0) {
-        alert_content = "Cannot delete the root node.";
+        alert_content = "プロジェクトルートはアーカイブできません。";
         show_alert = true;
         return;
       }
@@ -390,7 +413,7 @@
     if ($table_selected_id) {
       const node = getNode($table_selected_id, $tree_data.data);
       if (node && node.id == $tree_data.data.id) {
-        alert_content = "Cannot delete the root node.";
+        alert_content = "プロジェクトルートはアーカイブできません。";
         show_alert = true;
         return;
       }
@@ -431,6 +454,9 @@
     if (!$tree_data?.data || !$table_selected_id) return false;
     return isNodeEffectivelyArchived($table_selected_id, $tree_data.data);
   })();
+  $: anchorIsRoot = Boolean(
+    $tree_data?.data && $table_selected_id === $tree_data.data.id && !isMultiSelect
+  );
   // 選択中のどこかに archived が含まれているか（restore ボタン表示の判定に使う）
   $: selectionHasArchived = (() => {
     if (!$tree_data?.data) return false;
@@ -464,6 +490,7 @@
   }
   const handleMoveUp = (e) => {
     e?.stopPropagation?.();
+    if (!selectionTreeCapabilities.moveUp) return;
     runBulkOrSingle({
       bulk: bulkMoveUp,
       single: moveNodeUp,
@@ -472,6 +499,7 @@
   };
   const handleMoveDown = (e) => {
     e?.stopPropagation?.();
+    if (!selectionTreeCapabilities.moveDown) return;
     runBulkOrSingle({
       bulk: bulkMoveDown,
       single: moveNodeDown,
@@ -480,6 +508,7 @@
   };
   const handleIndent = (e) => {
     e?.stopPropagation?.();
+    if (!selectionTreeCapabilities.indent) return;
     if (isMultiSelect) {
       if (!canMultiTreeOp || !$tree_data?.data) return;
       const { new_parent_ids } = bulkIndent($selected_ids, $tree_data.data);
@@ -493,6 +522,7 @@
   };
   const handleOutdent = (e) => {
     e?.stopPropagation?.();
+    if (!selectionTreeCapabilities.outdent) return;
     runBulkOrSingle({
       bulk: bulkOutdent,
       single: outdentNode,
@@ -528,25 +558,25 @@
         id: "moveUp",
         action: "overflowAction",
         title: "上に移動",
-        disabled: anchorIsArchived || (isMultiSelect && !canMultiSiblingMove),
+        disabled: !selectionTreeCapabilities.moveUp,
       },
       {
         id: "moveDown",
         action: "overflowAction",
         title: "下に移動",
-        disabled: anchorIsArchived || (isMultiSelect && !canMultiSiblingMove),
+        disabled: !selectionTreeCapabilities.moveDown,
       },
       {
         id: "outdent",
         action: "overflowAction",
         title: "アウトデント",
-        disabled: anchorIsArchived || (isMultiSelect && (!canMultiTreeOp || !canMultiOutdent)),
+        disabled: !selectionTreeCapabilities.outdent,
       },
       {
         id: "indent",
         action: "overflowAction",
         title: "インデント",
-        disabled: anchorIsArchived || (isMultiSelect && !canMultiTreeOp),
+        disabled: !selectionTreeCapabilities.indent,
       },
     ];
     const expandGroup = [
@@ -645,7 +675,7 @@
         $ganttVisible = !$ganttVisible;
         break;
       case "toggleDetail":
-        detailPaneVisible = !detailPaneVisible;
+        toggleDetailPane();
         break;
       case "toggleArchived":
         show_archived.set(!$show_archived);
@@ -656,7 +686,14 @@
 
 {#if $tree_data}
   <div class:Content={true}>
-    <SplitPanes defaultRatio={detailPaneVisible ? [3, 2] : [1]}>
+    <SplitPanes
+      defaultRatio={[3, 2]}
+      collapsePriority="end"
+      collapseSize={0}
+      separatorLabel="ツリーと詳細の幅を変更"
+      persistenceKey="layout.project.tree-detail"
+      bind:collapsedPane={outerCollapsedPane}
+    >
       <Pane style={"min-width: 10rem;"}>
         <Card title={projectName} padded={false} style={"height: 100%; width: 100%;"}>
           <span slot="header-actions" class="storage-badge">{projectStorageLabel}</span>
@@ -725,17 +762,22 @@
                   </svg>
                 </IconButton>
                 <IconButton
-                  tooltipContent={isMultiSelect
-                    ? `${selectionSize}件を削除（アーカイブ／完全削除を自動振り分け）`
-                    : anchorIsArchived
-                      ? "完全に削除"
-                      : "アーカイブ"}
-                  ariaLabel={isMultiSelect
-                    ? `${selectionSize}件を削除`
-                    : anchorIsArchived
-                      ? "完全に削除"
-                      : "アーカイブ"}
+                  tooltipContent={anchorIsRoot
+                    ? "プロジェクトルートはアーカイブできません"
+                    : isMultiSelect
+                      ? `${selectionSize}件を削除（アーカイブ／完全削除を自動振り分け）`
+                      : anchorIsArchived
+                        ? "完全に削除"
+                        : "アーカイブ"}
+                  ariaLabel={anchorIsRoot
+                    ? "プロジェクトルートはアーカイブできません"
+                    : isMultiSelect
+                      ? `${selectionSize}件を削除`
+                      : anchorIsArchived
+                        ? "完全に削除"
+                        : "アーカイブ"}
                   variant="text"
+                  disabled={anchorIsRoot}
                   activeColor={"var(--theme-color-Error-main)"}
                   normalColor={"var(--theme-color-Error-main)"}
                   on:click={(e) => handleRemove(e, anchorIsArchived ? "permanent" : "archive")}
@@ -773,107 +815,110 @@
               </div>
               <span class="TbSep" aria-hidden="true"></span>
 
-              {#if !isCompact}
-                <!-- Move / Indent -->
-                <div class="TbGroup">
-                  <IconButton
-                    tooltipContent={isMultiSelect
-                      ? canMultiSiblingMove
-                        ? `${selectionSize}件 上に移動`
-                        : "同じ親の連続した兄弟のみ移動できます"
-                      : "上に移動 (Alt+↑)"}
-                    ariaLabel={isMultiSelect ? `${selectionSize}件 上に移動` : "上に移動"}
-                    variant="text"
-                    normalColor={"var(--theme-color-Sub-main)"}
-                    activeColor={"var(--theme-color-Primary-main)"}
-                    disabled={anchorIsArchived || (isMultiSelect && !canMultiSiblingMove)}
-                    on:click={handleMoveUp}
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path
-                        d="M12 19V5M5 12L12 5L19 12"
-                        stroke="currentColor"
-                        stroke-width="2"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                      />
-                    </svg>
-                  </IconButton>
-                  <IconButton
-                    tooltipContent={isMultiSelect
-                      ? canMultiSiblingMove
-                        ? `${selectionSize}件 下に移動`
-                        : "同じ親の連続した兄弟のみ移動できます"
-                      : "下に移動 (Alt+↓)"}
-                    ariaLabel={isMultiSelect ? `${selectionSize}件 下に移動` : "下に移動"}
-                    variant="text"
-                    normalColor={"var(--theme-color-Sub-main)"}
-                    activeColor={"var(--theme-color-Primary-main)"}
-                    disabled={anchorIsArchived || (isMultiSelect && !canMultiSiblingMove)}
-                    on:click={handleMoveDown}
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path
-                        d="M12 5V19M5 12L12 19L19 12"
-                        stroke="currentColor"
-                        stroke-width="2"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                      />
-                    </svg>
-                  </IconButton>
-                  <IconButton
-                    tooltipContent={isMultiSelect
-                      ? canMultiTreeOp && canMultiOutdent
-                        ? `${selectionSize}件 アウトデント`
-                        : canMultiTreeOp
-                          ? "これ以上アウトデントできません"
-                          : "同じ親の兄弟のみアウトデントできます"
-                      : "アウトデント (Shift+Tab)"}
-                    ariaLabel={isMultiSelect ? `${selectionSize}件 アウトデント` : "アウトデント"}
-                    variant="text"
-                    normalColor={"var(--theme-color-Sub-main)"}
-                    activeColor={"var(--theme-color-Primary-main)"}
-                    disabled={anchorIsArchived ||
-                      (isMultiSelect && (!canMultiTreeOp || !canMultiOutdent))}
-                    on:click={handleOutdent}
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path
-                        d="M21 4H10M21 12H10M21 20H10M7 8L3 12L7 16"
-                        stroke="currentColor"
-                        stroke-width="2"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                      />
-                    </svg>
-                  </IconButton>
-                  <IconButton
-                    tooltipContent={isMultiSelect
-                      ? canMultiTreeOp
-                        ? `${selectionSize}件 インデント`
-                        : "同じ親の兄弟のみインデントできます"
-                      : "インデント (Tab)"}
-                    ariaLabel={isMultiSelect ? `${selectionSize}件 インデント` : "インデント"}
-                    variant="text"
-                    normalColor={"var(--theme-color-Sub-main)"}
-                    activeColor={"var(--theme-color-Primary-main)"}
-                    disabled={anchorIsArchived || (isMultiSelect && !canMultiTreeOp)}
-                    on:click={handleIndent}
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path
-                        d="M3 4H14M3 12H14M3 20H14M17 8L21 12L17 16"
-                        stroke="currentColor"
-                        stroke-width="2"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                      />
-                    </svg>
-                  </IconButton>
-                </div>
-                <span class="TbSep" aria-hidden="true"></span>
+              <!-- Moving tasks is a primary editing action in both density modes.
+                   Compact keeps these icon buttons visible instead of requiring
+                   the overflow menu for every reorder. At very narrow widths CSS
+                   leaves up/down visible and lets indent/outdent remain available
+                   from the overflow menu. -->
+              <div class="TbGroup" class:TbCompactTreeActions={isCompact}>
+                <IconButton
+                  tooltipContent={isMultiSelect
+                    ? canMultiSiblingMove
+                      ? `${selectionSize}件 上に移動`
+                      : "同じ親の連続した兄弟のみ移動できます"
+                    : "上に移動 (Alt+↑)"}
+                  ariaLabel={isMultiSelect ? `${selectionSize}件 上に移動` : "上に移動"}
+                  variant="text"
+                  normalColor={"var(--theme-color-Sub-main)"}
+                  activeColor={"var(--theme-color-Primary-main)"}
+                  disabled={!selectionTreeCapabilities.moveUp}
+                  on:click={handleMoveUp}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path
+                      d="M12 19V5M5 12L12 5L19 12"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </IconButton>
+                <IconButton
+                  tooltipContent={isMultiSelect
+                    ? canMultiSiblingMove
+                      ? `${selectionSize}件 下に移動`
+                      : "同じ親の連続した兄弟のみ移動できます"
+                    : "下に移動 (Alt+↓)"}
+                  ariaLabel={isMultiSelect ? `${selectionSize}件 下に移動` : "下に移動"}
+                  variant="text"
+                  normalColor={"var(--theme-color-Sub-main)"}
+                  activeColor={"var(--theme-color-Primary-main)"}
+                  disabled={!selectionTreeCapabilities.moveDown}
+                  on:click={handleMoveDown}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path
+                      d="M12 5V19M5 12L12 19L19 12"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </IconButton>
+                <IconButton
+                  tooltipContent={isMultiSelect
+                    ? canMultiTreeOp && canMultiOutdent
+                      ? `${selectionSize}件 アウトデント`
+                      : canMultiTreeOp
+                        ? "これ以上アウトデントできません"
+                        : "同じ親の兄弟のみアウトデントできます"
+                    : "アウトデント (Shift+Tab)"}
+                  ariaLabel={isMultiSelect ? `${selectionSize}件 アウトデント` : "アウトデント"}
+                  variant="text"
+                  normalColor={"var(--theme-color-Sub-main)"}
+                  activeColor={"var(--theme-color-Primary-main)"}
+                  disabled={!selectionTreeCapabilities.outdent}
+                  on:click={handleOutdent}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path
+                      d="M21 4H10M21 12H10M21 20H10M7 8L3 12L7 16"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </IconButton>
+                <IconButton
+                  tooltipContent={isMultiSelect
+                    ? canMultiTreeOp
+                      ? `${selectionSize}件 インデント`
+                      : "同じ親の兄弟のみインデントできます"
+                    : "インデント (Tab)"}
+                  ariaLabel={isMultiSelect ? `${selectionSize}件 インデント` : "インデント"}
+                  variant="text"
+                  normalColor={"var(--theme-color-Sub-main)"}
+                  activeColor={"var(--theme-color-Primary-main)"}
+                  disabled={!selectionTreeCapabilities.indent}
+                  on:click={handleIndent}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path
+                      d="M3 4H14M3 12H14M3 20H14M17 8L21 12L17 16"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </IconButton>
+              </div>
+              <span class="TbSep" aria-hidden="true"></span>
 
+              {#if !isCompact}
                 <!-- Expand / Collapse -->
                 <div class="TbGroup">
                   <IconButton
@@ -1024,14 +1069,14 @@
                     </svg>
                   </IconButton>
                   <IconButton
-                    tooltipContent={detailPaneVisible ? "Hide detail pane" : "Show detail pane"}
-                    ariaLabel={detailPaneVisible ? "Hide detail pane" : "Show detail pane"}
+                    tooltipContent={detailPaneVisible ? "詳細欄を隠す" : "詳細欄を表示"}
+                    ariaLabel={detailPaneVisible ? "詳細欄を隠す" : "詳細欄を表示"}
                     variant="text"
                     normalColor={detailPaneVisible
                       ? "var(--theme-color-Primary-main)"
                       : "var(--theme-color-Sub-main)"}
                     activeColor={"var(--theme-color-Primary-main)"}
-                    on:click={() => (detailPaneVisible = !detailPaneVisible)}
+                    on:click={toggleDetailPane}
                   >
                     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <rect
@@ -1100,7 +1145,13 @@
           <ActiveFilterBar />
           <div class="TreeAndGantt">
             {#if $ganttVisible}
-              <SplitPanes defaultRatio={[3, 2]}>
+              <SplitPanes
+                defaultRatio={[3, 2]}
+                collapsePriority="end"
+                collapseSize={0}
+                separatorLabel="ツリーとガントチャートの幅を変更"
+                persistenceKey="layout.project.tree-gantt"
+              >
                 <Pane style={"height: 100%; min-width: 6rem;"}>
                   <div class="TreeTable">
                     <TreeTable />
@@ -1118,11 +1169,11 @@
           </div>
         </Card>
       </Pane>
-      {#if detailPaneVisible}
-        <Pane style={"min-width: 10rem;"}>
+      <Pane style={"min-width: 10rem;"}>
+        {#if detailPaneVisible}
           <TaskDetail />
-        </Pane>
-      {/if}
+        {/if}
+      </Pane>
     </SplitPanes>
   </div>
   <Dialog
@@ -1152,14 +1203,14 @@
     toggle={closeBulkMemoFormatConfirm}
     width="44rem"
     height="auto"
-    label="Bulk memo format conversion"
+    label="メモ形式の一括変換"
   >
     <div class="bulk-convert-container">
-      <div class="bulk-convert-header">Convert memos to {bulkMemoTargetLabel}</div>
+      <div class="bulk-convert-header">メモを{bulkMemoTargetLabel}へ変換</div>
 
       <div class="bulk-convert-body">
         {#if bulkMemoPhase === "ready" || bulkMemoPhase === "running"}
-          <p class="bulk-section-label">Memos to convert ({bulkMemoItems.length})</p>
+          <p class="bulk-section-label">変換対象（{bulkMemoItems.length}件）</p>
           <ul class="bulk-list">
             {#each bulkMemoItems as item (item.id)}
               <li class="bulk-item">
@@ -1177,11 +1228,11 @@
             / やり直しで取り消しできます。
           </p>
           {#if bulkMemoPhase === "running"}
-            <p class="bulk-note">Converting...</p>
+            <p class="bulk-note">変換中...</p>
           {/if}
         {:else if bulkMemoPhase === "done"}
           {#if successfulBulkMemoItems.length > 0}
-            <p class="bulk-section-label">Converted ({successfulBulkMemoItems.length})</p>
+            <p class="bulk-section-label">変換済み（{successfulBulkMemoItems.length}件）</p>
             <ul class="bulk-result-list">
               {#each successfulBulkMemoItems as item (item.id)}
                 <li class="bulk-result-ok">
@@ -1204,7 +1255,7 @@
           {/if}
 
           {#if failedBulkMemoItems.length === 0}
-            <p class="bulk-success-note">Conversion completed.</p>
+            <p class="bulk-success-note">変換が完了しました。</p>
           {/if}
         {/if}
       </div>
@@ -1214,11 +1265,11 @@
           <button
             class="bulk-convert-btn"
             disabled={bulkMemoItems.length === 0}
-            on:click={applyBulkMemoFormat}>Convert</button
+            on:click={applyBulkMemoFormat}>変換</button
           >
         {/if}
         <button class="bulk-close-btn" on:click={closeBulkMemoFormatConfirm}>
-          {bulkMemoPhase === "done" ? "Close" : "Cancel"}
+          {bulkMemoPhase === "done" ? "閉じる" : "キャンセル"}
         </button>
       </div>
     </div>
@@ -1249,8 +1300,8 @@
     flex: 0 0 auto;
   }
   .TbGroup :global(button) {
-    width: 1.75rem;
-    height: 1.75rem;
+    width: 2.25rem;
+    height: 2.25rem;
     margin: 0;
   }
   .TaskListToolbar {
@@ -1264,6 +1315,7 @@
     box-sizing: border-box;
     border-bottom: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 12%, transparent);
     flex-shrink: 0;
+    container-type: inline-size;
   }
   .TbRow {
     display: flex;

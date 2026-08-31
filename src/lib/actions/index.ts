@@ -180,9 +180,15 @@ export function tooltip(
       entry.element.style.top = `calc(${e.pageY}px + 1rem)`;
     }
   };
+  // Once the anchor is activated, the tooltip has served its purpose. Keeping
+  // it visible can overlap a menu or dialog opened by the same click.
+  const handleClick = () => {
+    removeOwn();
+  };
   target.addEventListener("mouseenter", handleMouseEnter);
   target.addEventListener("mouseleave", handleMouseLeave);
   target.addEventListener("mousemove", handleMouseMove);
+  target.addEventListener("click", handleClick);
 
   return {
     update(next: TooltipParams) {
@@ -201,6 +207,7 @@ export function tooltip(
       target.removeEventListener("mouseenter", handleMouseEnter);
       target.removeEventListener("mouseleave", handleMouseLeave);
       target.removeEventListener("mousemove", handleMouseMove);
+      target.removeEventListener("click", handleClick);
       removeOwn();
     },
   };

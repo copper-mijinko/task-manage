@@ -1,5 +1,6 @@
-import { render } from "@testing-library/svelte";
+import { fireEvent, render } from "@testing-library/svelte";
 import { tick } from "svelte";
+import { vi } from "vitest";
 
 import SplitPanesHarness from "../mocks/SplitPanesHarness.svelte";
 
@@ -157,8 +158,9 @@ describe("SplitPanes", () => {
     await tick();
 
     expect(panes[0].classList.contains("PaneMini")).toBe(false);
-    // The inline min-width override has been cleared so CSS min-width applies again.
-    expect(panes[0].style.minWidth).toBe("");
+    // The temporary zero minimum is removed and the pane's declared minimum
+    // is restored rather than being lost across collapse/expand cycles.
+    expect(panes[0].style.minWidth).toBe("128px");
     // Placeholder has been removed from the DOM.
     expect(panes[0].querySelector(".PaneMiniPlaceholder")).toBeNull();
   });
@@ -194,6 +196,129 @@ describe("SplitPanes", () => {
     expect(panes[1].classList.contains("PaneMini")).toBe(true);
     expect(panes[1].style.width).toBe("64px");
     expect(panes[0].style.width).toBe("336px");
+  });
+
+  test("keeps the tree pane open and collapses the detail pane to the draggable edge", async () => {
+    const { container } = render(SplitPanesHarness, {
+      props: {
+        defaultRatio: [3, 2],
+        collapsePriority: "end",
+        collapseSize: 0,
+        separatorLabel: "ツリーと詳細の幅を変更",
+        paneMinWidth: "10rem",
+      },
+    });
+    await tick();
+
+    const resizer = container.querySelector(".Resizer");
+    const panes = getPanes(container);
+
+    expect(resizer).toHaveAttribute("role", "separator");
+    expect(resizer).toHaveAttribute("aria-label", "ツリーと詳細の幅を変更");
+
+    // Moving left cannot collapse the priority tree pane; it stops at its
+    // declared minimum and leaves the detail pane available.
+    drag(resizer, 240, 10);
+    await tick();
+    expect(panes[0]).not.toHaveClass("PaneCollapsed");
+    expect(parseFloat(panes[0].style.width)).toBeGreaterThanOrEqual(160);
+
+    // Moving right collapses only the detail pane to the edge. The separator
+    // remains in the DOM and can be dragged left to restore the detail pane.
+    drag(resizer, 128, 5000);
+    await tick();
+    expect(panes[1]).toHaveClass("PaneCollapsed");
+    expect(panes[1].style.width).toBe("0px");
+    expect(panes[1].querySelector(":scope > .PaneMiniPlaceholder")).toBeNull();
+    expect(resizer).toBeInTheDocument();
+
+    drag(resizer, 395, 250);
+    await tick();
+    expect(panes[1]).not.toHaveClass("PaneCollapsed");
+    expect(parseFloat(panes[1].style.width)).toBeGreaterThanOrEqual(160);
+  });
+
+  test("keeps the edge separator usable when the detail pane is collapsed externally", async () => {
+    const { container } = render(SplitPanesHarness, {
+      props: {
+        defaultRatio: [3, 2],
+        collapsePriority: "end",
+        collapseSize: 0,
+        collapsedPane: "end",
+        separatorLabel: "ツリーと詳細の幅を変更",
+      },
+    });
+    await tick();
+
+    const resizer = container.querySelector(".Resizer");
+    const panes = getPanes(container);
+    expect(panes[1]).toHaveClass("PaneCollapsed");
+    expect(resizer).toHaveAttribute("aria-valuenow", "100");
+    expect(resizer).toHaveAttribute(
+      "aria-valuetext",
+      "詳細欄をたたんでいます。左へドラッグすると表示できます"
+    );
+
+    await fireEvent.keyDown(resizer, { key: "Enter" });
+    await tick();
+    expect(panes[1]).not.toHaveClass("PaneCollapsed");
+    expect(parseFloat(panes[1].style.width)).toBeGreaterThanOrEqual(128);
+  });
+
+  test("supports arrow resizing and Home/End collapse from the keyboard", async () => {
+    const { container } = render(SplitPanesHarness, {
+      props: {
+        collapsePriority: "end",
+        collapseSize: 0,
+        paneMinWidth: "10rem",
+      },
+    });
+    await tick();
+
+    const resizer = container.querySelector(".Resizer");
+    const panes = getPanes(container);
+    await fireEvent.keyDown(resizer, { key: "ArrowRight" });
+    expect(parseFloat(panes[0].style.width)).toBeGreaterThan(200);
+
+    await fireEvent.keyDown(resizer, { key: "End" });
+    expect(panes[1]).toHaveClass("PaneCollapsed");
+
+    await fireEvent.keyDown(resizer, { key: "Home" });
+    expect(panes[0]).not.toHaveClass("PaneCollapsed");
+    expect(parseFloat(panes[0].style.width)).toBeGreaterThanOrEqual(160);
+  });
+
+  test("restores and updates a persisted pane ratio", async () => {
+    const getMetaData = vi.fn().mockResolvedValue({ ratio: [0.7, 0.3], collapsedPane: null });
+    const setMetaData = vi.fn();
+    Object.defineProperty(window, "electronAPI", {
+      configurable: true,
+      value: { getMetaData, setMetaData },
+    });
+
+    const { container } = render(SplitPanesHarness, {
+      props: { persistenceKey: "layout.test" },
+    });
+    await tick();
+    await Promise.resolve();
+    await tick();
+
+    const panes = getPanes(container);
+    expect(getMetaData).toHaveBeenCalledWith("layout.test");
+    expect(parseFloat(panes[0].style.width)).toBeCloseTo(280, 0);
+
+    const resizer = container.querySelector(".Resizer");
+    await fireEvent.keyDown(resizer, { key: "ArrowLeft" });
+    const persistedLayout = setMetaData.mock.calls.at(-1)?.[1];
+    expect(setMetaData).toHaveBeenLastCalledWith("layout.test", persistedLayout);
+    expect(persistedLayout).toEqual(
+      expect.objectContaining({
+        ratio: [expect.closeTo(0.65, 2), expect.closeTo(0.35, 2)],
+        collapsedPane: null,
+      })
+    );
+
+    delete window.electronAPI;
   });
 
   test("does not create a stray placeholder when nested SplitPanes are present", async () => {

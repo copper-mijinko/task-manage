@@ -58,6 +58,12 @@ Workspace 形式では、編集中の画面状態を正本として扱い、ロ�
   - 依存パッケージをインストールする
 - `npm run dev`
   - Vite dev server を起動し、Electron を自動起動する
+- `npm run dev:web`
+  - 実 Electron を Vite HMR 付きで起動し、Codex / Claude 用 CDP を `127.0.0.1:9222` に公開する
+- `npm run dev:agent`
+  - `dev:web` の互換エイリアス
+- `npm run verify:agent-ui`
+  - agent 開発モードの Electron renderer に接続できることを確認する
 - `npm run start`
   - ビルド済みのアプリを Electron で起動する
 - `npm run build`
@@ -75,11 +81,12 @@ Workspace 形式では、編集中の画面状態を正本として扱い、ロ�
 
 ## ドキュメント
 
-| ファイル                                               | 内容                                        |
-| ------------------------------------------------------ | ------------------------------------------- |
-| [docs/specification.md](docs/specification.md)         | 機能仕様、画面構成、状態管理                |
-| [docs/data.md](docs/data.md)                           | データ保存先、Workspace 構造、永続化        |
-| [docs/architecture.md](docs/architecture.md)           | ソースコード構造、レイヤー責務、import 規約 |
-| [docs/performance.md](docs/performance.md)             | 起動、読み込み、保存まわりの性能設計        |
-| [docs/testing.md](docs/testing.md)                     | テスト種別、テストケース、実行コマンド      |
-| [docs/how-to-contribute.md](docs/how-to-contribute.md) | 開発フロー、CI、リリース、ドキュメント方針  |
+| ファイル                                                     | 内容                                                    |
+| ------------------------------------------------------------ | ------------------------------------------------------- |
+| [docs/specification.md](docs/specification.md)               | 機能仕様、画面構成、状態管理                            |
+| [docs/data.md](docs/data.md)                                 | データ保存先、Workspace 構造、永続化                    |
+| [docs/architecture.md](docs/architecture.md)                 | ソースコード構造、レイヤー責務、import 規約             |
+| [docs/performance.md](docs/performance.md)                   | 起動、読み込み、保存まわりの性能設計                    |
+| [docs/testing.md](docs/testing.md)                           | テスト種別、テストケース、実行コマンド                  |
+| [docs/how-to-contribute.md](docs/how-to-contribute.md)       | 開発フロー、CI、リリース、ドキュメント方針              |
+| [docs/agent-ui-development.md](docs/agent-ui-development.md) | Codex / Claude から実 Electron GUI を操作する開発モード |

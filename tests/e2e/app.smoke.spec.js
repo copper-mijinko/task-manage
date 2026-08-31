@@ -89,11 +89,74 @@ test("loads seeded project data in Electron", async () => {
   }
 });
 
+test("collapses and restores detail from the tree-priority split boundary", async () => {
+  const app = await launchSeededApp();
+
+  try {
+    await app.window.locator("#task-1").dispatchEvent("click");
+
+    const splitRoot = app.window.locator(".Content > .SplitPaneRoot");
+    const panes = splitRoot.locator(":scope > .Pane");
+    const resizer = app.window.getByRole("separator", { name: "ツリーと詳細の幅を変更" });
+    await expect(resizer).toBeVisible();
+    const treeMinimum = await panes.nth(0).evaluate((pane) => {
+      const cssValue = window.getComputedStyle(pane).minWidth;
+      const numericValue = parseFloat(cssValue);
+      if (cssValue.endsWith("rem")) {
+        return (
+          numericValue * parseFloat(window.getComputedStyle(document.documentElement).fontSize)
+        );
+      }
+      return numericValue;
+    });
+
+    const rootBox = await splitRoot.boundingBox();
+    let resizerBox = await resizer.boundingBox();
+    expect(rootBox).not.toBeNull();
+    expect(resizerBox).not.toBeNull();
+
+    // Drag to the right edge: only the detail pane collapses and the 5px
+    // boundary remains reachable at the edge.
+    await app.window.mouse.move(resizerBox.x + resizerBox.width / 2, resizerBox.y + 40);
+    await app.window.mouse.down();
+    await app.window.mouse.move(rootBox.x + rootBox.width + 100, resizerBox.y + 40);
+    await app.window.mouse.up();
+
+    await expect(panes.nth(1)).toHaveClass(/PaneCollapsed/);
+    await expect(resizer).toBeVisible();
+    await expect(resizer).toHaveAttribute("aria-valuenow", "100");
+    await expect(app.window.getByRole("button", { name: "詳細欄を表示" })).toBeVisible();
+
+    // Drag the retained edge left to restore the detail pane.
+    resizerBox = await resizer.boundingBox();
+    await app.window.mouse.move(resizerBox.x + resizerBox.width / 2, resizerBox.y + 40);
+    await app.window.mouse.down();
+    await app.window.mouse.move(rootBox.x + rootBox.width * 0.62, resizerBox.y + 40);
+    await app.window.mouse.up();
+
+    await expect(panes.nth(1)).not.toHaveClass(/PaneCollapsed/);
+    await expect(app.window.getByRole("button", { name: "詳細欄を隠す" })).toBeVisible();
+
+    // Dragging hard left must not collapse the priority tree pane; it clamps
+    // at its declared minimum instead.
+    resizerBox = await resizer.boundingBox();
+    await app.window.mouse.move(resizerBox.x + resizerBox.width / 2, resizerBox.y + 40);
+    await app.window.mouse.down();
+    await app.window.mouse.move(rootBox.x + 5, resizerBox.y + 40);
+    await app.window.mouse.up();
+
+    await expect(panes.nth(0)).not.toHaveClass(/PaneCollapsed|PaneMini/);
+    expect((await panes.nth(0).boundingBox()).width).toBeGreaterThanOrEqual(treeMinimum - 1);
+  } finally {
+    await closeSeededApp(app);
+  }
+});
+
 test("filters the visible task rows from the project search box", async () => {
   const app = await launchSeededApp();
 
   try {
-    const filterInput = app.window.locator('input[placeholder="filter tasks..."]');
+    const filterInput = app.window.getByLabel("タスク一覧を絞り込み");
 
     await filterInput.fill("missing");
     await expect(app.window.locator("#task-1")).toHaveCount(0);
@@ -217,7 +280,7 @@ test("shows a missing-task state when the selected task is deleted", async () =>
       window.electronAPI.setTreeData(project);
     });
 
-    await expect(detailWindow.getByText("Task not found.")).toBeVisible();
+    await expect(detailWindow.getByText("タスクが見つかりません。")).toBeVisible();
     await expect(
       detailWindow.getByText("The target task was deleted. Rename is still tracked by task ID.")
     ).toBeVisible();
@@ -236,7 +299,7 @@ test("shows a missing-project state when the source project is deleted", async (
       window.electronAPI.deleteProject("project-1");
     });
 
-    await expect(detailWindow.getByText("Project not found.")).toBeVisible();
+    await expect(detailWindow.getByText("プロジェクトが見つかりません。")).toBeVisible();
     await expect(
       detailWindow.getByText("The project for this detail window was deleted.")
     ).toBeVisible();

@@ -59,8 +59,8 @@ export function setProjectOrder(projects: ProjectListItem[]): void {
   api()?.setProjectOrder?.(projects);
 }
 
-export function addProject(project: ProjectData): void {
-  api()?.addProject?.(project);
+export function addProject(project: ProjectData): Promise<void> {
+  return Promise.resolve(api()?.addProject?.(project)).then(() => undefined);
 }
 
 export function deleteProject(projectId: string): void {

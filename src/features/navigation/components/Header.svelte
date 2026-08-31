@@ -116,16 +116,18 @@
     $selected_type = "Inbox";
     $selected_id = INBOX_SELECTED_ID;
   }
+
+  const isElectronRuntime = typeof window !== "undefined" && Boolean(window.electronAPI);
 </script>
 
 <svelte:window on:keydown={handleGlobalKeydown} />
 
-<div class="Container" data-page-search-skip>
+<div class="Container" class:webRuntime={!isElectronRuntime} data-page-search-skip>
   <IconButton
     on:click={() => {
       $sidebarCollapsed = !$sidebarCollapsed;
     }}
-    ariaLabel={$sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
+    ariaLabel={$sidebarCollapsed ? "サイドバーを表示" : "サイドバーを隠す"}
     tooltipContent={$sidebarCollapsed ? "サイドバーを表示" : "サイドバーを折りたたむ"}
     use_ripple={false}
     activeColor={"transparent"}
@@ -294,11 +296,12 @@
     class:Active={$selected_type === "Inbox"}
     class:Disabled={!$workspace_store.activeWorkspacePath}
     disabled={!$workspace_store.activeWorkspacePath}
+    data-testid="open-inbox"
     on:click={openInboxView}
     aria-label="Inboxを開く"
     aria-pressed={$selected_type === "Inbox"}
     title={$workspace_store.activeWorkspacePath
-      ? "Inboxを開く (Ctrl+Shift+I でクイック追加)"
+      ? "Inboxを開く"
       : "Workspaceを設定するとInboxが使えます"}
   >
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -468,12 +471,17 @@
     box-shadow: var(--elevation-2);
     width: 100%;
     height: 100%;
+    box-sizing: border-box;
+    padding-left: var(--sp1);
     background-color: var(--theme-color-Theme-main);
     color: white;
     position: sticky;
     top: 0;
     z-index: 999;
     -webkit-app-region: drag;
+  }
+  .Container.webRuntime {
+    -webkit-app-region: no-drag;
   }
   /* インタラクティブ要素はドラッグ対象から除外 */
   .Container :global(button),

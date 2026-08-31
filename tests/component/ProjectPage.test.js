@@ -24,7 +24,14 @@ vi.mock("@features/gantt/components/GanttPanel.svelte", async () => {
 });
 
 import ProjectPage from "@pages/MainPage.svelte";
-import { closed_node_ids, ganttVisible, selected_id, table_selected_id, tree_data } from "@stores";
+import {
+  closed_node_ids,
+  ganttVisible,
+  selected_id,
+  table_selected_id,
+  tree_data,
+  ui_density,
+} from "@stores";
 import { clearSelection, selected_ids } from "@stores/ui";
 
 function createProjectData() {
@@ -74,6 +81,7 @@ describe("ProjectPage", () => {
     table_selected_id.set("task-1");
     closed_node_ids.set(new Set());
     ganttVisible.set(false);
+    ui_density.set("comfortable");
   });
 
   afterEach(() => {
@@ -113,12 +121,7 @@ describe("ProjectPage", () => {
     expect(get(table_selected_id)).toBe(get(tree_data).data.children[0].id);
   });
 
-  test("shows an alert when adding a sibling next to the project root", async () => {
-    // Pressing the toolbar "insert after current" button while the user has
-    // explicitly selected the root row is meaningless — the root has no
-    // parent to receive a sibling. We surface that as a Dialog alert rather
-    // than silently re-routing the add. The "add child" button (buttons[1])
-    // remains the correct way to add a top-level task.
+  test("adds a top-level task from the primary add button when the root is selected", async () => {
     const data = createProjectData();
     data.data.children = [];
     tree_data.set(data);
@@ -131,9 +134,10 @@ describe("ProjectPage", () => {
     await vi.runAllTimersAsync();
     await tick();
 
-    // No task added — alert dialog shown instead.
-    expect(get(tree_data).data.children).toHaveLength(0);
-    expect(document.body.textContent).toMatch(/Cannot insert a sibling/);
+    expect(get(tree_data).data.children).toHaveLength(1);
+    expect(get(tree_data).data.children[0].data.name).toBe("new_task");
+    expect(get(table_selected_id)).toBe(get(tree_data).data.children[0].id);
+    expect(document.body.textContent).not.toMatch(/Cannot insert a sibling/);
   });
 
   test("adds a task under the project root via 子タスク追加 when the root is selected", async () => {
@@ -172,15 +176,61 @@ describe("ProjectPage", () => {
     expect(get(table_selected_id)).toBe(get(tree_data).data.children[0].children[0].id);
   });
 
-  test("shows an alert when trying to delete the root node", async () => {
+  test("disables archive when the project root is selected", () => {
     table_selected_id.set("project-1");
-    const { container } = render(ProjectPage);
-    const buttons = container.querySelectorAll(".TbGroup button");
+    render(ProjectPage);
 
-    await fireEvent.click(buttons[2]);
-
-    expect(screen.getByText("Cannot delete the root node.")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "プロジェクトルートはアーカイブできません" })
+    ).toBeDisabled();
     expect(get(tree_data).data.children).toHaveLength(1);
+  });
+
+  test("disables tree operations that cannot change the selected task", async () => {
+    const data = createProjectData();
+    data.data.children.push({
+      id: "task-2",
+      data: { name: "Last Task", status: "Open", "due date": undefined, memo: [] },
+      children: [],
+    });
+    tree_data.set(data);
+    render(ProjectPage);
+
+    expect(screen.getByRole("button", { name: "上に移動" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "下に移動" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "インデント" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "アウトデント" })).toBeDisabled();
+
+    table_selected_id.set("task-2");
+    await tick();
+
+    expect(screen.getByRole("button", { name: "上に移動" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "下に移動" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "インデント" })).toBeEnabled();
+  });
+
+  test("keeps common tree operations visible and usable in compact mode", async () => {
+    const data = createProjectData();
+    data.data.children.push({
+      id: "task-2",
+      data: { name: "Last Task", status: "Open", "due date": undefined, memo: [] },
+      children: [],
+    });
+    tree_data.set(data);
+    ui_density.set("compact");
+    render(ProjectPage);
+
+    expect(screen.getByRole("button", { name: "上に移動" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "下に移動" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "インデント" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "アウトデント" })).toBeDisabled();
+
+    await fireEvent.click(screen.getByRole("button", { name: "下に移動" }));
+    await tick();
+
+    expect(get(tree_data).data.children.map((task) => task.id)).toEqual(["task-2", "task-1"]);
+    expect(screen.getByRole("button", { name: "上に移動" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "下に移動" })).toBeDisabled();
   });
 
   test("archives the selected task after confirmation (delete button = archive)", async () => {
@@ -206,11 +256,11 @@ describe("ProjectPage", () => {
 
     expect(screen.getByTestId("task-detail-stub")).toBeInTheDocument();
 
-    await fireEvent.click(screen.getByRole("button", { name: "Hide detail pane" }));
+    await fireEvent.click(screen.getByRole("button", { name: "詳細欄を隠す" }));
 
     expect(screen.queryByTestId("task-detail-stub")).not.toBeInTheDocument();
 
-    await fireEvent.click(screen.getByRole("button", { name: "Show detail pane" }));
+    await fireEvent.click(screen.getByRole("button", { name: "詳細欄を表示" }));
 
     expect(screen.getByTestId("task-detail-stub")).toBeInTheDocument();
   });
@@ -231,19 +281,19 @@ describe("ProjectPage", () => {
     render(ProjectPage);
 
     await fireEvent.click(screen.getByRole("button", { name: "全メモをMarkdownへ変換" }));
-    expect(screen.getByText("Memos to convert (1)")).toBeInTheDocument();
+    expect(screen.getByText("変換対象（1件）")).toBeInTheDocument();
     expect(screen.getByText("First Task / Quill memo")).toBeInTheDocument();
     expect(screen.getByText(/情報が損なわれる可能性/)).toBeInTheDocument();
 
-    await fireEvent.click(screen.getByRole("button", { name: "Convert" }));
+    await fireEvent.click(screen.getByRole("button", { name: "変換" }));
     await tick();
 
     const memo = get(tree_data).data.children[0].data.memo[0];
     expect(memo.format).toBe("markdown");
     expect(memo.content).toBe("launch");
-    expect(screen.getByText("Converted (1)")).toBeInTheDocument();
+    expect(screen.getByText("変換済み（1件）")).toBeInTheDocument();
     expect(screen.getByText(/OK: First Task \/ Quill memo/)).toBeInTheDocument();
-    expect(screen.getByText("Conversion completed.")).toBeInTheDocument();
+    expect(screen.getByText("変換が完了しました。")).toBeInTheDocument();
   });
 
   test("closes the right detail pane while the gantt panel remains visible", async () => {
@@ -253,7 +303,7 @@ describe("ProjectPage", () => {
 
     expect(screen.getByTestId("gantt-panel-stub")).toBeInTheDocument();
 
-    await fireEvent.click(screen.getByRole("button", { name: "Hide detail pane" }));
+    await fireEvent.click(screen.getByRole("button", { name: "詳細欄を隠す" }));
 
     expect(screen.queryByTestId("task-detail-stub")).not.toBeInTheDocument();
     expect(screen.getByTestId("gantt-panel-stub")).toBeInTheDocument();

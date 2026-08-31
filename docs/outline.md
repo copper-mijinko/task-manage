@@ -13,6 +13,7 @@
 | [performance.md](performance.md) | 起動時・ワークスペースプロジェクト選択時の読み込み最適化と遅延読み込み境界 |
 | [testing.md](testing.md) | テスト種別・テストケース一覧・実装状況・実行コマンド |
 | [how-to-contribute.md](how-to-contribute.md) | 開発フロー・CI/リリース手順・認証認可・ドキュメント記載方針 |
+| [agent-ui-development.md](agent-ui-development.md) | Codex / Claude から実 Electron GUI を操作する開発モード |
 
 ## 読み方のガイド
 

@@ -52,6 +52,30 @@ describe("filter store", () => {
     expect(get(filtered_data).data.name).toBe("Sample Project");
   });
 
+  test("focuses the project root after clearing a filter that hid the selected task", async () => {
+    filter.init();
+    const project = createProjectData();
+    project.data.children.push({
+      id: "task-1",
+      data: {
+        name: "Visible task",
+        status: "Open",
+        "due date": undefined,
+        memo: [],
+      },
+      children: [],
+    });
+    tree_data.set(project);
+    table_selected_id.set("task-1");
+
+    filter.set({ full_text: ["not found"] });
+    await waitFor(() => expect(get(table_selected_id)).toBeUndefined());
+
+    filter.set({});
+
+    expect(get(table_selected_id)).toBe("project-1");
+  });
+
   test("hydrates workspace memo bodies when memo full-text search is enabled", async () => {
     filter.init();
     const projectDir = "C:/workspace/project";

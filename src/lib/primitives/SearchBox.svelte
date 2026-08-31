@@ -156,7 +156,8 @@
       bind:this={search_box}
       bind:value={search_text}
       draggable="false"
-      placeholder={terms.length === 0 ? "filter tasks..." : ""}
+      placeholder={terms.length === 0 ? "タスクを絞り込み" : ""}
+      aria-label="タスク一覧を絞り込み"
       on:input={() => {
         applyFilter();
       }}
@@ -181,8 +182,8 @@
       confirmChip();
       search_box?.focus();
     }}
-    ariaLabel="Search tasks"
-    tooltipContent="フィルタを適用"
+    ariaLabel="入力を絞り込み条件に追加"
+    tooltipContent="入力を絞り込み条件に追加"
     variant="text"
     use_ripple={true}
     normalColor="var(--theme-color-Sub-main)"
@@ -201,7 +202,7 @@
   </IconButton>
   <IconButton
     on:click={toggleMemoSearch}
-    ariaLabel={memoSearchEnabled ? "Disable memo search" : "Enable memo search"}
+    ariaLabel={memoSearchEnabled ? "メモ本文を検索対象から外す" : "メモ本文も検索する"}
     aria-pressed={memoSearchEnabled}
     variant="text"
     use_ripple={true}

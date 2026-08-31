@@ -4,10 +4,18 @@
   export let status = "Open";
   export let style = "";
   export let disabled = false;
+  export let ariaLabel = "ステータス";
 
   const dispatch = createEventDispatcher();
 
   const STATUSES = ["Open", "Pending", "In Progress", "Completed", "Canceled"];
+  const STATUS_LABELS = {
+    Open: "未着手",
+    Pending: "保留",
+    "In Progress": "進行中",
+    Completed: "完了",
+    Canceled: "キャンセル",
+  };
 
   const color_map = {
     Open: "var(--theme-color-Primary-main)",
@@ -80,7 +88,7 @@
     class="s-button"
     class:s-disabled={disabled}
     style="--status-color: {color_map[status]};"
-    aria-label="Status"
+    aria-label={ariaLabel}
     aria-haspopup="listbox"
     aria-expanded={open}
     {disabled}
@@ -88,7 +96,7 @@
     on:click={toggle}
   >
     <span class="s-dot" style="--dot-color: {color_map[status]};"></span>
-    <span class="s-label">{status}</span>
+    <span class="s-label">{STATUS_LABELS[status] ?? status}</span>
     <svg class="s-caret" viewBox="0 0 12 12" aria-hidden="true">
       <path
         d="M3 4.5L6 7.5L9 4.5"
@@ -123,7 +131,7 @@
         >
           <span class="s-dot s-dot-static" style="--dot-color: {color_map[opt]};" data-status={opt}
           ></span>
-          <span class="s-option-label">{opt}</span>
+          <span class="s-option-label">{STATUS_LABELS[opt] ?? opt}</span>
           {#if opt === status}
             <svg class="s-check" viewBox="0 0 16 16" aria-hidden="true">
               <path

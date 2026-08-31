@@ -4,6 +4,7 @@
   export let row;
   export let headers = [];
   export let selected = false;
+  export let bulkSelectionActive = false;
   export let isDark = false;
   export let canDrop = () => false;
   export let canMoveUp = false;
@@ -27,7 +28,16 @@
   data-can-outdent={canOutdent ? "true" : "false"}
   data-selected={selected ? "true" : "false"}
 >
-  <div class="CheckboxCell" style="width: 28px;"></div>
+  <div class="CheckboxCell" style="width: 28px;">
+    {#if row.depth > 0}
+      <input
+        type="checkbox"
+        data-testid={"bulk-select-" + row.id}
+        checked={bulkSelectionActive && selected}
+        on:click={() => dispatch("toggleCheckbox", { id: row.id })}
+      />
+    {/if}
+  </div>
   {#each headers as header}
     <div class="TableData" style="width: 100px;">
       {#if header.name === "name"}

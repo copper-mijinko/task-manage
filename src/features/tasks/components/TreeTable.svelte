@@ -55,6 +55,7 @@
     copied_task,
     copied_tasks,
     selected_ids,
+    bulk_selection_active,
     selection_anchor_id,
     clearSelection,
     selectOnly,
@@ -181,7 +182,7 @@
     return !!getParent(parent.id, $tree_data.data);
   })();
   $: selectableCount = visibleSelectableIds.length;
-  $: selectedCount = selectionSize;
+  $: selectedCount = $bulk_selection_active ? selectionSize : 0;
 
   // Filter or tree-shape changes can hide previously selected rows. Prune the
   // multi-selection by what survives the current filter (independent of expand /
@@ -248,6 +249,14 @@
       handlers = setResizersEvents(resizers, newDomHeaders, newDataRows);
     });
     mutation_observer.observe(table_root, { subtree: true, childList: true });
+
+    return () => {
+      mutation_observer.disconnect();
+      resize_observer?.disconnect();
+      unsetResizerEvents(resizers, handlers ?? []);
+      resizers.forEach((resizer) => resizer.parentNode?.removeChild(resizer));
+      resizers = [];
+    };
   });
 
   onDestroy(() => {
@@ -365,7 +374,7 @@
 
     // For table_root resizing
     if (existingResizeObserver) {
-      existingResizeObserver.disconnect(table_root);
+      existingResizeObserver.disconnect();
     }
     /**
      * The NAME column (index 0) absorbs pane resizes. Name is the only
@@ -381,7 +390,9 @@
      *    accumulating deltas.
      */
     function fitNameColumn() {
-      if (domHeaders.length === 0) return;
+      if (!table_root?.isConnected || domHeaders.length === 0 || !domHeaders[0]?.isConnected) {
+        return;
+      }
       const tableWidth = table_root.getBoundingClientRect().width;
       const leadingColumnWidth = getLeadingColumnWidth();
       const widths = domHeaders.map((h) => h.getBoundingClientRect().width);
@@ -544,6 +555,11 @@
 
   function handleToggleCheckbox(event) {
     const { id, shiftKey, ctrlKey } = event.detail;
+    if (!$bulk_selection_active) {
+      selectOnly(id);
+      $bulk_selection_active = true;
+      return;
+    }
     if (shiftKey && $selection_anchor_id) {
       selectRange(
         id,
@@ -1167,6 +1183,7 @@
         {row}
         headers={visibleHeaders}
         selected={$selected_ids.has(row.id)}
+        bulkSelectionActive={$bulk_selection_active}
         isAnchor={$selection_anchor_id === row.id}
         anyMultiSelected={selectionSize > 1}
         {isDark}

@@ -86,15 +86,15 @@ describe("TaskDetail", () => {
   test("shows a placeholder when no task is selected", () => {
     render(TaskDetail);
 
-    expect(screen.getByText("No data.")).toBeInTheDocument();
+    expect(screen.getByText("タスクを選択してください。")).toBeInTheDocument();
   });
 
-  test("shows the legacy memo tab placeholder when the selected task has no notes", () => {
+  test("shows an actionable empty state when the selected task has no notes", () => {
     table_selected_id.set("task-1");
     render(TaskDetail);
 
-    expect(screen.getByText("Tabs here")).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("No page")).toBeInTheDocument();
+    expect(screen.getByText("メモはまだありません")).toBeInTheDocument();
+    expect(screen.getByText("補足や記録を残すためのメモを追加できます。")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "メモを追加" })).toBeInTheDocument();
     expect(screen.getByText("First Task")).toBeInTheDocument();
     expect(screen.queryByLabelText("Storage mode")).not.toBeInTheDocument();
@@ -158,6 +158,35 @@ describe("TaskDetail", () => {
     expect(screen.getByRole("button", { name: "詳細欄をたたんでメモを広げる" })).toHaveAttribute(
       "aria-pressed",
       "false"
+    );
+  });
+
+  test("keeps the split boundary available while details are collapsed", async () => {
+    table_selected_id.set("task-1");
+    const { container } = render(TaskDetail);
+    const body = container.querySelector(".task-detail-card-body");
+
+    await fireEvent.click(screen.getByRole("button", { name: "詳細欄をたたんでメモを広げる" }));
+    await tick();
+
+    const separator = screen.getByRole("separator", {
+      name: "タスク詳細とメモの高さを変更",
+    });
+    expect(body).toHaveClass("detail-mini");
+    expect(separator).toHaveAttribute("aria-valuenow", "0");
+    expect(separator).toHaveAttribute(
+      "aria-valuetext",
+      "詳細欄をたたんでいます。下へドラッグすると表示できます"
+    );
+    expect(getComputedStyle(separator).display).not.toBe("none");
+
+    await fireEvent.keyDown(separator, { key: "Enter" });
+    await tick();
+
+    expect(body).not.toHaveClass("detail-mini");
+    expect(separator).toHaveAttribute(
+      "aria-valuetext",
+      "ドラッグして詳細欄とメモ欄の高さを変更できます"
     );
   });
 
@@ -431,18 +460,18 @@ describe("TaskDetail", () => {
     table_selected_id.set("task-1");
     render(TaskDetail);
 
-    await fireEvent.input(screen.getByLabelText("Task name"), {
+    await fireEvent.input(screen.getByLabelText("タスク名"), {
       target: { value: "Updated Task" },
     });
-    await fireEvent.blur(screen.getByLabelText("Task name"));
+    await fireEvent.blur(screen.getByLabelText("タスク名"));
     await tick();
 
-    await fireEvent.click(screen.getByLabelText("Status"));
-    await fireEvent.click(screen.getByRole("option", { name: /In Progress/ }));
-    await fireEvent.change(screen.getByLabelText("Start Date"), {
+    await fireEvent.click(screen.getByLabelText("ステータス"));
+    await fireEvent.click(screen.getByRole("option", { name: /進行中/ }));
+    await fireEvent.change(screen.getByLabelText("開始日"), {
       target: { value: "2026-06-01" },
     });
-    await fireEvent.change(screen.getByLabelText("Due Date"), {
+    await fireEvent.change(screen.getByLabelText("期限日"), {
       target: { value: "2026-06-10" },
     });
     await tick();
@@ -452,18 +481,17 @@ describe("TaskDetail", () => {
     expect(task.status).toBe("In Progress");
     expect(task["start date"]).toBe("2026-06-01");
     expect(task["due date"]).toBe("2026-06-10");
-    expect(screen.getByLabelText("Memo count")).toHaveTextContent("0");
+    expect(screen.getByLabelText("メモ数")).toHaveTextContent("0");
   });
 
   test("adds a memo tab to the selected task", async () => {
     table_selected_id.set("task-1");
-    const { container } = render(TaskDetail);
+    render(TaskDetail);
 
-    const buttons = container.querySelectorAll(".memotab-control button");
-    await fireEvent.click(buttons[0]);
+    await fireEvent.click(screen.getByRole("button", { name: "メモを追加" }));
     await tick();
 
-    expect(screen.getByRole("button", { name: "Select memo memo" })).toHaveClass("selected");
+    expect(screen.getByRole("button", { name: "メモ「memo」を選択" })).toHaveClass("selected");
     expect(get(tree_data).data.children[0].data.memo).toEqual([
       expect.objectContaining({ title: "memo", content: "" }),
     ]);
@@ -486,7 +514,7 @@ describe("TaskDetail", () => {
 
     render(TaskDetail);
 
-    await fireEvent.click(screen.getByRole("button", { name: "Select memo draft" }));
+    await fireEvent.click(screen.getByRole("button", { name: "メモ「draft」を選択" }));
     await fireEvent.click(screen.getByRole("button", { name: "このメモを複製" }));
     await tick();
     await fireEvent.click(screen.getByRole("menuitem", { name: "このタスク内に複製" }));
@@ -506,7 +534,7 @@ describe("TaskDetail", () => {
     expect(memo[1].id).not.toBe("memo-draft");
     expect(memo[2]).toEqual(expect.objectContaining({ id: "memo-notes", title: "notes" }));
 
-    expect(screen.getByRole("button", { name: "Select memo draft のコピー" })).toHaveClass(
+    expect(screen.getByRole("button", { name: "メモ「draft のコピー」を選択" })).toHaveClass(
       "selected"
     );
   });
@@ -522,7 +550,7 @@ describe("TaskDetail", () => {
 
     render(TaskDetail);
 
-    await fireEvent.click(screen.getByRole("button", { name: "Select memo draft" }));
+    await fireEvent.click(screen.getByRole("button", { name: "メモ「draft」を選択" }));
     await fireEvent.click(screen.getByRole("button", { name: "このメモを複製" }));
     await tick();
     await fireEvent.click(screen.getByRole("menuitem", { name: "このタスク内に複製" }));
@@ -536,11 +564,11 @@ describe("TaskDetail", () => {
     ]);
   });
 
-  test("disables the duplicate button when there are no memos", () => {
+  test("hides memo actions when there are no memos", () => {
     table_selected_id.set("task-1");
     render(TaskDetail);
 
-    expect(screen.getByRole("button", { name: "このメモを複製" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "このメモを複製" })).not.toBeInTheDocument();
   });
 
   test("deletes the selected memo after confirmation", async () => {
@@ -558,18 +586,17 @@ describe("TaskDetail", () => {
     await tick();
 
     expect(get(tree_data).data.children[0].data.memo).toEqual([]);
-    expect(screen.getByText("Tabs here")).toBeInTheDocument();
+    expect(screen.getByText("メモはまだありません")).toBeInTheDocument();
   });
 
   test("creates the first memo from the tab add action", async () => {
     table_selected_id.set("task-1");
-    const { container } = render(TaskDetail);
+    render(TaskDetail);
 
-    const addButton = container.querySelectorAll(".memotab-control button")[0];
-    await fireEvent.click(addButton);
+    await fireEvent.click(screen.getByRole("button", { name: "メモを追加" }));
     await tick();
 
-    expect(screen.getByRole("button", { name: "Select memo memo" })).toHaveClass("selected");
+    expect(screen.getByRole("button", { name: "メモ「memo」を選択" })).toHaveClass("selected");
     expect(get(tree_data).data.children[0].data.memo).toEqual([
       expect.objectContaining({ title: "memo", content: "" }),
     ]);
@@ -586,8 +613,8 @@ describe("TaskDetail", () => {
 
     render(TaskDetail);
 
-    const firstTab = screen.getByRole("button", { name: "Select memo first" });
-    const secondTab = screen.getByRole("button", { name: "Select memo second" });
+    const firstTab = screen.getByRole("button", { name: "メモ「first」を選択" });
+    const secondTab = screen.getByRole("button", { name: "メモ「second」を選択" });
     const dataTransfer = { effectAllowed: "", dropEffect: "" };
     const dragStart = new Event("dragstart", { bubbles: true, cancelable: true });
     Object.defineProperty(dragStart, "dataTransfer", { value: dataTransfer });
@@ -637,7 +664,7 @@ describe("TaskDetail", () => {
 
     render(TaskDetail);
 
-    await fireEvent.click(screen.getByRole("button", { name: "Use Markdown memo format" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Markdown形式を使用" }));
 
     expect(screen.getByText(/情報が損なわれる可能性/)).toBeInTheDocument();
     await fireEvent.click(screen.getByRole("button", { name: "ok" }));
@@ -646,7 +673,7 @@ describe("TaskDetail", () => {
     const memo = get(tree_data).data.children[0].data.memo[0];
     expect(memo.format).toBe("markdown");
     expect(memo.content).toBe("hello");
-    expect(screen.getByRole("button", { name: "Use Markdown memo format" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "Markdown形式を使用" })).toHaveAttribute(
       "aria-pressed",
       "true"
     );
@@ -670,14 +697,14 @@ describe("TaskDetail", () => {
 
     render(TaskDetail);
 
-    await fireEvent.click(screen.getByRole("button", { name: "Use Quill memo format" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Quill形式を使用" }));
     await fireEvent.click(screen.getByRole("button", { name: "ok" }));
     await tick();
 
     const memo = get(tree_data).data.children[0].data.memo[0];
     expect(memo.format).toBe("quill");
     expect(memo.content).toEqual({ ops: [{ insert: "stale markdown save\n" }] });
-    expect(screen.getByRole("button", { name: "Use Quill memo format" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "Quill形式を使用" })).toHaveAttribute(
       "aria-pressed",
       "true"
     );
@@ -695,13 +722,13 @@ describe("TaskDetail", () => {
 
     render(TaskDetail);
 
-    await fireEvent.click(screen.getByRole("button", { name: "Select memo notes" }));
-    expect(screen.getByRole("button", { name: "Select memo notes" })).toHaveClass("selected");
+    await fireEvent.click(screen.getByRole("button", { name: "メモ「notes」を選択" }));
+    expect(screen.getByRole("button", { name: "メモ「notes」を選択" })).toHaveClass("selected");
 
     table_selected_id.set("task-2");
     await tick();
 
-    expect(screen.getByRole("button", { name: "Select memo review" })).toHaveClass("selected");
+    expect(screen.getByRole("button", { name: "メモ「review」を選択" })).toHaveClass("selected");
   });
 
   test("shows empty content after switching from existing memo to new empty memo and back", async () => {
@@ -720,18 +747,18 @@ describe("TaskDetail", () => {
     await tick();
 
     // Now on the new empty memo (index 1) - verify "memo" tab is selected
-    expect(screen.getByRole("button", { name: "Select memo memo" })).toHaveClass("selected");
+    expect(screen.getByRole("button", { name: "メモ「memo」を選択" })).toHaveClass("selected");
 
     // Switch to existing memo (index 0)
-    await fireEvent.click(screen.getByRole("button", { name: "Select memo existing" }));
+    await fireEvent.click(screen.getByRole("button", { name: "メモ「existing」を選択" }));
     await tick();
-    expect(screen.getByRole("button", { name: "Select memo existing" })).toHaveClass("selected");
+    expect(screen.getByRole("button", { name: "メモ「existing」を選択" })).toHaveClass("selected");
 
     // Switch back to the empty memo (index 1)
-    await fireEvent.click(screen.getByRole("button", { name: "Select memo memo" }));
+    await fireEvent.click(screen.getByRole("button", { name: "メモ「memo」を選択" }));
     await tick();
 
-    expect(screen.getByRole("button", { name: "Select memo memo" })).toHaveClass("selected");
+    expect(screen.getByRole("button", { name: "メモ「memo」を選択" })).toHaveClass("selected");
     // content should be empty string for the new empty memo
     expect(screen.getByTestId("memo-stub").textContent.trim()).toBe("");
   });
@@ -789,7 +816,7 @@ describe("TaskDetail", () => {
 
     render(TaskDetail);
 
-    await fireEvent.click(screen.getByRole("button", { name: "Select memo draft" }));
+    await fireEvent.click(screen.getByRole("button", { name: "メモ「draft」を選択" }));
     await fireEvent.click(screen.getByRole("button", { name: "このメモを複製" }));
     await tick();
     await fireEvent.click(screen.getByRole("menuitem", { name: "別のタスクへ複製…" }));
@@ -835,7 +862,7 @@ describe("TaskDetail", () => {
 
     render(TaskDetail);
 
-    await fireEvent.click(screen.getByRole("button", { name: "Select memo draft" }));
+    await fireEvent.click(screen.getByRole("button", { name: "メモ「draft」を選択" }));
     await fireEvent.click(screen.getByRole("button", { name: "このメモを複製" }));
     await tick();
     await fireEvent.click(screen.getByRole("menuitem", { name: "別のタスクへ複製…" }));
@@ -864,7 +891,7 @@ describe("TaskDetail", () => {
 
     render(TaskDetail);
 
-    await fireEvent.click(screen.getByRole("button", { name: "Select memo draft" }));
+    await fireEvent.click(screen.getByRole("button", { name: "メモ「draft」を選択" }));
     await fireEvent.click(screen.getByRole("button", { name: "このメモを複製" }));
     await tick();
     await fireEvent.click(screen.getByRole("menuitem", { name: "別のタスクへ複製…" }));
