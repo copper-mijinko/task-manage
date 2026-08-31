@@ -1,5 +1,6 @@
-﻿import { throttle } from "lodash";
-import _ from "lodash";
+﻿import throttle from "lodash/throttle";
+import cloneDeep from "lodash/cloneDeep";
+import isEqual from "lodash/isEqual";
 import { get, writable, type Writable } from "svelte/store";
 import * as platform from "@lib/ipc/platform";
 import { getNode, type ProjectData, type TreeData } from "@features/tasks/utils/tree_control";
@@ -96,7 +97,7 @@ function nextWorkspaceProjectRevision(projectDir: string): number {
 }
 
 function captureSnapshot(data: ProjectData) {
-  undoStack.push(_.cloneDeep(data));
+  undoStack.push(cloneDeep(data));
   if (undoStack.length > MAX_HISTORY) {
     undoStack.shift();
   }
@@ -216,7 +217,7 @@ function buildWorkspacePatch(
     const previousTask = previousById.get(task.id);
     return (
       !previousTask ||
-      !_.isEqual(comparableWorkspaceTask(task), comparableWorkspaceTask(previousTask))
+      !isEqual(comparableWorkspaceTask(task), comparableWorkspaceTask(previousTask))
     );
   });
   const deletedTaskIds = [...previousById.keys()].filter((id) => !currentIds.has(id));
@@ -354,7 +355,7 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
         }
       }
 
-      previousData = _.cloneDeep(current);
+      previousData = cloneDeep(current);
       // filtered_data is re-derived by the filter store's own tree_data
       // subscription (see search.ts), which already fired when this tree_data
       // value was set. Re-setting the filter here would refilter the same tree
@@ -555,7 +556,7 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
 
         if (skipPersistOnce) {
           skipPersistOnce = false;
-          previousData = current ? _.cloneDeep(current) : null;
+          previousData = current ? cloneDeep(current) : null;
           if (skipSnapshot) {
             pendingSkipSnapshot = true;
             skipSnapshot = false;
@@ -608,7 +609,7 @@ export function undoHistory() {
   if (undoStack.length === 0) return;
   const current = get(tree_data);
   if (current) {
-    redoStack.push(_.cloneDeep(current));
+    redoStack.push(cloneDeep(current));
     if (redoStack.length > MAX_HISTORY) {
       redoStack.shift();
     }
@@ -623,7 +624,7 @@ export function redoHistory() {
   if (redoStack.length === 0) return;
   const current = get(tree_data);
   if (current) {
-    undoStack.push(_.cloneDeep(current));
+    undoStack.push(cloneDeep(current));
     if (undoStack.length > MAX_HISTORY) {
       undoStack.shift();
     }

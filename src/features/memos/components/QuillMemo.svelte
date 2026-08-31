@@ -3,7 +3,7 @@
   import Quill from "quill";
   import quillIcons from "quill/ui/icons.js";
   import "quill/dist/quill.snow.css";
-  import { isEqual } from "lodash";
+  import isEqual from "lodash/isEqual";
   import { memoContentForCompare } from "@features/memos/utils/memo_utils";
 
   export let saveMemo;

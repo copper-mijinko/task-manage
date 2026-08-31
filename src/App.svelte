@@ -20,15 +20,11 @@
   import { onMount, onDestroy } from "svelte";
   import * as platform from "@lib/ipc/platform";
   import { workspaceToProjectData } from "@features/workspace/utils/workspace_tree";
-  import ProjectPage from "@pages/MainPage.svelte";
   import Header from "@features/navigation/components/Header.svelte";
   import MenuList from "@features/navigation/components/MenuList.svelte";
-  import InboxPanel from "@features/inbox/components/InboxPanel.svelte";
-  import QuickCapture from "@features/inbox/components/QuickCapture.svelte";
   import { showQuickCapture, showWorkspaceSetup } from "@stores/ui";
   import Loading from "@lib/primitives/Loading.svelte";
   import PageSearchBox from "@features/search/components/PageSearchBox.svelte";
-  import TaskDetailWindow from "@pages/TaskDetailPage.svelte";
   import { sidebarCollapsed } from "@stores";
   import { startAutoRescan, stopAutoRescan } from "@features/search/utils/page_search_highlighter";
   import { registerDateTimeShortcuts } from "@lib/utils/datetime_shortcuts";
@@ -37,6 +33,14 @@
   let workspaceNoticeMessage = null;
   let flushingOnShutdown = false;
   let unregisterDateTimeShortcuts = null;
+  let ProjectPageComponent = null;
+  let InboxPanelComponent = null;
+  let QuickCaptureComponent = null;
+  let TaskDetailWindowComponent = null;
+  let projectPageLoading = null;
+  let inboxPanelLoading = null;
+  let quickCaptureLoading = null;
+  let taskDetailWindowLoading = null;
 
   const currentHash = typeof window !== "undefined" ? window.location.hash : "";
   const currentSearch =
@@ -57,6 +61,56 @@
   let detailWindowSelectedType =
     currentSearch.get("selectedType") === "WorkspaceProject" ? "WorkspaceProject" : "Projects";
   let detailWindowProjectDir = currentSearch.get("projectDir") || "";
+
+  function loadProjectPage() {
+    if (ProjectPageComponent || projectPageLoading) return projectPageLoading;
+    projectPageLoading = import("@pages/MainPage.svelte").then((module) => {
+      ProjectPageComponent = module.default;
+    });
+    return projectPageLoading;
+  }
+
+  function loadInboxPanel() {
+    if (InboxPanelComponent || inboxPanelLoading) return inboxPanelLoading;
+    inboxPanelLoading = import("@features/inbox/components/InboxPanel.svelte").then((module) => {
+      InboxPanelComponent = module.default;
+    });
+    return inboxPanelLoading;
+  }
+
+  function loadQuickCapture() {
+    if (QuickCaptureComponent || quickCaptureLoading) return quickCaptureLoading;
+    quickCaptureLoading = import("@features/inbox/components/QuickCapture.svelte").then(
+      (module) => {
+        QuickCaptureComponent = module.default;
+      }
+    );
+    return quickCaptureLoading;
+  }
+
+  function loadTaskDetailWindow() {
+    if (TaskDetailWindowComponent || taskDetailWindowLoading) return taskDetailWindowLoading;
+    taskDetailWindowLoading = import("@pages/TaskDetailPage.svelte").then((module) => {
+      TaskDetailWindowComponent = module.default;
+    });
+    return taskDetailWindowLoading;
+  }
+
+  $: if (isTaskDetailWindow) {
+    void loadTaskDetailWindow();
+  }
+  $: if (
+    !isTaskDetailWindow &&
+    ($selected_type === "Projects" || $selected_type === "WorkspaceProject")
+  ) {
+    void loadProjectPage();
+  }
+  $: if (!isTaskDetailWindow && $selected_type === "Inbox") {
+    void loadInboxPanel();
+  }
+  $: if (!isTaskDetailWindow && $showQuickCapture) {
+    void loadQuickCapture();
+  }
 
   async function initTaskDetailWindow() {
     try {
@@ -381,12 +435,16 @@
     {/if}
     <div class="Main" class:DetailWindowMain={isTaskDetailWindow}>
       {#if isTaskDetailWindow}
-        <TaskDetailWindow
-          initialTaskName={detailWindowTaskName}
-          initialTaskId={detailWindowTaskId}
-          initialProjectId={detailWindowProjectId}
-          ready={detailWindowReady}
-        />
+        {#if TaskDetailWindowComponent}
+          <TaskDetailWindowComponent
+            initialTaskName={detailWindowTaskName}
+            initialTaskId={detailWindowTaskId}
+            initialProjectId={detailWindowProjectId}
+            ready={detailWindowReady}
+          />
+        {:else}
+          <Loading variant="h1" />
+        {/if}
       {:else}
         {#if !($selected_type && $selected_id)}
           <section class="EmptyStart" aria-labelledby="empty-start-title">
@@ -408,9 +466,17 @@
         {#if ($selected_type == "Projects" || $selected_type == "WorkspaceProject") && $projectLoading}
           <Loading variant="h1" />
         {:else if $selected_type == "Projects" || $selected_type == "WorkspaceProject"}
-          <ProjectPage />
+          {#if ProjectPageComponent}
+            <ProjectPageComponent />
+          {:else}
+            <Loading variant="h1" />
+          {/if}
         {:else if $selected_type == "Inbox"}
-          <InboxPanel />
+          {#if InboxPanelComponent}
+            <InboxPanelComponent />
+          {:else}
+            <Loading variant="h1" />
+          {/if}
         {/if}
       {/if}
       {#if !isTaskDetailWindow && !$sidebarCollapsed}
@@ -438,12 +504,14 @@
   }}
 />
 
-<QuickCapture
-  show={$showQuickCapture}
-  on:close={() => {
-    $showQuickCapture = false;
-  }}
-/>
+{#if QuickCaptureComponent}
+  <QuickCaptureComponent
+    show={$showQuickCapture}
+    on:close={() => {
+      $showQuickCapture = false;
+    }}
+  />
+{/if}
 
 {#if flushingOnShutdown}
   <div

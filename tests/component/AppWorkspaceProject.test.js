@@ -1,5 +1,6 @@
 ﻿import { render, screen } from "@testing-library/svelte";
 import { tick } from "svelte";
+import { waitFor } from "@testing-library/svelte";
 import { vi } from "vitest";
 
 vi.mock("@features/navigation/components/Header.svelte", async () => {
@@ -67,7 +68,9 @@ describe("App - workspace project rendering", () => {
     selected_id.set("workspace-project-1");
     await tick();
 
-    expect(screen.getByTestId("tree-table-stub")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByTestId("tree-table-stub")).toBeInTheDocument();
+    });
   });
 
   test("resets the project page while a workspace project switch is loading", async () => {
@@ -128,7 +131,9 @@ describe("App - workspace project rendering", () => {
     await tick();
 
     expect(get(projectLoading)).toBe(false);
-    expect(screen.getByTestId("tree-table-stub")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByTestId("tree-table-stub")).toBeInTheDocument();
+    });
     expect(get(tree_data).data.data.name).toBe("Beta");
     expect(api.wsReadProject).toHaveBeenCalledWith("C:/workspace/beta");
   });

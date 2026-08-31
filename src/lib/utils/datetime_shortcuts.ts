@@ -1,6 +1,4 @@
 import { get } from "svelte/store";
-import { EditorView } from "@codemirror/view";
-import Quill from "quill";
 import { date_time_format, type DateFormat } from "@stores/preferences";
 
 function pad2(n: number): string {
@@ -103,9 +101,10 @@ function insertIntoTextInput(input: HTMLInputElement | HTMLTextAreaElement, text
   input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
-function insertIntoCodeMirror(target: Element, text: string): boolean {
+async function insertIntoCodeMirror(target: Element, text: string): Promise<boolean> {
   const editor = target.closest(".cm-editor");
   if (!(editor instanceof HTMLElement)) return false;
+  const { EditorView } = await import("@codemirror/view");
   const view = EditorView.findFromDOM(editor);
   if (!view) return false;
   const range = view.state.selection.main;
@@ -118,13 +117,14 @@ function insertIntoCodeMirror(target: Element, text: string): boolean {
   return true;
 }
 
-function insertIntoQuill(target: Element, text: string): boolean {
+async function insertIntoQuill(target: Element, text: string): Promise<boolean> {
   const editor = target.closest(".ql-editor");
   if (!editor) return false;
+  const { default: Quill } = await import("quill");
   // Quill instances are bound to the container (the `.ql-container` parent),
   // not the `.ql-editor` itself. Walk up to find the registered node.
   let node: Element | null = editor;
-  let quill: Quill | null = null;
+  let quill: InstanceType<typeof Quill> | null = null;
   while (node) {
     const found = Quill.find(node);
     if (found instanceof Quill) {
@@ -202,15 +202,17 @@ function handleDateTimeShortcut(event: KeyboardEvent) {
     return;
   }
 
-  if (insertIntoCodeMirror(target, text)) {
+  if (target.closest(".cm-editor")) {
     event.preventDefault();
     event.stopPropagation();
+    void insertIntoCodeMirror(target, text);
     return;
   }
 
-  if (insertIntoQuill(target, text)) {
+  if (target.closest(".ql-editor")) {
     event.preventDefault();
     event.stopPropagation();
+    void insertIntoQuill(target, text);
     return;
   }
 
