@@ -108,7 +108,7 @@ describe("App - workspace project rendering", () => {
     await tick();
 
     expect(get(projectLoading)).toBe(true);
-    expect(screen.getByText("Loading...")).toBeInTheDocument();
+    expect(screen.getByText("読み込み中...")).toBeInTheDocument();
     expect(screen.queryByTestId("tree-table-stub")).toBeNull();
 
     resolveReadProject({

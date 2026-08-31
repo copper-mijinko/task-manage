@@ -98,7 +98,7 @@ export interface ElectronAPI {
   getInitialTreeData: () => Promise<ProjectData | undefined>;
   getProjectIDs: () => Promise<ProjectListItem[]>;
   setProjectOrder: (projects: ProjectListItem[]) => void;
-  addProject: (project: ProjectData) => void;
+  addProject: (project: ProjectData) => Promise<unknown>;
   deleteProject: (projectId: string) => void;
   message: (message: string) => void;
   openExternalLink: (url: string) => void;

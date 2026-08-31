@@ -416,6 +416,10 @@ export let show_archived: ShowArchivedStore = createShowArchived();
 // for Shift-range expansion. `table_selected_id` continues to act as the
 // "primary" / focused row (used by TaskDetail, MemoTab, paste-after target).
 export const selected_ids: Writable<Set<string>> = writable<Set<string>>(new Set<string>());
+// A focused row and a checked row are different concepts. Plain row clicks
+// keep selected_ids as the operation target for compatibility, while this flag
+// controls whether the checkbox/header expose an active bulk selection.
+export const bulk_selection_active: Writable<boolean> = writable(false);
 export const selection_anchor_id: Writable<string | undefined> = writable<string | undefined>(
   undefined
 );
@@ -432,12 +436,14 @@ function mirrorTableSelected(ids: Set<string>, anchor: string | undefined) {
 }
 
 export function clearSelection() {
+  bulk_selection_active.set(false);
   selected_ids.set(new Set<string>());
   selection_anchor_id.set(undefined);
   table_selected_id.set(undefined);
 }
 
 export function selectOnly(id: string) {
+  bulk_selection_active.set(false);
   const next = new Set<string>([id]);
   selected_ids.set(next);
   selection_anchor_id.set(id);
@@ -445,6 +451,7 @@ export function selectOnly(id: string) {
 }
 
 export function toggleSelection(id: string) {
+  bulk_selection_active.set(true);
   selected_ids.update((current) => {
     const next = new Set(current);
     if (next.has(id)) {
@@ -473,8 +480,10 @@ export function selectRange(targetId: string, visibleRowIds: string[]) {
   if (!anchor || !visibleRowIds.includes(anchor) || !visibleRowIds.includes(targetId)) {
     // No valid anchor: fall back to single-select.
     selectOnly(targetId);
+    bulk_selection_active.set(true);
     return;
   }
+  bulk_selection_active.set(true);
   const a = visibleRowIds.indexOf(anchor);
   const b = visibleRowIds.indexOf(targetId);
   const [lo, hi] = a <= b ? [a, b] : [b, a];
@@ -489,6 +498,7 @@ export function selectAll(visibleRowIds: string[]) {
     clearSelection();
     return;
   }
+  bulk_selection_active.set(true);
   const next = new Set<string>(visibleRowIds);
   selected_ids.set(next);
   selection_anchor_id.set(visibleRowIds[0]);
@@ -515,6 +525,7 @@ export function pruneSelection(existingIds: Set<string>) {
       selection_anchor_id.set(first.done ? undefined : (first.value as string));
     }
     mirrorTableSelected(next, get(selection_anchor_id));
+    if (next.size === 0) bulk_selection_active.set(false);
     return next;
   });
 }
@@ -547,6 +558,9 @@ export const showPageSearch = writable(false);
  * the header button and the global Ctrl+Shift+I shortcut.
  */
 export const showQuickCapture = writable(false);
+
+/** 初期画面など、サイドバー外からWorkspace設定を開くための共有状態。 */
+export const showWorkspaceSetup = writable(false);
 
 export const saveStatus = writable<SaveStatus>("idle");
 

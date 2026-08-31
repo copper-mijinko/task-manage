@@ -18,6 +18,7 @@
   export let row;
   export let headers = [];
   export let selected = false;
+  export let bulkSelectionActive = false;
   export let isAnchor = false;
   export let anyMultiSelected = false;
   export let isDark = false;
@@ -262,8 +263,9 @@
       <input
         type="checkbox"
         class="RowCheckbox"
-        checked={selected}
-        aria-label="タスクを選択"
+        checked={bulkSelectionActive && selected}
+        aria-label="一括操作の対象として選択"
+        title="一括操作の対象として選択"
         tabindex="-1"
         on:click={toggleCheckbox}
         on:keydown|stopPropagation
@@ -281,7 +283,7 @@
             class:Expanded={expanded}
             class:ExpandButton={true}
             style="flex-shrink: 0"
-            aria-label={expanded ? "Collapse task" : "Expand task"}
+            aria-label={expanded ? "タスクを折りたたむ" : "タスクを展開"}
             on:click={toggle}
           >
             <svg viewBox="-12 0 32 32" xmlns="http://www.w3.org/2000/svg"
@@ -365,6 +367,7 @@
       {:else if header.name == "status"}
         <StatusSelect
           status={data[header.name]}
+          ariaLabel={`${data.name}のステータス`}
           disabled={isArchived}
           on:change={(e) => {
             commitData("status", e.detail.value);
@@ -376,6 +379,7 @@
           id="start-date"
           backgroundColor={"var(--backgroundColor)"}
           value={data[header.name]}
+          ariaLabel={`${data.name}の開始日`}
           disabled={isArchived}
           on:change={(e) => {
             commitData("start date", e.target.value);
@@ -387,6 +391,7 @@
           id="due-date"
           backgroundColor={"var(--backgroundColor)"}
           value={data[header.name]}
+          ariaLabel={`${data.name}の期限日`}
           inheritedDate={inheritedDueDate}
           disabled={isArchived}
           on:change={(e) => {

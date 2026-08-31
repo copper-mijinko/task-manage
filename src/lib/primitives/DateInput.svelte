@@ -7,6 +7,7 @@
   export let id = "";
   export let style = "";
   export let inheritedDate = "";
+  export let ariaLabel = "日付";
   /** When true, urgency state is reflected on the input border + text color. Default true. */
   export let showUrgency = true;
 
@@ -68,6 +69,7 @@
     {disabled}
     value={displayDate}
     title={inputTitle}
+    aria-label={ariaLabel}
     on:change
     on:click={(e) => {
       e.stopPropagation();

@@ -1,96 +1,74 @@
-﻿<script>
-  import { clickOutside } from "@lib/actions";
+<script>
   import Card from "@lib/primitives/Card.svelte";
-  import { onDestroy } from "svelte";
+  import { modalLayer } from "@lib/actions/modal_layer";
+
   export let show = true;
   export let toggle;
   export let width = "90%";
   export let height = "90%";
   export let label = undefined;
   export let labelledBy = undefined;
-  let modal; // bind
 
-  let mask;
-
-  const add = () => {
-    mask = document.createElement("span");
-    mask.style.position = "absolute";
-    mask.style.left = "0";
-    mask.style.top = "0";
-    mask.style.width = "100%";
-    mask.style.height = "100%";
-    mask.style.backgroundColor = "rgba(0,0,0,0.5)";
-    mask.style.zIndex = "9999";
-    mask.style.padding = "0";
-    mask.style.margin = "0";
-
-    document.body.appendChild(mask);
-    return mask;
-  };
-
-  const removeMask = () => {
-    if (mask) {
-      mask.remove();
-      mask = undefined;
-    }
-  };
-
-  $: if (show && !mask) {
-    mask = add();
-  }
-  $: if (!show) {
-    removeMask();
-  }
-
-  onDestroy(removeMask);
-
-  function handleKeydown(e) {
-    if (show && e.key === "Escape") {
+  function handleKeydown(event) {
+    if (show && event.key === "Escape") {
+      event.preventDefault();
       toggle();
     }
   }
 </script>
 
 <svelte:window on:keydown={handleKeydown} />
+
 {#if show}
-  <div class="Mask"></div>
+  <div class="ModalLayer" use:modalLayer data-page-search-skip>
+    <button
+      type="button"
+      class="Mask"
+      aria-label="ダイアログを閉じる"
+      tabindex="-1"
+      on:click={toggle}
+    ></button>
+    <div
+      class="Modal"
+      style="--width: {width}; --height: {height};"
+      role="dialog"
+      aria-modal="true"
+      aria-label={label}
+      aria-labelledby={labelledBy}
+      tabindex="-1"
+    >
+      <Card style="width: 100%; height:100%;">
+        <slot>
+          <h1 style="color:var(--theme-color-Sub-main); display:flex; justify-content:center">
+            This is default modal.
+          </h1>
+        </slot>
+      </Card>
+    </div>
+  </div>
 {/if}
-<div
-  class="Modal"
-  class:Show={show}
-  bind:this={modal}
-  style="--width: {width}; --height: {height};"
-  role="dialog"
-  aria-modal={show ? "true" : undefined}
-  aria-hidden={show ? undefined : "true"}
-  aria-label={label}
-  aria-labelledby={labelledBy}
-  use:clickOutside
-  on:outclick={toggle}
->
-  <Card style="width: 100%; height:100%;">
-    <slot>
-      <h1 style="color:var(--theme-color-Sub-main); display:flex; justify-content:center">
-        This is default modal.
-      </h1>
-    </slot>
-  </Card>
-</div>
 
 <style>
-  .Modal {
-    display: flex;
+  .ModalLayer {
     position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 0;
-    height: 0;
-    z-index: 99999;
-    overflow: auto;
+    inset: 0;
+    z-index: 100000;
+    display: grid;
+    place-items: center;
   }
-  .Show {
+  .Mask {
+    position: absolute;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+  }
+  .Modal {
+    position: relative;
+    display: flex;
     width: var(--width);
     height: var(--height);
+    max-width: calc(100vw - 2rem);
+    max-height: calc(100vh - 2rem);
+    overflow: auto;
+    z-index: 1;
   }
 </style>

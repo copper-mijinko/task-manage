@@ -1,8 +1,9 @@
 <script>
   export let headers = [];
+  export let selectedCount = 0;
 </script>
 
-<div class="TableRow" data-testid="tree-table-header-stub">
+<div class="TableRow" data-testid="tree-table-header-stub" data-selected-count={selectedCount}>
   <div class="CheckboxHeaderCell" style="width: 28px;"></div>
   {#each headers as header}
     <div

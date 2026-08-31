@@ -1,5 +1,4 @@
 <script>
-  import { onMount } from "svelte";
   import Card from "@lib/primitives/Card.svelte";
   import IconButton from "@lib/primitives/IconButton.svelte";
   import DateInput from "@lib/primitives/DateInput.svelte";
@@ -13,16 +12,6 @@
   import { showQuickCapture } from "@stores/ui";
   import ProjectTargetPicker from "./ProjectTargetPicker.svelte";
   import InboxDetailPanel from "./InboxDetailPanel.svelte";
-
-  // Open the QuickCapture modal automatically whenever the user lands on
-  // Inbox. App.svelte mounts InboxPanel each time selected_type flips to
-  // "Inbox", so onMount fires on every navigation into Inbox — exactly the
-  // "open Inbox = start capturing" cadence the user wants.
-  onMount(() => {
-    if ($workspace_store.activeWorkspacePath) {
-      $showQuickCapture = true;
-    }
-  });
 
   const INBOX_DRAG_MIME = "application/x-task-manage-inbox-items";
 
@@ -43,10 +32,10 @@
   $: isDark = $theme === "dark";
   $: activeItem = activeItemId ? (items.find((item) => item.id === activeItemId) ?? null) : null;
 
-  // When items disappear (sendToProject, external watcher events), purge stale
-  // selection ids and clear the active item if it no longer exists.
+  // Keep focus and batch selection inside the currently visible result set.
+  // A filtered-out item must not remain editable or actionable off-screen.
   $: {
-    const visibleIdSet = new Set(items.map((item) => item.id));
+    const visibleIdSet = new Set(visibleItems.map((item) => item.id));
     let changed = false;
     const next = new Set();
     for (const id of selectedIds) {
@@ -62,8 +51,8 @@
         lastAnchorId = next.size > 0 ? [...next][0] : null;
       }
     }
-    if (activeItemId && !visibleIdSet.has(activeItemId)) {
-      activeItemId = null;
+    if (!activeItemId || !visibleIdSet.has(activeItemId)) {
+      activeItemId = visibleItems[0]?.id ?? null;
     }
   }
 
@@ -123,7 +112,9 @@
     } else if (e.ctrlKey || e.metaKey) {
       toggleSelect(id);
     } else {
-      selectOnly(id);
+      // Match the main task table: a plain row click changes the focused
+      // detail item without arming batch actions or checking the row.
+      setActive(id);
     }
   }
 
@@ -281,23 +272,60 @@
 <div class="InboxRoot">
   {#if !workspaceReady}
     <Card title="Inbox" padded={false} style="height: 100%; width: 100%;">
-      <span slot="header-actions" class="storage-badge">Workspace</span>
       <div class="EmptyState">
         <p>Workspaceを設定するとInboxが使えます。</p>
         <p class="EmptySub">サイドバーのワークスペース管理から追加してください。</p>
       </div>
     </Card>
+  {:else if items.length === 0}
+    <Card title="Inbox" padded={false} style="height: 100%; width: 100%;">
+      <span slot="header-actions" class="ItemCount">0件</span>
+      <div class="EmptyState InboxEmptyState" data-testid="inbox-empty-state">
+        <svg class="EmptyInboxIcon" viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M3 12L5.5 5.5C5.7 4.9 6.3 4.5 7 4.5H17C17.7 4.5 18.3 4.9 18 5.5L21 12V18C21 18.6 20.6 19 20 19H4C3.4 19 3 18.6 3 18V12Z"
+          />
+          <path d="M3 12H8L9.5 14H14.5L16 12H21" />
+        </svg>
+        <h2>Inboxは空です</h2>
+        <p class="EmptySub">まだ整理先を決めていないタスクを、ここに一時保存できます。</p>
+        <button
+          type="button"
+          class="AddBtn EmptyAddBtn"
+          data-testid="inbox-add"
+          on:click={() => ($showQuickCapture = true)}
+        >
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M12 5V19M5 12H19"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            />
+          </svg>
+          Inboxに追加
+        </button>
+        <p class="ShortcutHint"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>I</kbd> でも追加できます</p>
+      </div>
+    </Card>
   {:else}
-    <SplitPanes defaultRatio={[3, 2]}>
+    <SplitPanes
+      defaultRatio={[3, 2]}
+      collapsePriority="end"
+      collapseSize={0}
+      separatorLabel="Inbox一覧と詳細の幅を変更"
+      persistenceKey="layout.inbox.list-detail"
+    >
       <Pane style="min-width: 14rem;">
         <Card title="Inbox" padded={false} style="height: 100%; width: 100%;">
-          <span slot="header-actions" class="storage-badge">Workspace</span>
+          <span slot="header-actions" class="ItemCount">{items.length}件</span>
 
-          <div class="Toolbar">
+          <div class="Toolbar" data-testid="inbox-toolbar">
             <div class="ToolbarGroup">
               <button
                 type="button"
                 class="AddBtn"
+                data-testid="inbox-add"
                 on:click={() => ($showQuickCapture = true)}
                 use:tooltip={{
                   color: "var(--on-theme-tooltip-fg)",
@@ -320,85 +348,6 @@
               </button>
             </div>
 
-            <span class="ToolbarSep" aria-hidden="true"></span>
-
-            <div class="ToolbarGroup">
-              <IconButton
-                tooltipContent={selectionCount > 0
-                  ? `${selectionCount}件を削除`
-                  : "削除する項目を選択してください"}
-                ariaLabel="削除"
-                variant="text"
-                normalColor="var(--theme-color-Error-main)"
-                activeColor="var(--theme-color-Error-main)"
-                disabled={selectionCount === 0}
-                on:click={handleDeleteSelected}
-              >
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path
-                    d="M3 6H21M8 6V4C8 3.4 8.4 3 9 3H15C15.6 3 16 3.4 16 4V6M10 11V17M14 11V17M5 6L6 20C6 20.6 6.4 21 7 21H17C17.6 21 18 20.6 18 20L19 6"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  />
-                </svg>
-              </IconButton>
-            </div>
-
-            <span class="ToolbarSep" aria-hidden="true"></span>
-
-            <div class="ToolbarGroup">
-              <button
-                type="button"
-                class="SendBtn"
-                class:Disabled={selectionCount === 0}
-                disabled={selectionCount === 0}
-                on:click={openSendPicker}
-                use:tooltip={{
-                  color: "var(--on-theme-tooltip-fg)",
-                  backgroundColor: "var(--on-theme-tooltip-bg)",
-                  content:
-                    selectionCount === 0
-                      ? "プロジェクトへ送る項目を選択してください"
-                      : `${selectionCount}件をプロジェクトへ送る（送信先のツリー位置を指定）`,
-                  force: true,
-                }}
-              >
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path
-                    d="M5 12H19M13 6L19 12L13 18"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  />
-                </svg>
-                プロジェクトへ送る...
-              </button>
-            </div>
-
-            <span class="ToolbarSep" aria-hidden="true"></span>
-
-            <div class="ToolbarGroup">
-              <button
-                type="button"
-                class="LinkBtn"
-                on:click={selectAllVisible}
-                disabled={visibleItems.length === 0}
-              >
-                全選択
-              </button>
-              <button
-                type="button"
-                class="LinkBtn"
-                on:click={clearSelection}
-                disabled={selectionCount === 0}
-              >
-                解除
-              </button>
-            </div>
-
             <div class="FilterBox">
               <svg viewBox="0 0 24 24" class="FilterIcon" aria-hidden="true">
                 <path d="M21 21L16.7 16.7M18 11A7 7 0 1 1 4 11A7 7 0 0 1 18 11Z" />
@@ -412,21 +361,59 @@
             </div>
 
             <div class="ToolbarMeta">
-              {selectionCount} / {items.length}
+              {selectionCount > 0
+                ? `${selectionCount}件選択中`
+                : normalizedFilter
+                  ? `${visibleItems.length}/${items.length}件`
+                  : `${items.length}件`}
+            </div>
+
+            <div class="ToolbarGroup SelectionTools" aria-label="選択操作">
+              {#if selectionCount === 0 && visibleItems.length > 1}
+                <button type="button" class="LinkBtn" on:click={selectAllVisible}>全選択</button>
+              {:else if selectionCount > 0}
+                <button type="button" class="LinkBtn" on:click={clearSelection}>選択解除</button>
+                <button type="button" class="SendBtn" on:click={openSendPicker}>
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path
+                      d="M5 12H19M13 6L19 12L13 18"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                  プロジェクトへ整理
+                </button>
+                <IconButton
+                  tooltipContent={`${selectionCount}件を削除`}
+                  ariaLabel={`${selectionCount}件を削除`}
+                  variant="text"
+                  normalColor="var(--theme-color-Error-main)"
+                  activeColor="var(--theme-color-Error-main)"
+                  on:click={handleDeleteSelected}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path
+                      d="M3 6H21M8 6V4C8 3.4 8.4 3 9 3H15C15.6 3 16 3.4 16 4V6M10 11V17M14 11V17M5 6L6 20C6 20.6 6.4 21 7 21H17C17.6 21 18 20.6 18 20L19 6"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </IconButton>
+              {/if}
             </div>
           </div>
 
-          <div class="ListContainer">
-            {#if items.length === 0}
-              <div class="EmptyList">
-                <p>Inboxは空です。</p>
-                <p class="EmptySub">
-                  ツールバーの「追加」ボタン、または <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>I</kbd> から思いついたタスクを素早く追加できます。
-                </p>
-              </div>
-            {:else if visibleItems.length === 0}
+          <div class="ListContainer" data-testid="inbox-list">
+            {#if visibleItems.length === 0}
               <div class="EmptyList">
                 <p>条件に一致する項目がありません。</p>
+                <button type="button" class="LinkBtn" on:click={() => (filterQuery = "")}
+                  >絞り込みを解除</button
+                >
               </div>
             {:else}
               <ul class="ItemList" role="listbox" aria-multiselectable="true">
@@ -447,6 +434,7 @@
                     on:click={(e) => handleRowClick(e, item.id)}
                     role="option"
                     aria-selected={selectedIds.has(item.id)}
+                    aria-current={activeItemId === item.id ? "true" : undefined}
                     tabindex="0"
                     on:keydown={(e) => {
                       if (e.key === " ") {
@@ -470,41 +458,45 @@
                       checked={selectedIds.has(item.id)}
                       on:click|stopPropagation
                       on:change={() => toggleSelect(item.id)}
-                      aria-label="この項目を選択"
+                      aria-label={`${item.name}を一括操作の対象にする`}
                     />
                     <input
                       type="text"
                       class="NameInput"
                       value={item.name}
                       on:click|stopPropagation
+                      on:focus={() => setActive(item.id)}
                       on:input={(e) => handleNameInput(item.id, e)}
-                      aria-label="項目名"
+                      aria-label={`${item.name}の項目名`}
                     />
                     <div class="StatusCell">
                       <StatusSelect
                         status={item.status || "Open"}
+                        ariaLabel={`${item.name}のステータス`}
                         on:change={(e) => handleStatusChange(item.id, e)}
                       />
                     </div>
                     <div class="DueCell">
                       <DateInput
                         value={item.dueDate || ""}
+                        ariaLabel={`${item.name}の期限日`}
                         is_dark={isDark}
                         on:change={(e) => handleDueChange(item.id, e)}
                       />
                     </div>
-                    {#if (item.memos?.length ?? 0) > 0}
-                      <span
-                        class="MemoBadge"
-                        use:tooltip={{
-                          content: `メモ ${item.memos.length}件`,
-                          color: "var(--theme-color-Sub-main)",
-                          backgroundColor: "var(--theme-color-Main-light)",
-                        }}
-                      >
-                        📝 {item.memos.length}
-                      </span>
-                    {/if}
+                    <span
+                      class="MemoBadge"
+                      class:MemoBadgeEmpty={(item.memos?.length ?? 0) === 0}
+                      aria-hidden={(item.memos?.length ?? 0) === 0 ? "true" : undefined}
+                      use:tooltip={{
+                        content: `メモ ${item.memos?.length ?? 0}件`,
+                        disable: (item.memos?.length ?? 0) === 0,
+                        color: "var(--theme-color-Sub-main)",
+                        backgroundColor: "var(--theme-color-Main-light)",
+                      }}
+                    >
+                      📝 {item.memos?.length ?? 0}
+                    </span>
                   </li>
                 {/each}
               </ul>
@@ -545,14 +537,11 @@
     width: 100%;
     background-color: var(--theme-color-Main-dark);
   }
-  .storage-badge {
+  .ItemCount {
     flex: 0 0 auto;
-    padding: 0.15rem var(--sp2);
-    border-radius: var(--shape-xs);
-    background-color: color-mix(in srgb, var(--theme-color-Info-main) 18%, transparent);
-    color: var(--theme-color-Sub-main);
+    color: color-mix(in srgb, var(--theme-color-Sub-main) 65%, transparent);
     font-size: var(--font-label-md);
-    font-weight: 600;
+    font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
   .Toolbar {
@@ -569,12 +558,6 @@
     display: inline-flex;
     align-items: center;
     gap: var(--sp1);
-  }
-  .ToolbarSep {
-    display: inline-block;
-    width: 1px;
-    height: 1.5rem;
-    background-color: color-mix(in srgb, var(--theme-color-Sub-main) 30%, transparent);
   }
   /* Theme color (deep navy) + white text mirrors the app header chrome,
      which guarantees enough contrast in both light and dark themes —
@@ -605,6 +588,36 @@
     width: 1rem;
     height: 1rem;
   }
+  .InboxEmptyState {
+    max-width: 34rem;
+    width: 100%;
+    align-self: center;
+    margin: auto;
+    box-sizing: border-box;
+  }
+  .InboxEmptyState h2 {
+    margin: var(--sp2) 0 0;
+    font-size: var(--font-title-lg);
+  }
+  .EmptyInboxIcon {
+    width: 3rem;
+    height: 3rem;
+    fill: none;
+    stroke: color-mix(in srgb, var(--theme-color-Primary-main) 75%, transparent);
+    stroke-width: 1.4;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .EmptyAddBtn {
+    margin-top: var(--sp3);
+    padding: 0.45rem var(--sp4);
+    font-size: var(--font-body-md);
+  }
+  .ShortcutHint {
+    margin: var(--sp1) 0 0;
+    color: color-mix(in srgb, var(--theme-color-Sub-main) 55%, transparent);
+    font-size: var(--font-label-md);
+  }
   .SendBtn {
     display: inline-flex;
     align-items: center;
@@ -617,11 +630,6 @@
     font-weight: 600;
     font-size: var(--font-label-md);
     cursor: pointer;
-  }
-  .SendBtn:disabled,
-  .SendBtn.Disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
   }
   .SendBtn svg {
     width: 1rem;
@@ -662,6 +670,9 @@
   .LinkBtn:disabled {
     color: color-mix(in srgb, var(--theme-color-Sub-main) 45%, transparent);
     cursor: not-allowed;
+  }
+  .SelectionTools {
+    min-height: 1.8rem;
   }
   .FilterBox {
     display: inline-flex;
@@ -707,6 +718,7 @@
     overflow-y: auto;
     overflow-x: hidden;
     padding: var(--sp2) var(--sp3) var(--sp3);
+    container-type: inline-size;
   }
   .EmptyState,
   .EmptyList {
@@ -725,7 +737,7 @@
     font-size: var(--font-body-sm);
     margin: 0;
   }
-  .EmptySub kbd {
+  .ShortcutHint kbd {
     background-color: color-mix(in srgb, var(--theme-color-Sub-main) 12%, transparent);
     border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 25%, transparent);
     border-radius: var(--shape-xs);
@@ -743,7 +755,7 @@
   }
   .ItemRow {
     display: grid;
-    grid-template-columns: 1.25rem 1.25rem 1fr auto auto auto;
+    grid-template-columns: 1.25rem 1.25rem minmax(4rem, 1fr) 5.75rem 9rem 3rem;
     align-items: center;
     gap: var(--sp2);
     padding: var(--sp2) var(--sp2) var(--sp2) var(--sp1);
@@ -835,17 +847,59 @@
   .StatusCell {
     display: inline-flex;
     align-items: center;
+    width: 5.75rem;
+    min-width: 0;
   }
   .DueCell {
     display: inline-flex;
     align-items: center;
+    width: 9rem;
     min-width: 9rem;
   }
   .MemoBadge {
+    display: inline-block;
+    width: 3rem;
+    box-sizing: border-box;
     color: color-mix(in srgb, var(--theme-color-Sub-main) 70%, transparent);
     font-size: var(--font-label-sm);
     font-variant-numeric: tabular-nums;
     padding: 0 var(--sp1);
     cursor: help;
+    text-align: right;
+    white-space: nowrap;
+  }
+  .MemoBadgeEmpty {
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  /* The Inbox pane is resizable independently from the window. Keep the
+     editable name and selection controls visible, and progressively move
+     secondary metadata to the detail pane instead of clipping row content. */
+  @container (max-width: 28rem) {
+    .ItemRow {
+      grid-template-columns: 1.25rem 1.25rem minmax(4rem, 1fr) 5.75rem 9rem;
+    }
+    .MemoBadge {
+      display: none;
+    }
+  }
+
+  @container (max-width: 21rem) {
+    .ItemRow {
+      grid-template-columns: 1.25rem 1.25rem minmax(4rem, 1fr) 5.75rem;
+    }
+    .DueCell {
+      display: none;
+    }
+  }
+
+  @container (max-width: 15rem) {
+    .ItemRow {
+      grid-template-columns: 1.25rem 1.25rem minmax(4rem, 1fr);
+    }
+    .StatusCell {
+      display: none;
+    }
   }
 </style>

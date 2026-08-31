@@ -16,14 +16,26 @@
 
   function handleOutsideEvent(event) {
     if (!show) return;
-    if (menuElement && menuElement.contains(event.target)) return;
+    const target = event?.target;
+    if (target instanceof Node && menuElement?.contains(target)) return;
     // Ignore mousedowns on a three-dot trigger button. The button's own click
     // handler is responsible for toggling its menu, so if we closed here the
     // subsequent click would just re-open it (a "won't ever close" loop).
-    if (event.target instanceof Element && event.target.closest("[data-task-menu-trigger]")) {
+    if (target instanceof Element && target.closest("[data-task-menu-trigger]")) {
       return;
     }
     dispatch("close");
+  }
+
+  function handleKeydown(event) {
+    if (!show || event.key !== "Escape") return;
+    event.preventDefault();
+    event.stopPropagation();
+    dispatch("close");
+  }
+
+  function handleModalOpen() {
+    if (show) dispatch("close");
   }
 
   function attachListeners() {
@@ -36,6 +48,8 @@
     document.addEventListener("mousedown", handleOutsideEvent, true);
     document.addEventListener("contextmenu", handleOutsideEvent, true);
     window.addEventListener("blur", handleOutsideEvent);
+    window.addEventListener("keydown", handleKeydown, true);
+    window.addEventListener("task-manage:modal-open", handleModalOpen);
     listenersAttached = true;
   }
 
@@ -45,6 +59,8 @@
     document.removeEventListener("mousedown", handleOutsideEvent, true);
     document.removeEventListener("contextmenu", handleOutsideEvent, true);
     window.removeEventListener("blur", handleOutsideEvent);
+    window.removeEventListener("keydown", handleKeydown, true);
+    window.removeEventListener("task-manage:modal-open", handleModalOpen);
     listenersAttached = false;
   }
 
@@ -166,7 +182,8 @@
 <style>
   #task-menu {
     position: fixed;
-    z-index: 999999999999;
+    /* Context menus sit above the main app but below every modal layer. */
+    z-index: 90000;
   }
 
   .task-menu {

@@ -107,7 +107,7 @@ describe("App - task detail window", () => {
       expect(taskDetail).toBeInTheDocument();
     });
 
-    expect(screen.queryByText("Task not found.")).not.toBeInTheDocument();
+    expect(screen.queryByText("タスクが見つかりません。")).not.toBeInTheDocument();
     expect(taskDetail).toHaveAttribute("data-title-override", "Actual Project / Opened Task");
     expect(taskDetail).toHaveAttribute("data-show-open-window-action", "false");
     expect(api.wsReadProject).toHaveBeenCalledTimes(1);

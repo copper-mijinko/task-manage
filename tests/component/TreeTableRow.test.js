@@ -69,6 +69,20 @@ describe("TreeTableRow", () => {
     expect(screen.getByText("0")).toBeInTheDocument();
   });
 
+  test("does not check the bulk-selection box for an ordinary focused row", () => {
+    render(TreeTableRow, { props: { ...createProps(), selected: true } });
+
+    expect(screen.getByRole("checkbox", { name: "一括操作の対象として選択" })).not.toBeChecked();
+  });
+
+  test("checks the box after bulk selection is explicitly activated", () => {
+    render(TreeTableRow, {
+      props: { ...createProps(), selected: true, bulkSelectionActive: true },
+    });
+
+    expect(screen.getByRole("checkbox", { name: "一括操作の対象として選択" })).toBeChecked();
+  });
+
   test("uses border-box sizing for the selection checkbox column", () => {
     const source = fs.readFileSync(
       path.join(process.cwd(), "src/features/tasks/components/TreeTableRow.svelte"),

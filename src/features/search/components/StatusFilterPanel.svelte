@@ -22,6 +22,13 @@
     Completed: "var(--theme-color-Success-main)",
     Canceled: "var(--theme-color-Sub-main)",
   };
+  const STATUS_LABEL: Record<string, string> = {
+    Open: "未着手",
+    Pending: "保留",
+    "In Progress": "進行中",
+    Completed: "完了",
+    Canceled: "キャンセル",
+  };
 
   onMount(() => {
     activePanelId.set(myPanelId);
@@ -70,13 +77,13 @@
   use:portal
   use:globalDismiss={() => dispatch("close")}
 >
-  <div class="PanelHeader">Status フィルター</div>
+  <div class="PanelHeader">ステータスフィルター</div>
   <div class="PanelBody">
     {#each options as opt}
       <label class="OptionRow">
         <input type="checkbox" checked={selected.includes(opt)} on:change={() => toggle(opt)} />
         <span class="StatusDot" style="--dot: {STATUS_DOT_COLOR[opt] ?? '#888'};"></span>
-        <span class="OptionLabel">{opt}</span>
+        <span class="OptionLabel">{STATUS_LABEL[opt] ?? opt}</span>
       </label>
     {/each}
   </div>

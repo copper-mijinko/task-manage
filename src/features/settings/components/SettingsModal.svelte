@@ -58,8 +58,8 @@
   ];
 
   const densityOptions = [
-    { value: "comfortable", label: "Comfortable" },
-    { value: "compact", label: "Compact (Flat)" },
+    { value: "comfortable", label: "標準" },
+    { value: "compact", label: "コンパクト" },
   ];
 
   $: previewDate = formatDate(now, $date_time_format);
@@ -119,8 +119,9 @@
           <header class="DetailHeader">
             <h3 class="DetailTitle">外観</h3>
             <p class="DetailHint">
-              <strong>Comfortable</strong> はカードに影と丸みを付けた既定の見た目。
-              <strong>Compact (Flat)</strong> はVSCode風のフラットレイアウトで、影と角の丸みを消し、余白を詰めて密度を上げます。
+              <strong>標準</strong>はカードに影と丸みを付けた既定の見た目です。
+              <strong>コンパクト</strong
+              >はVSCode風のフラットレイアウトで、影と角の丸みを消し、余白を詰めて密度を上げます。
             </p>
           </header>
 

@@ -4,6 +4,7 @@
   import { workspaceToProjectData } from "@features/workspace/utils/workspace_tree";
   import * as platform from "@lib/ipc/platform";
   import { globalDismiss } from "@lib/actions";
+  import { modalLayer } from "@lib/actions/modal_layer";
   import TargetTreeNode from "./TargetTreeNode.svelte";
 
   /** Number of items the parent intends to send. Used for the footer summary. */
@@ -157,6 +158,7 @@
 
 <div
   class="PickerMask"
+  use:modalLayer
   on:mousedown={handleMaskMousedown}
   role="presentation"
   data-page-search-skip

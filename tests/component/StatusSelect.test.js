@@ -8,8 +8,8 @@ describe("StatusSelect", () => {
   test("shows the current status text on the trigger button", () => {
     const { getByLabelText } = render(StatusSelect, { props: { status: "In Progress" } });
 
-    const btn = getByLabelText("Status");
-    expect(btn).toHaveTextContent("In Progress");
+    const btn = getByLabelText("ステータス");
+    expect(btn).toHaveTextContent("進行中");
   });
 
   test("clicking the trigger opens the option listbox", async () => {
@@ -17,16 +17,16 @@ describe("StatusSelect", () => {
 
     expect(screen.queryByRole("listbox")).toBeNull();
 
-    await fireEvent.click(getByLabelText("Status"));
+    await fireEvent.click(getByLabelText("ステータス"));
     await tick();
 
     expect(screen.getByRole("listbox")).toBeInTheDocument();
     // All status options are visible.
-    expect(screen.getByRole("option", { name: /Open/ })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: /In Progress/ })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: /Pending/ })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: /Completed/ })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: /Canceled/ })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /未着手/ })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /進行中/ })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /保留/ })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /完了/ })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /キャンセル/ })).toBeInTheDocument();
   });
 
   test("selecting a new option dispatches a `change` event with target.value", async () => {
@@ -34,9 +34,9 @@ describe("StatusSelect", () => {
       props: { status: "Open" },
     });
 
-    await fireEvent.click(getByLabelText("Status"));
+    await fireEvent.click(getByLabelText("ステータス"));
     await tick();
-    await fireEvent.click(screen.getByRole("option", { name: /In Progress/ }));
+    await fireEvent.click(screen.getByRole("option", { name: /進行中/ }));
     await tick();
 
     expect(getByTestId("change-count")).toHaveTextContent("1");
@@ -52,9 +52,9 @@ describe("StatusSelect", () => {
       props: { status: "Pending" },
     });
 
-    await fireEvent.click(getByLabelText("Status"));
+    await fireEvent.click(getByLabelText("ステータス"));
     await tick();
-    await fireEvent.click(screen.getByRole("option", { name: /Pending/ }));
+    await fireEvent.click(screen.getByRole("option", { name: /保留/ }));
     await tick();
 
     expect(getByTestId("change-count")).toHaveTextContent("0");
@@ -66,7 +66,7 @@ describe("StatusSelect", () => {
     // popup must reset color on the listbox so options stay neutral.
     const { getByLabelText } = render(StatusSelect, { props: { status: "Completed" } });
 
-    await fireEvent.click(getByLabelText("Status"));
+    await fireEvent.click(getByLabelText("ステータス"));
     await tick();
 
     const listbox = screen.getByRole("listbox");
@@ -79,7 +79,7 @@ describe("StatusSelect", () => {
   test("clicking outside the panel closes it", async () => {
     const { getByLabelText } = render(StatusSelect, { props: { status: "Open" } });
 
-    await fireEvent.click(getByLabelText("Status"));
+    await fireEvent.click(getByLabelText("ステータス"));
     await tick();
     expect(screen.getByRole("listbox")).toBeInTheDocument();
 

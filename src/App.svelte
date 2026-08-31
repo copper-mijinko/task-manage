@@ -25,7 +25,7 @@
   import MenuList from "@features/navigation/components/MenuList.svelte";
   import InboxPanel from "@features/inbox/components/InboxPanel.svelte";
   import QuickCapture from "@features/inbox/components/QuickCapture.svelte";
-  import { showQuickCapture } from "@stores/ui";
+  import { showQuickCapture, showWorkspaceSetup } from "@stores/ui";
   import Loading from "@lib/primitives/Loading.svelte";
   import PageSearchBox from "@features/search/components/PageSearchBox.svelte";
   import TaskDetailWindow from "@pages/TaskDetailPage.svelte";
@@ -369,7 +369,13 @@
   {/if}
   <div class="Body" class:DetailWindowBody={isTaskDetailWindow}>
     {#if !isTaskDetailWindow}
-      <aside class="Sidebar" class:Collapsed={$sidebarCollapsed} aria-label="ナビゲーション">
+      <aside
+        class="Sidebar"
+        class:Collapsed={$sidebarCollapsed}
+        aria-label="ナビゲーション"
+        aria-hidden={$sidebarCollapsed ? "true" : undefined}
+        inert={$sidebarCollapsed}
+      >
         <MenuList />
       </aside>
     {/if}
@@ -383,9 +389,21 @@
         />
       {:else}
         {#if !($selected_type && $selected_id)}
-          <h1 style="color:var(--theme-color-Sub-main); display:flex; justify-content:center">
-            No data.
-          </h1>
+          <section class="EmptyStart" aria-labelledby="empty-start-title">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3 7.5h7l2 2h9v9.5H3V7.5Z" />
+              <path d="M7 14h10M12 9v10" />
+            </svg>
+            <h1 id="empty-start-title">ワークスペースを追加して始めましょう</h1>
+            <p>保存先のフォルダーを設定すると、プロジェクトとメモを作成できます。</p>
+            <button
+              type="button"
+              on:click={() => {
+                $sidebarCollapsed = false;
+                $showWorkspaceSetup = true;
+              }}>ワークスペースを設定</button
+            >
+          </section>
         {/if}
         {#if ($selected_type == "Projects" || $selected_type == "WorkspaceProject") && $projectLoading}
           <Loading variant="h1" />
@@ -506,6 +524,8 @@
     width: 0;
     min-width: 0;
     box-shadow: none;
+    visibility: hidden;
+    pointer-events: none;
   }
   div.Main {
     display: flex;
@@ -519,6 +539,49 @@
   div.Main.DetailWindowMain {
     height: 100%;
     flex: 1;
+  }
+  .EmptyStart {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    max-width: 32rem;
+    padding: var(--sp6);
+    color: var(--theme-color-Sub-main);
+    text-align: center;
+  }
+  .EmptyStart svg {
+    width: 3rem;
+    height: 3rem;
+    margin-bottom: var(--sp3);
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    opacity: 0.72;
+  }
+  .EmptyStart h1 {
+    margin: 0;
+    color: var(--theme-color-Sub-light);
+    font-size: var(--font-title-lg);
+  }
+  .EmptyStart p {
+    margin: var(--sp2) 0 var(--sp4);
+    font-size: var(--font-body-md);
+  }
+  .EmptyStart button {
+    min-height: 2.5rem;
+    padding: 0 var(--sp4);
+    border: 1px solid var(--theme-color-Primary-main);
+    border-radius: var(--shape-sm);
+    color: var(--on-theme-primary);
+    background: var(--theme-color-Primary-main);
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .EmptyStart button:focus-visible {
+    outline: 2px solid var(--theme-color-Primary-main);
+    outline-offset: 2px;
   }
   /* SplitPanes 内の Resizer は z-index: 999。マスクはそれより上に置く。 */
   .SidebarMask {

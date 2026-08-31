@@ -80,6 +80,19 @@ describe("tooltip action", () => {
     action.destroy();
   });
 
+  test("hides the tooltip when its anchor is clicked", () => {
+    const el = newAnchor();
+    const action = tooltip(el, { content: "hello", force: true });
+
+    fireMouseEnter(el);
+    expect(visibleTooltip()).toBeInTheDocument();
+
+    el.click();
+    expect(visibleTooltip()).toBeNull();
+
+    action.destroy();
+  });
+
   test("update() reflects new content into a currently visible tooltip", () => {
     // Regression: the sidebar toggle button reuses the same IconButton with
     // changing tooltipContent ("Show sidebar" ⇄ "Hide sidebar"). Before the

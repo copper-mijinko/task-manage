@@ -4,7 +4,7 @@
 </script>
 
 <script lang="ts">
-  import { tick, onDestroy } from "svelte";
+  import { tick, onDestroy, onMount } from "svelte";
   import {
     Direction,
     EditorView,
@@ -14,18 +14,36 @@
     type LayerMarker,
     type ViewUpdate,
   } from "@codemirror/view";
-  import { EditorState, type Text } from "@codemirror/state";
+  import { EditorSelection, EditorState, type Text } from "@codemirror/state";
   import {
     autocompletion,
+    closeBrackets,
+    closeBracketsKeymap,
     completionKeymap,
     type CompletionContext,
     type CompletionResult,
   } from "@codemirror/autocomplete";
-  import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
-  import { syntaxHighlighting, HighlightStyle } from "@codemirror/language";
+  import {
+    deleteMarkupBackward,
+    insertNewlineContinueMarkupCommand,
+    markdown,
+    markdownLanguage,
+  } from "@codemirror/lang-markdown";
+  import {
+    bracketMatching,
+    indentUnit,
+    syntaxHighlighting,
+    HighlightStyle,
+  } from "@codemirror/language";
   import { tags as t } from "@lezer/highlight";
   import { languages } from "@codemirror/language-data";
-  import { history, defaultKeymap, historyKeymap } from "@codemirror/commands";
+  import {
+    history,
+    defaultKeymap,
+    historyKeymap,
+    indentLess,
+    indentMore,
+  } from "@codemirror/commands";
   import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
   import { marked } from "marked";
   import { markedHighlight } from "marked-highlight";
@@ -102,6 +120,7 @@
   const SPLIT_MIN_PERCENT = 30;
   const SPLIT_MAX_PERCENT = 72;
   const SPLIT_KEY_STEP = 5;
+  const MARKDOWN_LAYOUT_KEY = "layout.markdown.editor";
 
   const EXTERNAL_LINK_PATTERN = /^(https?:\/\/|mailto:|file:\/\/)/i;
   // Quill 標準の `code` と `code-block` は同じ SVG (`<>`) で視覚的に区別できないため、
@@ -136,9 +155,9 @@
   type MarkdownMemoMode = "preview" | "edit" | "split";
   type EditableMarkdownMemoMode = Exclude<MarkdownMemoMode, "preview">;
   const memoModeOptions = [
-    { value: "preview", label: "Preview" },
-    { value: "edit", label: "Edit" },
-    { value: "split", label: "Split" },
+    { value: "preview", label: "プレビュー" },
+    { value: "edit", label: "編集" },
+    { value: "split", label: "分割" },
   ] satisfies Array<{
     value: MarkdownMemoMode;
     label: string;
@@ -302,6 +321,26 @@
       },
       scrollIntoView: true,
     });
+  }
+
+  function insertMarkdownHardBreak(editorView: EditorView): boolean {
+    const transaction = editorView.state.changeByRange((range) => {
+      const line = editorView.state.doc.lineAt(range.from);
+      const beforeCursor = editorView.state.doc.sliceString(line.from, range.from);
+      const trailingSpaces = beforeCursor.match(/ +$/)?.[0].length ?? 0;
+      const insert = `${" ".repeat(Math.max(0, 2 - trailingSpaces))}\n`;
+
+      return {
+        changes: { from: range.from, to: range.to, insert },
+        range: EditorSelection.cursor(range.from + insert.length),
+      };
+    });
+
+    editorView.dispatch(transaction, {
+      scrollIntoView: true,
+      userEvent: "input.type",
+    });
+    return true;
   }
 
   function wrapInline(marker: string, markerEnd = marker) {
@@ -1010,16 +1049,16 @@
       if (pre.querySelector(".copy-btn")) return;
       const btn = document.createElement("button");
       btn.className = "copy-btn";
-      btn.textContent = "Copy";
-      btn.setAttribute("aria-label", "Copy code");
+      btn.textContent = "コピー";
+      btn.setAttribute("aria-label", "コードをコピー");
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
         const text = code.innerText ?? code.textContent ?? "";
         void navigator.clipboard.writeText(text).then(() => {
-          btn.textContent = "Copied!";
+          btn.textContent = "コピー済み";
           btn.classList.add("copied");
           setTimeout(() => {
-            btn.textContent = "Copy";
+            btn.textContent = "コピー";
             btn.classList.remove("copied");
           }, 1800);
         });
@@ -1124,6 +1163,7 @@
     window.removeEventListener("pointerup", stopSplitResize);
     document.body.style.removeProperty("cursor");
     document.body.style.removeProperty("user-select");
+    persistMarkdownPreferences();
   }
 
   function startSplitResize(event: PointerEvent) {
@@ -1142,18 +1182,22 @@
       case "ArrowLeft":
         event.preventDefault();
         applyMarkdownSplitPercent(markdownSplitPercent - SPLIT_KEY_STEP);
+        persistMarkdownPreferences();
         break;
       case "ArrowRight":
         event.preventDefault();
         applyMarkdownSplitPercent(markdownSplitPercent + SPLIT_KEY_STEP);
+        persistMarkdownPreferences();
         break;
       case "Home":
         event.preventDefault();
         applyMarkdownSplitPercent(SPLIT_MIN_PERCENT);
+        persistMarkdownPreferences();
         break;
       case "End":
         event.preventDefault();
         applyMarkdownSplitPercent(SPLIT_MAX_PERCENT);
+        persistMarkdownPreferences();
         break;
     }
   }
@@ -1379,7 +1423,10 @@
       editorTheme,
       lineNumbers(),
       visibleSpaces,
-      markdown({ base: markdownLanguage, codeLanguages: languages }),
+      markdown({ base: markdownLanguage, codeLanguages: languages, addKeymap: false }),
+      indentUnit.of("  "),
+      closeBrackets(),
+      bracketMatching(),
       autocompletion({
         override: [memoLinkCompletion],
         activateOnTyping: true,
@@ -1410,12 +1457,25 @@
         },
         {
           key: "Tab",
-          run: (editorView) => formatTableAndMoveCell(editorView, 1),
+          run: (editorView) => formatTableAndMoveCell(editorView, 1) || indentMore(editorView),
         },
         {
           key: "Shift-Tab",
-          run: (editorView) => formatTableAndMoveCell(editorView, -1),
+          run: (editorView) => formatTableAndMoveCell(editorView, -1) || indentLess(editorView),
         },
+        {
+          key: "Shift-Enter",
+          run: insertMarkdownHardBreak,
+        },
+        {
+          key: "Enter",
+          run: insertNewlineContinueMarkupCommand({ nonTightLists: false }),
+        },
+        {
+          key: "Backspace",
+          run: deleteMarkupBackward,
+        },
+        ...closeBracketsKeymap,
         ...completionKeymap,
         ...defaultKeymap,
         ...searchKeymap,
@@ -1530,6 +1590,7 @@
       view = null;
     }
     markdownMode = "preview";
+    persistMarkdownPreferences();
   }
 
   function selectMarkdownMode(nextMode: MarkdownMemoMode) {
@@ -1541,8 +1602,35 @@
       stopEdit();
     } else {
       void startEdit(nextMode);
+      platform.setMetaData(MARKDOWN_LAYOUT_KEY, {
+        mode: nextMode,
+        splitPercent: markdownSplitPercent,
+      });
     }
   }
+
+  function persistMarkdownPreferences() {
+    if (readOnly) return;
+    platform.setMetaData(MARKDOWN_LAYOUT_KEY, {
+      mode: markdownMode,
+      splitPercent: markdownSplitPercent,
+    });
+  }
+
+  onMount(() => {
+    if (readOnly) return;
+    void platform.getMetaData(MARKDOWN_LAYOUT_KEY).then((saved) => {
+      if (!saved || typeof saved !== "object") return;
+      const savedMode = (saved as { mode?: unknown }).mode;
+      const savedPercent = (saved as { splitPercent?: unknown }).splitPercent;
+      if (typeof savedPercent === "number" && Number.isFinite(savedPercent)) {
+        applyMarkdownSplitPercent(savedPercent);
+      }
+      if (savedMode === "edit" || savedMode === "split") {
+        void startEdit(savedMode);
+      }
+    });
+  });
 
   function toggleModeMenu() {
     modeMenuOpen = !modeMenuOpen;
@@ -1598,6 +1686,7 @@
   }
 
   onDestroy(() => {
+    persistMarkdownPreferences();
     stopSplitResize();
     clearTimeout(savedTimer);
     if (view) {
@@ -1701,7 +1790,7 @@
   $: normalizedContent = toMarkdown(content);
   $: isEditing = markdownMode !== "preview";
   $: currentModeLabel =
-    memoModeOptions.find((mode) => mode.value === markdownMode)?.label ?? "Preview";
+    memoModeOptions.find((mode) => mode.value === markdownMode)?.label ?? "プレビュー";
   $: hasRenderedContent = Boolean(currentContent.trim());
   $: if (!isEditing && normalizedContent !== currentContent) {
     currentContent = normalizedContent;
@@ -1730,22 +1819,22 @@
           <!-- eslint-disable svelte/no-at-html-tags -->
           <span class="heading-picker toolbar-picker">
             <select
-              aria-label="Heading"
-              title="Heading"
+              aria-label="見出し"
+              title="見出し"
               bind:value={currentHeadingLevel}
               on:change={handleHeadingChange}
             >
-              <option value="normal">Normal</option>
-              <option value="1">Heading 1</option>
-              <option value="2">Heading 2</option>
+              <option value="normal">本文</option>
+              <option value="1">見出し 1</option>
+              <option value="2">見出し 2</option>
             </select>
           </span>
           <span class="tool-sep"></span>
           <button
             type="button"
             class="tool-btn tool-bold"
-            aria-label="Bold"
-            title="Bold (Ctrl+B)"
+            aria-label="太字"
+            title="太字 (Ctrl+B)"
             on:mousedown|preventDefault
             on:click={formatBold}
           >
@@ -1754,8 +1843,8 @@
           <button
             type="button"
             class="tool-btn tool-italic"
-            aria-label="Italic"
-            title="Italic (Ctrl+I)"
+            aria-label="斜体"
+            title="斜体 (Ctrl+I)"
             on:mousedown|preventDefault
             on:click={formatItalic}
           >
@@ -1764,8 +1853,8 @@
           <button
             type="button"
             class="tool-btn tool-code-inline"
-            aria-label="Inline code"
-            title="Inline code"
+            aria-label="インラインコード"
+            title="インラインコード"
             on:mousedown|preventDefault
             on:click={formatInlineCode}
           >
@@ -1775,8 +1864,8 @@
           <button
             type="button"
             class="tool-btn"
-            aria-label="Link"
-            title="Link (Ctrl+K)"
+            aria-label="リンク"
+            title="リンク (Ctrl+K)"
             on:mousedown|preventDefault
             on:click={formatLink}
           >
@@ -1785,8 +1874,8 @@
           <button
             type="button"
             class="tool-btn"
-            aria-label="Bullet list"
-            title="Bullet list"
+            aria-label="箇条書き"
+            title="箇条書き"
             on:mousedown|preventDefault
             on:click={formatBulletList}
           >
@@ -1795,8 +1884,8 @@
           <button
             type="button"
             class="tool-btn"
-            aria-label="Quote"
-            title="Quote"
+            aria-label="引用"
+            title="引用"
             on:mousedown|preventDefault
             on:click={formatQuote}
           >
@@ -1805,8 +1894,8 @@
           <button
             type="button"
             class="tool-btn tool-code-block"
-            aria-label="Code block"
-            title="Code block"
+            aria-label="コードブロック"
+            title="コードブロック"
             on:mousedown|preventDefault
             on:click={formatCodeBlock}
           >
@@ -1815,12 +1904,12 @@
           <span class="tool-sep"></span>
           <span class="table-picker toolbar-picker">
             <select
-              aria-label="Table"
-              title="Table"
+              aria-label="表"
+              title="表"
               bind:value={tableActionValue}
               on:change={handleTableActionChange}
             >
-              <option value="" disabled>Table</option>
+              <option value="" disabled>表</option>
               {#each tableActionOptions as action}
                 <option value={action.value}>{action.label}</option>
               {/each}
@@ -1830,14 +1919,14 @@
         </div>
         <div class="edit-bar-end">
           <span class="save-status" aria-live="polite">
-            {saveState === "dirty" ? "Unsaved" : saveState === "saved" ? "Saved" : ""}
+            {saveState === "dirty" ? "未保存" : saveState === "saved" ? "保存済み" : ""}
           </span>
           <!-- eslint-disable svelte/no-at-html-tags -->
           <div class="memo-mode-dropdown" bind:this={modeDropdownEl}>
             <button
               type="button"
               class="memo-mode-trigger"
-              aria-label={`Memo mode: ${currentModeLabel}`}
+              aria-label={`メモ表示モード：${currentModeLabel}`}
               aria-haspopup="listbox"
               aria-expanded={modeMenuOpen}
               title={currentModeLabel}
@@ -1856,7 +1945,7 @@
               <div
                 class="memo-mode-menu"
                 role="listbox"
-                aria-label="Memo mode"
+                aria-label="メモ表示モード"
                 tabindex="-1"
                 on:keydown={handleModeMenuKeydown}
               >
@@ -1898,7 +1987,7 @@
           <div
             class="markdown-split-resizer"
             role="separator"
-            aria-label="Resize editor and preview"
+            aria-label="エディターとプレビューの幅を変更"
             aria-orientation="vertical"
             aria-valuemin={SPLIT_MIN_PERCENT}
             aria-valuemax={SPLIT_MAX_PERCENT}
@@ -1910,7 +1999,7 @@
           <!-- svelte-ignore a11y-no-static-element-interactions -->
           <div
             class="live-preview"
-            aria-label="Markdown preview"
+            aria-label="Markdownプレビュー"
             on:click={handlePreviewClick}
             on:keydown={handlePreviewKeydown}
           >
@@ -1918,7 +2007,7 @@
               <!-- eslint-disable-next-line svelte/no-at-html-tags -->
               <div class="preview" bind:this={livePreviewEl}>{@html renderedHtml}</div>
             {:else}
-              <div class="placeholder">Preview</div>
+              <div class="placeholder">プレビュー</div>
             {/if}
           </div>
         {/if}
@@ -1939,7 +2028,7 @@
             <button
               type="button"
               class="memo-mode-trigger"
-              aria-label={`Memo mode: ${currentModeLabel}`}
+              aria-label={`メモ表示モード：${currentModeLabel}`}
               aria-haspopup="listbox"
               aria-expanded={modeMenuOpen}
               title={currentModeLabel}
@@ -1958,7 +2047,7 @@
               <div
                 class="memo-mode-menu"
                 role="listbox"
-                aria-label="Memo mode"
+                aria-label="メモ表示モード"
                 tabindex="-1"
                 on:keydown={handleModeMenuKeydown}
               >
@@ -1989,7 +2078,7 @@
         <!-- eslint-disable-next-line svelte/no-at-html-tags -->
         <div class="preview" bind:this={previewEl}>{@html renderedHtml}</div>
       {:else if !readOnly}
-        <div class="placeholder">No content</div>
+        <div class="placeholder">内容なし</div>
       {/if}
     </div>
   {/if}

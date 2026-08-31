@@ -41,8 +41,8 @@
   let edit = false;
   const hasSelectedMemo = () => Boolean(memo[selectedMemoIndex]);
   const memoFormatOptions = [
-    { value: "markdown", label: "Markdown", ariaLabel: "Use Markdown memo format" },
-    { value: "quill", label: "Quill", ariaLabel: "Use Quill memo format" },
+    { value: "markdown", label: "Markdown", ariaLabel: "Markdown形式を使用" },
+    { value: "quill", label: "Quill", ariaLabel: "Quill形式を使用" },
   ];
 
   const toggle_confirm = () => {
@@ -307,7 +307,7 @@
   <div class="memotab-container">
     <div class="memotab">
       {#if memo.length == 0}
-        <span class="memotab-item">{"Tabs here"}</span>
+        <span class="memo-section-label">メモ</span>
       {:else}
         {#each memo as memo, i (memo.id)}
           <button
@@ -318,7 +318,7 @@
             class:drop-right={dragOverIndex === i &&
               draggingIndex !== i &&
               dragOverSide === "right"}
-            aria-label={`Select memo ${memo.title}`}
+            aria-label={`メモ「${memo.title}」を選択`}
             draggable="true"
             on:click={() => {
               selectedMemoIndex = i;
@@ -360,121 +360,125 @@
         {/each}
       {/if}
     </div>
-    <div class="memo-format-control">
-      <SegmentedControl
-        options={memoFormatOptions}
-        value={selectedMemoFormat}
-        ariaLabel="Memo format"
-        size="md"
-        disabled={disabled || !selectedMemo || !changeMemoFormat}
-        on:change={handleMemoFormatChange}
-      />
-    </div>
-    <div class="memotab-control">
-      <IconButton
-        tooltipContent="メモを追加"
-        ariaLabel="メモを追加"
-        {disabled}
-        activeColor={"var(--theme-color-Primary-dark)"}
-        normalColor={"var(--theme-color-Primary-main)"}
-        on:click={createMemo}
-      >
-        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
-          ><path
-            d="M12 5V19M5 12H19"
-            stroke="var(--theme-color-Main-main)"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          ></path></svg
+    {#if selectedMemo}
+      <div class="memo-format-control">
+        <SegmentedControl
+          options={memoFormatOptions}
+          value={selectedMemoFormat}
+          ariaLabel="メモ形式"
+          size="md"
+          disabled={disabled || !changeMemoFormat}
+          on:change={handleMemoFormatChange}
+        />
+      </div>
+    {/if}
+    {#if memo.length > 0}
+      <div class="memotab-control">
+        <IconButton
+          tooltipContent="メモを追加"
+          ariaLabel="メモを追加"
+          {disabled}
+          activeColor={"var(--theme-color-Primary-dark)"}
+          normalColor={"var(--theme-color-Primary-main)"}
+          on:click={createMemo}
         >
-      </IconButton>
-      <IconButton
-        tooltipContent="このメモを複製"
-        ariaLabel="このメモを複製"
-        variant="text"
-        disabled={disabled || memo.length === 0}
-        activeColor={"var(--theme-color-Primary-dark)"}
-        normalColor={"var(--theme-color-Primary-main)"}
-        on:click={openDuplicateMenu}
-      >
-        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path
-            d="M8 8V5C8 4.4 8.4 4 9 4H19C19.6 4 20 4.4 20 5V15C20 15.6 19.6 16 19 16H16"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
-          <path
-            d="M5 8H15C15.6 8 16 8.4 16 9V19C16 19.6 15.6 20 15 20H5C4.4 20 4 19.6 4 19V9C4 8.4 4.4 8 5 8Z"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
-        </svg>
-      </IconButton>
-      <TaskMenu
-        menuItems={duplicateMenuItems}
-        position={duplicateMenu.position}
-        show={duplicateMenu.show}
-        on:duplicateInPlace={handleDuplicateInPlace}
-        on:duplicateToTask={handleDuplicateToTask}
-        on:close={closeDuplicateMenu}
-      />
-      <IconButton
-        tooltipContent="このメモを削除"
-        ariaLabel="このメモを削除"
-        variant="text"
-        disabled={disabled || memo.length === 0}
-        activeColor={"var(--theme-color-Error-main)"}
-        normalColor={"var(--theme-color-Error-main)"}
-        on:click={() => {
-          if (!hasSelectedMemo()) {
-            return;
-          }
-          show_confirm = true;
-          name_confirm = memo[selectedMemoIndex].title;
-        }}
-      >
-        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path
-            d="M3 6H21M8 6V4C8 3.4 8.4 3 9 3H15C15.6 3 16 3.4 16 4V6M10 11V17M14 11V17M5 6L6 20C6 20.6 6.4 21 7 21H17C17.6 21 18 20.6 18 20L19 6"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
-        </svg>
-      </IconButton>
-      <IconButton
-        tooltipContent="名前を変更"
-        ariaLabel="名前を変更"
-        variant="text"
-        disabled={disabled || memo.length === 0}
-        activeColor={"var(--theme-color-Primary-main)"}
-        normalColor={"var(--theme-color-Sub-main)"}
-        on:click={toggleRename}
-      >
-        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path
-            d="M11 4H4C3.4 4 3 4.4 3 5V20C3 20.6 3.4 21 4 21H19C19.6 21 20 20.6 20 20V13"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
-          <path
-            d="M18.5 2.5C19.3284 1.67157 20.6716 1.67157 21.5 2.5C22.3284 3.32843 22.3284 4.67157 21.5 5.5L12 15L8 16L9 12L18.5 2.5Z"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
-        </svg>
-      </IconButton>
-    </div>
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
+            ><path
+              d="M12 5V19M5 12H19"
+              stroke="var(--theme-color-Main-main)"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            ></path></svg
+          >
+        </IconButton>
+        <IconButton
+          tooltipContent="このメモを複製"
+          ariaLabel="このメモを複製"
+          variant="text"
+          disabled={disabled || memo.length === 0}
+          activeColor={"var(--theme-color-Primary-dark)"}
+          normalColor={"var(--theme-color-Primary-main)"}
+          on:click={openDuplicateMenu}
+        >
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path
+              d="M8 8V5C8 4.4 8.4 4 9 4H19C19.6 4 20 4.4 20 5V15C20 15.6 19.6 16 19 16H16"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+            <path
+              d="M5 8H15C15.6 8 16 8.4 16 9V19C16 19.6 15.6 20 15 20H5C4.4 20 4 19.6 4 19V9C4 8.4 4.4 8 5 8Z"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </IconButton>
+        <TaskMenu
+          menuItems={duplicateMenuItems}
+          position={duplicateMenu.position}
+          show={duplicateMenu.show}
+          on:duplicateInPlace={handleDuplicateInPlace}
+          on:duplicateToTask={handleDuplicateToTask}
+          on:close={closeDuplicateMenu}
+        />
+        <IconButton
+          tooltipContent="このメモを削除"
+          ariaLabel="このメモを削除"
+          variant="text"
+          disabled={disabled || memo.length === 0}
+          activeColor={"var(--theme-color-Error-main)"}
+          normalColor={"var(--theme-color-Error-main)"}
+          on:click={() => {
+            if (!hasSelectedMemo()) {
+              return;
+            }
+            show_confirm = true;
+            name_confirm = memo[selectedMemoIndex].title;
+          }}
+        >
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path
+              d="M3 6H21M8 6V4C8 3.4 8.4 3 9 3H15C15.6 3 16 3.4 16 4V6M10 11V17M14 11V17M5 6L6 20C6 20.6 6.4 21 7 21H17C17.6 21 18 20.6 18 20L19 6"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </IconButton>
+        <IconButton
+          tooltipContent="名前を変更"
+          ariaLabel="名前を変更"
+          variant="text"
+          disabled={disabled || memo.length === 0}
+          activeColor={"var(--theme-color-Primary-main)"}
+          normalColor={"var(--theme-color-Sub-main)"}
+          on:click={toggleRename}
+        >
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path
+              d="M11 4H4C3.4 4 3 4.4 3 5V20C3 20.6 3.4 21 4 21H19C19.6 21 20 20.6 20 20V13"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+            <path
+              d="M18.5 2.5C19.3284 1.67157 20.6716 1.67157 21.5 2.5C22.3284 3.32843 22.3284 4.67157 21.5 5.5L12 15L8 16L9 12L18.5 2.5Z"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </IconButton>
+      </div>
+    {/if}
   </div>
 
   {#if duplicateError && !showTargetPicker}
@@ -482,7 +486,7 @@
   {/if}
 
   {#if selectedMemo}
-    <div class="tag-panel" aria-label="Memo tags">
+    <div class="tag-panel" aria-label="メモのタグ">
       <!-- 追加済みタグ (Added tags) -->
       <div class="tag-row">
         <span class="tag-row-label">タグ</span>
@@ -511,7 +515,7 @@
             bind:value={tagInput}
             on:keydown={handleTagInput}
             placeholder={currentTags.length === 0 ? "タグを入力… (Enter)" : "タグを入力…"}
-            aria-label="Memo tag"
+            aria-label="メモタグ"
             autocomplete="off"
             spellcheck="false"
           />
@@ -522,14 +526,14 @@
       {#if visibleSuggestedTags.length > 0}
         <div class="tag-row">
           <span class="tag-row-label">候補</span>
-          <div class="tag-available" aria-label="Suggested tags">
+          <div class="tag-available" aria-label="タグ候補">
             {#each visibleSuggestedTags as tag (tag)}
               <button
                 type="button"
                 class="tag-pill"
                 disabled={!saveMemoTags}
                 on:click={() => addTag(tag)}
-                aria-label="Add tag {tag}"
+                aria-label="タグ {tag} を追加"
               >
                 <span class="tag-pill-plus" aria-hidden="true">＋</span>#{tag}
               </button>
@@ -557,7 +561,17 @@
         />
       {/key}
     {:else}
-      <textarea placeholder="No page" disabled></textarea>
+      <div class="memo-empty-state" data-testid="memo-empty-state">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M5 4H19V20H5Z" />
+          <path d="M8 8H16M8 12H16" />
+        </svg>
+        <strong>メモはまだありません</strong>
+        <span>補足や記録を残すためのメモを追加できます。</span>
+        <button type="button" aria-label="メモを追加" on:click={createMemo} {disabled}
+          >＋ メモを追加</button
+        >
+      </div>
     {/if}
   </div>
 </div>
@@ -572,7 +586,7 @@
 <Dialog
   show={show_format_confirm}
   toggle={toggle_format_confirm}
-  header="Memo format conversion"
+  header="メモ形式の変換"
   content={`Markdown と Quill の変換では、装飾や埋め込みなど一部の情報が損なわれる可能性があります。\n変換後は元に戻す / やり直しで取り消しできます。\n\nこのメモを ${pendingFormat === "markdown" ? "Markdown" : "Quill"} に変換しますか？`}
   callback={callback_format_confirm}
 />
@@ -707,14 +721,11 @@
     overflow: hidden;
   }
 
-  span.memotab-item {
-    display: inline-block;
-    vertical-align: middle;
-    text-overflow: ellipsis;
-    overflow: hidden;
-    white-space: nowrap;
-    line-height: 100%;
-    cursor: default !important;
+  .memo-section-label {
+    padding: 0 var(--sp2);
+    color: color-mix(in srgb, var(--theme-color-Sub-main) 70%, transparent);
+    font-size: var(--font-label-md);
+    font-weight: 600;
   }
 
   .memotab-item:hover {
@@ -945,12 +956,50 @@
     overflow: hidden;
   }
 
-  .memotab-content textarea {
-    height: 100%;
-    width: 100%;
+  .memo-empty-state {
+    display: flex;
     flex: 1;
-    min-height: 0;
-    resize: none;
-    overflow: auto;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp2);
+    padding: var(--sp4);
+    text-align: center;
+    color: color-mix(in srgb, var(--theme-color-Sub-main) 65%, transparent);
+  }
+
+  .memo-empty-state svg {
+    width: 2.5rem;
+    height: 2.5rem;
+    fill: none;
+    stroke: color-mix(in srgb, var(--theme-color-Primary-main) 75%, transparent);
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .memo-empty-state strong {
+    color: var(--theme-color-Sub-main);
+    font-size: var(--font-title-md);
+  }
+
+  .memo-empty-state span {
+    font-size: var(--font-body-sm);
+  }
+
+  .memo-empty-state button {
+    margin-top: var(--sp2);
+    padding: 0.4rem var(--sp4);
+    border-radius: var(--shape-xs);
+    background-color: var(--theme-color-Theme-main);
+    color: #fff;
+    font-size: var(--font-body-md);
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .memo-empty-state button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
   }
 </style>

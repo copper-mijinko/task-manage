@@ -68,20 +68,15 @@
   let detailPaneSize = "40%";
   let splitState = "open";
   let splitSnapping = false;
-  // Compact (flat) mode hides the task-name / status / dates header by
-  // default — the user explicitly asked for a memo-first view when the
-  // UI is in VSCode mode. The reactive below keeps this in sync if they
-  // flip density mid-session: switching to compact collapses the detail
-  // pane, switching back opens it. Manual toggle still wins within a mode
-  // (we only overwrite when $ui_density itself changes).
+  // Comfortable / Compact ごとにユーザーが選んだ分割状態を保持する。
+  // 初回だけ Compact はメモ優先、Comfortable は 40/60 を既定とする。
   let memoFocusMode = false;
   let previousUiDensity = undefined;
+  let layoutRestoreVersion = 0;
   $: if ($ui_density !== previousUiDensity) {
     previousUiDensity = $ui_density;
-    memoFocusMode = $ui_density === "compact";
-    resetCardSplit();
+    void restoreCardSplitPreference($ui_density);
   }
-  let previousTaskDetailId = "";
   let snapTimer;
   let resizeStartY = 0;
   let startDetailSize = 0;
@@ -219,12 +214,6 @@
   $: if (editContextKey !== previousEditContextKey) {
     changeDataDebounce.cancel();
     previousEditContextKey = editContextKey;
-  }
-
-  $: currentTaskDetailId = node?.id ?? "";
-  $: if (currentTaskDetailId !== previousTaskDetailId) {
-    previousTaskDetailId = currentTaskDetailId;
-    resetCardSplit();
   }
 
   const unsubscribeCancelPending = cancelPendingOperations.subscribe(() => {
@@ -450,6 +439,56 @@
     splitSnapping = false;
   }
 
+  function cardSplitPreferenceKey(density) {
+    return `layout.task-detail.vertical.${density}`;
+  }
+
+  function isSavedCardSplit(value) {
+    return (
+      value &&
+      typeof value === "object" &&
+      ["open", "detail-mini", "memo-mini"].includes(value.state) &&
+      Number.isFinite(value.detailPercent)
+    );
+  }
+
+  async function restoreCardSplitPreference(density) {
+    const version = ++layoutRestoreVersion;
+    memoFocusMode = density === "compact";
+    resetCardSplit();
+    if (!memoFocusMode) {
+      detailPanePercent = 40;
+      detailPaneSize = "40%";
+    }
+
+    try {
+      const saved = await platform.getMetaData(cardSplitPreferenceKey(density));
+      if (version !== layoutRestoreVersion || !isSavedCardSplit(saved)) return;
+      splitState = saved.state;
+      memoFocusMode = saved.state === "detail-mini";
+      detailPanePercent = Math.min(100, Math.max(0, saved.detailPercent));
+      if (saved.state === "detail-mini") {
+        detailPaneSize = `${MINI_PANE_SIZE}px`;
+      } else if (saved.state === "memo-mini") {
+        detailPaneSize = `calc(100% - ${MINI_PANE_SIZE}px - ${RESIZER_SIZE}px)`;
+      } else {
+        detailPanePercent = Math.min(76, Math.max(24, detailPanePercent || 40));
+        detailPaneSize = `${detailPanePercent}%`;
+      }
+    } catch {
+      // 設定を読めない場合は、密度ごとの既定レイアウトを使う。
+    }
+  }
+
+  function persistCardSplitPreference() {
+    const detailPercent =
+      splitState === "detail-mini" ? 0 : splitState === "memo-mini" ? 100 : detailPanePercent || 40;
+    platform.setMetaData(cardSplitPreferenceKey($ui_density), {
+      state: splitState,
+      detailPercent,
+    });
+  }
+
   function getCurrentPaneSizes() {
     const total = Math.max(0, splitBody?.getBoundingClientRect().height - RESIZER_SIZE);
     const detailHeight = detailPane?.getBoundingClientRect().height ?? 0;
@@ -544,6 +583,7 @@
     }
 
     applyDetailSize(finalDetailSize, totalHeight, nextState, true);
+    persistCardSplitPreference();
   }
 
   function startCardResize(event) {
@@ -569,6 +609,7 @@
     detailPanePercent = Math.min(76, Math.max(24, nextPercent));
     detailPaneSize = `${detailPanePercent}%`;
     splitState = "open";
+    persistCardSplitPreference();
   }
 
   function snapCardSplit(nextState) {
@@ -576,6 +617,7 @@
     const { total } = getCurrentPaneSizes();
     const nextDetailSize = nextState === "detail-mini" ? MINI_PANE_SIZE : total - MINI_PANE_SIZE;
     applyDetailSize(nextDetailSize, total, nextState, true);
+    persistCardSplitPreference();
   }
 
   function getRestoredDetailSize(totalHeight) {
@@ -598,16 +640,18 @@
     }
     memoFocusMode = true;
     applyDetailSize(MINI_PANE_SIZE, total, "detail-mini", true);
+    persistCardSplitPreference();
   }
 
   function restoreDetailPane() {
     const { total } = getCurrentPaneSizes();
     memoFocusMode = false;
     applyDetailSize(getRestoredDetailSize(total), total, "open", true);
+    persistCardSplitPreference();
   }
 
   function toggleMemoFocusMode() {
-    if (splitState === "detail-mini") {
+    if (splitState !== "open") {
       restoreDetailPane();
     } else {
       collapseDetailForMemo();
@@ -635,8 +679,7 @@
       case "Enter":
       case " ":
         event.preventDefault();
-        memoFocusMode = false;
-        splitState = "open";
+        toggleMemoFocusMode();
         break;
     }
   }
@@ -782,13 +825,13 @@
         <div class="detail-container">
           <div class="detail-fields">
             <label class="detail-field">
-              <span class="detail-label">Name</span>
+              <span class="detail-label">タスク名</span>
               <div class="detail-control">
                 <input
                   class="detail-input"
                   type="text"
                   value={name}
-                  aria-label="Task name"
+                  aria-label="タスク名"
                   on:input={handleNameInput}
                   on:blur={flushNameChange}
                 />
@@ -796,10 +839,11 @@
             </label>
 
             <label class="detail-field">
-              <span class="detail-label">Status</span>
+              <span class="detail-label">ステータス</span>
               <div class="detail-control">
                 <StatusSelect
                   status={node.data.status ?? "Open"}
+                  ariaLabel="ステータス"
                   style="height: 100%; font-size: var(--font-body-md);"
                   on:change={(event) => changeTaskField("status", event.detail.value)}
                 />
@@ -807,7 +851,7 @@
             </label>
 
             <label class="detail-field">
-              <span class="detail-label">Start Date</span>
+              <span class="detail-label">開始日</span>
               <div class="detail-control">
                 <DateInput
                   is_dark={isDark}
@@ -815,6 +859,7 @@
                   backgroundColor={"var(--theme-color-Main-light)"}
                   style={detailDateStyle}
                   value={node.data["start date"] ?? ""}
+                  ariaLabel="開始日"
                   on:change={(event) =>
                     changeTaskField("start date", event.target.value || undefined)}
                 />
@@ -822,7 +867,7 @@
             </label>
 
             <label class="detail-field">
-              <span class="detail-label">Due Date</span>
+              <span class="detail-label">期限日</span>
               <div class="detail-control">
                 <DateInput
                   is_dark={isDark}
@@ -830,6 +875,7 @@
                   backgroundColor={"var(--theme-color-Main-light)"}
                   style={detailDateStyle}
                   value={node.data["due date"] ?? ""}
+                  ariaLabel="期限日"
                   on:change={(event) =>
                     changeTaskField("due date", event.target.value || undefined)}
                 />
@@ -837,11 +883,9 @@
             </label>
 
             <div class="detail-field">
-              <span class="detail-label" id="lbl-memo-count">Memo 数</span>
-              <output
-                class="detail-readonly"
-                aria-labelledby="lbl-memo-count"
-                aria-label="Memo count">{memo.length}</output
+              <span class="detail-label" id="lbl-memo-count">メモ数</span>
+              <output class="detail-readonly" aria-labelledby="lbl-memo-count" aria-label="メモ数"
+                >{memo.length}</output
               >
             </div>
           </div>
@@ -861,7 +905,7 @@
       <div
         class="card-split-resizer"
         role="separator"
-        aria-label="Resize task detail and memo"
+        aria-label="タスク詳細とメモの高さを変更"
         aria-orientation="horizontal"
         aria-valuemin="0"
         aria-valuemax="100"
@@ -870,8 +914,19 @@
           : splitState === "memo-mini"
             ? 100
             : Math.round(detailPanePercent)}
+        aria-valuetext={splitState === "detail-mini"
+          ? "詳細欄をたたんでいます。下へドラッグすると表示できます"
+          : splitState === "memo-mini"
+            ? "メモ欄をたたんでいます。上へドラッグすると表示できます"
+            : "ドラッグして詳細欄とメモ欄の高さを変更できます"}
+        title={splitState === "detail-mini"
+          ? "下へドラッグして詳細欄を表示"
+          : splitState === "memo-mini"
+            ? "上へドラッグしてメモ欄を表示"
+            : "ドラッグして詳細欄とメモ欄の高さを変更"}
         tabindex="0"
         on:pointerdown={startCardResize}
+        on:dblclick={toggleMemoFocusMode}
         on:keydown={handleCardResizeKeydown}
       ></div>
 
@@ -901,7 +956,7 @@
     </div>
   </Card>
 {:else}
-  <h1 class="empty-state">No data.</h1>
+  <h1 class="empty-state">タスクを選択してください。</h1>
 {/if}
 
 <style>
@@ -990,15 +1045,6 @@
   .task-detail-card-body.memo-mini .memotab-container {
     display: none;
   }
-  /* When one pane is collapsed to zero the resizer is unreachable anyway
-     — drop the 5px strip so the visible pane butts up against the
-     CardHeader. This is what keeps the right-Card chrome height aligned
-     with the left-Card chrome height (toolbar's 2 rows). Re-opening via
-     the toggle button restores the resizer naturally. */
-  .task-detail-card-body.detail-mini .card-split-resizer,
-  .task-detail-card-body.memo-mini .card-split-resizer {
-    display: none;
-  }
   .card-split-resizer {
     position: relative;
     display: flex;
@@ -1046,6 +1092,11 @@
     top: 0;
     height: 5px;
     background-color: var(--theme-color-Primary-main);
+    opacity: 1;
+  }
+  .task-detail-card-body.detail-mini .card-split-resizer::before,
+  .task-detail-card-body.memo-mini .card-split-resizer::before {
+    background-color: color-mix(in srgb, var(--theme-color-Primary-main) 68%, transparent);
     opacity: 1;
   }
   .card-split-resizer:focus-visible {

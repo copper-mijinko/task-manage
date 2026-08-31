@@ -93,12 +93,12 @@ describe("Header", () => {
     render(Header);
     expect(get(sidebarCollapsed)).toBe(true);
 
-    const button = screen.getByLabelText("Show sidebar");
+    const button = screen.getByLabelText("サイドバーを表示");
     await fireEvent.click(button);
     expect(get(sidebarCollapsed)).toBe(false);
 
-    // After opening, the aria-label flips to "Hide sidebar".
-    const nowOpen = screen.getByLabelText("Hide sidebar");
+    // After opening, the aria-label flips to the close action.
+    const nowOpen = screen.getByLabelText("サイドバーを隠す");
     await fireEvent.click(nowOpen);
     expect(get(sidebarCollapsed)).toBe(true);
   });
