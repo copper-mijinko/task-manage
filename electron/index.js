@@ -1070,6 +1070,7 @@ app.on("ready", () => {
       ].join(":");
       const existing = taskDetailWindows.get(windowKey);
       if (existing && !existing.isDestroyed()) {
+        existing.show();
         existing.focus();
         return existing;
       }
@@ -1084,6 +1085,7 @@ app.on("ready", () => {
         maximizable: true,
         alwaysOnTop: false,
         autoHideMenuBar: true,
+        show: false,
         webPreferences: {
           preload: path.join(__dirname, "preload.js"),
           nodeIntegration: false,
@@ -1121,6 +1123,13 @@ app.on("ready", () => {
         taskDetailWindows.delete(windowKey);
       });
 
+      win.once("ready-to-show", () => {
+        if (win.isDestroyed()) return;
+        win.show();
+        win.focus();
+        log.info(`Task detail window shown for task: ${safeDetailData.taskId}`);
+      });
+
       log.info(`Task detail window created for task: ${safeDetailData.taskId}`);
       return win;
     } catch (error) {
@@ -1129,17 +1138,9 @@ app.on("ready", () => {
     }
   }
 
-  ipcMain.on("open-task-detail-window", async (_event, detailData) => {
+  ipcMain.on("open-task-detail-window", (_event, detailData) => {
     try {
-      const window = createTaskDetailWindow(detailData);
-
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      if (window && !window.isDestroyed()) {
-        window.show();
-        window.focus();
-        log.info(`Task detail window shown for task: ${detailData?.taskId || ""}`);
-      }
+      createTaskDetailWindow(detailData);
     } catch (error) {
       log.error("Failed to open task detail window:", error);
     }

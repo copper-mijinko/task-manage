@@ -137,3 +137,24 @@ renderer は現在保持している revision 以下の `local-write` を保存�
 
 加えて、production build 後の `renderer/index.html` で起動時に preload される module 数を確認する。
 メモエディタ関連 chunk が初期 modulepreload に戻っている場合は、起動経路への eager import が再発している可能性が高い。
+
+## 9. 再現可能な性能計測
+
+production build を対象に、起動、タスク詳細ウィンドウ、画像ウィンドウを同じ条件で計測する。
+
+```powershell
+npm run build
+npm run measure:performance
+```
+
+`measure:performance` は E2E fixture を一時ディレクトリへ複製し、次の時間を3回計測して中央値と各サンプルを JSON で出力する。既存のユーザーデータは使用しない。
+
+- `startupInteractiveMs`: Electron の起動開始から、保存済みプロジェクトが操作可能になるまで
+- `detailInteractiveMs`: 別ウィンドウを要求してから、タスク詳細が表示されるまで
+- `imageFirstOpenMs`: セッション内で最初の画像ウィンドウが読み込みを終えるまで
+- `imageReopenMs`: 同じセッション内で画像ウィンドウを再度開き、読み込みを終えるまで
+- `renderer`: DOMContentLoaded、load、First Contentful Paint、Svelte mount の各ブラウザ計測値
+
+サンプル数を変える場合は `PERF_SAMPLES` 環境変数を設定する。単発値はOSのキャッシュ、ウイルス対策、GPUプロセスの初期化に左右されるため、比較には中央値と個別サンプルの両方を使う。
+
+起動経路では、プロジェクト画面、Inbox、クイックキャプチャ、タスク詳細画面を動的 import の境界として維持する。CodeMirror と Quill は日時ショートカットの登録だけでは読み込まず、対象エディタでショートカットが実行されたときに初めて読み込む。Lodash はパッケージ全体ではなく、使用する関数のサブパスから import する。

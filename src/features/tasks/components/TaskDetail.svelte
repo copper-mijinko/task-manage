@@ -18,7 +18,7 @@
     ui_density,
   } from "@stores";
   import { selected_ids } from "@stores/ui";
-  import { debounce } from "lodash";
+  import debounce from "lodash/debounce";
   import { onDestroy } from "svelte";
   import { get } from "svelte/store";
   import MemoTab from "@features/memos/components/MemoTab.svelte";

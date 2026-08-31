@@ -30,6 +30,7 @@
     "dev:web": "vite --mode agent",
     "dev:agent": "vite --mode agent",
     "verify:agent-ui": "node scripts/verify-agent-ui.mjs",
+    "measure:performance": "node scripts/measure-performance.mjs",
     "start": "electron .",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "dist": "npm run build && electron-builder -w",

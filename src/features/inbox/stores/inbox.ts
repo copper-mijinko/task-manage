@@ -1,4 +1,4 @@
-import { throttle } from "lodash";
+import throttle from "lodash/throttle";
 import { derived, get, writable, type Readable, type Writable } from "svelte/store";
 
 import { uuidV4 } from "@lib/utils/uuid";

@@ -1,4 +1,4 @@
-﻿import { debounce } from "lodash";
+﻿import debounce from "lodash/debounce";
 import { get, writable, type Writable } from "svelte/store";
 import {
   filterTree,
