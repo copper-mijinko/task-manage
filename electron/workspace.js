@@ -48,6 +48,25 @@ function safeFileName(fileName, fallback = "attachment") {
   return baseName || fallback;
 }
 
+function assertSafePathSegment(value, label = "identifier") {
+  const segment = String(value || "");
+  if (
+    !segment ||
+    segment === "." ||
+    segment === ".." ||
+    segment.length > 200 ||
+    /[<>:"/\\|?*\u0000-\u001f]/.test(segment) ||
+    /[. ]$/.test(segment)
+  ) {
+    throw new Error(`Invalid ${label}`);
+  }
+  const stem = segment.split(".")[0].toLowerCase();
+  if (/^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$/.test(stem)) {
+    throw new Error(`Invalid ${label}`);
+  }
+  return segment;
+}
+
 function uniqueFileName(parentDir, fileName) {
   const safeName = safeFileName(fileName);
   if (!fs.existsSync(path.join(parentDir, safeName))) return safeName;
@@ -1172,7 +1191,7 @@ function writeMemoFiles(taskDir, indexFileName, memos) {
   const existing = fs.readdirSync(taskDir).filter((f) => f.endsWith(".md") && f !== indexFileName);
   for (const f of existing) fs.unlinkSync(path.join(taskDir, f));
   for (const [index, memo] of (memos || []).entries()) {
-    const id = memo.id || crypto.randomUUID();
+    const id = assertSafePathSegment(memo.id || crypto.randomUUID(), "memo id");
     fs.writeFileSync(
       path.join(taskDir, `${id}.md`),
       stringifyFrontmatter(
@@ -1196,7 +1215,7 @@ async function writeMemoFilesAsync(taskDir, indexFileName, memos, onWritten) {
   const nextFiles = new Set();
 
   for (const [index, memo] of (memos || []).entries()) {
-    const id = memo.id || crypto.randomUUID();
+    const id = assertSafePathSegment(memo.id || crypto.randomUUID(), "memo id");
     nextFiles.add(`${id}.md`);
     await writeFileIfChanged(
       path.join(taskDir, `${id}.md`),
@@ -1249,6 +1268,7 @@ async function writeRootTaskAsync(projectDir, task, onWritten) {
  * taskDirs (Map<id, dirName>) is mutated when a new dir is allocated.
  */
 function writeTask(projectDir, task, taskDirs) {
+  assertSafePathSegment(task.id, "task id");
   if (!task.parents || task.parents.length === 0) {
     writeRootTask(projectDir, task);
     if (!taskDirs.has(task.id)) taskDirs.set(task.id, "_project");
@@ -1276,6 +1296,7 @@ function writeTask(projectDir, task, taskDirs) {
  * writeTask stays available for export/migrate batch operations.
  */
 async function writeTaskAsync(projectDir, task, taskDirs, onWritten) {
+  assertSafePathSegment(task.id, "task id");
   if (!task.parents || task.parents.length === 0) {
     await writeRootTaskAsync(projectDir, task, onWritten);
     if (!taskDirs.has(task.id)) taskDirs.set(task.id, "_project");

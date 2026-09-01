@@ -501,6 +501,49 @@ describe("Markdown Memo - view mode", () => {
     expect(preview.querySelector("h1")).toHaveTextContent("Hello");
   });
 
+  test("sanitizes executable Markdown HTML while keeping safe formatting", async () => {
+    await renderMarkdownMemo({
+      saveMemo,
+      content:
+        '<details open><summary>More</summary><b style="color:red" onclick="alert(1)">Safe text</b></details>' +
+        '<img src="x" onerror="window.electronAPI.wsDeleteProject(\'/tmp\')">' +
+        "<script>window.electronAPI.wsDeleteProject('/tmp')</script>" +
+        '<iframe src="https://example.com"></iframe>',
+    });
+
+    const preview = document.querySelector(".preview");
+    expect(preview.querySelector("details")).toHaveTextContent("MoreSafe text");
+    expect(preview.querySelector("b")).not.toHaveAttribute("style");
+    expect(preview.querySelector("b")).not.toHaveAttribute("onclick");
+    expect(preview.querySelector("img")).not.toHaveAttribute("onerror");
+    expect(preview.querySelector("script")).not.toBeInTheDocument();
+    expect(preview.querySelector("iframe")).not.toBeInTheDocument();
+  });
+
+  test("removes dangerous link and data-image protocols from Markdown HTML", async () => {
+    await renderMarkdownMemo({
+      saveMemo,
+      content:
+        '<a href="javascript:alert(1)">Bad link</a>' +
+        '<img alt="bad" src="data:image/svg+xml,<svg onload=alert(1)></svg>">' +
+        '<img alt="local" src="file:///C:/private.txt">',
+    });
+
+    const preview = document.querySelector(".preview");
+    expect(preview.querySelector("a")).not.toHaveAttribute("href");
+    expect(preview.querySelector('img[alt="bad"]')).not.toHaveAttribute("src");
+    expect(preview.querySelector('img[alt="local"]')).not.toHaveAttribute("src");
+  });
+
+  test("keeps Markdown task-list checkboxes after sanitizing", async () => {
+    await renderMarkdownMemo({ saveMemo, content: "- [ ] Todo\n- [x] Done" });
+
+    const checkboxes = document.querySelectorAll('.preview input[type="checkbox"]');
+    expect(checkboxes).toHaveLength(2);
+    expect(checkboxes[0]).not.toBeChecked();
+    expect(checkboxes[1]).toBeChecked();
+  });
+
   test("renders wiki links with resolved state when memo exists", async () => {
     await renderMarkdownMemo({
       saveMemo,

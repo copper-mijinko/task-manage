@@ -51,6 +51,7 @@
   import mermaid from "mermaid";
   import quillIcons from "quill/ui/icons.js";
   import { toMarkdown } from "@features/memos/utils/memo_utils";
+  import { sanitizeMarkdownHtml } from "@features/memos/utils/markdown_security";
   import * as platform from "@lib/ipc/platform";
   import { theme } from "@stores/theme";
   import "@features/memos/styles/hljs-theme.css";
@@ -1116,10 +1117,12 @@
 
   async function updateRenderedHtml(markdownText: string) {
     const sequence = ++renderSequence;
-    const baseHtml = marked.parse(preprocessWikiLinks(markdownText), {
-      gfm: true,
-      breaks: false,
-    }) as string;
+    const baseHtml = sanitizeMarkdownHtml(
+      marked.parse(preprocessWikiLinks(markdownText), {
+        gfm: true,
+        breaks: false,
+      }) as string
+    );
     renderedHtml = baseHtml;
     await tick();
     injectCopyButtons(previewEl);
