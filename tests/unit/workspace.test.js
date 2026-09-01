@@ -983,6 +983,34 @@ describe("file system operations", () => {
     ).toBe(false);
   });
 
+  it("writeTaskAsync rejects task ids that escape the project directory", async () => {
+    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
+    const taskDirs = new Map([["root-id", "_project"]]);
+    const task = {
+      id: "../outside",
+      name: "Unsafe",
+      status: "Open",
+      parents: ["root-id"],
+      memos: [],
+    };
+
+    await expect(writeTaskAsync(projectDir, task, taskDirs)).rejects.toThrow(/Invalid task id/);
+  });
+
+  it("writeTaskAsync rejects memo ids that escape the task directory", async () => {
+    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
+    const taskDirs = new Map([["root-id", "_project"]]);
+    const task = {
+      id: "root-id",
+      name: "Root",
+      status: "Open",
+      parents: [],
+      memos: [{ id: "../outside", title: "Unsafe", content: "x", tags: [] }],
+    };
+
+    await expect(writeTaskAsync(projectDir, task, taskDirs)).rejects.toThrow(/Invalid memo id/);
+  });
+
   it("saveMemoImageAsync writes pasted images atomically", async () => {
     const { projectDir } = createProject(tmpDir, "Proj", "root-id");
     const taskDirs = new Map([["root-id", "_project"]]);

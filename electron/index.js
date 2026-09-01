@@ -10,6 +10,13 @@ const inbox = require("./inbox");
 const { WorkspaceReconciler } = require("./workspace-reconciler");
 const { WorkspaceWriteQueue } = require("./workspace-write-queue");
 const { configureAgentDebugging } = require("./agent-debug");
+const {
+  createIpcSenderValidator,
+  createWorkspaceAuthorizer,
+  normalizePathForCompare,
+  parseAllowedExternalUrl,
+  validateWorkspaceConfig,
+} = require("./ipc-security");
 
 const agentDebugging = configureAgentDebugging(app);
 if (agentDebugging) {
@@ -217,12 +224,20 @@ function attachZoomControls(win, { allowEscapeClose = false } = {}) {
   });
 }
 
+function denyRendererNavigation(win) {
+  win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  win.webContents.on("will-navigate", (event) => event.preventDefault());
+}
+
 app.on("ready", () => {
   const t0 = Date.now();
 
   let mainWindow = new BrowserWindow({
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
       zoomFactor: 1.0,
       ...(agentDebugging ? { backgroundThrottling: false } : {}),
     },
@@ -236,6 +251,7 @@ app.on("ready", () => {
   log.info(`[perf] BrowserWindow created: ${Date.now() - t0}ms`);
 
   attachZoomControls(mainWindow);
+  denyRendererNavigation(mainWindow);
 
   function sendWindowState(win) {
     if (!win || win.isDestroyed()) return;
@@ -283,11 +299,6 @@ app.on("ready", () => {
   const wsCache = new Map();
   const optimisticWorkspaceProjectDirs = new Set();
 
-  function normalizeForCompare(value) {
-    const resolved = path.resolve(String(value));
-    return process.platform === "win32" ? resolved.toLowerCase() : resolved;
-  }
-
   function knownWorkspacePaths() {
     return [
       ...(db_meta.data.workspaces || []).map((item) => item.path).filter(Boolean),
@@ -295,19 +306,30 @@ app.on("ready", () => {
     ].filter(Boolean);
   }
 
-  function isKnownWorkspacePath(workspacePath) {
-    const requestedPath = normalizeForCompare(workspacePath);
-    return knownWorkspacePaths().some(
-      (itemPath) => normalizeForCompare(itemPath) === requestedPath
-    );
+  const approvedWorkspacePaths = new Set();
+  const workspaceAuthorizer = createWorkspaceAuthorizer({ getWorkspacePaths: knownWorkspacePaths });
+  const isTrustedIpcSender = createIpcSenderValidator({
+    rendererDirectory: path.join(__dirname, "../renderer"),
+    devOrigins: process.env.VITE_DEV === "true" ? ["http://localhost:5173"] : [],
+  });
+
+  function trustedHandle(channel, handler) {
+    ipcMain.handle(channel, (event, ...args) => {
+      if (!isTrustedIpcSender(event)) {
+        log.warn(`Rejected IPC from an untrusted sender: ${channel}`);
+        throw new Error("Untrusted IPC sender");
+      }
+      return handler(event, ...args);
+    });
   }
 
-  function isInsideKnownWorkspace(targetPath) {
-    const requestedPath = normalizeForCompare(targetPath);
-    return knownWorkspacePaths().some((workspacePath) => {
-      const rootPath = normalizeForCompare(workspacePath);
-      const relativePath = path.relative(rootPath, requestedPath);
-      return relativePath && !relativePath.startsWith("..") && !path.isAbsolute(relativePath);
+  function trustedOn(channel, handler) {
+    ipcMain.on(channel, (event, ...args) => {
+      if (!isTrustedIpcSender(event)) {
+        log.warn(`Rejected IPC from an untrusted sender: ${channel}`);
+        return;
+      }
+      return handler(event, ...args);
     });
   }
 
@@ -751,22 +773,22 @@ app.on("ready", () => {
   ////////////// IPC //////////////
   // on get-initial-tree-data.
   // return data to renderer.
-  ipcMain.handle("get-initial-tree-data", async () => {
+  trustedHandle("get-initial-tree-data", async () => {
     return db.data[0];
   });
   // on get-tree-data.
   // return data to renderer.
-  ipcMain.handle("get-tree-data", async (event, arg) => {
+  trustedHandle("get-tree-data", async (event, arg) => {
     return db.data.find((o) => o?.data?.id === arg);
   });
   // on get-meta-data.
   // return data to renderer.
-  ipcMain.handle("get-meta-data", async (event, key) => {
+  trustedHandle("get-meta-data", async (event, key) => {
     return db_meta.data[key];
   });
   // on set-meta-data.
   // return data to renderer.
-  ipcMain.on("set-meta-data", (event, key, value) => {
+  trustedOn("set-meta-data", (event, key, value) => {
     db_meta.data[key] = value;
     dbMetaWriter.write();
     // 繝・・繝槭′螟画峩縺輔ｌ縺溷ｴ蜷医∽ｻ悶・繧ｦ繧｣繝ｳ繝峨え縺ｫ繧る夂衍
@@ -780,7 +802,7 @@ app.on("ready", () => {
   });
   // on delete-meta-data.
   // completely remove a key from meta data.
-  ipcMain.on("delete-meta-data", (_event, key) => {
+  trustedOn("delete-meta-data", (_event, key) => {
     if (key && Object.prototype.hasOwnProperty.call(db_meta.data, key)) {
       delete db_meta.data[key];
       dbMetaWriter.write();
@@ -789,7 +811,7 @@ app.on("ready", () => {
   });
   // on set-tree-data.
   // return data to renderer.
-  ipcMain.on("set-tree-data", (event, arg) => {
+  trustedOn("set-tree-data", (event, arg) => {
     if (arg) {
       db.data = db.data.map((o) => {
         if (o.data.id === arg.data.id) {
@@ -809,13 +831,13 @@ app.on("ready", () => {
   });
   // on get-project-ids.
   // return data to renderer.
-  ipcMain.handle("get-project-ids", async () => {
+  trustedHandle("get-project-ids", async () => {
     return db.data.map((o) => {
       return { name: o.data.data.name, id: o.data.id };
     });
   });
   // on add-project.
-  ipcMain.handle("add-project", async (_event, arg) => {
+  trustedHandle("add-project", async (_event, arg) => {
     if (arg) {
       db.data.push(arg);
       await dbWriter.write();
@@ -823,7 +845,7 @@ app.on("ready", () => {
     return { success: Boolean(arg) };
   });
   // on delete-project.
-  ipcMain.on("delete-project", (event, arg) => {
+  trustedOn("delete-project", (event, arg) => {
     if (arg) {
       db.data = db.data.filter((node) => node.data.id !== arg);
       dbWriter.write();
@@ -836,7 +858,7 @@ app.on("ready", () => {
     }
   });
   // on set-project-order.
-  ipcMain.on("set-project-order", (event, projects) => {
+  trustedOn("set-project-order", (event, projects) => {
     if (projects && Array.isArray(projects) && projects.length > 0) {
       const projectMap = {};
       db.data.forEach((item) => {
@@ -866,16 +888,19 @@ app.on("ready", () => {
     }
   });
   // on message.
-  ipcMain.on("message", (event, arg) => {
+  trustedOn("message", (event, arg) => {
     log.info(arg);
   });
   // 螟夜Κ繝ｪ繝ｳ繧ｯ繧帝幕縺上◆繧√・繝上Φ繝峨Λ
-  ipcMain.on("open-external-link", (event, url) => {
-    if (url && typeof url === "string") {
-      shell.openExternal(url).catch((err) => {
-        log.error("Failed to open external link:", err);
-      });
+  trustedOn("open-external-link", (event, url) => {
+    const safeUrl = parseAllowedExternalUrl(url);
+    if (!safeUrl) {
+      log.warn("Blocked an external link with an unsupported protocol");
+      return;
     }
+    shell.openExternal(safeUrl).catch((err) => {
+      log.error("Failed to open external link:", err);
+    });
   });
 
   // Open rendered Markdown images with the operating system's default app.
@@ -883,7 +908,7 @@ app.on("ready", () => {
   // workspace are accepted so arbitrary renderer-provided paths cannot escape
   // the user's configured data roots. HTTP(S) images are delegated to the
   // default browser. Legacy data URLs keep using the internal viewer fallback.
-  ipcMain.handle("open-image-external", async (_event, src) => {
+  trustedHandle("open-image-external", async (_event, src) => {
     if (!src || typeof src !== "string") {
       return { success: false, fallback: true, error: "No image source was provided" };
     }
@@ -891,7 +916,9 @@ app.on("ready", () => {
     try {
       const url = new URL(src);
       if (url.protocol === "http:" || url.protocol === "https:") {
-        await shell.openExternal(src);
+        const safeUrl = parseAllowedExternalUrl(src);
+        if (!safeUrl) throw new Error("Unsupported image URL");
+        await shell.openExternal(safeUrl);
         return { success: true };
       }
 
@@ -900,7 +927,7 @@ app.on("ready", () => {
       }
 
       const filePath = fileURLToPath(url);
-      if (!isInsideKnownWorkspace(filePath)) {
+      if (!(await workspaceAuthorizer.isInsideKnownWorkspace(filePath))) {
         return { success: false, error: "Image is outside a registered workspace" };
       }
 
@@ -917,19 +944,22 @@ app.on("ready", () => {
     }
   });
 
-  // Memo image enlarged view: open the image in a dedicated BrowserWindow.
-  // We load the image URL directly (no HTML wrapper) because a wrapping
-  // data:text/html page lives in a different origin and Chromium blocks
-  // cross-origin file:// resource loads by default — which would silently
-  // fail for workspace memo images served as file://. Loading the image
-  // URL as the page itself avoids that restriction; Chromium auto-fits
-  // the image to the window and shows scrollbars for larger images.
+  // Legacy db.json memos may contain raster data URLs. Keep their enlarged
+  // view in an isolated BrowserWindow; workspace and remote images use the
+  // operating system's default application via open-image-external instead.
+  // SVG and arbitrary document URLs are intentionally not accepted here.
   // Zoom wiring (Ctrl+= / Ctrl+- / Ctrl+0 / Ctrl+wheel) and Esc-to-close
   // are delegated to attachZoomControls — the same helper used by the
   // main and task-detail windows, keeping zoom behavior consistent.
   let imageWindowSequence = 0;
-  ipcMain.on("open-image-window", (event, src) => {
-    if (!src || typeof src !== "string") return;
+  trustedOn("open-image-window", async (event, src) => {
+    if (
+      typeof src !== "string" ||
+      !/^data:image\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/=\s]+$/i.test(src)
+    ) {
+      log.warn("Blocked an unsupported internal image source");
+      return;
+    }
     try {
       const win = new BrowserWindow({
         width: 960,
@@ -952,6 +982,7 @@ app.on("ready", () => {
           partition: `image-window-${++imageWindowSequence}`,
         },
       });
+      win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
       attachZoomControls(win, { allowEscapeClose: true });
 
       // Defense-in-depth on top of the isolated session above: no-cache headers
@@ -1012,7 +1043,7 @@ app.on("ready", () => {
   bindFindInPageEvents(mainWindow.webContents);
 
   // find-in-page
-  ipcMain.handle("find-in-page", async (event, text, options = {}) => {
+  trustedHandle("find-in-page", async (event, text, options = {}) => {
     log.info("Execute Search:", text);
     const targetWebContents = resolveSearchWebContents(event);
 
@@ -1046,7 +1077,7 @@ app.on("ready", () => {
   });
 
   // 谺｡縺ｮ讀懃ｴ｢
-  ipcMain.handle("find-in-page-next", async (event, text = "") => {
+  trustedHandle("find-in-page-next", async (event, text = "") => {
     log.info("Search next");
     const targetWebContents = resolveSearchWebContents(event);
 
@@ -1068,7 +1099,7 @@ app.on("ready", () => {
   });
 
   // 蜑阪・讀懃ｴ｢
-  ipcMain.handle("find-in-page-previous", async (event, text = "") => {
+  trustedHandle("find-in-page-previous", async (event, text = "") => {
     log.info("Search Previous");
     const targetWebContents = resolveSearchWebContents(event);
 
@@ -1090,7 +1121,7 @@ app.on("ready", () => {
   });
 
   // 讀懃ｴ｢縺ｮ繧ｯ繝ｪ繧｢
-  ipcMain.on("stop-find-in-page", async (event) => {
+  trustedOn("stop-find-in-page", async (event) => {
     log.info("Execute stopFindInPage()");
     const targetWebContents = resolveSearchWebContents(event);
 
@@ -1141,11 +1172,13 @@ app.on("ready", () => {
           preload: path.join(__dirname, "preload.js"),
           nodeIntegration: false,
           contextIsolation: true,
+          sandbox: true,
           zoomFactor: 1.0,
         },
       });
 
       attachZoomControls(win);
+      denyRendererNavigation(win);
       win.webContents.once("dom-ready", () => {
         log.info(`[perf] Task detail DOM ready: ${Date.now() - detailStartedAt}ms`);
       });
@@ -1197,8 +1230,11 @@ app.on("ready", () => {
     }
   }
 
-  ipcMain.on("open-task-detail-window", (_event, detailData) => {
+  trustedOn("open-task-detail-window", async (_event, detailData) => {
     try {
+      if (detailData?.selectedType === "WorkspaceProject") {
+        await workspaceAuthorizer.assertKnownProject(detailData.projectDir);
+      }
       createTaskDetailWindow(detailData);
     } catch (error) {
       log.error("Failed to open task detail window:", error);
@@ -1242,7 +1278,7 @@ app.on("ready", () => {
     taskDetailWindows.clear();
   });
 
-  ipcMain.handle("get-current-theme", async () => {
+  trustedHandle("get-current-theme", async () => {
     return db_meta.data.theme || "dark";
   });
 
@@ -1250,11 +1286,11 @@ app.on("ready", () => {
   function targetWindow(event) {
     return BrowserWindow.fromWebContents(event.sender);
   }
-  ipcMain.on("window:minimize", (event) => {
+  trustedOn("window:minimize", (event) => {
     const win = targetWindow(event);
     if (win && !win.isDestroyed()) win.minimize();
   });
-  ipcMain.on("window:toggle-maximize", (event) => {
+  trustedOn("window:toggle-maximize", (event) => {
     const win = targetWindow(event);
     if (!win || win.isDestroyed()) return;
     if (win.isMaximized()) {
@@ -1263,11 +1299,11 @@ app.on("ready", () => {
       win.maximize();
     }
   });
-  ipcMain.on("window:close", (event) => {
+  trustedOn("window:close", (event) => {
     const win = targetWindow(event);
     if (win && !win.isDestroyed()) win.close();
   });
-  ipcMain.handle("window:get-state", (event) => {
+  trustedHandle("window:get-state", (event) => {
     const win = targetWindow(event);
     if (!win || win.isDestroyed()) {
       return { isMaximized: false, isFullScreen: false };
@@ -1278,28 +1314,33 @@ app.on("ready", () => {
   ////////////// Workspace IPC //////////////
   // projectDir 竊・{ tasks: Map, taskDirs: Map } 縺ｮ繧､繝ｳ繝｡繝｢繝ｪ繧ｭ繝｣繝・す繝･
 
-  ipcMain.handle("ws:get-workspaces", async () => {
+  trustedHandle("ws:get-workspaces", async () => {
     return {
       workspaces: db_meta.data.workspaces || [],
       activeWorkspace: db_meta.data.activeWorkspace || null,
     };
   });
 
-  ipcMain.on("ws:set-workspaces", (event, { workspaces, activeWorkspace }) => {
-    db_meta.data.workspaces = workspaces;
-    if (activeWorkspace !== undefined) {
-      db_meta.data.activeWorkspace = activeWorkspace;
-      startWorkspaceWatcher(activeWorkspace);
-    }
+  trustedOn("ws:set-workspaces", (event, config) => {
     try {
+      const validated = validateWorkspaceConfig({
+        config,
+        currentWorkspacePaths: knownWorkspacePaths(),
+        approvedWorkspacePaths,
+      });
+      db_meta.data.workspaces = validated.workspaces;
+      db_meta.data.activeWorkspace = validated.activeWorkspace;
+      workspaceAuthorizer.reset();
       db_meta.write();
+      startWorkspaceWatcher(validated.activeWorkspace);
     } catch (err) {
-      showSaveError("ws:set-workspaces", err);
+      log.warn("Rejected workspace configuration:", err.message);
     }
   });
 
-  ipcMain.handle("ws:list-projects", async (event, { workspacePath }) => {
+  trustedHandle("ws:list-projects", async (event, { workspacePath }) => {
     try {
+      await workspaceAuthorizer.assertKnownWorkspace(workspacePath);
       return await workspace.listProjectsAsync(workspacePath);
     } catch (err) {
       log.error("ws:list-projects error:", err.message);
@@ -1307,22 +1348,13 @@ app.on("ready", () => {
     }
   });
 
-  ipcMain.handle("ws:open-workspace", async (event, { workspacePath }) => {
+  trustedHandle("ws:open-workspace", async (event, { workspacePath }) => {
     try {
       if (!workspacePath || typeof workspacePath !== "string") {
         return { success: false, error: "No workspace is selected" };
       }
 
-      if (!isKnownWorkspacePath(workspacePath)) {
-        return { success: false, error: "Workspace is not registered" };
-      }
-
-      const requestedPath = path.resolve(workspacePath);
-      const stats = await fs.promises.stat(requestedPath);
-      if (!stats.isDirectory()) {
-        return { success: false, error: "Workspace path is not a directory" };
-      }
-
+      const requestedPath = await workspaceAuthorizer.assertKnownWorkspace(workspacePath);
       return openDirectoryInExplorer(requestedPath);
     } catch (err) {
       log.error("ws:open-workspace error:", err.message);
@@ -1330,7 +1362,7 @@ app.on("ready", () => {
     }
   });
 
-  ipcMain.handle("ws:open-task-folder", async (event, { projectDir, taskId }) => {
+  trustedHandle("ws:open-task-folder", async (event, { projectDir, taskId }) => {
     try {
       if (!projectDir || typeof projectDir !== "string") {
         return { success: false, error: "No workspace project is selected" };
@@ -1338,9 +1370,7 @@ app.on("ready", () => {
       if (!taskId || typeof taskId !== "string") {
         return { success: false, error: "No task is selected" };
       }
-      if (!isInsideKnownWorkspace(projectDir)) {
-        return { success: false, error: "Project is not inside a registered workspace" };
-      }
+      await workspaceAuthorizer.assertKnownProject(projectDir);
 
       // Opening a folder in Explorer should not block on the write queue or a full
       // project re-read. Prefer the in-memory cache; only fall back to the slower
@@ -1380,8 +1410,9 @@ app.on("ready", () => {
     }
   });
 
-  ipcMain.handle("ws:set-project-order", async (event, { workspacePath, projects }) => {
+  trustedHandle("ws:set-project-order", async (event, { workspacePath, projects }) => {
     try {
+      await workspaceAuthorizer.assertKnownWorkspace(workspacePath);
       const result = await workspace.setProjectOrderAsync(workspacePath, projects, {
         onWritten: recordWrite,
       });
@@ -1395,8 +1426,9 @@ app.on("ready", () => {
     }
   });
 
-  ipcMain.handle("ws:read-project", async (event, { projectDir, preferCache = false }) => {
+  trustedHandle("ws:read-project", async (event, { projectDir, preferCache = false }) => {
     try {
+      await workspaceAuthorizer.assertKnownProject(projectDir);
       const { tasks } = await readWorkspaceProjectForRendererAsync(projectDir, { preferCache });
       // Map 竊・plain object for IPC serialisation
       return { tasks: Object.fromEntries(tasks) };
@@ -1406,8 +1438,9 @@ app.on("ready", () => {
     }
   });
 
-  ipcMain.handle("ws:read-task-memos", async (event, { projectDir, taskId }) => {
+  trustedHandle("ws:read-task-memos", async (event, { projectDir, taskId }) => {
     try {
+      await workspaceAuthorizer.assertKnownProject(projectDir);
       const cached = await ensureWorkspaceCacheAsync(projectDir);
       const memos = await workspace.readTaskMemosAsync(projectDir, taskId, cached.taskDirs);
       const task = cached.tasks.get(taskId);
@@ -1421,8 +1454,9 @@ app.on("ready", () => {
     }
   });
 
-  ipcMain.handle("ws:read-project-memos", async (event, { projectDir }) => {
+  trustedHandle("ws:read-project-memos", async (event, { projectDir }) => {
     try {
+      await workspaceAuthorizer.assertKnownProject(projectDir);
       const cached = await ensureWorkspaceCacheAsync(projectDir);
       const memosByTaskId = {};
       // Read every task's memos concurrently so per-file disk latency overlaps
@@ -1446,8 +1480,9 @@ app.on("ready", () => {
     }
   });
 
-  ipcMain.handle("ws:write-task", async (event, { projectDir, task }) => {
+  trustedHandle("ws:write-task", async (event, { projectDir, task }) => {
     try {
+      await workspaceAuthorizer.assertKnownProject(projectDir);
       const cached = ensureWorkspaceCache(projectDir);
       const { tasks, taskDirs } = cached;
       const [taskToWrite] = withLoadedMemoBodies(projectDir, [task], taskDirs);
@@ -1471,10 +1506,11 @@ app.on("ready", () => {
     }
   });
 
-  ipcMain.handle(
+  trustedHandle(
     "ws:save-memo-image",
     async (event, { projectDir, taskId, bytes, mimeType = "image/png" }) => {
       try {
+        await workspaceAuthorizer.assertKnownProject(projectDir);
         const cached = ensureWorkspaceCache(projectDir);
 
         const result = await workspace.saveMemoImageAsync(
@@ -1493,8 +1529,9 @@ app.on("ready", () => {
     }
   );
 
-  ipcMain.handle("ws:resolve-memo-asset", async (event, { projectDir, taskId, assetPath }) => {
+  trustedHandle("ws:resolve-memo-asset", async (event, { projectDir, taskId, assetPath }) => {
     try {
+      await workspaceAuthorizer.assertKnownProject(projectDir);
       const cached = ensureWorkspaceCache(projectDir);
 
       const fileUrl = workspace.resolveMemoAssetPath(
@@ -1511,10 +1548,11 @@ app.on("ready", () => {
     }
   });
 
-  ipcMain.handle(
+  trustedHandle(
     "ws:save-task-attachment",
     async (event, { projectDir, taskId, fileName, bytes }) => {
       try {
+        await workspaceAuthorizer.assertKnownProject(projectDir);
         const cached = ensureWorkspaceCache(projectDir);
         const attachment = await workspace.saveTaskAttachmentAsync(
           projectDir,
@@ -1538,10 +1576,11 @@ app.on("ready", () => {
     }
   );
 
-  ipcMain.handle(
+  trustedHandle(
     "ws:delete-task-attachment",
     async (event, { projectDir, taskId, attachmentPath }) => {
       try {
+        await workspaceAuthorizer.assertKnownProject(projectDir);
         const cached = ensureWorkspaceCache(projectDir);
         const attachments = await workspace.deleteTaskAttachmentAsync(
           projectDir,
@@ -1564,10 +1603,11 @@ app.on("ready", () => {
     }
   );
 
-  ipcMain.handle(
+  trustedHandle(
     "ws:open-task-attachment",
     async (event, { projectDir, taskId, attachmentPath }) => {
       try {
+        await workspaceAuthorizer.assertKnownProject(projectDir);
         const cached = ensureWorkspaceCache(projectDir);
         const resolvedPath = workspace.resolveTaskAttachmentFilePath(
           projectDir,
@@ -1593,10 +1633,11 @@ app.on("ready", () => {
     }
   );
 
-  ipcMain.handle(
+  trustedHandle(
     "ws:open-task-attachment-with",
     async (event, { projectDir, taskId, attachmentPath }) => {
       try {
+        await workspaceAuthorizer.assertKnownProject(projectDir);
         const cached = ensureWorkspaceCache(projectDir);
         const resolvedPath = workspace.resolveTaskAttachmentFilePath(
           projectDir,
@@ -1618,8 +1659,9 @@ app.on("ready", () => {
     }
   );
 
-  ipcMain.handle("ws:delete-task", async (event, { projectDir, taskId }) => {
+  trustedHandle("ws:delete-task", async (event, { projectDir, taskId }) => {
     try {
+      await workspaceAuthorizer.assertKnownProject(projectDir);
       const cached = ensureWorkspaceCache(projectDir);
       const { tasks, taskDirs } = cached;
 
@@ -1640,11 +1682,9 @@ app.on("ready", () => {
     }
   });
 
-  ipcMain.on("ws:broadcast-project-snapshot", (event, { projectDir, tasks, options }) => {
+  trustedOn("ws:broadcast-project-snapshot", async (event, { projectDir, tasks, options }) => {
     try {
-      if (!projectDir || !isInsideKnownWorkspace(projectDir)) {
-        return;
-      }
+      await workspaceAuthorizer.assertKnownProject(projectDir);
 
       const cached = primeWorkspaceProjectSnapshot(projectDir, tasks);
       if (!cached) return;
@@ -1665,8 +1705,9 @@ app.on("ready", () => {
     }
   });
 
-  ipcMain.handle("ws:write-project", async (event, { projectDir, tasks, options }) => {
+  trustedHandle("ws:write-project", async (event, { projectDir, tasks, options }) => {
     try {
+      await workspaceAuthorizer.assertKnownProject(projectDir);
       primeWorkspaceProjectSnapshot(projectDir, tasks);
       return workspaceWriteQueue.enqueue(projectDir, tasks, options || {});
     } catch (err) {
@@ -1675,8 +1716,9 @@ app.on("ready", () => {
     }
   });
 
-  ipcMain.handle("ws:write-project-patch", async (event, { projectDir, patch, options }) => {
+  trustedHandle("ws:write-project-patch", async (event, { projectDir, patch, options }) => {
     try {
+      await workspaceAuthorizer.assertKnownProject(projectDir);
       primeWorkspaceProjectPatch(projectDir, patch);
       return workspaceWriteQueue.enqueuePatch(projectDir, patch, options || {});
     } catch (err) {
@@ -1685,8 +1727,9 @@ app.on("ready", () => {
     }
   });
 
-  ipcMain.handle("ws:resolve-conflict", async (event, { projectDir, action }) => {
+  trustedHandle("ws:resolve-conflict", async (event, { projectDir, action }) => {
     try {
+      await workspaceAuthorizer.assertKnownProject(projectDir);
       if (action === "keep-local") {
         return { success: true };
       }
@@ -1716,7 +1759,7 @@ app.on("ready", () => {
     }
   });
 
-  ipcMain.handle("ws:select-directory", async () => {
+  trustedHandle("ws:select-directory", async () => {
     const result = await dialog.showOpenDialog({
       properties: ["openDirectory"],
       title: "Select workspace folder",
@@ -1745,11 +1788,13 @@ app.on("ready", () => {
           "選択したフォルダは空でも既存のワークスペースでもありません。空のフォルダ、または _project.md を含むプロジェクトフォルダがあるディレクトリを選択してください。",
       };
     }
+    approvedWorkspacePaths.add(normalizePathForCompare(selected));
     return { path: selected };
   });
 
-  ipcMain.handle("ws:create-project", async (event, { workspacePath, name, id, order }) => {
+  trustedHandle("ws:create-project", async (event, { workspacePath, name, id, order }) => {
     try {
+      await workspaceAuthorizer.assertKnownWorkspace(workspacePath);
       const result = await workspace.createProjectAsync(workspacePath, name, id, order, {
         onWritten: recordWrite,
       });
@@ -1760,9 +1805,11 @@ app.on("ready", () => {
     }
   });
 
-  ipcMain.handle("ws:delete-project", async (event, { projectDir }) => {
+  trustedHandle("ws:delete-project", async (event, { projectDir }) => {
     try {
+      await workspaceAuthorizer.assertKnownProject(projectDir);
       const result = await workspace.deleteProjectAsync(projectDir);
+      workspaceAuthorizer.forgetProject(projectDir);
       wsCache.delete(projectDir);
       optimisticWorkspaceProjectDirs.delete(projectDir);
       if (result?.success) {
@@ -1776,8 +1823,9 @@ app.on("ready", () => {
   });
 
   ////////////// Inbox IPC //////////////
-  ipcMain.handle("ws:ensure-inbox", async (event, { workspacePath }) => {
+  trustedHandle("ws:ensure-inbox", async (event, { workspacePath }) => {
     try {
+      await workspaceAuthorizer.assertKnownWorkspace(workspacePath);
       const result = await inbox.ensureInbox(workspacePath, { onWritten: recordWrite });
       return { success: true, projectDir: result.projectDir, rootId: result.rootId };
     } catch (err) {
@@ -1786,8 +1834,9 @@ app.on("ready", () => {
     }
   });
 
-  ipcMain.handle("ws:read-inbox", async (event, { workspacePath }) => {
+  trustedHandle("ws:read-inbox", async (event, { workspacePath }) => {
     try {
+      await workspaceAuthorizer.assertKnownWorkspace(workspacePath);
       const { projectDir, rootId, tasks, taskDirs } = await inbox.readInbox(workspacePath, {
         onWritten: recordWrite,
       });
@@ -1804,8 +1853,9 @@ app.on("ready", () => {
     }
   });
 
-  ipcMain.handle("ws:add-inbox-item", async (event, { workspacePath, item }) => {
+  trustedHandle("ws:add-inbox-item", async (event, { workspacePath, item }) => {
     try {
+      await workspaceAuthorizer.assertKnownWorkspace(workspacePath);
       const { task, projectDir, rootId, tasks, taskDirs } = await inbox.addInboxItem(
         workspacePath,
         item || {},
@@ -1825,10 +1875,12 @@ app.on("ready", () => {
     }
   });
 
-  ipcMain.handle(
+  trustedHandle(
     "ws:send-inbox-items",
     async (event, { workspacePath, targetProjectDir, targetRootId, targetParentId, taskIds }) => {
       try {
+        await workspaceAuthorizer.assertKnownWorkspace(workspacePath);
+        await workspaceAuthorizer.assertKnownProject(targetProjectDir);
         if (!Array.isArray(taskIds) || taskIds.length === 0) {
           return { success: false, error: "No items to send" };
         }
@@ -1904,15 +1956,17 @@ app.on("ready", () => {
     return { success: errors.length === 0, migrated, errors };
   }
 
-  ipcMain.handle("ws:export-legacy-projects", async (event, { workspacePath, options }) => {
+  trustedHandle("ws:export-legacy-projects", async (event, { workspacePath, options }) => {
+    await workspaceAuthorizer.assertKnownWorkspace(workspacePath);
     return exportLegacyProjects(workspacePath, options);
   });
 
-  ipcMain.handle("ws:migrate-projects", async (event, { workspacePath, options }) => {
+  trustedHandle("ws:migrate-projects", async (event, { workspacePath, options }) => {
+    await workspaceAuthorizer.assertKnownWorkspace(workspacePath);
     return exportLegacyProjects(workspacePath, options);
   });
 
-  ipcMain.handle("ws:get-legacy-projects", async () => {
+  trustedHandle("ws:get-legacy-projects", async () => {
     return (db.data || []).map((p) => ({
       id: p.data?.id ?? "",
       name: p.data?.data?.name ?? "unnamed",

@@ -89,6 +89,34 @@ test("loads seeded project data in Electron", async () => {
   }
 });
 
+test("rejects renderer-invented workspace registration and recursive project deletion", async () => {
+  const app = await launchSeededApp();
+  const inventedWorkspace = path.join(app.tempDir, "invented-workspace");
+  const sentinelDir = path.join(inventedWorkspace, "delete-sentinel");
+  const sentinelFile = path.join(sentinelDir, "keep.txt");
+  fs.mkdirSync(sentinelDir, { recursive: true });
+  fs.writeFileSync(path.join(sentinelDir, "_project.md"), "---\nid: sentinel\n---\n");
+  fs.writeFileSync(sentinelFile, "keep");
+
+  try {
+    await app.window.evaluate((workspacePath) => {
+      window.electronAPI.wsSetWorkspaces({
+        workspaces: [{ path: workspacePath, label: "Invented" }],
+        activeWorkspace: workspacePath,
+      });
+    }, inventedWorkspace);
+
+    const result = await app.window.evaluate((projectDir) => {
+      return window.electronAPI.wsDeleteProject(projectDir);
+    }, sentinelDir);
+
+    expect(result.success).toBe(false);
+    expect(fs.existsSync(sentinelFile)).toBe(true);
+  } finally {
+    await closeSeededApp(app);
+  }
+});
+
 test("collapses and restores detail from the tree-priority split boundary", async () => {
   const app = await launchSeededApp();
 
