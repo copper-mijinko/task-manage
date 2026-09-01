@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, shell, dialog } = require("electron");
 const { spawn } = require("child_process");
 const fs = require("fs");
 const path = require("path");
+const { performance } = require("perf_hooks");
 const { fileURLToPath } = require("url");
 const { LowSync, JSONFileSync } = require("@commonify/lowdb");
 const log = require("electron-log/main");
@@ -10,6 +11,7 @@ const inbox = require("./inbox");
 const { WorkspaceReconciler } = require("./workspace-reconciler");
 const { WorkspaceWriteQueue } = require("./workspace-write-queue");
 const { configureAgentDebugging } = require("./agent-debug");
+const { performanceMetrics } = require("./performance-metrics");
 const {
   createIpcSenderValidator,
   createWorkspaceAuthorizer,
@@ -230,7 +232,9 @@ function denyRendererNavigation(win) {
 }
 
 app.on("ready", () => {
+  const appReadyAt = performance.now();
   const t0 = Date.now();
+  performanceMetrics.record("startup.processToAppReady", appReadyAt);
 
   let mainWindow = new BrowserWindow({
     webPreferences: {
@@ -248,7 +252,15 @@ app.on("ready", () => {
     frame: false,
     titleBarStyle: "hidden",
   });
+  performanceMetrics.record("startup.appReadyToBrowserWindow", performance.now() - appReadyAt);
   log.info(`[perf] BrowserWindow created: ${Date.now() - t0}ms`);
+
+  mainWindow.webContents.once("dom-ready", () => {
+    performanceMetrics.record("startup.processToDomReady", performance.now());
+  });
+  mainWindow.webContents.once("did-finish-load", () => {
+    performanceMetrics.record("startup.processToLoadFinished", performance.now());
+  });
 
   attachZoomControls(mainWindow);
   denyRendererNavigation(mainWindow);
@@ -298,6 +310,9 @@ app.on("ready", () => {
   const dbMetaWriter = createAsyncWriter(db_meta, file_meta, "meta", 100);
   const wsCache = new Map();
   const optimisticWorkspaceProjectDirs = new Set();
+  const detailPerformanceRuns = new Map();
+  let detailPerformanceSequence = 0;
+  let performanceSummaryLogged = false;
 
   function knownWorkspacePaths() {
     return [
@@ -332,6 +347,48 @@ app.on("ready", () => {
       return handler(event, ...args);
     });
   }
+
+  const allowedRendererMilestones = new Set([
+    "startup.mounted",
+    "startup.initialWorkspaceVisible",
+    "detail.taskDataLoaded",
+    "detail.interactive",
+  ]);
+
+  trustedOn("perf:renderer-milestone", (event, payload) => {
+    const name = payload?.name;
+    const durationMs = Number(payload?.durationMs);
+    if (!allowedRendererMilestones.has(name) || !Number.isFinite(durationMs)) return;
+    if (durationMs < 0 || durationMs > 10 * 60 * 1000) return;
+
+    if (name.startsWith("startup.")) {
+      if (event.sender !== mainWindow.webContents) return;
+      performanceMetrics.record(`renderer.${name}`, durationMs);
+      performanceMetrics.record(
+        name === "startup.mounted"
+          ? "startup.processToRendererMount"
+          : "startup.processToInitialWorkspaceVisible",
+        performance.now()
+      );
+      if (name === "startup.initialWorkspaceVisible") {
+        log.info(`[perf] Initial workspace visible: ${Math.round(performance.now())}ms`);
+      }
+      return;
+    }
+
+    const run = detailPerformanceRuns.get(payload?.runId);
+    if (!run || run.webContentsId !== event.sender.id) return;
+    performanceMetrics.record(`renderer.${name}`, durationMs);
+    const milestone = name === "detail.taskDataLoaded" ? "TaskDataLoaded" : "Interactive";
+    const requestDuration = performance.now() - run.requestReceivedAt;
+    performanceMetrics.record(`detail.requestTo${milestone}`, requestDuration);
+    if (run.requestedAtEpochMs) {
+      performanceMetrics.record(`detail.clickTo${milestone}`, Date.now() - run.requestedAtEpochMs);
+    }
+    if (name === "detail.interactive") {
+      log.info(`[perf] Task detail interactive: ${Math.round(requestDuration)}ms`);
+    }
+  });
 
   function sendWorkspaceSaveStatus(payload) {
     BrowserWindow.getAllWindows().forEach((win) => {
@@ -751,7 +808,14 @@ app.on("ready", () => {
     return shutdownFlushPromise;
   }
 
+  function logPerformanceSummary() {
+    if (performanceSummaryLogged || !performanceMetrics.enabled) return;
+    performanceSummaryLogged = true;
+    log.info(`[perf-summary] ${JSON.stringify(performanceMetrics.summary())}`);
+  }
+
   app.on("before-quit", (event) => {
+    logPerformanceSummary();
     if (shutdownFlushPromise) return; // already in flight
     if (!workspaceWriteQueue.hasPending()) {
       // Synchronously flush low-level db writers; nothing to await.
@@ -1133,9 +1197,10 @@ app.on("ready", () => {
   });
 
   // 繧ｿ繧ｹ繧ｯ隧ｳ邏ｰ逕ｨ縺ｮ繧ｦ繧｣繝ｳ繝峨え繧剃ｽ懈・縺吶ｋ髢｢謨ｰ
-  function createTaskDetailWindow(detailData) {
+  function createTaskDetailWindow(detailData, timing = {}) {
     try {
-      const detailStartedAt = Date.now();
+      const detailStartedAt = timing.requestReceivedAt ?? performance.now();
+      const requestedAtEpochMs = timing.requestedAtEpochMs ?? null;
       const safeDetailData = {
         projectId: detailData?.projectId ? String(detailData.projectId) : "",
         taskId: detailData?.taskId ? String(detailData.taskId) : "",
@@ -1154,8 +1219,14 @@ app.on("ready", () => {
       if (existing && !existing.isDestroyed()) {
         existing.show();
         existing.focus();
+        performanceMetrics.record(
+          "detail.requestToExistingWindowFocus",
+          performance.now() - detailStartedAt
+        );
         return existing;
       }
+
+      const performanceRunId = `detail-${++detailPerformanceSequence}`;
 
       const win = new BrowserWindow({
         width: 960,
@@ -1176,18 +1247,31 @@ app.on("ready", () => {
           zoomFactor: 1.0,
         },
       });
+      performanceMetrics.record(
+        "detail.requestToBrowserWindowCreated",
+        performance.now() - detailStartedAt
+      );
+      detailPerformanceRuns.set(performanceRunId, {
+        requestReceivedAt: detailStartedAt,
+        requestedAtEpochMs,
+        webContentsId: win.webContents.id,
+      });
 
       attachZoomControls(win);
       denyRendererNavigation(win);
       win.webContents.once("dom-ready", () => {
-        log.info(`[perf] Task detail DOM ready: ${Date.now() - detailStartedAt}ms`);
+        const durationMs = performance.now() - detailStartedAt;
+        performanceMetrics.record("detail.requestToDomReady", durationMs);
+        log.info(`[perf] Task detail DOM ready: ${Math.round(durationMs)}ms`);
       });
       win.webContents.once("did-finish-load", () => {
-        log.info(`[perf] Task detail load finished: ${Date.now() - detailStartedAt}ms`);
+        const durationMs = performance.now() - detailStartedAt;
+        performanceMetrics.record("detail.requestToLoadFinished", durationMs);
+        log.info(`[perf] Task detail load finished: ${Math.round(durationMs)}ms`);
       });
 
       if (process.env.VITE_DEV === "true") {
-        const params = new URLSearchParams(safeDetailData);
+        const params = new URLSearchParams({ ...safeDetailData, performanceRunId });
         win.loadURL(`http://localhost:5173/detail.html?${params.toString()}#task-detail-window`);
       } else {
         win.loadFile(path.join(__dirname, "../renderer/detail.html"), {
@@ -1198,6 +1282,7 @@ app.on("ready", () => {
             taskName: safeDetailData.taskName,
             selectedType: safeDetailData.selectedType,
             projectDir: safeDetailData.projectDir,
+            performanceRunId,
           },
         });
       }
@@ -1211,14 +1296,17 @@ app.on("ready", () => {
 
       win.on("closed", () => {
         taskDetailWindows.delete(windowKey);
+        detailPerformanceRuns.delete(performanceRunId);
       });
 
       win.once("ready-to-show", () => {
         if (win.isDestroyed()) return;
         win.show();
         win.focus();
+        const durationMs = performance.now() - detailStartedAt;
+        performanceMetrics.record("detail.requestToShown", durationMs);
         log.info(
-          `[perf] Task detail shown: ${Date.now() - detailStartedAt}ms (${safeDetailData.taskId})`
+          `[perf] Task detail shown: ${Math.round(durationMs)}ms (${safeDetailData.taskId})`
         );
       });
 
@@ -1231,11 +1319,28 @@ app.on("ready", () => {
   }
 
   trustedOn("open-task-detail-window", async (_event, detailData) => {
+    const requestReceivedAt = performance.now();
+    const requestedAtEpochMs = Number(detailData?.requestedAtEpochMs);
+    const safeRequestedAtEpochMs =
+      Number.isFinite(requestedAtEpochMs) &&
+      requestedAtEpochMs > 0 &&
+      Math.abs(Date.now() - requestedAtEpochMs) < 60_000
+        ? requestedAtEpochMs
+        : null;
+    if (safeRequestedAtEpochMs) {
+      performanceMetrics.record(
+        "detail.clickToRequestReceived",
+        Date.now() - safeRequestedAtEpochMs
+      );
+    }
     try {
       if (detailData?.selectedType === "WorkspaceProject") {
         await workspaceAuthorizer.assertKnownProject(detailData.projectDir);
       }
-      createTaskDetailWindow(detailData);
+      createTaskDetailWindow(detailData, {
+        requestReceivedAt,
+        requestedAtEpochMs: safeRequestedAtEpochMs,
+      });
     } catch (error) {
       log.error("Failed to open task detail window:", error);
     }
@@ -1534,7 +1639,7 @@ app.on("ready", () => {
       await workspaceAuthorizer.assertKnownProject(projectDir);
       const cached = ensureWorkspaceCache(projectDir);
 
-      const fileUrl = workspace.resolveMemoAssetPath(
+      const fileUrl = await workspace.resolveMemoAssetPathAsync(
         projectDir,
         cached.taskDirs,
         taskId,
@@ -1609,7 +1714,7 @@ app.on("ready", () => {
       try {
         await workspaceAuthorizer.assertKnownProject(projectDir);
         const cached = ensureWorkspaceCache(projectDir);
-        const resolvedPath = workspace.resolveTaskAttachmentFilePath(
+        const resolvedPath = await workspace.resolveTaskAttachmentFilePathAsync(
           projectDir,
           cached.taskDirs,
           taskId,
@@ -1639,7 +1744,7 @@ app.on("ready", () => {
       try {
         await workspaceAuthorizer.assertKnownProject(projectDir);
         const cached = ensureWorkspaceCache(projectDir);
-        const resolvedPath = workspace.resolveTaskAttachmentFilePath(
+        const resolvedPath = await workspace.resolveTaskAttachmentFilePathAsync(
           projectDir,
           cached.taskDirs,
           taskId,

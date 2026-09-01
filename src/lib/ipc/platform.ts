@@ -1,6 +1,7 @@
 ﻿import type {
   ElectronAPI,
   FindInPageResult,
+  PerformanceMilestone,
   ProjectListItem,
   TaskDetailWindowData,
   ThemeName,
@@ -109,7 +110,11 @@ export function openImageExternal(
 }
 
 export function openTaskDetailWindow(detailData: TaskDetailWindowData): void {
-  api()?.openTaskDetailWindow?.(detailData);
+  api()?.openTaskDetailWindow?.({ ...detailData, requestedAtEpochMs: Date.now() });
+}
+
+export function reportPerformanceMilestone(payload: PerformanceMilestone): void {
+  api()?.reportPerformanceMilestone?.(payload);
 }
 
 // ---------------------------------------------------------------------------

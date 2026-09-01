@@ -3,6 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const { pathToFileURL } = require("url");
 const { marked } = require("marked");
+const { performanceMetrics } = require("./performance-metrics");
 
 // marked: gfm + 標準仕様(breaks:false) + 行頭4-space を code block 扱いしない。
 marked.use({
@@ -35,6 +36,23 @@ function uniqueName(parentDir, baseName) {
   if (!fs.existsSync(path.join(parentDir, baseName))) return baseName;
   let i = 2;
   while (fs.existsSync(path.join(parentDir, `${baseName}-${i}`))) i++;
+  return `${baseName}-${i}`;
+}
+
+async function pathExists(filePath) {
+  try {
+    await fs.promises.access(filePath);
+    return true;
+  } catch (error) {
+    if (error?.code === "ENOENT") return false;
+    throw error;
+  }
+}
+
+async function uniqueNameAsync(parentDir, baseName) {
+  if (!(await pathExists(path.join(parentDir, baseName)))) return baseName;
+  let i = 2;
+  while (await pathExists(path.join(parentDir, `${baseName}-${i}`))) i++;
   return `${baseName}-${i}`;
 }
 
@@ -75,6 +93,17 @@ function uniqueFileName(parentDir, fileName) {
   const stem = path.basename(safeName, extension) || "attachment";
   let i = 2;
   while (fs.existsSync(path.join(parentDir, `${stem}-${i}${extension}`))) i++;
+  return `${stem}-${i}${extension}`;
+}
+
+async function uniqueFileNameAsync(parentDir, fileName) {
+  const safeName = safeFileName(fileName);
+  if (!(await pathExists(path.join(parentDir, safeName)))) return safeName;
+
+  const extension = path.extname(safeName);
+  const stem = path.basename(safeName, extension) || "attachment";
+  let i = 2;
+  while (await pathExists(path.join(parentDir, `${stem}-${i}${extension}`))) i++;
   return `${stem}-${i}${extension}`;
 }
 
@@ -847,9 +876,7 @@ function readMemos(taskDir, reservedFiles = ["_index.md"], options = {}) {
     .map(({ fileIndex: _fileIndex, ...memo }) => memo);
 }
 
-function attachmentEntryFromFile(attachmentsDir, fileName) {
-  const filePath = path.join(attachmentsDir, fileName);
-  const stats = fs.statSync(filePath);
+function attachmentEntryFromStats(fileName, stats) {
   return {
     id: `./attachments/${fileName}`,
     name: fileName,
@@ -857,6 +884,11 @@ function attachmentEntryFromFile(attachmentsDir, fileName) {
     size: stats.size,
     modifiedAt: stats.mtime.toISOString(),
   };
+}
+
+function attachmentEntryFromFile(attachmentsDir, fileName) {
+  const filePath = path.join(attachmentsDir, fileName);
+  return attachmentEntryFromStats(fileName, fs.statSync(filePath));
 }
 
 function readAttachments(taskDir) {
@@ -926,7 +958,7 @@ function readTaskDir(taskDir, options = {}) {
  * Read all tasks from a project directory.
  * Returns { tasks: Map<id, task>, taskDirs: Map<id, dirName> }
  */
-function readProject(projectDir, options = {}) {
+function readProjectUnmeasured(projectDir, options = {}) {
   const tasks = new Map();
   const taskDirs = new Map();
 
@@ -958,7 +990,13 @@ function readProject(projectDir, options = {}) {
   return { tasks, taskDirs };
 }
 
-function readTaskMemos(projectDir, taskId, taskDirs) {
+function readProject(projectDir, options = {}) {
+  return performanceMetrics.measureSync("workspace.readProject", () =>
+    readProjectUnmeasured(projectDir, options)
+  );
+}
+
+function readTaskMemosUnmeasured(projectDir, taskId, taskDirs) {
   const dirName = taskDirs.get(taskId);
   if (!dirName) {
     throw new Error("Task directory was not found");
@@ -967,6 +1005,12 @@ function readTaskMemos(projectDir, taskId, taskDirs) {
   return readMemos(taskDir, dirName === "_project" ? ["_project.md"] : ["_index.md"], {
     includeMemoContent: true,
   });
+}
+
+function readTaskMemos(projectDir, taskId, taskDirs) {
+  return performanceMetrics.measureSync("workspace.readTaskMemos", () =>
+    readTaskMemosUnmeasured(projectDir, taskId, taskDirs)
+  );
 }
 
 // ── Async read mirrors ───────────────────────────────────────────────────
@@ -1068,13 +1112,7 @@ async function readAttachmentsAsync(taskDir) {
     fileNames.map(async (fileName) => {
       const filePath = path.join(attachmentsDir, fileName);
       const stats = await fs.promises.stat(filePath);
-      return {
-        id: `./attachments/${fileName}`,
-        name: fileName,
-        relativePath: `./attachments/${fileName}`,
-        size: stats.size,
-        modifiedAt: stats.mtime.toISOString(),
-      };
+      return attachmentEntryFromStats(fileName, stats);
     })
   );
 }
@@ -1123,7 +1161,7 @@ async function readTaskDirAsync(taskDir, options = {}) {
  * Task directories are read concurrently so per-file disk latency overlaps
  * instead of summing.
  */
-async function readProjectAsync(projectDir, options = {}) {
+async function readProjectAsyncUnmeasured(projectDir, options = {}) {
   const tasks = new Map();
   const taskDirs = new Map();
 
@@ -1176,7 +1214,13 @@ async function readProjectAsync(projectDir, options = {}) {
   return { tasks, taskDirs };
 }
 
-async function readTaskMemosAsync(projectDir, taskId, taskDirs) {
+async function readProjectAsync(projectDir, options = {}) {
+  return performanceMetrics.measureAsync("workspace.readProjectAsync", () =>
+    readProjectAsyncUnmeasured(projectDir, options)
+  );
+}
+
+async function readTaskMemosAsyncUnmeasured(projectDir, taskId, taskDirs) {
   const dirName = taskDirs.get(taskId);
   if (!dirName) {
     throw new Error("Task directory was not found");
@@ -1185,6 +1229,12 @@ async function readTaskMemosAsync(projectDir, taskId, taskDirs) {
   return readMemosAsync(taskDir, dirName === "_project" ? ["_project.md"] : ["_index.md"], {
     includeMemoContent: true,
   });
+}
+
+async function readTaskMemosAsync(projectDir, taskId, taskDirs) {
+  return performanceMetrics.measureAsync("workspace.readTaskMemosAsync", () =>
+    readTaskMemosAsyncUnmeasured(projectDir, taskId, taskDirs)
+  );
 }
 
 function writeMemoFiles(taskDir, indexFileName, memos) {
@@ -1367,7 +1417,7 @@ async function saveMemoImageAsync(projectDir, taskDirs, taskId, bytes, mimeType,
   };
 }
 
-function resolveTaskAttachmentFilePath(projectDir, taskDirs, taskId, attachmentPath) {
+function resolveTaskAttachmentPathCandidate(projectDir, taskDirs, taskId, attachmentPath) {
   if (!attachmentPath) return null;
 
   const taskDir = getTaskTargetDir(projectDir, taskDirs, taskId);
@@ -1395,11 +1445,37 @@ function resolveTaskAttachmentFilePath(projectDir, taskDirs, taskId, attachmentP
     return null;
   }
 
-  if (!fs.existsSync(resolvedPath) || !fs.statSync(resolvedPath).isFile()) {
+  return resolvedPath;
+}
+
+function resolveTaskAttachmentFilePath(projectDir, taskDirs, taskId, attachmentPath) {
+  const resolvedPath = resolveTaskAttachmentPathCandidate(
+    projectDir,
+    taskDirs,
+    taskId,
+    attachmentPath
+  );
+  if (!resolvedPath || !fs.existsSync(resolvedPath) || !fs.statSync(resolvedPath).isFile()) {
     return null;
   }
-
   return resolvedPath;
+}
+
+async function resolveTaskAttachmentFilePathAsync(projectDir, taskDirs, taskId, attachmentPath) {
+  const resolvedPath = resolveTaskAttachmentPathCandidate(
+    projectDir,
+    taskDirs,
+    taskId,
+    attachmentPath
+  );
+  if (!resolvedPath) return null;
+  try {
+    const stats = await fs.promises.stat(resolvedPath);
+    return stats.isFile() ? resolvedPath : null;
+  } catch (error) {
+    if (error?.code === "ENOENT") return null;
+    throw error;
+  }
 }
 
 async function saveTaskAttachmentAsync(projectDir, taskDirs, taskId, fileName, bytes, onWritten) {
@@ -1407,26 +1483,32 @@ async function saveTaskAttachmentAsync(projectDir, taskDirs, taskId, fileName, b
   const attachmentsDir = path.join(targetDir, "attachments");
   await fs.promises.mkdir(attachmentsDir, { recursive: true });
 
-  const attachmentFileName = uniqueFileName(attachmentsDir, fileName);
+  const attachmentFileName = await uniqueFileNameAsync(attachmentsDir, fileName);
   const attachmentPath = path.join(attachmentsDir, attachmentFileName);
   const buffer = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
 
   await atomicWriteFile(attachmentPath, buffer, undefined, onWritten);
 
-  return attachmentEntryFromFile(attachmentsDir, attachmentFileName);
+  const stats = await fs.promises.stat(attachmentPath);
+  return attachmentEntryFromStats(attachmentFileName, stats);
 }
 
 async function deleteTaskAttachmentAsync(projectDir, taskDirs, taskId, attachmentPath) {
-  const resolvedPath = resolveTaskAttachmentFilePath(projectDir, taskDirs, taskId, attachmentPath);
+  const resolvedPath = await resolveTaskAttachmentFilePathAsync(
+    projectDir,
+    taskDirs,
+    taskId,
+    attachmentPath
+  );
   if (!resolvedPath) {
     throw new Error("Attachment was not found");
   }
 
   await retryFileOperation(() => fs.promises.unlink(resolvedPath));
-  return readAttachments(getTaskTargetDir(projectDir, taskDirs, taskId));
+  return readAttachmentsAsync(getTaskTargetDir(projectDir, taskDirs, taskId));
 }
 
-function resolveMemoAssetPath(projectDir, taskDirs, taskId, assetPath) {
+function resolveMemoAssetPathCandidate(projectDir, taskDirs, taskId, assetPath) {
   const dirName = taskDirs.get(taskId);
   if (!dirName || !assetPath) {
     return null;
@@ -1441,10 +1523,19 @@ function resolveMemoAssetPath(projectDir, taskDirs, taskId, assetPath) {
     return null;
   }
 
-  if (!fs.existsSync(resolvedPath)) {
-    return null;
-  }
+  return resolvedPath;
+}
 
+function resolveMemoAssetPath(projectDir, taskDirs, taskId, assetPath) {
+  const resolvedPath = resolveMemoAssetPathCandidate(projectDir, taskDirs, taskId, assetPath);
+  return resolvedPath && fs.existsSync(resolvedPath)
+    ? pathToFileURL(resolvedPath).toString()
+    : null;
+}
+
+async function resolveMemoAssetPathAsync(projectDir, taskDirs, taskId, assetPath) {
+  const resolvedPath = resolveMemoAssetPathCandidate(projectDir, taskDirs, taskId, assetPath);
+  if (!resolvedPath || !(await pathExists(resolvedPath))) return null;
   return pathToFileURL(resolvedPath).toString();
 }
 
@@ -1464,15 +1555,13 @@ async function deleteTaskDirAsync(projectDir, taskDirs, taskId) {
   const dirName = taskDirs.get(taskId);
   if (!dirName || dirName === "_project") return;
   const taskDir = path.join(projectDir, dirName);
-  if (fs.existsSync(taskDir)) {
-    await retryFileOperation(() => fs.promises.rm(taskDir, { recursive: true, force: true }));
-  }
+  await retryFileOperation(() => fs.promises.rm(taskDir, { recursive: true, force: true }));
   taskDirs.delete(taskId);
 }
 
-async function writeProjectAsync(projectDir, tasks, options = {}) {
+async function writeProjectAsyncUnmeasured(projectDir, tasks, options = {}) {
   const { onWritten } = options;
-  const { taskDirs } = readProject(projectDir, { includeMemoContent: false });
+  const { taskDirs } = await readProjectAsync(projectDir, { includeMemoContent: false });
   const nextTaskIds = new Set(tasks.map((task) => task.id));
 
   for (const id of [...taskDirs.keys()]) {
@@ -1491,9 +1580,15 @@ async function writeProjectAsync(projectDir, tasks, options = {}) {
   };
 }
 
-async function writeProjectPatchAsync(projectDir, patch, options = {}) {
+async function writeProjectAsync(projectDir, tasks, options = {}) {
+  return performanceMetrics.measureAsync("workspace.writeProjectAsync", () =>
+    writeProjectAsyncUnmeasured(projectDir, tasks, options)
+  );
+}
+
+async function writeProjectPatchAsyncUnmeasured(projectDir, patch, options = {}) {
   const { onWritten } = options;
-  const { tasks, taskDirs } = readProject(projectDir, { includeMemoContent: false });
+  const { tasks, taskDirs } = await readProjectAsync(projectDir, { includeMemoContent: false });
   const nextTasks = Array.isArray(patch?.tasks) ? patch.tasks.filter((task) => task?.id) : [];
   const deletedTaskIds = Array.isArray(patch?.deletedTaskIds)
     ? [...new Set(patch.deletedTaskIds.filter((id) => typeof id === "string" && id.length > 0))]
@@ -1513,6 +1608,12 @@ async function writeProjectPatchAsync(projectDir, patch, options = {}) {
     tasks,
     taskDirs,
   };
+}
+
+async function writeProjectPatchAsync(projectDir, patch, options = {}) {
+  return performanceMetrics.measureAsync("workspace.writeProjectPatchAsync", () =>
+    writeProjectPatchAsyncUnmeasured(projectDir, patch, options)
+  );
 }
 
 /**
@@ -1538,7 +1639,7 @@ function createProject(workspacePath, name, id, order) {
 
 async function createProjectAsync(workspacePath, name, id, order, options = {}) {
   const { onWritten } = options;
-  const dirName = uniqueName(workspacePath, slugify(name) || "project");
+  const dirName = await uniqueNameAsync(workspacePath, slugify(name) || "project");
   const projectDir = path.join(workspacePath, dirName);
   await fs.promises.mkdir(projectDir, { recursive: true });
   const today = new Date().toISOString().slice(0, 10);
@@ -1574,7 +1675,7 @@ function compareProjectListItems(a, b) {
   });
 }
 
-function listProjects(workspacePath) {
+function listProjectsUnmeasured(workspacePath) {
   if (!fs.existsSync(workspacePath)) return [];
   const entries = fs.readdirSync(workspacePath, { withFileTypes: true });
   const projects = [];
@@ -1607,12 +1708,18 @@ function listProjects(workspacePath) {
   return projects.sort(compareProjectListItems);
 }
 
+function listProjects(workspacePath) {
+  return performanceMetrics.measureSync("workspace.listProjects", () =>
+    listProjectsUnmeasured(workspacePath)
+  );
+}
+
 /**
  * Async mirror of listProjects. Reads every `_project.md` concurrently so a
  * slow disk does not serialize one stat+read per project on the main event
  * loop.
  */
-async function listProjectsAsync(workspacePath) {
+async function listProjectsAsyncUnmeasured(workspacePath) {
   let entries;
   try {
     entries = await fs.promises.readdir(workspacePath, { withFileTypes: true });
@@ -1654,6 +1761,12 @@ async function listProjectsAsync(workspacePath) {
   return projects.filter(Boolean).sort(compareProjectListItems);
 }
 
+async function listProjectsAsync(workspacePath) {
+  return performanceMetrics.measureAsync("workspace.listProjectsAsync", () =>
+    listProjectsAsyncUnmeasured(workspacePath)
+  );
+}
+
 function projectListIdentity(project) {
   return project?.rootId || project?.id || project?.dirName || project?.projectDir || null;
 }
@@ -1677,16 +1790,16 @@ async function writeProjectRootOrder(projectDir, order, onWritten) {
   );
 }
 
-async function setProjectOrderAsync(workspacePath, orderedProjects, options = {}) {
+async function setProjectOrderAsyncUnmeasured(workspacePath, orderedProjects, options = {}) {
   const { onWritten } = options;
   if (!workspacePath || typeof workspacePath !== "string") {
     throw new Error("Invalid workspacePath");
   }
-  if (!fs.existsSync(workspacePath)) {
+  if (!(await pathExists(workspacePath))) {
     throw new Error("workspacePath does not exist");
   }
 
-  const currentProjects = listProjects(workspacePath);
+  const currentProjects = await listProjectsAsync(workspacePath);
   const currentByIdentity = new Map();
   for (const project of currentProjects) {
     for (const identity of projectListIdentities(project)) {
@@ -1722,6 +1835,12 @@ async function setProjectOrderAsync(workspacePath, orderedProjects, options = {}
   }
 
   return { projects: nextProjects, changedProjectDirs };
+}
+
+async function setProjectOrderAsync(workspacePath, orderedProjects, options = {}) {
+  return performanceMetrics.measureAsync("workspace.setProjectOrderAsync", () =>
+    setProjectOrderAsyncUnmeasured(workspacePath, orderedProjects, options)
+  );
 }
 
 /**
@@ -1877,10 +1996,15 @@ async function deleteProjectAsync(projectDir) {
   if (!projectDir || typeof projectDir !== "string") {
     throw new Error("Invalid projectDir");
   }
-  if (!fs.existsSync(projectDir)) {
-    return { success: true, alreadyMissing: true };
+  let stat;
+  try {
+    stat = await fs.promises.stat(projectDir);
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return { success: true, alreadyMissing: true };
+    }
+    throw error;
   }
-  const stat = await fs.promises.stat(projectDir);
   if (!stat.isDirectory()) {
     throw new Error("projectDir is not a directory");
   }
@@ -1908,7 +2032,9 @@ module.exports = {
   saveTaskAttachmentAsync,
   deleteTaskAttachmentAsync,
   resolveTaskAttachmentFilePath,
+  resolveTaskAttachmentFilePathAsync,
   resolveMemoAssetPath,
+  resolveMemoAssetPathAsync,
   deleteTaskDir,
   deleteTaskDirAsync,
   createProject,

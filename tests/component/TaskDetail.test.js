@@ -123,6 +123,7 @@ describe("TaskDetail", () => {
         taskName: "Second Task",
         selectedType: "WorkspaceProject",
         projectDir: "C:\\workspace\\project-1",
+        requestedAtEpochMs: expect.any(Number),
       })
     );
   });

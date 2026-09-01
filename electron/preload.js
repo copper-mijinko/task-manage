@@ -31,6 +31,9 @@ const electronAPI = {
   openTaskDetailWindow: (detailData) => {
     ipcRenderer.send("open-task-detail-window", detailData);
   },
+  reportPerformanceMilestone: (payload) => {
+    ipcRenderer.send("perf:renderer-milestone", payload);
+  },
   // 画面内検索機能 - シンプル実装
   findInPage: (text, options) => {
     return ipcRenderer.invoke("find-in-page", text, options);

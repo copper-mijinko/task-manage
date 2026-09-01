@@ -140,6 +140,10 @@ renderer は現在保持している revision 以下の `local-write` を保存�
 
 ## 9. 再現可能な性能計測
 
+計測は、画面全体のE2E時間、Electron内部のmilestone、Workspace filesystem I/Oを分けて行う。これにより、画面が遅い場合にrenderer、IPC、Workspace I/Oのどこで待っているかを切り分けられる。
+
+### 9.1 画面全体のE2E時間
+
 production build を対象に、起動、タスク詳細ウィンドウ、画像ウィンドウを同じ条件で計測する。
 
 ```powershell
@@ -147,14 +151,55 @@ npm run build
 npm run measure:performance
 ```
 
-`measure:performance` は E2E fixture を一時ディレクトリへ複製し、次の時間を3回計測して中央値と各サンプルを JSON で出力する。既存のユーザーデータは使用しない。
+`measure:performance` は E2E fixture を一時ディレクトリへ複製し、次の時間を計測する。出力には後方互換用の中央値、各サンプルに加えて、p50 / p95 / max の集計が含まれる。既存のユーザーデータは使用しない。
 
 - `startupInteractiveMs`: Electron の起動開始から、保存済みプロジェクトが操作可能になるまで
 - `detailInteractiveMs`: 別ウィンドウを要求してから、タスク詳細が表示されるまで
 - `imageFirstOpenMs`: セッション内で最初の画像ウィンドウが読み込みを終えるまで
 - `imageReopenMs`: 同じセッション内で画像ウィンドウを再度開き、読み込みを終えるまで
 - `renderer`: DOMContentLoaded、load、First Contentful Paint、Svelte mount の各ブラウザ計測値
+- `detailRenderer`: 詳細ウィンドウのDOMContentLoaded、load、First Contentful Paint、task data取得完了の各ブラウザ計測値
 
-サンプル数を変える場合は `PERF_SAMPLES` 環境変数を設定する。単発値はOSのキャッシュ、ウイルス対策、GPUプロセスの初期化に左右されるため、比較には中央値と個別サンプルの両方を使う。
+サンプル数を変える場合は `PERF_SAMPLES` 環境変数を設定する。OneDriveの一時的な遅延を評価する場合は20回以上を推奨する。
+
+```powershell
+$env:PERF_SAMPLES="20"
+npm run measure:performance
+```
+
+### 9.2 Electron内部のmilestone
+
+`TASK_MANAGE_PERF=1` でアプリを起動すると、計測値を最大500サンプルまでメモリ内に保持し、終了時に `[perf-summary]` ログとして p50 / p95 / max を出力する。計測を有効にしない通常起動では、Workspace I/Oのタイマーとサンプル保持は行わない。
+
+```powershell
+$env:TASK_MANAGE_PERF="1"
+npm start
+```
+
+起動のmilestoneは次の順序で記録する。
+
+| Metric | Start | End |
+| --- | --- | --- |
+| `startup.processToAppReady` | Electron process start | `app` ready |
+| `startup.appReadyToBrowserWindow` | `app` ready | main `BrowserWindow`生成 |
+| `startup.processToDomReady` | Electron process start | main window `dom-ready` |
+| `startup.processToLoadFinished` | Electron process start | main window `did-finish-load` |
+| `startup.processToInitialWorkspaceVisible` | Electron process start | 初期Workspace選択後のDOM反映 |
+
+詳細ウィンドウは、クリック時刻、main processでの要求受信、`BrowserWindow`生成、DOM ready、task data取得、interactiveを同じrun IDで関連付ける。既存ウィンドウを再利用した場合は `detail.requestToExistingWindowFocus` として別に記録する。
+
+### 9.3 Workspace I/O
+
+`perf:workspace` は指定した保存場所の直下に一時Workspaceを作成し、終了時にその一時ディレクトリだけを削除する。既存Workspaceは読み書きしない。`--root` を省略した場合はOSの一時ディレクトリを使用する。
+
+```powershell
+npm run perf:workspace -- --root "C:\path\inside\OneDrive" --iterations 20 --projects 8 --tasks 30
+```
+
+所要時間とevent-loop delayを別々に集計する。対象は `readProject` / `readTaskMemos` / `writeProjectAsync` / `writeProjectPatchAsync` / `listProjects` / `setProjectOrderAsync` と、それぞれのasync read経路である。所要時間が長くてもevent-loop delayが低ければUIは応答を維持できるため、両方を比較する。
+
+### 9.4 比較方法
+
+変更前後で同じ保存場所、fixtureサイズ、サンプル数を使用する。平均値は一時的なOneDrive待ちを隠すため、判断にはp50 / p95 / maxと個別サンプルを用いる。OSキャッシュ、ウイルス対策、GPU process初期化の影響を避けるため、測定中は条件を揃える。
 
 起動経路では、プロジェクト画面、Inbox、クイックキャプチャ、タスク詳細画面を動的 import の境界として維持する。CodeMirror と Quill は日時ショートカットの登録だけでは読み込まず、対象エディタでショートカットが実行されたときに初めて読み込む。Lodash はパッケージ全体ではなく、使用する関数のサブパスから import する。
