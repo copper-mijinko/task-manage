@@ -18,7 +18,7 @@
     workspace_tasks_cache,
     navigation_history,
   } from "@stores";
-  import { onMount, onDestroy } from "svelte";
+  import { onMount, onDestroy, tick } from "svelte";
   import * as platform from "@lib/ipc/platform";
   import { workspaceToProjectData } from "@features/workspace/utils/workspace_tree";
   import Header from "@features/navigation/components/Header.svelte";
@@ -309,6 +309,38 @@
     }
   }
 
+  async function reportInitialWorkspaceVisible() {
+    try {
+      // selected_id queues the project read in a microtask. Let that queue start,
+      // then wait for the disk-backed tree load rather than reporting as soon as
+      // the sidebar selection changes.
+      await Promise.resolve();
+      if ($projectLoading) {
+        await new Promise((resolve) => {
+          const unsubscribe = projectLoading.subscribe((loading) => {
+            if (!loading) {
+              unsubscribe();
+              resolve();
+            }
+          });
+        });
+      }
+      await tick();
+      const report = () =>
+        platform.reportPerformanceMilestone({
+          name: "startup.initialWorkspaceVisible",
+          durationMs: performance.now(),
+        });
+      if (typeof requestAnimationFrame === "function") {
+        requestAnimationFrame(report);
+      } else {
+        report();
+      }
+    } catch {
+      // Performance reporting must never affect startup.
+    }
+  }
+
   onMount(async () => {
     try {
       performance.mark("app-mounted");
@@ -317,13 +349,23 @@
       // renderer-start not set (e.g. test environment)
     }
 
+    if (!isTaskDetailWindow) {
+      platform.reportPerformanceMilestone({
+        name: "startup.mounted",
+        durationMs: performance.now(),
+      });
+    }
+
     if (isTaskDetailWindow) {
       await initTaskDetailWindow();
     } else {
       detailWindowReady = true;
       // 起動時の自動選択: Workspace を優先、なければ InApp の先頭プロジェクト。
       // 既に何か選択されている (例: タスク詳細ウィンドウ) 場合は no-op。
-      autoSelectInitialProject();
+      void autoSelectInitialProject().then(
+        () => reportInitialWorkspaceVisible(),
+        () => reportInitialWorkspaceVisible()
+      );
     }
 
     // テーマ初期化

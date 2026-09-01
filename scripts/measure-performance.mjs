@@ -27,6 +27,26 @@ function median(values) {
     : sorted[middle];
 }
 
+function percentile(values, percentileValue) {
+  const sorted = values.filter((value) => typeof value === "number").sort((a, b) => a - b);
+  if (sorted.length === 0) return null;
+  const index = Math.max(
+    0,
+    Math.min(sorted.length - 1, Math.ceil((percentileValue / 100) * sorted.length) - 1)
+  );
+  return sorted[index];
+}
+
+function summarize(values) {
+  const numericValues = values.filter((value) => typeof value === "number");
+  return {
+    count: numericValues.length,
+    p50Ms: roundTiming(percentile(numericValues, 50)),
+    p95Ms: roundTiming(percentile(numericValues, 95)),
+    maxMs: roundTiming(numericValues.length > 0 ? Math.max(...numericValues) : null),
+  };
+}
+
 async function measureSample() {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "task-manage-performance-"));
   fs.copyFileSync(path.join(fixtureDir, "db.json"), path.join(tempDir, "db.json"));
@@ -71,6 +91,7 @@ async function measureSample() {
         projectId: "project-1",
         taskId: "task-1",
         taskName: "First Task",
+        requestedAtEpochMs: Date.now(),
       });
     });
     const detailWindow = await detailWindowPromise;
@@ -137,6 +158,20 @@ const rendererKeys = Object.keys(samples[0]?.renderer ?? {});
 const detailRendererKeys = Object.keys(samples[0]?.detailRenderer ?? {});
 const result = {
   sampleCount,
+  summary: {
+    ...Object.fromEntries(
+      timingKeys.map((key) => [key, summarize(samples.map((sample) => sample[key]))])
+    ),
+    renderer: Object.fromEntries(
+      rendererKeys.map((key) => [key, summarize(samples.map((sample) => sample.renderer[key]))])
+    ),
+    detailRenderer: Object.fromEntries(
+      detailRendererKeys.map((key) => [
+        key,
+        summarize(samples.map((sample) => sample.detailRenderer[key])),
+      ])
+    ),
+  },
   median: {
     ...Object.fromEntries(
       timingKeys.map((key) => [key, median(samples.map((sample) => sample[key]))])

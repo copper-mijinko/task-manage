@@ -32,6 +32,17 @@ export interface PendingTaskDetailSelection {
 
 export interface TaskDetailWindowData extends PendingTaskDetailSelection {
   taskName: string;
+  requestedAtEpochMs?: number;
+}
+
+export interface PerformanceMilestone {
+  name:
+    | "startup.mounted"
+    | "startup.initialWorkspaceVisible"
+    | "detail.taskDataLoaded"
+    | "detail.interactive";
+  durationMs: number;
+  runId?: string;
 }
 
 export interface FindInPageResult {
@@ -107,6 +118,7 @@ export interface ElectronAPI {
     src: string
   ) => Promise<{ success: boolean; fallback?: boolean; error?: string }>;
   openTaskDetailWindow: (detailData: TaskDetailWindowData) => void;
+  reportPerformanceMilestone: (payload: PerformanceMilestone) => void;
   findInPage: (text: string, options?: Record<string, unknown>) => Promise<FindInPageResult | void>;
   findInPageNext: (text: string) => Promise<void>;
   findInPagePrevious: (text: string) => Promise<FindInPageResult | void>;

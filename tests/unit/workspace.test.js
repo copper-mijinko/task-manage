@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -27,7 +27,9 @@ import {
   saveTaskAttachmentAsync,
   deleteTaskAttachmentAsync,
   resolveTaskAttachmentFilePath,
+  resolveTaskAttachmentFilePathAsync,
   resolveMemoAssetPath,
+  resolveMemoAssetPathAsync,
   deleteTaskDir,
   deleteTaskDirAsync,
   deleteProject,
@@ -785,7 +787,7 @@ describe("file system operations", () => {
     expect(path.dirname(result.assetPath)).toBe(path.join(projectDir, "task-assets", "assets"));
   });
 
-  it("resolveMemoAssetPath returns a file URL for existing task assets", () => {
+  it("resolveMemoAssetPath returns a file URL for existing task assets", async () => {
     const { projectDir } = createProject(tmpDir, "Proj", "root-id");
     const taskDirs = new Map([["root-id", "_project"]]);
     const task = {
@@ -811,6 +813,9 @@ describe("file system operations", () => {
     );
 
     expect(fileUrl).toBe(pathToFileURL(assetPath).toString());
+    await expect(
+      resolveMemoAssetPathAsync(projectDir, taskDirs, "task-preview", "./assets/diagram.png")
+    ).resolves.toBe(fileUrl);
   });
 
   it("saveTaskAttachmentAsync copies files into task attachments and readProject lists them", async () => {
@@ -892,6 +897,14 @@ describe("file system operations", () => {
         "../_project.md"
       )
     ).toBeNull();
+    await expect(
+      resolveTaskAttachmentFilePathAsync(
+        projectDir,
+        taskDirs,
+        "task-delete-attachment",
+        attachment.relativePath
+      )
+    ).resolves.toBe(attachmentPath);
     expect(
       resolveTaskAttachmentFilePath(
         projectDir,
@@ -1056,6 +1069,63 @@ describe("file system operations", () => {
     const result = await deleteProjectAsync(projectDir);
     expect(result.success).toBe(true);
     expect(fs.existsSync(projectDir)).toBe(false);
+  });
+
+  it("keeps interactive async project operations free of synchronous filesystem calls", async () => {
+    const { projectDir } = createProject(tmpDir, "Async I/O", "async-io-root", 0);
+    const taskDirs = new Map([["async-io-root", "_project"]]);
+    const childTask = {
+      id: "async-io-child",
+      name: "Child",
+      status: "Open",
+      parents: ["async-io-root"],
+      memos: [],
+      createdAt: "2026-04-24",
+    };
+    writeTask(projectDir, childTask, taskDirs);
+    const initialTasks = [...readProject(projectDir).tasks.values()];
+    const initialProjects = listProjects(tmpDir);
+
+    const blockedMethods = ["existsSync", "readdirSync", "readFileSync", "statSync"];
+    for (const method of blockedMethods) {
+      vi.spyOn(fs, method).mockImplementation(() => {
+        throw new Error(`Unexpected synchronous filesystem call: ${method}`);
+      });
+    }
+
+    try {
+      await writeProjectAsync(projectDir, initialTasks);
+      await writeProjectPatchAsync(projectDir, {
+        tasks: [{ ...childTask, name: "Updated child" }],
+      });
+      await setProjectOrderAsync(tmpDir, initialProjects);
+      const image = await saveMemoImageAsync(
+        projectDir,
+        taskDirs,
+        childTask.id,
+        Uint8Array.from([137, 80, 78, 71]),
+        "image/png"
+      );
+      await resolveMemoAssetPathAsync(projectDir, taskDirs, childTask.id, image.relativePath);
+      const attachment = await saveTaskAttachmentAsync(
+        projectDir,
+        taskDirs,
+        childTask.id,
+        "async.txt",
+        Uint8Array.from([1, 2, 3])
+      );
+      await resolveTaskAttachmentFilePathAsync(
+        projectDir,
+        taskDirs,
+        childTask.id,
+        attachment.relativePath
+      );
+      await deleteTaskAttachmentAsync(projectDir, taskDirs, childTask.id, attachment.relativePath);
+      const created = await createProjectAsync(tmpDir, "Second Async Project", "async-io-second");
+      await deleteProjectAsync(created.projectDir);
+    } finally {
+      vi.restoreAllMocks();
+    }
   });
 
   it("writeProjectAsync skips unchanged task and memo files", async () => {

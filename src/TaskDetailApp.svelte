@@ -1,5 +1,5 @@
 <script>
-  import { onDestroy, onMount } from "svelte";
+  import { onDestroy, onMount, tick } from "svelte";
   import {
     init_detail_store,
     saveStatus,
@@ -26,6 +26,7 @@
   const selectedType =
     search.get("selectedType") === "WorkspaceProject" ? "WorkspaceProject" : "Projects";
   const projectDir = search.get("projectDir") || "";
+  const performanceRunId = search.get("performanceRunId") || undefined;
 
   let ready = false;
   let saveErrorMessage = null;
@@ -105,6 +106,30 @@
       saveErrorMessage = error instanceof Error ? error.message : "Failed to load task detail";
     } finally {
       ready = true;
+      platform.reportPerformanceMilestone({
+        name: "detail.taskDataLoaded",
+        durationMs: performance.now(),
+        runId: performanceRunId,
+      });
+    }
+  }
+
+  async function reportInteractiveAfterPaint() {
+    try {
+      await tick();
+      const report = () =>
+        platform.reportPerformanceMilestone({
+          name: "detail.interactive",
+          durationMs: performance.now(),
+          runId: performanceRunId,
+        });
+      if (typeof requestAnimationFrame === "function") {
+        requestAnimationFrame(report);
+      } else {
+        report();
+      }
+    } catch {
+      // Performance reporting must never affect detail-window startup.
     }
   }
 
@@ -145,6 +170,7 @@
 
   onMount(async () => {
     await initialiseDetail();
+    void reportInteractiveAfterPaint();
     const currentTheme = await platform.getCurrentTheme().catch(() => undefined);
     if (currentTheme) theme.set(currentTheme);
 
