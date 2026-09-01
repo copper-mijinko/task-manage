@@ -6,6 +6,7 @@
     tree_data,
     setTaskDetailWindowTarget,
     init_store,
+    init_detail_store,
     autoSelectInitialProject,
     showPageSearch,
     theme,
@@ -49,7 +50,11 @@
       : new URLSearchParams();
 
   ////////////// Initial Settings //////////////
-  init_store();
+  if (currentHash === "#task-detail-window") {
+    init_detail_store();
+  } else {
+    init_store();
+  }
 
   // ページ内検索ショートカットキー設定
   let searchBox;
@@ -141,7 +146,9 @@
               ],
         }));
 
-        const workspaceProject = await platform.wsReadProject(detailWindowProjectDir);
+        const workspaceProject = await platform.wsReadProject(detailWindowProjectDir, {
+          preferCache: true,
+        });
         if (workspaceProject) {
           const workspaceRootTask = Object.values(workspaceProject.tasks ?? {}).find(
             (task) => task.parents.length === 0

@@ -462,7 +462,12 @@ describe("Markdown Memo - view mode", () => {
   beforeEach(() => {
     quillInstances.length = 0;
     saveMemo = vi.fn();
-    window.electronAPI = { wsResolveMemoAsset: vi.fn(), openExternalLink: vi.fn() };
+    window.electronAPI = {
+      wsResolveMemoAsset: vi.fn(),
+      openExternalLink: vi.fn(),
+      openImageExternal: vi.fn().mockResolvedValue({ success: true }),
+      openImageWindow: vi.fn(),
+    };
   });
 
   afterEach(() => {
@@ -529,6 +534,34 @@ describe("Markdown Memo - view mode", () => {
         "file:///C:/workspace/project/task-1/assets/diagram.png"
       );
     });
+  });
+
+  test("opens a rendered workspace image with the operating system default app", async () => {
+    window.electronAPI.wsResolveMemoAsset.mockResolvedValue({
+      success: true,
+      url: "file:///C:/workspace/project/task-1/assets/diagram.png",
+    });
+
+    await renderMarkdownMemo({
+      saveMemo,
+      content: "![Diagram](./assets/diagram.png)",
+      workspaceProjectDir: "C:\\workspace\\project",
+      taskId: "task-1",
+    });
+
+    let image;
+    await waitFor(() => {
+      image = document.querySelector(".preview img");
+      expect(image.getAttribute("src")).toBe(
+        "file:///C:/workspace/project/task-1/assets/diagram.png"
+      );
+    });
+    await fireEvent.click(image);
+
+    expect(window.electronAPI.openImageExternal).toHaveBeenCalledWith(
+      "file:///C:/workspace/project/task-1/assets/diagram.png"
+    );
+    expect(window.electronAPI.openImageWindow).not.toHaveBeenCalled();
   });
 
   test("markdown preview image relies on the static CSS cap, not a JS-set per-image variable", async () => {

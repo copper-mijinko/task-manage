@@ -1753,7 +1753,7 @@
     return true;
   }
 
-  function handlePreviewClick(e: MouseEvent | KeyboardEvent) {
+  async function handlePreviewClick(e: MouseEvent | KeyboardEvent) {
     const target = e.target as Element | null;
     if (target && handleChecklistClick(target)) {
       return;
@@ -1776,14 +1776,17 @@
     const img = target?.closest("img") as HTMLImageElement | null;
     if (img?.src && img.dataset.missingImage !== "true") {
       e.preventDefault();
-      platform.openImageWindow(img.src);
+      const result = await platform.openImageExternal(img.src);
+      if (!result.success && result.fallback) {
+        platform.openImageWindow(img.src);
+      }
       return;
     }
   }
 
   function handlePreviewKeydown(e: KeyboardEvent) {
     if (e.key === "Enter" || e.key === " ") {
-      handlePreviewClick(e);
+      void handlePreviewClick(e);
     }
   }
 

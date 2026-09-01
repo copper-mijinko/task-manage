@@ -99,6 +99,15 @@ export function openImageWindow(src: string): void {
   api()?.openImageWindow?.(src);
 }
 
+export function openImageExternal(
+  src: string
+): Promise<{ success: boolean; fallback?: boolean; error?: string }> {
+  return (
+    api()?.openImageExternal?.(src) ??
+    Promise.resolve({ success: false, fallback: true, error: "API unavailable" })
+  );
+}
+
 export function openTaskDetailWindow(detailData: TaskDetailWindowData): void {
   api()?.openTaskDetailWindow?.(detailData);
 }
@@ -188,6 +197,10 @@ export function onWorkspaceProjectUpdated(
   api()?.onWorkspaceProjectUpdated?.(callback);
 }
 
+export function onWorkspaceProjectDeleted(callback: (event: { projectDir: string }) => void): void {
+  api()?.onWorkspaceProjectDeleted?.(callback);
+}
+
 export function onWorkspaceConflict(callback: (event: WorkspaceConflictEvent) => void): void {
   api()?.onWorkspaceConflict?.(callback);
 }
@@ -242,8 +255,13 @@ export function wsSetProjectOrder(
   );
 }
 
-export function wsReadProject(projectDir: string): Promise<WorkspaceProject | undefined> {
-  return api()?.wsReadProject?.(projectDir) ?? Promise.resolve(undefined);
+export function wsReadProject(
+  projectDir: string,
+  options?: { preferCache?: boolean }
+): Promise<WorkspaceProject | undefined> {
+  const readProject = api()?.wsReadProject;
+  if (!readProject) return Promise.resolve(undefined);
+  return options ? readProject(projectDir, options) : readProject(projectDir);
 }
 
 export function wsReadTaskMemos(

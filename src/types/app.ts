@@ -103,6 +103,9 @@ export interface ElectronAPI {
   message: (message: string) => void;
   openExternalLink: (url: string) => void;
   openImageWindow: (src: string) => void;
+  openImageExternal: (
+    src: string
+  ) => Promise<{ success: boolean; fallback?: boolean; error?: string }>;
   openTaskDetailWindow: (detailData: TaskDetailWindowData) => void;
   findInPage: (text: string, options?: Record<string, unknown>) => Promise<FindInPageResult | void>;
   findInPageNext: (text: string) => Promise<void>;
@@ -115,6 +118,7 @@ export interface ElectronAPI {
   onSaveError: (callback: (message: string) => void) => void;
   onWorkspaceSaveStatus: (callback: (event: WorkspaceSaveStatusEvent) => void) => void;
   onWorkspaceProjectUpdated: (callback: (event: WorkspaceProjectUpdatedEvent) => void) => void;
+  onWorkspaceProjectDeleted: (callback: (event: { projectDir: string }) => void) => void;
   onWorkspaceConflict: (callback: (event: WorkspaceConflictEvent) => void) => void;
   onWorkspaceNotice: (callback: (event: WorkspaceNoticeEvent) => void) => void;
   onWorkspaceFlushStart: (callback: (event: WorkspaceFlushStartEvent) => void) => void;
@@ -136,7 +140,10 @@ export interface ElectronAPI {
     workspacePath: string,
     projects: WorkspaceProjectListItem[]
   ) => Promise<{ success: boolean; projects?: WorkspaceProjectListItem[]; error?: string }>;
-  wsReadProject: (projectDir: string) => Promise<WorkspaceProject>;
+  wsReadProject: (
+    projectDir: string,
+    options?: { preferCache?: boolean }
+  ) => Promise<WorkspaceProject>;
   wsReadTaskMemos: (
     projectDir: string,
     taskId: string

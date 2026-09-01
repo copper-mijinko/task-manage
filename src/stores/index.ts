@@ -37,6 +37,26 @@ import { date_time_format, ui_density } from "./preferences";
 import { navigation_history } from "./navigation_history";
 
 let initStoreReady: Promise<void> | null = null;
+let initDetailStoreReady: Promise<void> | null = null;
+
+/**
+ * Initialise only the stores needed by the standalone task-detail renderer.
+ * The main app also loads project navigation, Inbox, filtering and column
+ * settings; doing that in every detail window causes avoidable IPC and a full
+ * workspace project-list scan on cloud-backed folders.
+ */
+export function init_detail_store(): Promise<void> {
+  if (initDetailStoreReady) return initDetailStoreReady;
+
+  tree_data.init();
+  theme.init();
+  workspace_conflict_policy.init();
+  date_time_format.init();
+  ui_density.init();
+
+  initDetailStoreReady = Promise.resolve();
+  return initDetailStoreReady;
+}
 
 export function init_store(): Promise<void> {
   if (initStoreReady) return initStoreReady;
