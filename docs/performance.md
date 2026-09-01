@@ -196,7 +196,9 @@ npm start
 npm run perf:workspace -- --root "C:\path\inside\OneDrive" --iterations 20 --projects 8 --tasks 30
 ```
 
-所要時間とevent-loop delayを別々に集計する。対象は `readProject` / `readTaskMemos` / `writeProjectAsync` / `writeProjectPatchAsync` / `listProjects` / `setProjectOrderAsync` と、それぞれのasync read経路である。所要時間が長くてもevent-loop delayが低ければUIは応答を維持できるため、両方を比較する。
+所要時間とevent-loop delayを別々に集計する。対象は `readProject` / `readTaskMemos` / `writeProjectAsync` / `writeProjectPatchAsync` / `listProjects` / `setProjectOrderAsync` と、それぞれのasync read経路である。event-loop delayは各処理中にheartbeatを継続し、その最大driftを1サンプルとして記録する。処理終了直前のblockingも最後のheartbeatで検出する。所要時間が長くてもevent-loop delayが低ければUIは応答を維持できるため、両方を比較する。
+
+interactive IPCのWorkspace cache missは非同期で補完する。同じprojectのcache missが重なった場合はin-flight Promiseを共有し、同じprojectを並行して複数回走査しない。disk readの待機中にrenderer snapshotやreconcilerがcacheを更新した場合は、遅れて完了したdisk readで新しいcacheを上書きしない。
 
 ### 9.4 比較方法
 

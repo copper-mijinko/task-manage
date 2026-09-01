@@ -67,7 +67,7 @@ describe("WorkspaceReconciler", () => {
     const updates = [];
     const notices = [];
     const reconciler = new WorkspaceReconciler({
-      readProject,
+      readProject: async (...args) => readProject(...args),
       onProjectUpdated: (event) => updates.push(event),
       onNotice: (event) => notices.push(event),
       stateRootDir: stateDir,

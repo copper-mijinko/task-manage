@@ -302,7 +302,7 @@ class WorkspaceReconciler {
     }
 
     try {
-      const { tasks, taskDirs } = this.readProject(projectDir);
+      const { tasks, taskDirs } = await this.readProject(projectDir);
       this.onProjectUpdated({
         projectDir,
         tasks,
