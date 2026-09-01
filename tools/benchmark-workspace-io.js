@@ -1,12 +1,11 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { performance } = require("perf_hooks");
-
 process.env.TASK_MANAGE_PERF = "1";
 
 const { PerformanceMetrics, performanceMetrics } = require("../electron/performance-metrics");
 const workspace = require("../electron/workspace");
+const { probeEventLoop } = require("./event-loop-probe");
 
 function readOption(name, fallback) {
   const index = process.argv.indexOf(`--${name}`);
@@ -61,22 +60,6 @@ function buildTasks(projectIndex, taskCount) {
     });
   }
   return tasks;
-}
-
-async function probeEventLoop(metrics, name, operation) {
-  const startedAt = performance.now();
-  let timerDelayMs = 0;
-  const timer = new Promise((resolve) => {
-    setTimeout(() => {
-      timerDelayMs = performance.now() - startedAt;
-      resolve();
-    }, 0);
-  });
-
-  const result = await operation();
-  await timer;
-  metrics.record(`eventLoop.${name}`, timerDelayMs);
-  return result;
 }
 
 async function createFixture(fixtureDir, projectCount, taskCount) {
@@ -166,7 +149,7 @@ async function main() {
     process.stdout.write(
       `${JSON.stringify(
         {
-          schemaVersion: 1,
+          schemaVersion: 2,
           fixture: {
             storage: requestedRoot ? "custom-root" : "os-temp",
             iterations,
