@@ -78,6 +78,17 @@ async function measureSample() {
       state: "visible",
     });
     const detailInteractiveMs = roundTiming(performance.now() - detailStartedAt);
+    const detailRenderer = await detailWindow.evaluate(() => {
+      const navigation = performance.getEntriesByType("navigation")[0];
+      return {
+        domContentLoadedMs: navigation?.domContentLoadedEventEnd ?? null,
+        loadMs: navigation?.loadEventEnd ?? null,
+        firstContentfulPaintMs:
+          performance.getEntriesByName("first-contentful-paint")[0]?.startTime ?? null,
+        rendererToDetailReadyMs:
+          performance.getEntriesByName("renderer-to-detail-ready")[0]?.duration ?? null,
+      };
+    });
     await detailWindow.close();
 
     async function measureImageOpen() {
@@ -100,6 +111,9 @@ async function measureSample() {
       renderer: Object.fromEntries(
         Object.entries(renderer).map(([key, value]) => [key, roundTiming(value)])
       ),
+      detailRenderer: Object.fromEntries(
+        Object.entries(detailRenderer).map(([key, value]) => [key, roundTiming(value)])
+      ),
     };
   } finally {
     if (electronApp) await electronApp.close();
@@ -120,6 +134,7 @@ const timingKeys = [
   "imageReopenMs",
 ];
 const rendererKeys = Object.keys(samples[0]?.renderer ?? {});
+const detailRendererKeys = Object.keys(samples[0]?.detailRenderer ?? {});
 const result = {
   sampleCount,
   median: {
@@ -128,6 +143,12 @@ const result = {
     ),
     renderer: Object.fromEntries(
       rendererKeys.map((key) => [key, median(samples.map((sample) => sample.renderer[key]))])
+    ),
+    detailRenderer: Object.fromEntries(
+      detailRendererKeys.map((key) => [
+        key,
+        median(samples.map((sample) => sample.detailRenderer[key])),
+      ])
     ),
   },
   samples,

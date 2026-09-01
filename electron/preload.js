@@ -26,6 +26,7 @@ const electronAPI = {
   openImageWindow: (src) => {
     ipcRenderer.send("open-image-window", src);
   },
+  openImageExternal: (src) => ipcRenderer.invoke("open-image-external", src),
   // タスク詳細ウィンドウを開く
   openTaskDetailWindow: (detailData) => {
     ipcRenderer.send("open-task-detail-window", detailData);
@@ -80,6 +81,11 @@ const electronAPI = {
       callback(payload);
     });
   },
+  onWorkspaceProjectDeleted: (callback) => {
+    ipcRenderer.on("workspace-project-deleted", (_event, payload) => {
+      callback(payload);
+    });
+  },
   onWorkspaceConflict: (callback) => {
     ipcRenderer.on("workspace-conflict", (event, payload) => {
       callback(payload);
@@ -122,7 +128,8 @@ const electronAPI = {
   wsListProjects: (workspacePath) => ipcRenderer.invoke("ws:list-projects", { workspacePath }),
   wsSetProjectOrder: (workspacePath, projects) =>
     ipcRenderer.invoke("ws:set-project-order", { workspacePath, projects }),
-  wsReadProject: (projectDir) => ipcRenderer.invoke("ws:read-project", { projectDir }),
+  wsReadProject: (projectDir, options) =>
+    ipcRenderer.invoke("ws:read-project", { projectDir, ...options }),
   wsReadTaskMemos: (projectDir, taskId) =>
     ipcRenderer.invoke("ws:read-task-memos", { projectDir, taskId }),
   wsReadProjectMemos: (projectDir) => ipcRenderer.invoke("ws:read-project-memos", { projectDir }),

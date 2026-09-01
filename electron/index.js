@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, shell, dialog } = require("electron");
 const { spawn } = require("child_process");
 const fs = require("fs");
 const path = require("path");
+const { fileURLToPath } = require("url");
 const { LowSync, JSONFileSync } = require("@commonify/lowdb");
 const log = require("electron-log/main");
 const workspace = require("./workspace");
@@ -326,6 +327,14 @@ app.on("ready", () => {
     });
   }
 
+  function sendWorkspaceProjectDeleted(projectDir) {
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed()) {
+        win.webContents.send("workspace-project-deleted", { projectDir });
+      }
+    });
+  }
+
   function sendWorkspaceConflict(payload) {
     BrowserWindow.getAllWindows().forEach((win) => {
       if (!win.isDestroyed()) {
@@ -496,11 +505,13 @@ app.on("ready", () => {
     return nextCached;
   }
 
-  async function readWorkspaceProjectForRendererAsync(projectDir) {
+  async function readWorkspaceProjectForRendererAsync(projectDir, { preferCache = false } = {}) {
     const cached = wsCache.get(projectDir);
     if (
       cached &&
-      (optimisticWorkspaceProjectDirs.has(projectDir) || workspaceWriteQueue.hasPending(projectDir))
+      (preferCache ||
+        optimisticWorkspaceProjectDirs.has(projectDir) ||
+        workspaceWriteQueue.hasPending(projectDir))
     ) {
       return cached;
     }
@@ -867,6 +878,45 @@ app.on("ready", () => {
     }
   });
 
+  // Open rendered Markdown images with the operating system's default app.
+  // Workspace images arrive as file:// URLs; only files inside a registered
+  // workspace are accepted so arbitrary renderer-provided paths cannot escape
+  // the user's configured data roots. HTTP(S) images are delegated to the
+  // default browser. Legacy data URLs keep using the internal viewer fallback.
+  ipcMain.handle("open-image-external", async (_event, src) => {
+    if (!src || typeof src !== "string") {
+      return { success: false, fallback: true, error: "No image source was provided" };
+    }
+
+    try {
+      const url = new URL(src);
+      if (url.protocol === "http:" || url.protocol === "https:") {
+        await shell.openExternal(src);
+        return { success: true };
+      }
+
+      if (url.protocol !== "file:") {
+        return { success: false, fallback: true, error: "Unsupported image source" };
+      }
+
+      const filePath = fileURLToPath(url);
+      if (!isInsideKnownWorkspace(filePath)) {
+        return { success: false, error: "Image is outside a registered workspace" };
+      }
+
+      const stats = await fs.promises.stat(filePath);
+      if (!stats.isFile()) {
+        return { success: false, error: "Image file was not found" };
+      }
+
+      const openError = await shell.openPath(filePath);
+      return openError ? { success: false, error: openError } : { success: true };
+    } catch (err) {
+      log.error("Failed to open image externally:", err);
+      return { success: false, error: err.message };
+    }
+  });
+
   // Memo image enlarged view: open the image in a dedicated BrowserWindow.
   // We load the image URL directly (no HTML wrapper) because a wrapping
   // data:text/html page lives in a different origin and Chromium blocks
@@ -1054,6 +1104,7 @@ app.on("ready", () => {
   // 繧ｿ繧ｹ繧ｯ隧ｳ邏ｰ逕ｨ縺ｮ繧ｦ繧｣繝ｳ繝峨え繧剃ｽ懈・縺吶ｋ髢｢謨ｰ
   function createTaskDetailWindow(detailData) {
     try {
+      const detailStartedAt = Date.now();
       const safeDetailData = {
         projectId: detailData?.projectId ? String(detailData.projectId) : "",
         taskId: detailData?.taskId ? String(detailData.taskId) : "",
@@ -1095,12 +1146,18 @@ app.on("ready", () => {
       });
 
       attachZoomControls(win);
+      win.webContents.once("dom-ready", () => {
+        log.info(`[perf] Task detail DOM ready: ${Date.now() - detailStartedAt}ms`);
+      });
+      win.webContents.once("did-finish-load", () => {
+        log.info(`[perf] Task detail load finished: ${Date.now() - detailStartedAt}ms`);
+      });
 
       if (process.env.VITE_DEV === "true") {
         const params = new URLSearchParams(safeDetailData);
-        win.loadURL(`http://localhost:5173/?${params.toString()}#task-detail-window`);
+        win.loadURL(`http://localhost:5173/detail.html?${params.toString()}#task-detail-window`);
       } else {
-        win.loadFile(path.join(__dirname, "../renderer/index.html"), {
+        win.loadFile(path.join(__dirname, "../renderer/detail.html"), {
           hash: "#task-detail-window",
           query: {
             projectId: safeDetailData.projectId,
@@ -1127,7 +1184,9 @@ app.on("ready", () => {
         if (win.isDestroyed()) return;
         win.show();
         win.focus();
-        log.info(`Task detail window shown for task: ${safeDetailData.taskId}`);
+        log.info(
+          `[perf] Task detail shown: ${Date.now() - detailStartedAt}ms (${safeDetailData.taskId})`
+        );
       });
 
       log.info(`Task detail window created for task: ${safeDetailData.taskId}`);
@@ -1336,9 +1395,9 @@ app.on("ready", () => {
     }
   });
 
-  ipcMain.handle("ws:read-project", async (event, { projectDir }) => {
+  ipcMain.handle("ws:read-project", async (event, { projectDir, preferCache = false }) => {
     try {
-      const { tasks } = await readWorkspaceProjectForRendererAsync(projectDir);
+      const { tasks } = await readWorkspaceProjectForRendererAsync(projectDir, { preferCache });
       // Map 竊・plain object for IPC serialisation
       return { tasks: Object.fromEntries(tasks) };
     } catch (err) {
@@ -1706,6 +1765,9 @@ app.on("ready", () => {
       const result = await workspace.deleteProjectAsync(projectDir);
       wsCache.delete(projectDir);
       optimisticWorkspaceProjectDirs.delete(projectDir);
+      if (result?.success) {
+        sendWorkspaceProjectDeleted(projectDir);
+      }
       return result;
     } catch (err) {
       log.error("ws:delete-project error:", err.message);

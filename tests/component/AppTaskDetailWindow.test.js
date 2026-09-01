@@ -46,6 +46,7 @@ function makeElectronAPI(overrides = {}) {
     onSaveError: vi.fn(),
     onWorkspaceSaveStatus: vi.fn(),
     onWorkspaceProjectUpdated: vi.fn(),
+    onWorkspaceProjectDeleted: vi.fn(),
     onWorkspaceConflict: vi.fn(),
     onWorkspaceNotice: vi.fn(),
     onWorkspaceFlushStart: vi.fn(),
@@ -82,13 +83,13 @@ async function importAppAtTaskDetailUrl(api = makeElectronAPI()) {
   Object.defineProperty(window, "electronAPI", { configurable: true, value: api });
 
   const [{ default: App }, stores] = await Promise.all([
-    import("../../src/App.svelte"),
+    import("../../src/TaskDetailApp.svelte"),
     import("@stores"),
   ]);
   return { App, stores, api };
 }
 
-describe("App - task detail window", () => {
+describe("standalone task detail window", () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
@@ -111,7 +112,12 @@ describe("App - task detail window", () => {
     expect(taskDetail).toHaveAttribute("data-title-override", "Actual Project / Opened Task");
     expect(taskDetail).toHaveAttribute("data-show-open-window-action", "false");
     expect(api.wsReadProject).toHaveBeenCalledTimes(1);
-    expect(api.wsReadProject).toHaveBeenCalledWith("C:/workspace/alpha");
+    expect(api.wsReadProject).toHaveBeenCalledWith("C:/workspace/alpha", {
+      preferCache: true,
+    });
+    expect(api.getProjectIDs).not.toHaveBeenCalled();
+    expect(api.wsGetWorkspaces).not.toHaveBeenCalled();
+    expect(api.wsListProjects).not.toHaveBeenCalled();
     expect(get(stores.selected_id)).toBe("actual-root");
     expect(get(stores.table_selected_id)).toBe("task-1");
     expect(get(stores.tree_data).data.id).toBe("actual-root");
