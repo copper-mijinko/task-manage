@@ -1,3 +1,5 @@
+# Repository Playwright MCP for the real Agent UI Electron renderer.
+# Start `npm run dev:agent`; do not replace this server with Codex Browser.
 [mcp_servers.task_manage_ui]
 command = "node"
 args = ["node_modules/@playwright/mcp/cli.js", "--cdp-endpoint=http://127.0.0.1:9222"]

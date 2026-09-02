@@ -1,42 +1,47 @@
-# Agent UI Development
+# Agent GUI 開発・検証
 
 → [outline.md](outline.md)
 
-## 目的
+## 目的と境界
 
-Codex DesktopまたはClaudeから、開発中の`task-manage`をインタラクティブに操作し、人間も同じ画面を継続的に確認するための開発モードです。決められたE2Eシナリオを再生する用途ではなく、画面修正と状態確認を短いサイクルで繰り返す用途を想定しています。
-
-通常の開発起動、配布アプリ、GitHub ActionsのE2Eはこのモードを使用しません。
-
-## 確認経路
+この手順は、Codex Desktop または Claude Code が開発中の task-manage を実 Electron 上で対話的に確認するためのものです。通常ブラウザで `http://localhost:5173` を開いても preload bridge と Electron IPC がないため、GUI/runtime 検証にはなりません。
 
 ```text
-ソース変更 ── Vite HMR ──> 実際のElectronウィンドウ <── 人間が目視
-                                      ^
-                                      |
-Codex / Claude ── Playwright MCP ── CDP (127.0.0.1:9222)
+source edit
+  -> dev:agent（Vite + 実 Electron）
+  -> Electron CDP 127.0.0.1:9222
+  -> Playwright MCP
+  -> accessibility/DOM snapshot
+  -> 操作
+  -> snapshot + console 確認
+  -> 必要なら再修正
 ```
 
-| 要素 | 役割 |
-| --- | --- |
-| Electronウィンドウ | 製品と同じrenderer、preload、IPCを実行し、人間が確認する |
-| Vite | rendererの変更をHot Module Replacementで反映する |
-| CDP | 明示的な開発モードに限り、実行中Electronをローカル操作可能にする |
-| Playwright MCP | accessibility snapshot、クリック、入力、console確認、screenshotを行う |
+Codex Browser、Browser skill、Claude の通常 Browser 操作、Chrome、通常の browser tab は、この経路の代替として使用しません。Electron または MCP が利用できない場合もフォールバックせず、`GUI verification: unavailable` として不足条件を報告します。
 
-`http://localhost:5173`を通常のブラウザタブで開くだけでは、Electronのpreload bridgeがありません。静的な見た目の参考にはなりますが、Workspace、添付、詳細ウィンドウなどIPC依存の動作確認には使わないでください。
+この interactive Agent GUI と、Linux/Xvfb を含む自動 Playwright E2E は別の仕組みです。前者は修正中の実機確認、後者は回帰テストであり、相互の代替ではありません。
+
+## 構成
+
+| 構成要素 | 責務 |
+| --- | --- |
+| `npm run dev:agent` | Agent 向けの canonical command。Vite の agent mode と実 Electron を同時に起動する |
+| `npm run dev:web` | 現在は `dev:agent` と同一実装の互換 alias。既存プロセスがあれば再利用できる |
+| `npm run verify:agent-ui` | Vite、CDP、task-manage renderer、Electron identity、preload bridge の準備状態を診断する |
+| Electron CDP | agent mode のときだけ `127.0.0.1:9222` で実 Electron renderer を公開する |
+| Playwright MCP | CDP に接続し、snapshot、操作、console、必要な screenshot を提供する |
 
 ## 初回セットアップ
 
-`.node-version`と`package.json`に指定されたNode.js 22を使用し、依存関係をインストールします。
+`.node-version` と `package.json` に従い、Node.js 22.12 以上かつ major 22 を使います。
 
-```bash
+```text
 npm ci
 ```
 
 ### Codex Desktop
 
-信頼済みプロジェクトの`.codex/config.toml`に次を追加します。新規作成なら[`.codex/config.toml.example`](../.codex/config.toml.example)をコピーできます。既存ファイルには、ほかのローカル設定を残したままこのセクションだけを追加してください。
+リポジトリの `.codex/config.toml.example` に次の設定があります。新規環境では `.codex/config.toml` に取り込み、Codex Desktop を再起動して `task_manage_ui` が利用可能なことを確認します。既存のローカル設定は上書きせず、この section だけを統合します。
 
 ```toml
 [mcp_servers.task_manage_ui]
@@ -45,59 +50,68 @@ args = ["node_modules/@playwright/mcp/cli.js", "--cdp-endpoint=http://127.0.0.1:
 startup_timeout_sec = 20
 ```
 
-Codex Desktopを再起動し、MCP servers画面で`task_manage_ui`が有効なことを確認します。リポジトリ直下の[`AGENTS.md`](../AGENTS.md)に標準手順があるため、以後の新規チャットも同じ手順を自動的に参照できます。
+Codex の共通作業ルールはリポジトリ直下の `AGENTS.md` にあります。MCP がロードされていない場合、通常 Browser では代替せず、設定不足として報告します。
 
 ### Claude Code
 
-リポジトリの[`.mcp.json`](../.mcp.json)に同じ接続を定義済みです。プロジェクト設定を承認し、`task-manage-ui`が有効なことを確認します。
+Claude Code は `CLAUDE.md` から `@AGENTS.md` を読み、Codex と同じ共通ルールを適用します。Playwright MCP は project-local の `.mcp.json` に定義済みで、サーバー名は `task-manage-ui` です。プロジェクト MCP の承認またはクライアント再起動が必要な場合があります。
 
-## 毎回の起動と確認
+## 毎回の起動と診断
 
-リポジトリルートで、作業中ずっと維持するターミナルを起動します。
+既存の Agent UI プロセスが正常なら再利用します。なければリポジトリ root の継続する terminal で起動します。
 
-```bash
-npm run dev:web
+```text
+npm run dev:agent
 ```
 
-Viteが`localhost:5173`、ElectronのCDPが`127.0.0.1:9222`を使用します。別ターミナルまたはagentから、起動完了を最大30秒待って確認します。
+別 terminal から最大 30 秒待って readiness を確認します。
 
-```bash
+```text
 npm run verify:agent-ui -- --wait=30000
 ```
 
-機械可読な確認結果が必要なら次を使用します。
+machine-readable output が必要な Agent は `--json` を加えます。
 
-```bash
+```text
 npm run verify:agent-ui -- --wait=30000 --json
 ```
 
-`5173`を別プロセスが使用している場合、Viteは別ポートへ自動退避せずエラーにします。Electron側の固定URLと食い違ったまま起動することを防ぐためです。終了時は`dev:web`のターミナルで`Ctrl+C`を押します。`npm run dev:agent`は互換エイリアスです。
+成功時の `checks` は、Vite、CDP、Electron user agent、`window.electronAPI` の必須 method を個別に示します。失敗時は `errorCode`、`stage`、`timedOut`、`details` を返します。
 
-## LLMによる低トークン確認
+| 主な `errorCode` | 意味 | 対応 |
+| --- | --- | --- |
+| `NODE_VERSION_UNSUPPORTED` | Node.js の version が対象外 | major 22、minor 12 以上へ切り替える |
+| `MCP_PACKAGE_MISSING` | repository-local Playwright MCP がない | `npm ci` を実行する |
+| `VITE_UNAVAILABLE` | Vite の 5173 endpoint がない | `npm run dev:agent` の出力と port を確認する |
+| `CDP_UNAVAILABLE` | Electron CDP に接続できない | Electron 起動、9222 の競合、agent mode を確認する |
+| `RENDERER_NOT_FOUND` | CDP はあるが task-manage renderer がない | stale process を停止し Agent UI を再起動する |
+| `NOT_ELECTRON` | target が Electron と識別できない | 通常 Browser を使わず Agent UI を再起動する |
+| `PRELOAD_MISSING` | `window.electronAPI` がない、または不完全 | preload/main process の error を確認し再起動する |
+| `RENDERER_NOT_READY` | renderer document が操作可能状態でない | 起動完了を待って再実行する |
 
-1. Playwright MCPのaccessibility/DOM snapshotで現在の要素と状態を読む。
-2. 対象のクリック、入力、キーボード操作を行う。
-3. 再度snapshotとconsole messageを確認する。
-4. レイアウト、色、重なり、切れ、位置ずれなど、視覚判断が必要な場合だけscreenshotを取得する。
-5. 修正後はVite HMRを待ち、同じElectronウィンドウで対象操作だけを再確認する。
+`--wait` の期限まで準備できない場合は、最後の根本原因を保持したまま `timedOut: true` になります。exit code だけでなく diagnostic を読んで対処します。
 
-複数ウィンドウが開いた場合は、Playwright MCPのtab一覧から対象を選びます。OSのファイルピッカー、Explorer、ネイティブメニューなどElectron外部の画面はCDPでは操作できません。人間が操作するか、専用E2Eで代替します。
+## 標準操作フロー
 
-## 新規チャットでの開始文
+1. Playwright MCP の accessibility/DOM snapshot を取得し、task-manage のメイン画面であることを確認する。
+2. Workspace、project、task、detail window など変更対象に対応する操作を行う。
+3. 操作後の snapshot と console message を確認する。
+4. レイアウト、色、位置、切れ、重なりなど視覚判断が必要な場合だけ screenshot を取得する。
+5. source を修正し、renderer の変更は Vite HMR を待つ。preload、main process、startup、window creation の変更では必要に応じて `dev:agent` を再起動する。
+6. 同じ操作を繰り返し、修正結果と新しい重大 error がないことを確認する。
 
-通常は[`AGENTS.md`](../AGENTS.md)が自動的に手順を伝えます。明示したい場合は、次の短い依頼で十分です。
+確認対象は CSS だけではありません。Svelte UI、preload、IPC、workspace 読み書き、task detail window、memo、attachment、image、startup、window creation、cache、filesystem interaction、error handling、体感性能・responsiveness も user operation に影響するため対象です。純粋な document や runtime に影響しない変更は省略でき、その理由を最終回答に記載します。
 
-> `AGENTS.md`のGUI確認手順に従い、`dev:web`を起動または再利用して実Electron画面を操作してください。変更後は人間が見ている同じ画面で動的に確認してください。
+## 最終回答
 
-agentが`verify:agent-ui`の成功を確認できない、または`task_manage_ui` MCPを利用できない場合は、画面状態を推測せず、起動または設定の不足を報告します。
+`AGENTS.md` に従い、毎回次のいずれかを明記します。
 
-## 安全性とCIへの影響
+- `GUI verification: performed` — 実 Electron で行った操作と結果
+- `GUI verification: skipped` — runtime/UI に影響しないため省略した理由
+- `GUI verification: unavailable` — Electron、CDP、preload、MCP の不足条件
 
-- CDPは`dev:web` / `dev:agent`から明示的に起動した場合だけ有効です。
-- 接続先はloopbackの`127.0.0.1`に固定します。
-- 配布済みアプリでは有効化を拒否します。
-- `PLAYWRIGHT_TEST=true`の自動E2E環境では有効化を拒否します。
-- GitHub Actionsは従来どおりbuild、unit/component、Playwright E2Eを実行し、`dev:web`は起動しません。
-- Playwright MCPは開発依存関係なので、配布ファイルには含まれません。
+## Security と production/CI
 
-WindowsとLinuxのどちらでも同じnpmコマンドを使用できます。Linuxで人間がウィンドウを見る場合はデスクトップセッションが必要です。GitHub Actionsのheadlessなxvfb E2Eは、このインタラクティブ開発経路とは独立しています。
+Agent CDP は `TASK_MANAGE_AGENT_UI=true` かつ `VITE_DEV=true` の明示的な開発 mode だけで有効になり、address は loopback の `127.0.0.1` に固定されます。`app.isPackaged` または `PLAYWRIGHT_TEST=true` では無効です。通常利用、production/package build、自動 E2E では有効化しません。
+
+Electron の context isolation、sandbox、navigation 制限など既存 hardening は維持します。Playwright MCP は devDependency のままとし、外部 network へ CDP を公開しません。GitHub Actions には interactive な `dev:agent` / `dev:web` を追加せず、既存の build、unit/component、Playwright E2E を維持します。

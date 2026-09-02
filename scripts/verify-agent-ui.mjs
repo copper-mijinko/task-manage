@@ -3,6 +3,7 @@ import { access } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  AgentUiDiagnosticError,
   assertSupportedNodeVersion,
   parseVerifyOptions,
   waitForAgentUi,
@@ -22,6 +23,34 @@ Options:
 `);
 }
 
+function serializeError(error) {
+  return {
+    error: error?.message ?? "Agent UI readiness probe failed",
+    errorCode: error?.code ?? "UNKNOWN_FAILURE",
+    stage: error?.stage ?? "unknown",
+    timedOut: error?.timedOut === true,
+    details: error?.details ?? {},
+  };
+}
+
+function recoveryHint(error) {
+  switch (error?.code) {
+    case "MCP_PACKAGE_MISSING":
+      return "Install repository dependencies with 'npm ci'.";
+    case "VITE_UNAVAILABLE":
+      return "Start the persistent Agent UI process with 'npm run dev:agent'.";
+    case "CDP_UNAVAILABLE":
+    case "RENDERER_NOT_FOUND":
+      return "Confirm that dev:agent launched Electron with TASK_MANAGE_AGENT_UI=true and CDP port 9222 is free.";
+    case "NOT_ELECTRON":
+    case "PRELOAD_MISSING":
+    case "RENDERER_URL_MISMATCH":
+      return "Stop stale development processes, restart 'npm run dev:agent', and do not substitute a normal browser.";
+    default:
+      return "Review the diagnostic code, restart 'npm run dev:agent' if needed, and retry.";
+  }
+}
+
 try {
   const options = parseVerifyOptions(process.argv.slice(2));
   if (options.help) {
@@ -33,7 +62,12 @@ try {
   try {
     await access(playwrightMcpCli);
   } catch {
-    throw new Error("Playwright MCP is not installed; run 'npm ci' first");
+    throw new AgentUiDiagnosticError(
+      "MCP_PACKAGE_MISSING",
+      "prerequisites",
+      "Playwright MCP is not installed; run 'npm ci' first",
+      { details: { expectedPath: playwrightMcpCli } }
+    );
   }
 
   const port = parseAgentDebugPort(process.env.TASK_MANAGE_CDP_PORT || DEFAULT_AGENT_DEBUG_PORT);
@@ -44,17 +78,22 @@ try {
   } else {
     process.stdout.write(
       `Agent UI is ready: ${result.renderer.title} (${result.renderer.url}) via ${endpoint}\n` +
-        "This is the real Electron renderer; keep 'npm run dev:web' running while you inspect it.\n"
+        `Electron: ${result.checks.electron.userAgent}\n` +
+        `Preload: ${result.checks.preload.bridge} (${result.checks.preload.requiredMethods.join(", ")})\n` +
+        "Keep 'npm run dev:agent' running and inspect this renderer only through the configured Playwright MCP.\n"
     );
   }
 } catch (error) {
   const jsonRequested = process.argv.includes("--json");
   if (jsonRequested) {
-    process.stdout.write(`${JSON.stringify({ ready: false, error: error.message })}\n`);
+    process.stdout.write(`${JSON.stringify({ ready: false, ...serializeError(error) })}\n`);
   } else {
+    const diagnostic = serializeError(error);
     process.stderr.write(
-      `Agent UI is not ready. Start it with 'npm run dev:web', then retry with ` +
-        `'npm run verify:agent-ui -- --wait=30000'.\n${error.message}\n`
+      `Agent UI is not ready [${diagnostic.errorCode}] at ${diagnostic.stage}.\n` +
+        `${diagnostic.error}${diagnostic.timedOut ? " (wait timed out)" : ""}\n` +
+        `${recoveryHint(error)}\n` +
+        "Retry with 'npm run verify:agent-ui -- --wait=30000'.\n"
     );
   }
   process.exitCode = 1;
