@@ -1,27 +1,52 @@
-# Task Manage: agent GUI verification
+# Task Manage agent GUI verification
 
-Apply this workflow whenever a task changes or evaluates the GUI. It is the repository's standard interactive verification path for Codex and Claude.
+This file is the shared interactive GUI/runtime verification policy for Codex Desktop and Claude Code. Apply it in every new agent session in this repository.
 
-## Start and verify the shared GUI
+## Verification boundary
 
-1. Use Node.js 22.12 or newer within major version 22 and install dependencies with `npm ci` when needed.
-2. From the repository root, start `npm run dev:web` in a persistent terminal. Keep that process running while editing.
-3. Wait until the real Electron renderer is available:
+Use the repository's real Electron `BrowserWindow` for any change that can affect user-visible behavior or the Electron runtime. This includes Svelte UI, preload, Electron IPC, workspace load/save, task detail windows, memos, attachments, images, startup, window creation, caches, filesystem interaction, error handling, and user-visible performance or responsiveness.
 
-   ```text
-   npm run verify:agent-ui -- --wait=30000
-   ```
+Pure documentation, comments, or other changes that cannot affect runtime behavior may skip Electron verification. Explain that decision in the final response.
 
-4. Connect with the Playwright MCP server named `task_manage_ui` in Codex or `task-manage-ui` in Claude. It attaches to the running Electron app through CDP at `http://127.0.0.1:9222`.
-5. Inspect the accessibility/DOM snapshot first, perform the relevant clicks and keyboard input, then inspect the resulting state and console messages. Take screenshots when layout, spacing, color, clipping, or alignment needs visual judgment.
-6. After each source edit, let Vite HMR update the same Electron window and repeat the focused interaction. The human can watch that window throughout the work.
+For task-manage GUI/runtime verification, never use Codex Browser, a Browser skill, Claude's normal browser controls, Chrome, a normal browser tab, or a direct visit to `http://localhost:5173`. Do not use any of them as a fallback. A normal browser has no Electron preload bridge or IPC and is not evidence that the application works. The real Electron renderer may itself load the Vite URL; the required distinction is that Playwright connects to that renderer through Electron CDP.
 
-Do not treat a normal browser tab opened directly at `http://localhost:5173` as equivalent verification. It does not have Electron's preload bridge and cannot exercise the real IPC-backed behavior. Automated Playwright E2E remains a separate regression check; it does not replace this interactive workflow.
+## Required interactive workflow
 
-If the MCP server is unavailable in a new chat, do not guess about the UI. Follow `docs/agent-ui-development.md` to install the repository-local MCP configuration, restart the agent client, and run the readiness command again.
+1. Read this file (and `CLAUDE.md` in Claude Code) before acting.
+2. Reuse an existing healthy Agent UI process when possible. Otherwise, from the repository root, start the canonical persistent process with `npm run dev:agent`. `npm run dev:web` is a compatibility alias with the same implementation and may be reused when it is already running.
+3. Confirm readiness with `npm run verify:agent-ui -- --wait=30000`. Use `--json` when machine-readable diagnostics are useful.
+4. Connect only through the repository Playwright MCP to Electron CDP at `http://127.0.0.1:9222`:
+   - Codex server: `task_manage_ui`
+   - Claude server: `task-manage-ui`
+
+5. Take an accessibility/DOM snapshot and confirm that the target is task-manage.
+6. Perform the relevant user operation.
+7. Take another snapshot and inspect console messages for new significant errors.
+8. Use a screenshot only when judging layout, color, position, clipping, overlap, or another visual property that snapshots cannot establish.
+9. After a source edit, use Vite HMR when sufficient; restart the Agent UI process when preload, main-process, startup, or window-creation behavior requires it. Repeat the same focused operation.
+
+Automated Playwright E2E is regression automation, not a substitute for this interactive Agent GUI workflow.
+
+## Unavailable verification
+
+If Electron cannot start, readiness verification fails, CDP is unavailable, the preload bridge is missing, or the configured Playwright MCP cannot be used:
+
+- Do not open or use a normal browser instead.
+- Do not infer GUI state from source code or screenshots from another runtime.
+- Report `GUI verification: unavailable` and name the missing condition and relevant diagnostic code/output.
+- State the next concrete setup or startup action needed. Do not claim that GUI verification was performed.
+
+## Final response requirement
+
+Every final response must include exactly one of these status lines:
+
+- `GUI verification: performed` — briefly list the real Electron operations and results.
+- `GUI verification: skipped` — state why the changes cannot affect GUI/runtime behavior.
+- `GUI verification: unavailable` — state which Electron, CDP, preload, or MCP condition was unavailable.
 
 ## Safety and CI boundary
 
-- Agent UI mode is development-only and binds CDP to loopback.
-- Never enable it in packaged builds or automated E2E.
-- Keep CI on the existing build, unit/component, and Playwright E2E commands. Do not add `dev:web` to GitHub Actions.
+- Agent CDP is development-only, binds to loopback `127.0.0.1`, and must never be exposed to an external network.
+- Keep Agent CDP disabled for packaged/production builds, normal application use, and runs with `PLAYWRIGHT_TEST=true`.
+- Do not weaken Electron security hardening or move Playwright MCP into production dependencies.
+- Keep existing Linux/Xvfb Playwright E2E independent. Do not add the interactive `dev:agent` or `dev:web` process to CI.
