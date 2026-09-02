@@ -1,0 +1,4 @@
+[mcp_servers.task_manage_ui]
+command = "node"
+args = ["node_modules/@playwright/mcp/cli.js", "--cdp-endpoint=http://127.0.0.1:9222"]
+startup_timeout_sec = 20
