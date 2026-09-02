@@ -39,6 +39,10 @@ export default defineConfig(({ mode }) => ({
   plugins: [svelte(), electronDevPlugin({ agentUi: mode === "agent" })],
   base: "./",
   publicDir: "public",
+  server: {
+    port: 5173,
+    strictPort: true,
+  },
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
     __APP_NAME__: JSON.stringify(pkg.name),

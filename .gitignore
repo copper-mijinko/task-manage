@@ -133,7 +133,8 @@ out
 .pnp.*
 
 # Local workspace artifacts
-.codex
+.codex/*
+!.codex/config.toml.example
 dist/
 renderer/
 public/build/
