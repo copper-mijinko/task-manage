@@ -159,7 +159,8 @@ test("tag input adds a chip and the tag persists after app restart", async () =>
     // Dispatch click directly on the row element to avoid child stopPropagation
     await window1.locator(`#${WS_TASK_ID}`).dispatchEvent("click");
 
-    const tagInput = window1.locator(".tag-input");
+    // タスク自身のタグ欄とメモのタグ欄が同居するので、メモ側を明示的に選ぶ。
+    const tagInput = window1.locator('.tag-input[aria-label="メモタグ"]');
     await tagInput.fill("ux");
     await tagInput.press("Enter");
     await expect(window1.locator('[aria-label="Remove tag ux"]')).toBeVisible();
