@@ -397,6 +397,7 @@
   <input
     type="text"
     bind:this={input}
+    aria-label={`${text}のタスク名`}
     value={draftText}
     disabled={!isEditing}
     draggable="true"

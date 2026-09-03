@@ -54,7 +54,7 @@
     {style}
     class="Date"
     class:Inherited={isInherited}
-    {id}
+    id={id || undefined}
     type="date"
     {disabled}
     value={displayDate}

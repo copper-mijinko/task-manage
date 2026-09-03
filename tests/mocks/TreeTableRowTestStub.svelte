@@ -12,12 +12,23 @@
   export let canIndent = false;
   export let canOutdent = false;
   export let canOpenTaskFolder = false;
+  export let isTabStop = false;
+
+  const NAVIGATION_KEYS = new Set([
+    "ArrowUp",
+    "ArrowDown",
+    "ArrowLeft",
+    "ArrowRight",
+    "Home",
+    "End",
+  ]);
 
   const dispatch = createEventDispatcher();
 </script>
 
 <div
   id={row.id}
+  role="row"
   class="TableRow"
   data-testid={"row-" + row.id}
   data-dark={isDark ? "true" : "false"}
@@ -27,6 +38,12 @@
   data-can-indent={canIndent ? "true" : "false"}
   data-can-outdent={canOutdent ? "true" : "false"}
   data-selected={selected ? "true" : "false"}
+  data-tab-stop={isTabStop ? "true" : "false"}
+  tabindex={isTabStop ? 0 : -1}
+  on:keydown={(e) => {
+    if (!NAVIGATION_KEYS.has(e.key) || e.ctrlKey || e.metaKey || e.altKey) return;
+    dispatch("navigate", { id: row.id, key: e.key, shiftKey: e.shiftKey });
+  }}
 >
   <div class="CheckboxCell" style="width: 28px;">
     {#if row.depth > 0}

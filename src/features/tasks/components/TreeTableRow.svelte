@@ -24,6 +24,11 @@
   export let bulkSelectionActive = false;
   export let isAnchor = false;
   export let anyMultiSelected = false;
+  /**
+   * roving tabindex。行は 1 つだけ Tab の停留点にする。全行が停留点だと、
+   * テーブルを通り過ぎるだけで行数ぶん Tab を押すことになる。
+   */
+  export let isTabStop = false;
   export let isDark = false;
   export let canDrop = () => false;
   export let canMoveUp = false;
@@ -105,6 +110,31 @@
   function toggle(e) {
     e.stopPropagation();
     dispatch("toggle", { id });
+  }
+
+  /**
+   * treegrid の矢印キー移動。行の並びや親子関係は TreeTable 側しか持って
+   * いないので、ここでは「どのキーが来たか」だけを伝えて移動は任せる。
+   */
+  const NAVIGATION_KEYS = new Set([
+    "ArrowUp",
+    "ArrowDown",
+    "ArrowLeft",
+    "ArrowRight",
+    "Home",
+    "End",
+  ]);
+
+  function handleKeydown(e) {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      select(e);
+      return;
+    }
+    // 修飾キー付きは既存のショートカット（Ctrl+↑ の移動など）に譲る。
+    if (!NAVIGATION_KEYS.has(e.key) || e.ctrlKey || e.metaKey || e.altKey) return;
+    e.preventDefault();
+    dispatch("navigate", { id, key: e.key, shiftKey: e.shiftKey });
   }
 
   function commitData(key, value) {
@@ -224,18 +254,13 @@
   class:DueSoonRow={rowDueUrgency === "today" || rowDueUrgency === "due-soon"}
   class:ArchivedRow={isArchived}
   use:ripple
-  tabindex="0"
+  tabindex={isTabStop ? 0 : -1}
   draggable="true"
   aria-level={depth + 1}
   aria-selected={selected}
   aria-expanded={hasChildren ? expanded : undefined}
   on:click={select}
-  on:keydown={(e) => {
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      select(e);
-    }
-  }}
+  on:keydown={handleKeydown}
   on:dragstart={dragStart}
   on:dragend={dragEnd}
   on:dragover={dragOver}
@@ -374,7 +399,6 @@
       {:else if header.name == "start date"}
         <DateInput
           is_dark={isDark}
-          id="start-date"
           backgroundColor={"var(--backgroundColor)"}
           value={data[header.name]}
           ariaLabel={`${data.name}の開始日`}
@@ -387,7 +411,6 @@
       {:else if header.name == "due date"}
         <DateInput
           is_dark={isDark}
-          id="due-date"
           backgroundColor={"var(--backgroundColor)"}
           value={data[header.name]}
           ariaLabel={`${data.name}の期限日`}
