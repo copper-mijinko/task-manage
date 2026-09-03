@@ -402,7 +402,9 @@
               fill={isKnowledge ? "currentColor" : "none"}
             />
           </svg>
-          <span>{isKnowledge ? "ナレッジ" : "作業メモ"}</span>
+          {#if isKnowledge}
+            <span>ナレッジ</span>
+          {/if}
         </button>
       </div>
       <div class="memo-format-control">
@@ -700,14 +702,17 @@
     display: inline-flex;
     align-items: center;
     flex: 0 0 auto;
-    margin-left: auto;
+    margin-left: var(--sp2);
   }
-  /* 作業メモが既定なので、既定側は控えめに。昇華した状態だけを目立たせる。 */
+  /* 作業メモ（既定）はアイコンだけ、ナレッジはラベル付き。
+     メモタブの帯は元から詰まっていて、常時ラベルを出すとタブ名を押し出して
+     しまう。既定の状態を静かにして、昇華したものだけを目立たせる。
+     意味はツールチップと aria-label が常に持つ。 */
   .KindToggle {
     display: inline-flex;
     align-items: center;
     gap: var(--sp1);
-    padding: 2px var(--sp2);
+    padding: 2px var(--sp1);
     border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 28%, transparent);
     border-radius: var(--shape-pill);
     background: transparent;
@@ -730,6 +735,7 @@
     cursor: not-allowed;
   }
   .KindToggle.Knowledge {
+    padding: 2px var(--sp2);
     border-color: var(--theme-color-Primary-text);
     background: color-mix(in srgb, var(--theme-color-Primary-main) 14%, transparent);
     color: var(--theme-color-Primary-text);
