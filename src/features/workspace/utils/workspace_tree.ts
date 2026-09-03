@@ -1,4 +1,5 @@
-﻿import type { WorkspaceTask, WorkspaceTaskStatus } from "@app-types/workspace";
+﻿import { normalizeTagList } from "@lib/utils/tags";
+import type { WorkspaceTask, WorkspaceTaskStatus } from "@app-types/workspace";
 import { normalizeMemoFormat, toMarkdown } from "@features/memos/utils/memo_utils";
 import type { ProjectData, TreeData } from "@features/tasks/utils/tree_control";
 
@@ -48,7 +49,15 @@ export function workspaceToProjectData(
   function buildNode(id: string): TreeData {
     visited.add(id);
     const task = tasks[id];
-    const childIds = (childrenMap.get(id) ?? []).filter((cid) => !visited.has(cid));
+    // visited は「子を組み立てる直前」に見る。先に配列へ絞り込んでしまうと、
+    // 別の親の下でそのタスクが展開された後でもこちらのリストに残り続け、
+    // 同じ id のノードが 2 箇所に現れて Svelte の keyed each が壊れる
+    // （each_key_duplicate → ツリーが描画できず「読み込み中...」のまま）。
+    const children: TreeData[] = [];
+    for (const cid of childrenMap.get(id) ?? []) {
+      if (visited.has(cid)) continue;
+      children.push(buildNode(cid));
+    }
     const node: TreeData = {
       id,
       data: {
@@ -65,9 +74,10 @@ export function workspaceToProjectData(
           order: m.order,
           bodyLoaded: m.bodyLoaded,
         })),
+        tags: normalizeTagList(task.tags),
         attachments: task.attachments ?? [],
       },
-      children: childIds.map((cid) => buildNode(cid)),
+      children,
     };
     if (task.archived) {
       node.archived = true;
@@ -131,6 +141,7 @@ export function projectDataToWorkspaceTasks(
           bodyLoaded: m.bodyLoaded,
         };
       }),
+      tags: normalizeTagList(node.data.tags),
       attachments: Array.isArray(node.data.attachments)
         ? node.data.attachments
         : (existing?.attachments ?? []),

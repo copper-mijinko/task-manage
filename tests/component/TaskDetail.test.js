@@ -639,7 +639,8 @@ describe("TaskDetail", () => {
     table_selected_id.set("task-2");
     render(TaskDetail);
 
-    const tagInput = document.querySelector(".tag-input");
+    // タスク自身のタグ欄とメモのタグ欄が同居するので、メモ側を明示的に選ぶ。
+    const tagInput = document.querySelector('.tag-input[aria-label="メモタグ"]');
     await fireEvent.input(tagInput, { target: { value: "Design " } });
     await fireEvent.keyDown(tagInput, { key: "Enter" });
     await tick();

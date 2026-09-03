@@ -27,6 +27,8 @@
   import StatusSelect from "@features/tasks/components/StatusSelect.svelte";
   import TaskAttachments from "@features/tasks/components/TaskAttachments.svelte";
   import DateInput from "@lib/primitives/DateInput.svelte";
+  import TagField from "@lib/primitives/TagField.svelte";
+  import { normalizeTagList } from "@lib/utils/tags";
   import * as platform from "@lib/ipc/platform";
   import { projectDataToWorkspaceTasks } from "@features/workspace/utils/workspace_tree";
   import {
@@ -227,6 +229,11 @@
     unsubscribeCancelPending();
   });
   $: allTags = [...$tag_index.keys()].sort();
+  $: taskTags = normalizeTagList(node?.data?.tags);
+
+  const saveTaskTags = (nextTags) => {
+    changeTaskField("tags", normalizeTagList(nextTags));
+  };
 
   const addMemo = (newMemoTitle) => {
     if (newMemoTitle) {
@@ -888,6 +895,18 @@
                 >{memo.length}</output
               >
             </div>
+
+            <div class="detail-field detail-field-wide">
+              <span class="detail-label" id="lbl-task-tags">タグ</span>
+              <TagField
+                tags={taskTags}
+                suggestions={allTags}
+                disabled={isArchived}
+                showLabels={false}
+                ariaLabel="タスクのタグ"
+                on:change={(event) => saveTaskTags(event.detail.tags)}
+              />
+            </div>
           </div>
 
           <TaskAttachments
@@ -1165,6 +1184,11 @@
     gap: 0.1rem;
     min-width: 0;
     color: var(--theme-color-Sub-main);
+  }
+  /* タグは値が可変長なので、2 カラムのフィールドグリッドを跨いで
+     1 行まるごと使う。 */
+  .detail-field-wide {
+    grid-column: 1 / -1;
   }
   .detail-label {
     flex: 0 0 auto;

@@ -15,6 +15,7 @@
     ganttScrollTop,
   } from "@stores";
   import { workspace_store } from "@features/workspace/stores/workspace";
+  import { DEFAULT_COLUMN_SETTINGS } from "@features/tasks/stores/column_settings";
   import {
     flattenVisibleTree,
     buildInheritedDueDateMap,
@@ -86,6 +87,7 @@
     { name: "due date", default_ratio: 3 },
     { name: "memo", default_ratio: 1.5 },
     { name: "attachments", default_ratio: 1.5 },
+    { name: "tags", default_ratio: 3 },
   ];
 
   $: rows = $filtered_data
@@ -119,10 +121,16 @@
       }
     }
 
-    // Include any headers not covered by settings
+    // Include any headers not covered by settings. Built-in columns that ship
+    // hidden by default (tags) are excluded: a settings list saved before that
+    // column existed means "the user never chose it", not "show it".
     const settingIds = new Set(settings.map((s) => s.id));
+    const defaultHidden = new Set(
+      DEFAULT_COLUMN_SETTINGS.filter((column) => !column.visible).map((column) => column.id)
+    );
     for (const header of availableHeaders) {
-      if (!settingIds.has(header.name)) result.push(header);
+      if (settingIds.has(header.name) || defaultHidden.has(header.name)) continue;
+      result.push(header);
     }
 
     return result;

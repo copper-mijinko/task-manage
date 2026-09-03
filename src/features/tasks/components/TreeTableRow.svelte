@@ -14,6 +14,8 @@
   import TaskName from "@features/tasks/components/TaskName.svelte";
   import StatusSelect from "@features/tasks/components/StatusSelect.svelte";
   import DateInput from "@lib/primitives/DateInput.svelte";
+  import { active_tag } from "@features/memos/stores/tags";
+  import { normalizeTagList } from "@lib/utils/tags";
 
   export let row;
   export let headers = [];
@@ -77,6 +79,7 @@
   }
 
   $: dueDateUrgency = getDueDateUrgency(data["due date"] || inheritedDueDate, data["status"]);
+  $: rowTags = normalizeTagList(data.tags);
 
   function displayCellValue(headerName) {
     const value = data[headerName];
@@ -273,7 +276,7 @@
     {/if}
   </div>
   {#each headers as header, i}
-    <div class:TableData={true} role="gridcell" style:z-index={i + 100}>
+    <div class:TableData={true} data-column={header.name} role="gridcell" style:z-index={i + 100}>
       {#if header.name == "name"}
         {#each Array(depth) as _}
           <div class:TreeLine={true} style="flex-shrink: 0"></div>
@@ -398,6 +401,24 @@
             commitData("due date", e.target.value);
           }}
         />
+      {:else if header.name == "tags"}
+        {#if rowTags.length > 0}
+          <span class="TagCellChips">
+            {#each rowTags as tag (tag)}
+              <button
+                type="button"
+                class="TagChip"
+                class:Active={$active_tag === tag}
+                title={`タグ ${tag} で絞り込む`}
+                aria-pressed={$active_tag === tag}
+                aria-label={`タグ ${tag} で絞り込む`}
+                on:click|stopPropagation={() => ($active_tag = $active_tag === tag ? null : tag)}
+              >
+                {tag}
+              </button>
+            {/each}
+          </span>
+        {/if}
       {:else}
         <span class:TextOverFlow={true}>{displayCellValue(header.name)}</span>
       {/if}
@@ -607,13 +628,65 @@
     position: relative;
     box-sizing: border-box;
     height: 100%;
-    min-width: 8rem;
+    min-width: var(--col-min-default);
     background-color: var(--backgroundColor);
     padding: var(--sp1) var(--sp2);
     align-items: center;
     color: var(--theme-color-Sub-main);
     font-size: var(--font-body-md);
     border-right: 1px solid var(--theme-color-Main-dark);
+  }
+  .TableData[data-column="name"] {
+    min-width: var(--col-min-name);
+  }
+  .TableData[data-column="status"] {
+    min-width: var(--col-min-status);
+  }
+  .TableData[data-column="start date"],
+  .TableData[data-column="due date"] {
+    min-width: var(--col-min-date);
+  }
+  .TableData[data-column="memo"],
+  .TableData[data-column="attachments"] {
+    min-width: var(--col-min-count);
+  }
+  .TableData[data-column="tags"] {
+    min-width: var(--col-min-tags);
+  }
+  /* タグセルは行内で 1 行に収める。溢れた分は横スクロールではなく
+     単純に切り落とし、詳細ペインで全部見てもらう。 */
+  .TagCellChips {
+    display: flex;
+    align-items: center;
+    gap: var(--sp1);
+    min-width: 0;
+    overflow: hidden;
+  }
+  .TagChip {
+    max-width: 8rem;
+    height: 1.25rem;
+    padding: 0 var(--sp2);
+    border: 1px solid color-mix(in srgb, var(--theme-color-Primary-main) 55%, transparent);
+    border-radius: var(--shape-pill);
+    background-color: color-mix(in srgb, var(--theme-color-Primary-main) 14%, transparent);
+    color: var(--theme-color-Sub-main);
+    font-size: var(--font-label-sm);
+    font-weight: 500;
+    line-height: 1.25rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+    flex: 0 1 auto;
+  }
+  .TagChip:hover {
+    border-color: var(--theme-color-Primary-main);
+    background-color: color-mix(in srgb, var(--theme-color-Primary-main) 26%, transparent);
+  }
+  .TagChip.Active {
+    border-color: var(--theme-color-Primary-main);
+    background-color: var(--theme-color-Primary-main);
+    color: var(--theme-color-Main-main);
   }
   .TableData:last-child {
     border-right: none;

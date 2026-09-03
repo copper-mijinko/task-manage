@@ -4,7 +4,7 @@ import { selected_type, show_archived } from "@stores/ui";
 import type { TreeData } from "@features/tasks/utils/tree_control";
 import type { SelectedType } from "@app-types/app";
 
-/** tag name (lowercase) → set of task node IDs that have a memo with this tag */
+/** tag name (lowercase) → set of task node IDs tagged with it (task tag or memo tag) */
 export type TagIndex = Map<string, Set<string>>;
 export type MemoTagScope = "db" | "workspace" | "none";
 
@@ -27,12 +27,17 @@ function rebuildTagIndex() {
       const archivedHere = insideArchived || !!node.archived;
       // archived (および archived 配下) は show_archived = OFF のとき集計から外す。
       if (archivedHere && !includeArchived) continue;
+      const addTag = (tag: string) => {
+        const normalized = tag.toLowerCase();
+        if (!normalized) return;
+        if (!index.has(normalized)) index.set(normalized, new Set());
+        index.get(normalized)!.add(node.id);
+      };
+      // タスク自身のタグとメモのタグを 1 つの索引にまとめる。サイドバーから
+      // タグを選んだときに「そのタグが付いたタスク」を漏れなく絞り込める。
+      for (const tag of (node.data.tags as string[]) ?? []) addTag(tag);
       for (const memo of node.data.memo ?? []) {
-        for (const tag of (memo.tags as string[]) ?? []) {
-          const normalized = tag.toLowerCase();
-          if (!index.has(normalized)) index.set(normalized, new Set());
-          index.get(normalized)!.add(node.id);
-        }
+        for (const tag of (memo.tags as string[]) ?? []) addTag(tag);
       }
       walk(node.children ?? [], archivedHere);
     }
