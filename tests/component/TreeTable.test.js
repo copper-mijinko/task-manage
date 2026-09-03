@@ -410,4 +410,97 @@ describe("TreeTable", () => {
 
     await fireEvent.mouseUp(document);
   });
+
+  describe("treegrid keyboard navigation", () => {
+    // ツリーの行は role="treegrid" を名乗るのに矢印キーが一切効かず、
+    // ツリーを辿るには行内のコントロールを Tab で全部踏むしかなかった。
+    const rowOf = (id) => screen.getByTestId(`row-${id}`);
+
+    test("moves down and up through the visible rows", async () => {
+      render(TreeTable);
+      await tick();
+
+      await fireEvent.keyDown(rowOf("project-1"), { key: "ArrowDown" });
+      await tick();
+      expect(get(table_selected_id)).toBe("task-1");
+
+      await fireEvent.keyDown(rowOf("task-1"), { key: "ArrowDown" });
+      await tick();
+      expect(get(table_selected_id)).toBe("task-1-1");
+
+      await fireEvent.keyDown(rowOf("task-1-1"), { key: "ArrowUp" });
+      await tick();
+      expect(get(table_selected_id)).toBe("task-1");
+    });
+
+    test("jumps to the first and last visible row with Home and End", async () => {
+      render(TreeTable);
+      await tick();
+
+      await fireEvent.keyDown(rowOf("project-1"), { key: "End" });
+      await tick();
+      expect(get(table_selected_id)).toBe("task-1-1");
+
+      await fireEvent.keyDown(rowOf("task-1-1"), { key: "Home" });
+      await tick();
+      expect(get(table_selected_id)).toBe("project-1");
+    });
+
+    test("ArrowLeft collapses an expanded row, then moves to the parent", async () => {
+      render(TreeTable);
+      await tick();
+
+      await fireEvent.keyDown(rowOf("task-1"), { key: "ArrowLeft" });
+      await tick();
+      expect(get(closed_node_ids).has("task-1")).toBe(true);
+      // 閉じただけで、まだ移動はしない。
+      expect(get(table_selected_id)).toBeUndefined();
+
+      await fireEvent.keyDown(rowOf("task-1"), { key: "ArrowLeft" });
+      await tick();
+      expect(get(table_selected_id)).toBe("project-1");
+    });
+
+    test("ArrowRight expands a collapsed row, then steps into the first child", async () => {
+      closed_node_ids.set(new Set(["task-1"]));
+      render(TreeTable);
+      await tick();
+
+      await fireEvent.keyDown(rowOf("task-1"), { key: "ArrowRight" });
+      await tick();
+      expect(get(closed_node_ids).has("task-1")).toBe(false);
+
+      await fireEvent.keyDown(rowOf("task-1"), { key: "ArrowRight" });
+      await tick();
+      expect(get(table_selected_id)).toBe("task-1-1");
+    });
+
+    test("Shift+ArrowDown extends the selection instead of replacing it", async () => {
+      render(TreeTable);
+      await tick();
+
+      await fireEvent.keyDown(rowOf("project-1"), { key: "ArrowDown" });
+      await tick();
+      await fireEvent.keyDown(rowOf("task-1"), { key: "ArrowDown", shiftKey: true });
+      await tick();
+
+      expect([...get(selected_ids)].sort()).toEqual(["task-1", "task-1-1"]);
+    });
+
+    test("keeps exactly one row in the tab order", async () => {
+      render(TreeTable);
+      await tick();
+
+      const tabStops = () =>
+        document.querySelectorAll('[data-testid^="row-"][data-tab-stop="true"]');
+      expect(tabStops()).toHaveLength(1);
+      // 選択していないうちは先頭行が停留点。
+      expect(tabStops()[0]).toBe(rowOf("project-1"));
+
+      await fireEvent.keyDown(rowOf("project-1"), { key: "End" });
+      await tick();
+      expect(tabStops()).toHaveLength(1);
+      expect(tabStops()[0]).toBe(rowOf("task-1-1"));
+    });
+  });
 });

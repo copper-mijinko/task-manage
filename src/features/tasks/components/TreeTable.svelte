@@ -1,5 +1,5 @@
 ﻿<script>
-  import { onDestroy, onMount } from "svelte";
+  import { onDestroy, onMount, tick } from "svelte";
   import TreeTableHeader from "@features/tasks/components/TreeTableHeader.svelte";
   import TreeTableRow from "@features/tasks/components/TreeTableRow.svelte";
   import BulkActionBar from "@features/tasks/components/BulkActionBar.svelte";
@@ -93,6 +93,12 @@
   $: rows = $filtered_data
     ? flattenVisibleTree($filtered_data, $closed_node_ids, $show_archived)
     : [];
+  /**
+   * Tab の停留点にする 1 行。選択行があればそれ、無ければ先頭行。全行を
+   * tabindex="0" にすると、テーブルを通り過ぎるだけで行数ぶん Tab を押す
+   * ことになる（矢印キーで移動できるようになったので停留点は 1 つで足りる）。
+   */
+  $: tabStopRowId = rows.find((row) => $selected_ids.has(row.id))?.id ?? rows[0]?.id ?? null;
   $: inheritedDueDateMap = buildInheritedDueDateMap(rows);
   $: nodePathMap = buildNodePathMap(rows);
   $: lineNumberMap = buildLineNumberMap($filtered_data);
@@ -599,6 +605,78 @@
     // Scrolling only shifts the resizers vertically; the content height is
     // unchanged, so reuse the cached measurement instead of re-walking rows.
     syncResizerBounds(resizers, { remeasure: false });
+  }
+
+  /**
+   * treegrid のキーボード操作（WAI-ARIA の treegrid パターン）。
+   *
+   * これまで行には Enter / Space しか無く、矢印キーが一切効かなかった。
+   * ツリーを辿るには行内のコントロールを Tab で全部踏むしかなく、タスクが
+   * 増えるほど現実的でなくなる。移動に必要な「表示中の行の並び」と親子関係は
+   * ここ（rows）にしかないので、判定もここに置く。
+   */
+  function focusRowById(id) {
+    if (!id) return;
+    // 行の DOM id はノード id そのもの（TreeTableRow の `{id}`）。
+    const target = document.getElementById(id);
+    if (!target) return;
+    target.focus();
+    target.scrollIntoView({ block: "nearest" });
+  }
+
+  /** 行へ移動する。選択もクリックと同じように動かし、詳細ペインを追従させる。 */
+  function moveToRow(id, { shiftKey = false } = {}) {
+    if (!id) return;
+    if (shiftKey && $selection_anchor_id) {
+      selectRange(
+        id,
+        rows.map((r) => r.id)
+      );
+    } else {
+      selectOnly(id);
+    }
+    navigation_history.pushSelection();
+    // 選択の反映で行が描き直されるため、DOM が落ち着いてから focus する。
+    tick().then(() => focusRowById(id));
+  }
+
+  function handleRowNavigate(event) {
+    const { id, key, shiftKey } = event.detail;
+    const index = rows.findIndex((row) => row.id === id);
+    if (index < 0) return;
+    const row = rows[index];
+
+    switch (key) {
+      case "ArrowDown":
+        if (index < rows.length - 1) moveToRow(rows[index + 1].id, { shiftKey });
+        return;
+      case "ArrowUp":
+        if (index > 0) moveToRow(rows[index - 1].id, { shiftKey });
+        return;
+      case "Home":
+        if (rows.length > 0) moveToRow(rows[0].id, { shiftKey });
+        return;
+      case "End":
+        if (rows.length > 0) moveToRow(rows[rows.length - 1].id, { shiftKey });
+        return;
+      case "ArrowRight":
+        // 閉じていれば開く。開いていれば最初の子へ入る。
+        if (row.hasChildren && !row.expanded) {
+          closed_node_ids.delete(id);
+        } else if (row.hasChildren && index < rows.length - 1) {
+          moveToRow(rows[index + 1].id);
+        }
+        return;
+      case "ArrowLeft":
+        // 開いていれば閉じる。閉じている / 子が無ければ親へ戻る。
+        if (row.hasChildren && row.expanded) {
+          closed_node_ids.add(id);
+        } else if (row.parentId) {
+          moveToRow(row.parentId);
+        }
+        return;
+      default:
+    }
   }
 
   function handleToggleRow(event) {
@@ -1208,7 +1286,9 @@
         inheritedDueDate={inheritedDueDateMap.get(row.id) ?? ""}
         nodePath={nodePathMap.get(row.id) ?? ""}
         lineNumber={lineNumberMap.get(row.id) ?? 0}
+        isTabStop={row.id === tabStopRowId}
         on:select={handleSelectRow}
+        on:navigate={handleRowNavigate}
         on:toggleCheckbox={handleToggleCheckbox}
         on:toggle={handleToggleRow}
         on:commit={handleCommit}
