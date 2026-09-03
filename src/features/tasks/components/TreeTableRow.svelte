@@ -81,6 +81,14 @@
   $: visibleRowTags = rowTags.slice(0, rowTags.length > 2 ? 1 : 2);
   $: hiddenRowTagCount = rowTags.length - visibleRowTags.length;
 
+  const COUNT_LABELS = { memo: "メモ", attachments: "添付" };
+
+  /** メモ / 添付の件数。未設定は 0 件として扱う。 */
+  function countCellValue(headerName) {
+    const value = data[headerName];
+    return Array.isArray(value) ? value.length : Number(value) || 0;
+  }
+
   function displayCellValue(headerName) {
     const value = data[headerName];
     if (headerName === "attachments" && value == null) {
@@ -253,6 +261,7 @@
   class:OverdueRow={rowDueUrgency === "overdue"}
   class:DueSoonRow={rowDueUrgency === "today" || rowDueUrgency === "due-soon"}
   class:ArchivedRow={isArchived}
+  class:RootRow={depth === 0}
   use:ripple
   tabindex={isTabStop ? 0 : -1}
   draggable="true"
@@ -443,6 +452,41 @@
               >
             {/if}
           </span>
+        {/if}
+      {:else if header.name === "memo" || header.name === "attachments"}
+        <!-- 件数は 0 のほうが普通なので、0 のときは目に入れない。1 件以上の
+             ときだけバッジで出す。全行に "0" を並べると、実際に中身がある
+             行を探すのがかえって難しくなる。 -->
+        {@const count = countCellValue(header.name)}
+        {#if count > 0}
+          <span
+            class="CountBadge"
+            title={`${COUNT_LABELS[header.name]} ${count}件`}
+            aria-label={`${COUNT_LABELS[header.name]} ${count}件`}
+          >
+            <svg class="CountBadgeIcon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              {#if header.name === "memo"}
+                <path
+                  d="M5 4h14v16H5zM8 9h8M8 13h6"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              {:else}
+                <path
+                  d="M18 8.5l-7 7a3 3 0 0 1-4.2-4.2l7.5-7.5a2 2 0 0 1 2.8 2.8l-7.5 7.5a1 1 0 0 1-1.4-1.4l6.8-6.8"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              {/if}
+            </svg>
+            {count}
+          </span>
+        {:else}
+          <span class="CountEmpty" aria-label={`${COUNT_LABELS[header.name]} なし`}>—</span>
         {/if}
       {:else}
         <span class:TextOverFlow={true}>{displayCellValue(header.name)}</span>
@@ -684,6 +728,49 @@
   .TableData:last-of-type {
     min-width: calc(var(--col-min) + var(--col-actions-reserve));
   }
+  /* プロジェクトのルート行。これまで子タスクとの差はインデントとアイコン
+     だけで、木の頂点がどこか一目で分からなかった。名前を太くし、下辺を
+     はっきりさせて「ここから下がこのプロジェクト」と読めるようにする。
+     色は足さない（色は期限の緊急度に予約してある）。 */
+  .TableRow.RootRow {
+    --backgroundColor: color-mix(
+      in srgb,
+      var(--theme-color-Sub-main) 5%,
+      var(--theme-color-Main-light)
+    );
+    border-bottom: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 22%, transparent);
+  }
+  .TableRow.RootRow :global(.highlight-display),
+  .TableRow.RootRow :global(input[type="text"]) {
+    font-weight: 700;
+  }
+
+  /* 件数バッジ。0 は控えめなダッシュにして、中身のある行だけが目に入る
+     ようにする（期限日の色付けと同じ「必要なものだけ目立たせる」方針）。 */
+  .CountBadge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px var(--sp1);
+    border-radius: var(--shape-pill);
+    background-color: color-mix(in srgb, var(--theme-color-Sub-main) 12%, transparent);
+    color: var(--theme-color-Sub-main);
+    font-size: var(--font-label-sm);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.25;
+  }
+  .CountBadgeIcon {
+    width: 0.85em;
+    height: 0.85em;
+    flex-shrink: 0;
+  }
+  .CountEmpty {
+    color: color-mix(in srgb, var(--theme-color-Sub-main) 32%, transparent);
+    font-size: var(--font-label-md);
+    user-select: none;
+  }
+
   /* タグセルは行内で 1 行に収める。溢れた分は横スクロールではなく
      単純に切り落とし、詳細ペインで全部見てもらう。 */
   .TagCellChips {
