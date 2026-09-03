@@ -480,6 +480,7 @@
                       <DateInput
                         value={item.dueDate || ""}
                         ariaLabel={`${item.name}の期限日`}
+                        status={item.status}
                         is_dark={isDark}
                         on:change={(e) => handleDueChange(item.id, e)}
                       />
