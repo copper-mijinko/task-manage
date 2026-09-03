@@ -32,6 +32,7 @@ Electron アプリ全体を起動して確認する。
 [tests/unit/task_tags.test.js](../tests/unit/task_tags.test.js)
 [tests/unit/agenda.test.ts](../tests/unit/agenda.test.ts)
 [tests/unit/window-state.test.js](../tests/unit/window-state.test.js)
+[tests/unit/agent-ui-launch.test.js](../tests/unit/agent-ui-launch.test.js)
 
 | 対象                                | テストケース                                                                                      | 確認内容                                                                        |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
@@ -117,6 +118,8 @@ Electron アプリ全体を起動して確認する。
 | `electron/window-state.js` | `serializeWindowState` 2 件 | 保存値の丸めと、数値でないフィールドの除外 |
 | `electron/window-state.js` | `loadWindowState` 2 件 | 状態ファイルの往復と、欠損 / 壊れたファイルでの既定値 |
 | `electron/window-state.js` | `trackWindowState` 2 件 | リサイズ中の debounce と閉じる直前の flush、最大化前サイズの保持 |
+| `scripts/agent-ui-launch.mjs` | `electronLaunchArgs` 4 件 | root 実行時だけ `--no-sandbox` を付ける（重複させない・引数を破壊しない） |
+| `scripts/agent-ui-launch.mjs` | `hasDisplay` 1 件 | X11 / Wayland の display 検出 |
 
 ### 2.2 Component テスト
 
@@ -290,6 +293,6 @@ Electron アプリ全体を起動して確認する。
 
 | 種別         | 件数                              |
 | ------------ | --------------------------------- |
-| Test files   | unit 30 passed + component 24 passed (54) |
-| Tests        | unit 433 passed + component 209 passed / 7 skipped (642 / 7) |
+| Test files   | unit 31 passed + component 24 passed (55) |
+| Tests        | unit 438 passed + component 209 passed / 7 skipped (647 / 7) |
 | svelte-check | 480 files / 0 errors / 0 warnings |

@@ -13,6 +13,11 @@ Claude Code specific:
 - Use the project-local `.mcp.json` entry named `task-manage-ui`. It connects
   Playwright MCP to the Agent UI Electron CDP endpoint (`http://127.0.0.1:9222`);
   it is not a normal browser target.
-- If Claude Code has not loaded that server, restart or re-approve the project
-  MCP configuration, and report GUI verification as unavailable until it is
-  active. Do not substitute a normal browser or a direct visit to the Vite URL.
+- Start the Agent UI (`npm run dev:agent`) and confirm
+  `npm run verify:agent-ui -- --wait=30000` before expecting that server to work.
+  Claude Code connects its MCP servers at session start, so a session that began
+  while the CDP port was closed keeps showing `task-manage-ui` as failed until
+  the project MCP configuration is re-approved or the session is restarted.
+- If it still cannot be used, follow the fallback in AGENTS.md (Playwright
+  attached to the same Electron CDP endpoint) and say so explicitly. Never
+  substitute a normal browser or a direct visit to the Vite URL.

@@ -1,5 +1,17 @@
 # Repository Playwright MCP for the real Agent UI Electron renderer.
-# Start `npm run dev:agent`; do not replace this server with Codex Browser.
+#
+# Order matters: start the Agent UI first (`npm run dev:agent` from the
+# repository root), confirm it with `npm run verify:agent-ui -- --wait=30000`,
+# and only then start / reload Codex so this server can reach the CDP endpoint.
+# A client that starts while 127.0.0.1:9222 is not listening keeps reporting the
+# server as failed for the rest of the session.
+#
+# `npm run dev:agent` copes with headless and root environments on its own
+# (Xvfb when $DISPLAY is unset, --no-sandbox when running as root, and it will
+# not start a second Electron when the CDP port is already in use).
+#
+# Do not replace this server with Codex Browser or a normal browser tab.
+# See AGENTS.md for the full policy.
 [mcp_servers.task_manage_ui]
 command = "node"
 args = ["node_modules/@playwright/mcp/cli.js", "--cdp-endpoint=http://127.0.0.1:9222"]
