@@ -58,11 +58,17 @@
      room for 2-3 digits, dates for a localized date, and the name column
      absorbs whatever space is left (see fitNameColumn in TreeTable). */
   --col-min-name: 12rem;
-  --col-min-status: 7rem;
+  /* ステータスは「ステータス」5 文字 + 並べ替えボタンが並ぶので、日付列
+     （3 文字）より少し広く要る。7rem では見出しが「ステー...」に切れていた。 */
+  --col-min-status: 8.5rem;
   --col-min-date: 8rem;
   --col-min-count: 5rem;
   --col-min-tags: 9rem;
   --col-min-default: 8rem;
+  /* 最終列の右端には列表示設定ボタンが浮いている。その専有ぶんは列の
+     最小幅に上乗せする（各列の min-width から引いてしまうと、最小幅の
+     ときに最終列の見出しが数 px まで潰れる）。 */
+  --col-actions-reserve: calc(var(--sp7) + var(--sp2));
 
   /* Card body padding — overridable by density mode so we don't squash
      every other --sp3 consumer. Defaults to the comfortable 12px. */

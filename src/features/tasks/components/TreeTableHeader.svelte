@@ -826,7 +826,8 @@
     position: relative;
     height: 3rem;
     box-sizing: border-box;
-    min-width: var(--col-min-default);
+    --col-min: var(--col-min-default);
+    min-width: var(--col-min);
     display: flex;
     flex-direction: column;
     border-right: 1px solid var(--header-border);
@@ -840,25 +841,29 @@
     letter-spacing: 0.02em;
   }
   .TableHeader[data-column="name"] {
-    min-width: var(--col-min-name);
+    --col-min: var(--col-min-name);
   }
   .TableHeader[data-column="status"] {
-    min-width: var(--col-min-status);
+    --col-min: var(--col-min-status);
   }
   .TableHeader[data-column="start date"],
   .TableHeader[data-column="due date"] {
-    min-width: var(--col-min-date);
+    --col-min: var(--col-min-date);
   }
   .TableHeader[data-column="memo"],
   .TableHeader[data-column="attachments"] {
-    min-width: var(--col-min-count);
+    --col-min: var(--col-min-count);
   }
   .TableHeader[data-column="tags"] {
-    min-width: var(--col-min-tags);
+    --col-min: var(--col-min-tags);
   }
+  /* 最終列は右端の列表示設定ボタンぶんを padding で空ける。padding は
+     列幅の内側を削るので、その専有ぶんを min-width にも足しておく。
+     足さないと最小幅のとき見出しが読めない幅まで潰れる。 */
   .TableHeader:last-of-type {
     border-right: 0px;
-    padding-right: calc(var(--sp7) + var(--sp2));
+    padding-right: var(--col-actions-reserve);
+    min-width: calc(var(--col-min) + var(--col-actions-reserve));
   }
   .TableHeader:first-of-type {
     border-left: 0;

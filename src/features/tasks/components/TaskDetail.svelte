@@ -867,6 +867,7 @@
                   style={detailDateStyle}
                   value={node.data["start date"] ?? ""}
                   ariaLabel="開始日"
+                  showUrgency={false}
                   on:change={(event) =>
                     changeTaskField("start date", event.target.value || undefined)}
                 />
@@ -883,6 +884,7 @@
                   style={detailDateStyle}
                   value={node.data["due date"] ?? ""}
                   ariaLabel="期限日"
+                  status={node.data["status"]}
                   on:change={(event) =>
                     changeTaskField("due date", event.target.value || undefined)}
                 />

@@ -210,6 +210,7 @@
                   style={DETAIL_DATE_STYLE}
                   value={item.startDate ?? ""}
                   ariaLabel="開始日"
+                  showUrgency={false}
                   on:change={handleStartChange}
                 />
               </div>
@@ -224,6 +225,7 @@
                   style={DETAIL_DATE_STYLE}
                   value={item.dueDate ?? ""}
                   ariaLabel="期限日"
+                  status={item.status}
                   on:change={handleDueChange}
                 />
               </div>

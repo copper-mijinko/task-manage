@@ -14,6 +14,7 @@
   import TaskName from "@features/tasks/components/TaskName.svelte";
   import StatusSelect from "@features/tasks/components/StatusSelect.svelte";
   import DateInput from "@lib/primitives/DateInput.svelte";
+  import { dueDateUrgency } from "@lib/utils/date_urgency";
   import { active_tag } from "@features/memos/stores/tags";
   import { normalizeTagList } from "@lib/utils/tags";
 
@@ -67,18 +68,7 @@
   let isDragging = false;
   let isMenuOpen = false;
 
-  const DAYS_5_MS = 5 * 24 * 60 * 60 * 1000;
-  const DAY_MS = 24 * 60 * 60 * 1000;
-
-  function getDueDateUrgency(dueDate, status) {
-    if (!dueDate || status === "Completed" || status === "Canceled") return null;
-    const diff = new Date(dueDate) - new Date() + DAY_MS - 1;
-    if (diff < 0) return "overdue";
-    if (diff < DAYS_5_MS) return "due-soon";
-    return null;
-  }
-
-  $: dueDateUrgency = getDueDateUrgency(data["due date"] || inheritedDueDate, data["status"]);
+  $: rowDueUrgency = dueDateUrgency(data["due date"] || inheritedDueDate, data["status"]);
   $: rowTags = normalizeTagList(data.tags);
   // 列幅は限られるので、読める大きさで出せる範囲だけ表示し、残りは「+N」で示す
   // （全件はセルの title と詳細ペインで確認できる）。3 件以上あるときは
@@ -230,8 +220,8 @@
   class:DragOverTop={dragOverType === "DragOverTop"}
   class:DragOverBottom={dragOverType === "DragOverBottom"}
   class:DragOverBelow={dragOverType === "DragOverBelow"}
-  class:OverdueRow={dueDateUrgency === "overdue"}
-  class:DueSoonRow={dueDateUrgency === "due-soon"}
+  class:OverdueRow={rowDueUrgency === "overdue"}
+  class:DueSoonRow={rowDueUrgency === "today" || rowDueUrgency === "due-soon"}
   class:ArchivedRow={isArchived}
   use:ripple
   tabindex="0"
@@ -388,6 +378,7 @@
           backgroundColor={"var(--backgroundColor)"}
           value={data[header.name]}
           ariaLabel={`${data.name}の開始日`}
+          showUrgency={false}
           disabled={isArchived}
           on:change={(e) => {
             commitData("start date", e.target.value);
@@ -400,6 +391,7 @@
           backgroundColor={"var(--backgroundColor)"}
           value={data[header.name]}
           ariaLabel={`${data.name}の期限日`}
+          status={data["status"]}
           inheritedDate={inheritedDueDate}
           disabled={isArchived}
           on:change={(e) => {
@@ -638,7 +630,8 @@
     position: relative;
     box-sizing: border-box;
     height: 100%;
-    min-width: var(--col-min-default);
+    --col-min: var(--col-min-default);
+    min-width: var(--col-min);
     background-color: var(--backgroundColor);
     padding: var(--sp1) var(--sp2);
     align-items: center;
@@ -647,21 +640,26 @@
     border-right: 1px solid var(--theme-color-Main-dark);
   }
   .TableData[data-column="name"] {
-    min-width: var(--col-min-name);
+    --col-min: var(--col-min-name);
   }
   .TableData[data-column="status"] {
-    min-width: var(--col-min-status);
+    --col-min: var(--col-min-status);
   }
   .TableData[data-column="start date"],
   .TableData[data-column="due date"] {
-    min-width: var(--col-min-date);
+    --col-min: var(--col-min-date);
   }
   .TableData[data-column="memo"],
   .TableData[data-column="attachments"] {
-    min-width: var(--col-min-count);
+    --col-min: var(--col-min-count);
   }
   .TableData[data-column="tags"] {
-    min-width: var(--col-min-tags);
+    --col-min: var(--col-min-tags);
+  }
+  /* ヘッダーの最終列は列表示設定ボタンぶんだけ最小幅が広い。行側も
+     同じだけ広げておかないと、最小幅まで縮めたときに列がずれる。 */
+  .TableData:last-of-type {
+    min-width: calc(var(--col-min) + var(--col-actions-reserve));
   }
   /* タグセルは行内で 1 行に収める。溢れた分は横スクロールではなく
      単純に切り落とし、詳細ペインで全部見てもらう。 */

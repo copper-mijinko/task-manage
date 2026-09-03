@@ -1,4 +1,6 @@
 ﻿<script>
+  import { dueDateUrgency, dueDateUrgencyLabel } from "@lib/utils/date_urgency";
+
   export let is_dark = false;
   export let backgroundColor = "var(--theme-color-Main-light)";
   export let color = "var(--theme-color-Sub-main)";
@@ -8,51 +10,42 @@
   export let style = "";
   export let inheritedDate = "";
   export let ariaLabel = "日付";
-  /** When true, urgency state is reflected on the input border + text color. Default true. */
+  /**
+   * true のときだけ期限としての差し迫り具合を枠線と文字色に出す。
+   * 開始日のような「期限ではない日付」は false にする。過ぎた開始日は
+   * 進行中タスクのごく普通の状態で、警告色にすると本当の期限切れが埋もれる。
+   */
   export let showUrgency = true;
-
-  const DAY_MS = 24 * 60 * 60 * 1000;
-  const URGENT_DAYS = 5;
-
-  function urgencyOf(dateStr) {
-    if (!dateStr) return "none";
-    const v = new Date(dateStr);
-    if (isNaN(v.getTime())) return "none";
-    const today = new Date();
-    const diff = v - today + DAY_MS - 1;
-    if (diff < 0) return "overdue";
-    if (diff < DAY_MS * URGENT_DAYS) return "due-soon";
-    return "none";
-  }
+  /** 期限の色付けを抑えるためのタスクステータス（完了 / 中止なら急かさない）。 */
+  export let status = undefined;
 
   $: displayDate = value || inheritedDate || "";
   $: isInherited = !value && !!inheritedDate;
-  $: urgency = showUrgency ? urgencyOf(displayDate) : "none";
+  $: urgency = showUrgency ? dueDateUrgency(displayDate, status) : "none";
   $: borderColor =
     urgency === "overdue"
       ? "var(--theme-color-Error-main)"
-      : urgency === "due-soon"
+      : urgency === "today" || urgency === "due-soon"
         ? "var(--theme-color-Warning-main)"
         : "var(--theme-color-Main-dark)";
   $: textColor =
     urgency === "overdue"
       ? "var(--theme-color-Error-main)"
-      : urgency === "due-soon"
+      : urgency === "today" || urgency === "due-soon"
         ? "var(--theme-color-Warning-main)"
         : color;
   $: inputTitle = isInherited
     ? `親タスクの期限: ${inheritedDate}`
-    : urgency === "overdue"
-      ? `期限切れ: ${displayDate}`
-      : urgency === "due-soon"
-        ? `期限間近: ${displayDate}`
-        : undefined;
+    : showUrgency
+      ? dueDateUrgencyLabel(displayDate, status)
+      : undefined;
 </script>
 
 <div
   class="Container"
   class:Overdue={urgency === "overdue"}
-  class:DueSoon={urgency === "due-soon"}
+  class:DueSoon={urgency === "today" || urgency === "due-soon"}
+  class:DueToday={urgency === "today"}
   style="--dark:{is_dark
     ? 'dark'
     : ''}; --backgroundColor: {backgroundColor}; --borderColor: {borderColor}; --color-datetime: {textColor};"
@@ -109,8 +102,11 @@
      the date itself out of view, so the urgency badge hid the very value it
      was flagging. The state is now carried by the red border, the bold red
      text, a thicker leading edge (a non-colour cue that survives a
-     colour-vision deficiency) and the `期限切れ: …` tooltip. */
-  .Container.Overdue .Date {
+     colour-vision deficiency) and the `期限切れ: …` tooltip.
+     当日の期限も同じ太い縁を付ける。色だけだと「あと数日」と区別が付かず、
+     今日出さないといけないものが埋もれるため。 */
+  .Container.Overdue .Date,
+  .Container.DueToday .Date {
     border-left-width: 3px;
   }
   .Date.Inherited {
