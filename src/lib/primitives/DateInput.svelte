@@ -28,11 +28,13 @@
       : urgency === "today" || urgency === "due-soon"
         ? "var(--theme-color-Warning-main)"
         : "var(--theme-color-Main-dark)";
+  // 枠線は視認しやすい原色のまま（UI 要素は 3:1）、文字だけ AA を満たす
+  // 濃さの変種にする。同じ色で両方やると 12px の日付が読めない。
   $: textColor =
     urgency === "overdue"
-      ? "var(--theme-color-Error-main)"
+      ? "var(--theme-color-Error-text)"
       : urgency === "today" || urgency === "due-soon"
-        ? "var(--theme-color-Warning-main)"
+        ? "var(--theme-color-Warning-text)"
         : color;
   $: inputTitle = isInherited
     ? `親タスクの期限: ${inheritedDate}`

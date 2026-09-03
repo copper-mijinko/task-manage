@@ -203,7 +203,7 @@
   <IconButton
     on:click={toggleMemoSearch}
     ariaLabel={memoSearchEnabled ? "メモ本文を検索対象から外す" : "メモ本文も検索する"}
-    aria-pressed={memoSearchEnabled}
+    ariaPressed={memoSearchEnabled ? "true" : "false"}
     variant="text"
     use_ripple={true}
     normalColor={memoSearchEnabled

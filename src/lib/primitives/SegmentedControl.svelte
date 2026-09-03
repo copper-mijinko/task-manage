@@ -83,8 +83,10 @@
     box-shadow: inset 1px 0 0 color-mix(in srgb, var(--theme-color-Main-light) 65%, transparent);
   }
 
+  /* 選択中の塗りは、その上のラベルが AA を満たす濃さの Primary を使う。
+     `main` だとライトテーマで白文字との比が 4.37:1 にとどまる。 */
   .SegmentOption.active {
-    background-color: var(--theme-color-Primary-main);
+    background-color: var(--theme-color-Primary-text);
     color: var(--theme-color-Main-light);
     cursor: default;
   }

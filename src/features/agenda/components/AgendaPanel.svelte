@@ -251,7 +251,7 @@
 
   .HeaderBadge.Overdue {
     background-color: color-mix(in srgb, var(--theme-color-Error-main) 22%, transparent);
-    color: var(--theme-color-Error-main);
+    color: var(--theme-color-Error-text);
   }
 
   .Toolbar {
@@ -321,7 +321,7 @@
   }
 
   .GroupHeader.Overdue {
-    color: var(--theme-color-Error-main);
+    color: var(--theme-color-Error-text);
   }
 
   .GroupCount {
@@ -424,7 +424,7 @@
   }
 
   .ItemDue.Overdue {
-    color: var(--theme-color-Error-main);
+    color: var(--theme-color-Error-text);
     font-weight: 700;
   }
 
