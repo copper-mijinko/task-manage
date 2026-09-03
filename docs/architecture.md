@@ -12,7 +12,7 @@
 ```
 src/
 ├── lib/                         # 再利用可能な汎用層（ドメイン非依存）
-│   ├── primitives/              # アトミックUI（13 ファイル）
+│   ├── primitives/              # アトミックUI（14 ファイル）
 │   │   ├── Button.svelte
 │   │   ├── IconButton.svelte
 │   │   ├── Card.svelte
@@ -25,6 +25,7 @@ src/
 │   │   ├── MultiSelect.svelte
 │   │   ├── SearchBox.svelte
 │   │   ├── DateInput.svelte
+│   │   ├── TagField.svelte      # タグのチップ入力（タスクタグ / メモタグ共用）
 │   │   └── Loading.svelte       # 共通ローディング表示（opacity 呼吸アニメ）
 │   ├── layouts/                 # レイアウトプリミティブ
 │   │   ├── Pane.svelte
@@ -33,6 +34,7 @@ src/
 │   │   └── index.ts             # tooltip / ripple / clickOutside / globalDismiss
 │   ├── utils/                   # 純粋ユーティリティ
 │   │   ├── uuid.ts
+│   │   ├── tags.ts              # タグ文字列の正規化（正規化・重複排除）
 │   │   └── theme.ts             # カラーパレット定義（THEME_LIGHT / THEME_DARK）
 │   └── ipc/                     # Electron IPC クライアント
 │       └── platform.ts          # window.api 経由の Promise ラッパ
@@ -57,6 +59,9 @@ src/
 │   │   ├── stores/              # workspace
 │   │   └── utils/
 │   │       └── workspace_tree.ts
+│   ├── agenda/                  # ワークスペース横断の予定ビュー
+│   │   ├── components/          # AgendaPanel
+│   │   └── stores/              # agenda（全プロジェクト読み込み・期限グルーピング）
 │   ├── inbox/
 │   │   ├── components/          # InboxPanel / InboxDetailPanel / QuickCapture / ProjectTargetPicker / TargetTreeNode
 │   │   └── stores/              # inbox
@@ -205,6 +210,7 @@ import LocalComponent from "./LocalComponent.svelte";
 | `workspace_store` 等                                                                     | `@features/workspace/stores/workspace`           | ワークスペース管理（含 `deleteProject`）                |
 | `project_ids`                                                                            | `@features/projects/stores/project`              | プロジェクト一覧                                        |
 | `inbox_store` / `inbox_count`                                                            | `@features/inbox/stores/inbox`                   | Workspace 横断 Inbox の状態（フラットアイテム列）       |
+| `agenda_store`                                                                           | `@features/agenda/stores/agenda`                 | Workspace 横断の予定（全プロジェクトの未完了タスクを期限でグルーピング） |
 | `filter` / `pageSearchQuery`                                                             | `@features/search/stores/search`                 | フィルター条件 / 画面内検索クエリ                       |
 | `pageSearchMatchCount` / `pageSearchCurrentIndex`                                        | `@features/search/utils/page_search_highlighter` | 画面内検索の件数と現在位置（readable store）            |
 | `selected_id` / `closed_node_ids` / `sidebarCollapsed` / `copied_task` / `saveStatus` / `show_archived` 等 | `@stores/ui`                                     | UI状態（`show_archived` はアーカイブ済みタスクの表示切替・プロジェクト毎に永続化） |
@@ -265,6 +271,8 @@ import LocalComponent from "./LocalComponent.svelte";
 | ワークスペース管理ダイアログ                                       | `WorkspaceSetup.svelte` + `MigrationWizard.svelte`                                                                                               |
 | ワークスペース永続化パイプライン（main プロセス）                  | `electron/workspace.js` + `electron/workspace-write-queue.js` + `electron/workspace-reconciler.js`                                               |
 | ワークスペースのコンフリクト / 通知バナー                          | `src/App.svelte` の `workspace-conflict-banner` / `workspace-notice-banner`                                                                      |
+| 予定ビュー（ワークスペース横断）                                   | `src/features/agenda/components/AgendaPanel.svelte` + `src/features/agenda/stores/agenda.ts`。入り口はヘッダの 🗓 ボタン（`Header.svelte`）                     |
+| タスクタグ                                                         | `src/lib/primitives/TagField.svelte` + `src/lib/utils/tags.ts` + `TaskDetail.svelte` のタグ欄 + `TreeTableRow.svelte` の `tags` 列 + `@features/memos/stores/tags` の統合索引 + `electron/workspace.js` の frontmatter `tags`  |
 | Inbox UI                                                           | `src/features/inbox/components/InboxPanel.svelte` + `InboxDetailPanel.svelte` + `QuickCapture.svelte` + `ProjectTargetPicker.svelte` + `TargetTreeNode.svelte`         |
 | Inbox 入り口                                                       | ヘッダの 📥 ボタン（`Header.svelte`）と `Ctrl+Shift+I`（`App.svelte` のグローバル keydown）。サイドバーには Inbox 行を置かない                  |
 | Inbox 永続化（main プロセス）                                      | `electron/inbox.js`（`ensureInbox` / `readInbox` / `addInboxItem` / `sendInboxItemsToProject`） + `electron/index.js` の `ws:*-inbox-*` ハンドラ |
