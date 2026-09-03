@@ -305,6 +305,28 @@ Workspace の通常編集では、renderer 側の Svelte store を単一の信�
 - `title` — メモタブ名
 - `content` — メモ本文
 - `format` — `"markdown"` または `"quill"`
+- `kind` — `"working"`（作業メモ）または `"knowledge"`（ナレッジ）
+
+### 6.0 メモの種別（kind）
+
+記録を「寿命の長さと再利用性」で分ける。
+
+- `working` — 作業メモ。そのタスクの作業中だけ意味を持つ短命な記録（詰まった点、レビュー指摘、手順の走り書き）
+- `knowledge` — ナレッジ。タスクより長生きし、別の文脈でも再利用される記録（設計判断の理由、デプロイ手順、規約）
+
+書く時点ではどちらになるか分からないことが多いため、既定は `working` で、あとから**昇華**（`working` → `knowledge`）する明示操作で変える。メモタブの種別ボタンから切り替える。本文には触らないので、形式変換と違って情報は落ちない。
+
+`kind:` を持たない既存のメモはすべて `working` として読む。ファイルへは常に書き出す。
+
+> **実装上の注意**：メモのフィールドは 5 箇所で個別に列挙されている。新しいフィールドを足すときは**すべてに追加する**こと。1 つでも漏れると、画面とキャッシュだけが変わってファイルに書かれない、という形で壊れる。
+>
+> 1. `electron/workspace.js` の `readMemos` / `buildMemoEntry`（読み）
+> 2. `electron/workspace.js` の `writeMemoFiles` / `writeMemoFilesAsync`（書き）
+> 3. `src/features/workspace/utils/workspace_tree.ts`（ワークスペース → ツリー）
+> 4. 同ファイル（ツリー → ワークスペース）
+> 5. `src/features/tasks/stores/tree.ts` の `comparableWorkspaceTask`（**差分判定**。ここに無いフィールドは「変更なし」と見なされ、ディスクに書かれない）
+>
+> 5 を守るためのテストが `tests/unit/memo_kind.test.ts` にある。
 
 ### 6.1 フォーマットの決定ルール
 

@@ -1,6 +1,10 @@
 ﻿import { normalizeTagList } from "@lib/utils/tags";
 import type { WorkspaceTask, WorkspaceTaskStatus } from "@app-types/workspace";
-import { normalizeMemoFormat, toMarkdown } from "@features/memos/utils/memo_utils";
+import {
+  normalizeMemoFormat,
+  normalizeMemoKind,
+  toMarkdown,
+} from "@features/memos/utils/memo_utils";
 import type { ProjectData, TreeData } from "@features/tasks/utils/tree_control";
 
 const DEFAULT_HEADERS = [
@@ -71,6 +75,7 @@ export function workspaceToProjectData(
           content: m.content,
           tags: m.tags,
           format: normalizeMemoFormat(m.format, "markdown"),
+          kind: normalizeMemoKind(m.kind),
           order: m.order,
           bodyLoaded: m.bodyLoaded,
         })),
@@ -137,6 +142,7 @@ export function projectDataToWorkspaceTasks(
           content: format === "markdown" ? toMarkdown(content) : content,
           tags: Array.isArray(m.tags) ? m.tags : [],
           format,
+          kind: normalizeMemoKind(m.kind),
           order: index,
           bodyLoaded: m.bodyLoaded,
         };

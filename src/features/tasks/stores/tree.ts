@@ -162,7 +162,15 @@ function applyWorkspaceRootOrder(
   }
 }
 
-function comparableWorkspaceTask(task: WorkspaceTask) {
+/**
+ * 差分判定に使う正規化。ここに載っていないフィールドは「変更なし」と見なされ、
+ * ディスクに書かれない。**永続化されるフィールドは必ずここにも足すこと。**
+ * （`kind` を落としていたため、種別だけ変えた編集が画面とキャッシュにしか
+ * 反映されず、ファイルに書かれないことがあった）
+ *
+ * テストから参照するため export している。
+ */
+export function comparableWorkspaceTask(task: WorkspaceTask) {
   return {
     id: task.id,
     name: task.name,
@@ -176,6 +184,9 @@ function comparableWorkspaceTask(task: WorkspaceTask) {
       content: memoContentForCompare(memo.content),
       tags: memo.tags ?? [],
       format: memo.format ?? "markdown",
+      // kind を落とすと「種別だけ変えた」編集が差分なしと判定され、
+      // ディスクに書かれないまま画面とキャッシュだけが変わる。
+      kind: memo.kind ?? "working",
       order: memo.order ?? null,
     })),
     attachments: (task.attachments ?? []).map((attachment) => ({

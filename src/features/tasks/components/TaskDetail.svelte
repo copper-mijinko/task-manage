@@ -35,6 +35,7 @@
     convertMemoContent,
     isQuillDelta,
     normalizeMemoFormat,
+    normalizeMemoKind,
   } from "@features/memos/utils/memo_utils";
 
   export let titleOverride = "";
@@ -405,6 +406,26 @@
           format: nextFormat,
           content: convertMemoContent(currentMemo.content, currentFormat, nextFormat),
         };
+      },
+      editContext
+    );
+  };
+
+  /**
+   * メモの種別を切り替える（作業メモ ⇄ ナレッジ）。
+   *
+   * 「昇華」は必ずユーザーの明示操作で起こす。書いている最中はそれが
+   * 再利用される記録になるか分からず、あとから気づくものだから。
+   * 本文には触らないので、形式変換と違って情報は落ちない。
+   */
+  const changeMemoKind = (selectedMemoIndex, nextKind) => {
+    const editContext = getEditContext();
+    return changeMemoAtIndex(
+      selectedMemoIndex,
+      (currentMemo) => {
+        const currentKind = normalizeMemoKind(currentMemo.kind);
+        if (currentKind === nextKind) return currentMemo;
+        return { ...currentMemo, kind: nextKind };
       },
       editContext
     );
@@ -965,6 +986,7 @@
             {reorderMemo}
             {saveMemoTags}
             {changeMemoFormat}
+            {changeMemoKind}
             {allTags}
             disabled={memoBodyLoading}
             {isWorkspaceProject}
