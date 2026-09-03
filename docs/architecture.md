@@ -269,6 +269,7 @@ import LocalComponent from "./LocalComponent.svelte";
 | 列ヘッダのフィルタ / 列設定ポップオーバー                          | `TreeTableHeader.svelte` + `@features/search/components/*FilterPanel.svelte`                                                                     |
 | ツリーの三点リーダメニュー                                         | `TaskMenu.svelte` + `TaskName.svelte`                                                                                                            |
 | ワークスペース管理ダイアログ                                       | `WorkspaceSetup.svelte` + `MigrationWizard.svelte`                                                                                               |
+| ウィンドウ状態の保存 / 復元（main プロセス）                        | `electron/window-state.js`（`loadWindowState` / `trackWindowState`）+ `electron/index.js` の BrowserWindow 生成                                    |
 | ワークスペース永続化パイプライン（main プロセス）                  | `electron/workspace.js` + `electron/workspace-write-queue.js` + `electron/workspace-reconciler.js`                                               |
 | ワークスペースのコンフリクト / 通知バナー                          | `src/App.svelte` の `workspace-conflict-banner` / `workspace-notice-banner`                                                                      |
 | 予定ビュー（ワークスペース横断）                                   | `src/features/agenda/components/AgendaPanel.svelte` + `src/features/agenda/stores/agenda.ts`。入り口はヘッダの 🗓 ボタン（`Header.svelte`）                     |

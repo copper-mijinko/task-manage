@@ -140,6 +140,7 @@ renderer/
 public/build/
 electron/db.json
 electron/meta.json
+electron/window-state.json
 electron/workspace-state/
 image.png
 # Local-only notes
