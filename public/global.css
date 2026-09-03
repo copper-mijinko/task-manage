@@ -48,6 +48,9 @@
   --on-theme-error: #f44336;
   --on-theme-error-light: #e57373;
   --on-theme-primary: #42a5f5;
+  /* 濃紺の上に小さい文字で出すとき用の明るいバリアント。--on-theme-primary
+     は 4.01:1 で AA (4.5:1) にわずかに届かない。 */
+  --on-theme-primary-light: #90caf9;
   --on-theme-tooltip-bg: #e8edf0;
   --on-theme-tooltip-fg: #262d32;
 

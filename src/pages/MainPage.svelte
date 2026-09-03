@@ -1055,6 +1055,7 @@
                       ? "ガントチャートを閉じる"
                       : "ガントチャートを表示"}
                     ariaLabel="ガントチャートの表示切替"
+                    ariaPressed={$ganttVisible ? "true" : "false"}
                     variant="text"
                     normalColor={$ganttVisible
                       ? "var(--theme-color-Primary-main)"
@@ -1071,6 +1072,7 @@
                   <IconButton
                     tooltipContent={detailPaneVisible ? "詳細欄を隠す" : "詳細欄を表示"}
                     ariaLabel={detailPaneVisible ? "詳細欄を隠す" : "詳細欄を表示"}
+                    ariaPressed={detailPaneVisible ? "true" : "false"}
                     variant="text"
                     normalColor={detailPaneVisible
                       ? "var(--theme-color-Primary-main)"
@@ -1096,6 +1098,7 @@
                       ? "アーカイブ済みタスクを隠す"
                       : "アーカイブ済みタスクを表示"}
                     ariaLabel="アーカイブ表示の切替"
+                    ariaPressed={$show_archived ? "true" : "false"}
                     variant="text"
                     normalColor={$show_archived
                       ? "var(--theme-color-Primary-main)"

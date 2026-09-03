@@ -169,7 +169,15 @@
     padding: 0 var(--sp1);
     background: transparent;
     border: none;
-    color: var(--status-color);
+    /* 状態の色はドットが持ち、ラベルは本文色にする。
+       アクセント色（例: Warning #ed6c02）は 8px のドットとしては十分でも
+       12px の文字としては薄く、ライトテーマの行背景に対して 2.96:1 まで
+       落ちて WCAG AA (4.5:1) を満たせなかった。ステータスは全行に出る、
+       アプリ中でいちばん反復の多い文字なので影響が大きい。
+       ドロップダウンの選択肢（.s-option）は元々この形なので、見た目も
+       そちらに揃う。色分けはドットで残り、Open は中抜き、Canceled は
+       打ち消し線と、色以外の手掛かりも保つ。 */
+    color: var(--theme-color-Sub-main);
     font-size: var(--font-label-md);
     font-weight: 500;
     cursor: pointer;
@@ -195,6 +203,12 @@
   }
   .s-chip[data-status="Canceled"] .s-label {
     text-decoration: line-through;
+  }
+  /* 終わったタスクは一段落とす。急ぐものだけが目に入るようにする方針は
+     期限日の色付けと揃える。 */
+  .s-chip[data-status="Canceled"] .s-label,
+  .s-chip[data-status="Completed"] .s-label {
+    opacity: 0.75;
   }
   .s-label {
     flex: 1 1 auto;

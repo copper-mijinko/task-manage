@@ -10,6 +10,12 @@ export const THEME_DARK = {
       light: "#e3f2fd",
       main: "#90caf9",
       dark: "#42a5f5",
+      /**
+       * 文字に載せる用、および「その上に文字を載せる塗り」用。ダークテーマ
+       * では `main` がそのまま AA を満たすので同値。ライトテーマ側の同名
+       * トークンと組で使うことで、テーマを跨いで 4.5:1 を確保する。
+       */
+      text: "#90caf9",
     },
     Secondary: {
       light: "#f3e5f5",
@@ -20,11 +26,20 @@ export const THEME_DARK = {
       light: "#e57373",
       main: "#f44336",
       dark: "#d32f2f",
+      /**
+       * 文字に載せる用。`main` は 8px のドットや 1px の枠線としては十分でも、
+       * 12px の文字にすると行背景に対して 2.8:1 前後しか出ず WCAG AA
+       * (4.5:1) を満たせない。枠線やドットは `main` のまま、文字だけ
+       * この値にする。
+       */
+      text: "#ffb4ab",
     },
     Warning: {
       light: "#ffb74d",
       main: "#ffa726",
       dark: "#f57c00",
+      /** 文字に載せる用。理由は Error.text と同じ。 */
+      text: "#ffb74d",
     },
     Info: {
       light: "#4fc3f7",
@@ -71,6 +86,12 @@ export const THEME_LIGHT = {
       main: "#1976d2",
       light: "#42a5f5",
       dark: "#1565c0",
+      /**
+       * 文字に載せる用、および「その上に文字を載せる塗り」用。`main`
+       * (#1976d2) は淡い背景の上で 3.9〜4.4:1 にとどまり AA に僅かに届か
+       * ない。塗りとして使う場合も、白文字との比が 4.37:1 で足りない。
+       */
+      text: "#1565c0",
     },
     Secondary: {
       light: "#ba68c8",
@@ -81,11 +102,18 @@ export const THEME_LIGHT = {
       light: "#ef5350",
       main: "#d32f2f",
       dark: "#c62828",
+      /** 文字に載せる用。理由は THEME_DARK の Error.text と同じ。 */
+      text: "#a31515",
     },
     Warning: {
       light: "#ff9800",
       main: "#ed6c02",
       dark: "#e65100",
+      /**
+       * 文字に載せる用。ライトテーマの `main` (#ed6c02) は行背景に対して
+       * 2.96:1 しかなく、色付き文字の中でいちばん読みにくかった。
+       */
+      text: "#8a4000",
     },
     Info: {
       light: "#03a9f4",

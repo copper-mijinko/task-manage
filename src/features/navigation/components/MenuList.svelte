@@ -459,7 +459,7 @@
             stroke-linejoin="round"
           />
         </svg>
-        <span class="SubsectionLabel TextOverFlow">Workspaceプロジェクト</span>
+        <span class="SubsectionLabel TextOverFlow">Workspace</span>
         <span class="SubsectionCount">{$workspace_store.projects.length}</span>
       </button>
       <div class="AddButtonContainer">
@@ -578,7 +578,7 @@
             stroke-linejoin="round"
           />
         </svg>
-        <span class="SubsectionLabel TextOverFlow">アプリ内プロジェクト</span>
+        <span class="SubsectionLabel TextOverFlow">アプリ内</span>
         <span class="SubsectionCount">{$project_ids?.length ?? 0}</span>
       </button>
       <div class="AddButtonContainer">
@@ -847,6 +847,10 @@
   .Chevron.Collapsed {
     transform: rotate(-90deg);
   }
+  /* 見出しは「Workspace」「アプリ内」だけにしてある。親セクションが既に
+     「プロジェクト」なので、子でも繰り返すと 216px のサイドバー幅に収まらず
+     「Workspaceプロジ…」と切れていた。正式名称はツールチップと aria-label
+     が持っている。 */
   .SubsectionLabel {
     flex: 0 1 auto;
     min-width: 0;
@@ -1150,7 +1154,7 @@
     width: 1.25rem;
     height: 1.25rem;
     border-radius: var(--shape-pill);
-    color: var(--on-theme-primary);
+    color: var(--on-theme-primary-light);
     background-color: rgba(255, 255, 255, 0.07);
     font-size: var(--font-label-md);
   }

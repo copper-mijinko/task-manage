@@ -663,7 +663,7 @@
   .LinkBtn {
     border: none;
     background: transparent;
-    color: var(--theme-color-Primary-main);
+    color: var(--theme-color-Primary-text);
     font-size: var(--font-label-md);
     cursor: pointer;
     padding: 0.2rem var(--sp1);
