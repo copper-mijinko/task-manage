@@ -1,5 +1,9 @@
 ﻿import { uuidV4 } from "@lib/utils/uuid";
-import { memoContentForSearch, type MemoFormat } from "@features/memos/utils/memo_utils";
+import {
+  memoContentForSearch,
+  type MemoFormat,
+  type MemoKind,
+} from "@features/memos/utils/memo_utils";
 import type { SortState } from "@app-types/app";
 
 export type TaskStatus = "Open" | "Pending" | "In Progress" | "Completed" | "Canceled";
@@ -10,6 +14,9 @@ export interface MemoEntry {
   content: unknown;
   tags: string[];
   format?: MemoFormat;
+  /** 記録の種別。省略時は作業メモ扱い。詳細は normalizeMemoKind を参照。 */
+  kind?: MemoKind;
+  order?: number;
   bodyLoaded?: boolean;
 }
 
