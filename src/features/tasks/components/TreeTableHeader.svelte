@@ -307,7 +307,7 @@
     />
   </div>
   {#each headers as header}
-    <div class:TableHeader={true} role="columnheader">
+    <div class:TableHeader={true} data-column={header.name} role="columnheader">
       <div class="HeaderLabelRow" class:sortActive={$sort_state?.column === header.name}>
         <span class="HeaderLabelText TextOverFlow">{getColumnLabel(header.name)}</span>
         {#if SORTABLE_COLUMNS.has(header.name)}
@@ -456,7 +456,9 @@
                   <path d={FILTER_ICON_PATH} />
                 </svg>
               </span>
-              <span class="FilterSelection">{filterSummaries[header.name]}</span>
+              {#if filterActive[header.name]}
+                <span class="FilterSelection">{filterSummaries[header.name]}</span>
+              {/if}
             </button>
             {#if filterActive[header.name]}
               <IconButton
@@ -495,7 +497,9 @@
                   <path d={FILTER_ICON_PATH} />
                 </svg>
               </span>
-              <span class="FilterSelection">{filterSummaries[header.name]}</span>
+              {#if filterActive[header.name]}
+                <span class="FilterSelection">{filterSummaries[header.name]}</span>
+              {/if}
             </button>
             {#if filterActive[header.name]}
               <IconButton
@@ -534,7 +538,9 @@
                   <path d={FILTER_ICON_PATH} />
                 </svg>
               </span>
-              <span class="FilterSelection">{filterSummaries[header.name]}</span>
+              {#if filterActive[header.name]}
+                <span class="FilterSelection">{filterSummaries[header.name]}</span>
+              {/if}
             </button>
             {#if filterActive[header.name]}
               <IconButton
@@ -573,7 +579,9 @@
                   <path d={FILTER_ICON_PATH} />
                 </svg>
               </span>
-              <span class="FilterSelection">{filterSummaries[header.name]}</span>
+              {#if filterActive[header.name]}
+                <span class="FilterSelection">{filterSummaries[header.name]}</span>
+              {/if}
             </button>
             {#if filterActive[header.name]}
               <IconButton
@@ -598,18 +606,23 @@
           </div>
         {:else}
           <div class="HeaderFilterGroup">
-            <div
-              class="HeaderFilterControl HeaderFilterSummary"
-              class:active={filterActive[header.name]}
-              aria-label={`${getColumnLabel(header.name)}フィルター：${filterSummaries[header.name]}`}
-            >
-              <span class="FilterIcon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path d={FILTER_ICON_PATH} />
-                </svg>
-              </span>
-              <span class="FilterSelection">{filterSummaries[header.name]}</span>
-            </div>
+            <!-- 絞り込み UI を持たない列（添付数など）は、条件が付いていない
+                 あいだサマリー自体を出さない。押せないフィルターアイコンが
+                 常時見えていると操作できそうに見えてしまうため。 -->
+            {#if filterActive[header.name]}
+              <div
+                class="HeaderFilterControl HeaderFilterSummary"
+                class:active={filterActive[header.name]}
+                aria-label={`${getColumnLabel(header.name)}フィルター：${filterSummaries[header.name]}`}
+              >
+                <span class="FilterIcon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d={FILTER_ICON_PATH} />
+                  </svg>
+                </span>
+                <span class="FilterSelection">{filterSummaries[header.name]}</span>
+              </div>
+            {/if}
             {#if filterActive[header.name]}
               <IconButton
                 style={"margin: 0rem; padding: var(--sp1); margin-left: auto; width: 1.5rem; height: 1.5rem; flex-shrink: 0;"}
@@ -813,7 +826,7 @@
     position: relative;
     height: 3rem;
     box-sizing: border-box;
-    min-width: 8rem;
+    min-width: var(--col-min-default);
     display: flex;
     flex-direction: column;
     border-right: 1px solid var(--header-border);
@@ -825,6 +838,23 @@
     font-weight: 600;
     font-size: var(--font-label-md);
     letter-spacing: 0.02em;
+  }
+  .TableHeader[data-column="name"] {
+    min-width: var(--col-min-name);
+  }
+  .TableHeader[data-column="status"] {
+    min-width: var(--col-min-status);
+  }
+  .TableHeader[data-column="start date"],
+  .TableHeader[data-column="due date"] {
+    min-width: var(--col-min-date);
+  }
+  .TableHeader[data-column="memo"],
+  .TableHeader[data-column="attachments"] {
+    min-width: var(--col-min-count);
+  }
+  .TableHeader[data-column="tags"] {
+    min-width: var(--col-min-tags);
   }
   .TableHeader:last-of-type {
     border-right: 0px;

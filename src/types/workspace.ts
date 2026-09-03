@@ -29,6 +29,8 @@ export interface WorkspaceTask {
   /** Empty array means this is the root task (project itself). */
   parents: string[];
   memos: WorkspaceMemo[];
+  /** Tags on the task itself. Persisted in `_index.md` / `_project.md` frontmatter. */
+  tags?: string[];
   attachments?: WorkspaceAttachment[];
   createdAt: string; // YYYY-MM-DD
   order?: number;

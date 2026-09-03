@@ -27,6 +27,11 @@ export interface TreeNodeData {
   "start date": `${string}-${string}-${string}` | undefined;
   "due date": `${string}-${string}-${string}` | undefined;
   memo: MemoEntry[];
+  /**
+   * タスク自身に付けたタグ。メモのタグ (`MemoEntry.tags`) とは別に、タスクを
+   * 横断的に分類するために使う。未設定は「タグなし」と同じ扱い。
+   */
+  tags?: string[];
   attachments?: TaskAttachmentEntry[];
   [key: string]: unknown;
 }
@@ -178,9 +183,16 @@ export function filterTree(
       nameFilterMatch = keyMatch; // Record if name filter matched
     } else if (key === "tags") {
       const tag = keywords[0].toLowerCase();
-      keyMatch = (tree.data.memo ?? []).some((entry) =>
-        ((entry.tags as string[]) ?? []).some((t) => t.toLowerCase() === tag)
+      // タグはタスク自身にもメモにも付く。どちらで一致しても、そのタスクは
+      // そのタグの付いたタスクとして扱う。
+      const taskTagMatch = ((tree.data.tags as string[]) ?? []).some(
+        (t) => t.toLowerCase() === tag
       );
+      keyMatch =
+        taskTagMatch ||
+        (tree.data.memo ?? []).some((entry) =>
+          ((entry.tags as string[]) ?? []).some((t) => t.toLowerCase() === tag)
+        );
     } else if (key === "start date" || key === "due date") {
       const from = keywords[0] ?? "";
       const to = keywords[1] ?? "";

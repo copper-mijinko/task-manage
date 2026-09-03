@@ -804,6 +804,8 @@ function taskFrontmatterData(task) {
   if (task.dueDate) data.due = task.dueDate;
   if (task.parents?.length > 0) data.parents = task.parents;
   if (typeof task.order === "number") data.order = task.order;
+  const tags = normalizeTaskTags(task.tags);
+  if (tags.length > 0) data.tags = tags;
   data.created = task.createdAt || new Date().toISOString().slice(0, 10);
   // Archived (論理削除) フラグはオプションで載せる。未アーカイブのときは
   // フィールド自体を出さないことで、既存ファイルとの差分も最小限になる。
@@ -812,6 +814,34 @@ function taskFrontmatterData(task) {
     if (task.archivedAt) data.archived_at = task.archivedAt;
   }
   return data;
+}
+
+/**
+ * Task tags round-trip through the `tags:` frontmatter list. Files are
+ * hand-editable, so accept both the YAML list form and a comma separated
+ * scalar, and drop blanks / duplicates rather than trusting the input.
+ */
+function normalizeTaskTags(value) {
+  const raw = Array.isArray(value)
+    ? value
+    : typeof value === "string"
+      ? value.split(",")
+      : value == null
+        ? []
+        : [value];
+  const seen = new Set();
+  const tags = [];
+  for (const entry of raw) {
+    const tag = String(entry ?? "")
+      .trim()
+      .replace(/^#/, "");
+    if (!tag) continue;
+    const key = tag.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    tags.push(tag);
+  }
+  return tags;
 }
 
 function parseArchivedValue(value) {
@@ -922,6 +952,7 @@ function readRootTask(projectDir, options = {}) {
     attachments: readAttachments(projectDir),
     createdAt: data.created || "",
     order: parseOrderValue(data.order),
+    tags: normalizeTaskTags(data.tags),
   };
   if (parseArchivedValue(data.archived)) {
     task.archived = true;
@@ -946,6 +977,7 @@ function readTaskDir(taskDir, options = {}) {
     attachments: readAttachments(taskDir),
     createdAt: data.created || "",
     order: parseOrderValue(data.order),
+    tags: normalizeTaskTags(data.tags),
   };
   if (parseArchivedValue(data.archived)) {
     task.archived = true;
@@ -1126,6 +1158,7 @@ function buildTaskFromFrontmatter(data, extra) {
     dueDate: data.due || undefined,
     createdAt: data.created || "",
     order: parseOrderValue(data.order),
+    tags: normalizeTaskTags(data.tags),
     ...extra,
   };
   if (parseArchivedValue(data.archived)) {
@@ -1944,6 +1977,7 @@ function exportProjectData(workspacePath, projectData, options = {}) {
       dueDate: node.data["due date"] || undefined,
       parents: [...parentIds],
       memos,
+      tags: normalizeTaskTags(node.data.tags),
       createdAt: today,
       order: siblingIndex,
     });
@@ -2014,6 +2048,7 @@ async function deleteProjectAsync(projectDir) {
 
 module.exports = {
   slugify,
+  normalizeTaskTags,
   parseFrontmatter,
   stringifyFrontmatter,
   atomicWriteFile,

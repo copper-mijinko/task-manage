@@ -51,6 +51,19 @@
   --on-theme-tooltip-bg: #e8edf0;
   --on-theme-tooltip-fg: #262d32;
 
+  /* Tree table column minimums — per column type rather than one blanket
+     value. A single min for every column made the widest-content column
+     (task name) clamp to the same width as a 1-digit counter, so at the
+     app's default window size no task name was readable. Counters need
+     room for 2-3 digits, dates for a localized date, and the name column
+     absorbs whatever space is left (see fitNameColumn in TreeTable). */
+  --col-min-name: 12rem;
+  --col-min-status: 7rem;
+  --col-min-date: 8rem;
+  --col-min-count: 5rem;
+  --col-min-tags: 8rem;
+  --col-min-default: 8rem;
+
   /* Card body padding — overridable by density mode so we don't squash
      every other --sp3 consumer. Defaults to the comfortable 12px. */
   --card-pad: var(--sp3);

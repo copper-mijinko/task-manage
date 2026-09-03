@@ -57,9 +57,6 @@
     ? 'dark'
     : ''}; --backgroundColor: {backgroundColor}; --borderColor: {borderColor}; --color-datetime: {textColor};"
 >
-  {#if urgency === "overdue"}
-    <span class="WarnIcon" aria-hidden="true">⚠</span>
-  {/if}
   <input
     {style}
     class="Date"
@@ -86,22 +83,6 @@
     height: 100%;
     gap: 2px;
   }
-  /* Warning icon overlaid at the left edge inside the input padding */
-  .WarnIcon {
-    position: absolute;
-    left: var(--sp1);
-    top: 50%;
-    transform: translateY(-50%);
-    flex-shrink: 0;
-    width: var(--sp4);
-    text-align: center;
-    font-size: var(--font-label-md);
-    color: var(--theme-color-Error-main);
-    line-height: 1;
-    user-select: none;
-    pointer-events: none;
-    z-index: 2;
-  }
   .Date {
     height: 100%;
     width: 100%;
@@ -119,13 +100,18 @@
     font-size: var(--font-label-md);
     cursor: pointer;
   }
-  /* Make room for the leading warning icon (icon is sp1 from left + sp4 wide, plus sp1 gap) */
-  .Container.Overdue .Date {
-    padding-left: calc(var(--sp1) * 2 + var(--sp4));
-  }
   .Container.Overdue .Date,
   .Container.DueSoon .Date {
     font-weight: 600;
+  }
+  /* Overdue used to be flagged with a leading ⚠ glyph that reserved 24px of
+     padding inside the input. In a tree column that is ~96px wide it pushed
+     the date itself out of view, so the urgency badge hid the very value it
+     was flagging. The state is now carried by the red border, the bold red
+     text, a thicker leading edge (a non-colour cue that survives a
+     colour-vision deficiency) and the `期限切れ: …` tooltip. */
+  .Container.Overdue .Date {
+    border-left-width: 3px;
   }
   .Date.Inherited {
     opacity: 0.65;

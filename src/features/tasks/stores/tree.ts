@@ -185,6 +185,7 @@ function comparableWorkspaceTask(task: WorkspaceTask) {
       size: attachment.size,
       modifiedAt: attachment.modifiedAt ?? null,
     })),
+    tags: task.tags ?? [],
     createdAt: task.createdAt,
     order: task.order ?? null,
     archived: task.archived ?? false,

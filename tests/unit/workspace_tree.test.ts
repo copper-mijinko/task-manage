@@ -179,4 +179,75 @@ describe("workspace tree conversion", () => {
     expect(projectData.data.data.name).toBe("Actual Project");
     expect(projectData.data.children.map((child) => child.id)).toEqual(["task-1"]);
   });
+
+  it("emits a task listed under two parents exactly once", () => {
+    // parents は複数持てるため、同じ task が 2 つの親の children に現れうる。
+    // ツリーは keyed each で描画されるので、同じ id を 2 箇所へ出すと
+    // each_key_duplicate で描画が落ちて画面が「読み込み中...」のまま止まる。
+    const projectData = workspaceToProjectData(
+      {
+        root: {
+          id: "root",
+          name: "Project",
+          status: "Open",
+          parents: [],
+          memos: [],
+          createdAt: "2026-01-01",
+          order: 0,
+        },
+        parent: {
+          id: "parent",
+          name: "Parent",
+          status: "Open",
+          parents: ["root"],
+          memos: [],
+          createdAt: "2026-01-01",
+          order: 0,
+        },
+        shared: {
+          id: "shared",
+          name: "Shared",
+          status: "Open",
+          parents: ["root", "parent"],
+          memos: [],
+          createdAt: "2026-01-01",
+          order: 1,
+        },
+      },
+      "root"
+    );
+
+    const ids: string[] = [];
+    const walk = (node: { id: string; children: { id: string }[] }) => {
+      ids.push(node.id);
+      for (const child of node.children) walk(child as never);
+    };
+    walk(projectData.data as never);
+
+    expect(ids.filter((id) => id === "shared")).toHaveLength(1);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("round-trips task tags between the tree and workspace tasks", () => {
+    const projectData = workspaceToProjectData(
+      {
+        root: {
+          id: "root",
+          name: "Project",
+          status: "Open",
+          parents: [],
+          memos: [],
+          tags: ["Frontend", "frontend", "  design "],
+          createdAt: "2026-01-01",
+          order: 0,
+        },
+      },
+      "root"
+    );
+
+    expect(projectData.data.data.tags).toEqual(["frontend", "design"]);
+
+    const [task] = projectDataToWorkspaceTasks(projectData, {});
+    expect(task.tags).toEqual(["frontend", "design"]);
+  });
 });
