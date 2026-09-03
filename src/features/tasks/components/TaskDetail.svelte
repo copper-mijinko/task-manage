@@ -975,14 +975,50 @@
     </div>
   </Card>
 {:else}
-  <h1 class="empty-state">タスクを選択してください。</h1>
+  <div class="empty-state" role="status">
+    <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M4 6h10M4 12h16M4 18h7"
+        stroke="currentColor"
+        stroke-width="1.6"
+        stroke-linecap="round"
+      />
+      <circle cx="18" cy="7" r="3" stroke="currentColor" stroke-width="1.6" />
+    </svg>
+    <p class="empty-state-title">タスクを選択してください</p>
+    <p class="empty-state-hint">左のツリーでタスクを選ぶと、ここに詳細とメモを表示します。</p>
+  </div>
 {/if}
 
 <style>
   .empty-state {
-    color: var(--theme-color-Sub-main);
     display: flex;
+    flex-direction: column;
+    align-items: center;
     justify-content: center;
+    gap: var(--sp2);
+    width: 100%;
+    height: 100%;
+    padding: var(--sp6);
+    color: color-mix(in srgb, var(--theme-color-Sub-main) 70%, transparent);
+    text-align: center;
+  }
+  .empty-state-icon {
+    width: 2.25rem;
+    height: 2.25rem;
+    color: color-mix(in srgb, var(--theme-color-Primary-main) 75%, transparent);
+  }
+  .empty-state-title {
+    margin: 0;
+    color: var(--theme-color-Sub-main);
+    font-size: var(--font-title-md);
+    font-weight: 600;
+  }
+  .empty-state-hint {
+    margin: 0;
+    max-width: 22rem;
+    font-size: var(--font-body-sm);
+    line-height: 1.5;
   }
   .task-detail-card-body {
     display: flex;

@@ -61,7 +61,7 @@
   --col-min-status: 7rem;
   --col-min-date: 8rem;
   --col-min-count: 5rem;
-  --col-min-tags: 8rem;
+  --col-min-tags: 9rem;
   --col-min-default: 8rem;
 
   /* Card body padding — overridable by density mode so we don't squash

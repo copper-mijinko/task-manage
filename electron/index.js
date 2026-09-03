@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, dialog } = require("electron");
+const { app, BrowserWindow, ipcMain, screen, shell, dialog } = require("electron");
 const { spawn } = require("child_process");
 const fs = require("fs");
 const path = require("path");
@@ -11,6 +11,7 @@ const inbox = require("./inbox");
 const { WorkspaceReconciler } = require("./workspace-reconciler");
 const { WorkspaceWriteQueue } = require("./workspace-write-queue");
 const { createWorkspaceCacheLoader } = require("./workspace-cache");
+const { loadWindowState, trackWindowState } = require("./window-state");
 const { configureAgentDebugging } = require("./agent-debug");
 const { performanceMetrics } = require("./performance-metrics");
 const {
@@ -237,6 +238,11 @@ app.on("ready", () => {
   const t0 = Date.now();
   performanceMetrics.record("startup.processToAppReady", appReadyAt);
 
+  // 前回終了時のウィンドウサイズ・位置を復元する。db.json / meta.json より
+  // 先に必要なので、専用の小さな状態ファイルだけを同期で読む。
+  const windowStateFile = resolveAppDataPath("window-state.json");
+  const windowState = loadWindowState(windowStateFile, screen.getAllDisplays());
+
   let mainWindow = new BrowserWindow({
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -246,13 +252,20 @@ app.on("ready", () => {
       zoomFactor: 1.0,
       ...(agentDebugging ? { backgroundThrottling: false } : {}),
     },
-    width: 1000,
-    height: 800,
-    minWidth: 700,
-    minHeight: 700,
+    width: windowState.width,
+    height: windowState.height,
+    ...(windowState.x !== undefined && windowState.y !== undefined
+      ? { x: windowState.x, y: windowState.y }
+      : {}),
+    minWidth: windowState.minWidth,
+    minHeight: windowState.minHeight,
     frame: false,
     titleBarStyle: "hidden",
   });
+  if (windowState.isMaximized) {
+    mainWindow.maximize();
+  }
+  trackWindowState(mainWindow, windowStateFile);
   performanceMetrics.record("startup.appReadyToBrowserWindow", performance.now() - appReadyAt);
   log.info(`[perf] BrowserWindow created: ${Date.now() - t0}ms`);
 

@@ -80,6 +80,11 @@
 
   $: dueDateUrgency = getDueDateUrgency(data["due date"] || inheritedDueDate, data["status"]);
   $: rowTags = normalizeTagList(data.tags);
+  // 列幅は限られるので、読める大きさで出せる範囲だけ表示し、残りは「+N」で示す
+  // （全件はセルの title と詳細ペインで確認できる）。3 件以上あるときは
+  // 「+N」の幅を確保するため 1 件だけ出す。
+  $: visibleRowTags = rowTags.slice(0, rowTags.length > 2 ? 1 : 2);
+  $: hiddenRowTagCount = rowTags.length - visibleRowTags.length;
 
   function displayCellValue(headerName) {
     const value = data[headerName];
@@ -403,8 +408,8 @@
         />
       {:else if header.name == "tags"}
         {#if rowTags.length > 0}
-          <span class="TagCellChips">
-            {#each rowTags as tag (tag)}
+          <span class="TagCellChips" title={rowTags.join(", ")}>
+            {#each visibleRowTags as tag (tag)}
               <button
                 type="button"
                 class="TagChip"
@@ -417,6 +422,11 @@
                 {tag}
               </button>
             {/each}
+            {#if hiddenRowTagCount > 0}
+              <span class="TagOverflow" aria-label={`他 ${hiddenRowTagCount} 件のタグ`}
+                >+{hiddenRowTagCount}</span
+              >
+            {/if}
           </span>
         {/if}
       {:else}
@@ -656,14 +666,26 @@
   /* タグセルは行内で 1 行に収める。溢れた分は横スクロールではなく
      単純に切り落とし、詳細ペインで全部見てもらう。 */
   .TagCellChips {
+    /* .TableData span の共通ルール（flex:1 / center）を上書きする。
+       中央寄せのままだとチップが左右どちらもはみ出して両端が切れる。 */
     display: flex;
+    flex: 1 1 auto;
     align-items: center;
+    justify-content: flex-start;
     gap: var(--sp1);
     min-width: 0;
     overflow: hidden;
   }
+  .TagOverflow {
+    flex: 0 0 auto;
+    color: color-mix(in srgb, var(--theme-color-Sub-main) 70%, transparent);
+    font-size: var(--font-label-sm);
+    font-weight: 600;
+    white-space: nowrap;
+  }
   .TagChip {
     max-width: 8rem;
+    min-width: 3.5rem;
     height: 1.25rem;
     padding: 0 var(--sp2);
     border: 1px solid color-mix(in srgb, var(--theme-color-Primary-main) 55%, transparent);

@@ -31,6 +31,7 @@ Electron アプリ全体を起動して確認する。
 [tests/unit/archive.test.ts](../tests/unit/archive.test.ts)
 [tests/unit/task_tags.test.js](../tests/unit/task_tags.test.js)
 [tests/unit/agenda.test.ts](../tests/unit/agenda.test.ts)
+[tests/unit/window-state.test.js](../tests/unit/window-state.test.js)
 
 | 対象                                | テストケース                                                                                      | 確認内容                                                                        |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
@@ -112,6 +113,10 @@ Electron アプリ全体を起動して確認する。
 | `src/features/agenda/stores/agenda.ts` | `date helpers` 3 件 | ローカル日付の算出、日数差、期限グループの判定 |
 | `src/features/agenda/stores/agenda.ts` | `buildAgendaItemsForProject` 4 件 | ルート / 完了 / アーカイブ配下の除外、親タスク名の付与、タグの引き継ぎ |
 | `src/features/agenda/stores/agenda.ts` | `sortAgendaItems orders by due date and puts undated tasks last` | 期限昇順・期限なしを末尾に置く並び |
+| `electron/window-state.js` | `sanitizeWindowState` 5 件 | 既定値へのフォールバック、最小 / 作業領域でのクランプ、画面外位置の破棄、最大化フラグ |
+| `electron/window-state.js` | `serializeWindowState` 2 件 | 保存値の丸めと、数値でないフィールドの除外 |
+| `electron/window-state.js` | `loadWindowState` 2 件 | 状態ファイルの往復と、欠損 / 壊れたファイルでの既定値 |
+| `electron/window-state.js` | `trackWindowState` 2 件 | リサイズ中の debounce と閉じる直前の flush、最大化前サイズの保持 |
 
 ### 2.2 Component テスト
 
@@ -285,6 +290,6 @@ Electron アプリ全体を起動して確認する。
 
 | 種別         | 件数                              |
 | ------------ | --------------------------------- |
-| Test files   | unit 29 passed + component 24 passed (53) |
-| Tests        | unit 422 passed + component 209 passed / 7 skipped (631 / 7) |
+| Test files   | unit 30 passed + component 24 passed (54) |
+| Tests        | unit 433 passed + component 209 passed / 7 skipped (642 / 7) |
 | svelte-check | 480 files / 0 errors / 0 warnings |

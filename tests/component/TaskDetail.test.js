@@ -86,7 +86,7 @@ describe("TaskDetail", () => {
   test("shows a placeholder when no task is selected", () => {
     render(TaskDetail);
 
-    expect(screen.getByText("タスクを選択してください。")).toBeInTheDocument();
+    expect(screen.getByText("タスクを選択してください")).toBeInTheDocument();
   });
 
   test("shows an actionable empty state when the selected task has no notes", () => {

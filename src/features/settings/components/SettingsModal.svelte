@@ -12,7 +12,60 @@
   export let show = false;
   export let toggle: () => void;
 
-  type CategoryId = "appearance" | "datetime-format" | "about";
+  type CategoryId = "appearance" | "datetime-format" | "shortcuts" | "about";
+
+  type ShortcutGroup = {
+    title: string;
+    items: { keys: string[]; description: string }[];
+  };
+
+  /**
+   * ショートカットは各所のツールチップにしか出ておらず、一覧で確認する場所が
+   * なかった。実装箇所（App.svelte / Header.svelte / TreeTable.svelte /
+   * datetime_shortcuts.ts）に合わせてここへ集約する。
+   */
+  const shortcutGroups: ShortcutGroup[] = [
+    {
+      title: "全体",
+      items: [
+        { keys: ["Ctrl", "F"], description: "画面内をハイライト検索" },
+        { keys: ["F3"], description: "次の検索結果へ（Shift+F3 で前へ / Ctrl+G も同じ）" },
+        { keys: ["Ctrl", "Shift", "I"], description: "Inbox にクイック追加" },
+        { keys: ["Alt", "←"], description: "前のページへ戻る" },
+        { keys: ["Alt", "→"], description: "次のページへ進む" },
+      ],
+    },
+    {
+      title: "タスクツリー",
+      items: [
+        { keys: ["Ctrl", "A"], description: "表示中のタスクをすべて選択" },
+        { keys: ["Esc"], description: "選択を解除" },
+        { keys: ["Delete"], description: "選択したタスクをアーカイブ / 削除" },
+        { keys: ["Ctrl", "C"], description: "選択したタスクをコピー" },
+        { keys: ["Ctrl", "V"], description: "コピーしたタスクを子として貼り付け" },
+        { keys: ["Ctrl", "Z"], description: "元に戻す" },
+        { keys: ["Ctrl", "Y"], description: "やり直す（Ctrl+Shift+Z も同じ）" },
+      ],
+    },
+    {
+      title: "テキスト入力中",
+      items: [
+        { keys: ["Ctrl", ";"], description: "今日の日付を挿入" },
+        { keys: ["Ctrl", ":"], description: "現在時刻を挿入" },
+        { keys: ["Ctrl", "B"], description: "太字（Markdown メモ）" },
+        { keys: ["Ctrl", "I"], description: "斜体（Markdown メモ）" },
+        { keys: ["Ctrl", "K"], description: "リンク（Markdown メモ）" },
+      ],
+    },
+    {
+      title: "ウィンドウ",
+      items: [
+        { keys: ["Ctrl", "+"], description: "拡大（Ctrl+マウスホイールも同じ）" },
+        { keys: ["Ctrl", "-"], description: "縮小" },
+        { keys: ["Ctrl", "0"], description: "拡大率をリセット" },
+      ],
+    },
+  ];
 
   type Category = {
     id: CategoryId;
@@ -31,6 +84,11 @@
       id: "datetime-format",
       label: "日時フォーマット",
       description: "Ctrl+; / Ctrl+: で挿入する書式",
+    },
+    {
+      id: "shortcuts",
+      label: "ショートカット",
+      description: "キーボード操作の一覧",
     },
     {
       id: "about",
@@ -177,6 +235,34 @@
             <code>&lt;input type="date"&gt;</code> や <code>&lt;input type="time"&gt;</code>
             では仕様上 ISO 形式が必要なため、ここでの設定にかかわらず YYYY-MM-DD / HH:MM 形式で値がセットされます。
           </p>
+        {:else if selected === "shortcuts"}
+          <header class="DetailHeader">
+            <h3 class="DetailTitle">ショートカット</h3>
+            <p class="DetailHint">
+              テキスト入力中は、入力欄向けのショートカット以外は入力側が優先されます。
+            </p>
+          </header>
+
+          <div class="ShortcutGroups">
+            {#each shortcutGroups as group (group.title)}
+              <section class="ShortcutGroup">
+                <h4 class="ShortcutGroupTitle">{group.title}</h4>
+                <dl class="ShortcutList">
+                  {#each group.items as item (item.description)}
+                    <div class="ShortcutRow">
+                      <dt class="ShortcutKeys">
+                        {#each item.keys as key, index (key + index)}
+                          {#if index > 0}<span class="ShortcutPlus" aria-hidden="true">+</span>{/if}
+                          <kbd>{key}</kbd>
+                        {/each}
+                      </dt>
+                      <dd class="ShortcutDesc">{item.description}</dd>
+                    </div>
+                  {/each}
+                </dl>
+              </section>
+            {/each}
+          </div>
         {:else if selected === "about"}
           <header class="DetailHeader">
             <h3 class="DetailTitle">バージョン情報</h3>
@@ -393,6 +479,69 @@
     color: var(--theme-color-Sub-main);
     line-height: 1.6;
   }
+  .ShortcutGroups {
+    display: grid;
+    /* 説明が折り返さない幅を優先する。狭いときは 1 列、広い設定画面では
+       2 列に自然に増える。 */
+    grid-template-columns: repeat(auto-fit, minmax(24rem, 1fr));
+    gap: var(--sp4);
+    align-content: start;
+  }
+
+  .ShortcutGroup {
+    min-width: 0;
+  }
+
+  .ShortcutGroupTitle {
+    margin: 0 0 var(--sp1);
+    color: var(--theme-color-Sub-main);
+    font-size: var(--font-label-md);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: none;
+  }
+
+  .ShortcutList {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 18%, transparent);
+    border-radius: var(--shape-sm);
+    overflow: hidden;
+  }
+
+  .ShortcutRow {
+    display: flex;
+    align-items: baseline;
+    gap: var(--sp3);
+    padding: var(--sp2) var(--sp3);
+    border-bottom: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 12%, transparent);
+  }
+
+  .ShortcutRow:last-child {
+    border-bottom: none;
+  }
+
+  .ShortcutKeys {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex: 0 0 auto;
+    min-width: 6.5rem;
+    margin: 0;
+  }
+
+  .ShortcutPlus {
+    color: color-mix(in srgb, var(--theme-color-Sub-main) 55%, transparent);
+    font-size: var(--font-label-sm);
+  }
+
+  .ShortcutDesc {
+    margin: 0;
+    color: color-mix(in srgb, var(--theme-color-Sub-main) 85%, transparent);
+    font-size: var(--font-body-sm);
+  }
+
   .AboutList {
     display: flex;
     flex-direction: column;
@@ -445,7 +594,8 @@
   .Note strong {
     color: var(--theme-color-Sub-light);
   }
-  .DetailHint kbd {
+  .DetailHint kbd,
+  .ShortcutKeys kbd {
     display: inline-block;
     padding: 0 var(--sp1);
     border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 35%, transparent);
