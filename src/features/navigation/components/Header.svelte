@@ -15,6 +15,7 @@
   } from "@stores";
   import { workspace_store } from "@features/workspace/stores/workspace";
   import { inbox_count, INBOX_SELECTED_ID } from "@features/inbox/stores/inbox";
+  import { AGENDA_SELECTED_ID } from "@features/agenda/stores/agenda";
   import { pageSearchQuery } from "@features/search/stores/search";
   import * as platform from "@lib/ipc/platform";
   import {
@@ -115,6 +116,12 @@
     if (!$workspace_store.activeWorkspacePath) return;
     $selected_type = "Inbox";
     $selected_id = INBOX_SELECTED_ID;
+  }
+
+  function openAgendaView() {
+    if (!$workspace_store.activeWorkspacePath) return;
+    $selected_type = "Agenda";
+    $selected_id = AGENDA_SELECTED_ID;
   }
 
   const isElectronRuntime = typeof window !== "undefined" && Boolean(window.electronAPI);
@@ -289,6 +296,39 @@
       <span class="SearchShortcut" aria-hidden="true">Ctrl+F</span>
     {/if}
   </label>
+
+  <button
+    type="button"
+    class="InboxBtn"
+    class:Active={$selected_type === "Agenda"}
+    class:Disabled={!$workspace_store.activeWorkspacePath}
+    disabled={!$workspace_store.activeWorkspacePath}
+    data-testid="open-agenda"
+    on:click={openAgendaView}
+    aria-label="予定を開く"
+    aria-pressed={$selected_type === "Agenda"}
+    title={$workspace_store.activeWorkspacePath
+      ? "予定を開く（全プロジェクトの期限）"
+      : "Workspaceを設定すると予定が使えます"}
+  >
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M4 5.5h16v15H4zM8 3v4M16 3v4M4 10h16"
+        stroke="currentColor"
+        stroke-width="1.6"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        fill="none"
+      />
+      <path
+        d="M8 14h3"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+        fill="none"
+      />
+    </svg>
+  </button>
 
   <button
     type="button"

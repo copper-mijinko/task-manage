@@ -36,10 +36,12 @@
   let unregisterDateTimeShortcuts = null;
   let ProjectPageComponent = null;
   let InboxPanelComponent = null;
+  let AgendaPanelComponent = null;
   let QuickCaptureComponent = null;
   let TaskDetailWindowComponent = null;
   let projectPageLoading = null;
   let inboxPanelLoading = null;
+  let agendaPanelLoading = null;
   let quickCaptureLoading = null;
   let taskDetailWindowLoading = null;
 
@@ -83,6 +85,14 @@
     return inboxPanelLoading;
   }
 
+  function loadAgendaPanel() {
+    if (AgendaPanelComponent || agendaPanelLoading) return agendaPanelLoading;
+    agendaPanelLoading = import("@features/agenda/components/AgendaPanel.svelte").then((module) => {
+      AgendaPanelComponent = module.default;
+    });
+    return agendaPanelLoading;
+  }
+
   function loadQuickCapture() {
     if (QuickCaptureComponent || quickCaptureLoading) return quickCaptureLoading;
     quickCaptureLoading = import("@features/inbox/components/QuickCapture.svelte").then(
@@ -112,6 +122,9 @@
   }
   $: if (!isTaskDetailWindow && $selected_type === "Inbox") {
     void loadInboxPanel();
+  }
+  $: if (!isTaskDetailWindow && $selected_type === "Agenda") {
+    void loadAgendaPanel();
   }
   $: if (!isTaskDetailWindow && $showQuickCapture) {
     void loadQuickCapture();
@@ -523,6 +536,12 @@
         {:else if $selected_type == "Inbox"}
           {#if InboxPanelComponent}
             <InboxPanelComponent />
+          {:else}
+            <Loading variant="h1" />
+          {/if}
+        {:else if $selected_type == "Agenda"}
+          {#if AgendaPanelComponent}
+            <AgendaPanelComponent />
           {:else}
             <Loading variant="h1" />
           {/if}
