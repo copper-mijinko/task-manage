@@ -29,6 +29,8 @@ Electron アプリ全体を起動して確認する。
 [tests/unit/datetime_shortcuts.test.ts](../tests/unit/datetime_shortcuts.test.ts)
 [tests/unit/navigation_history.test.ts](../tests/unit/navigation_history.test.ts)
 [tests/unit/archive.test.ts](../tests/unit/archive.test.ts)
+[tests/unit/task_tags.test.js](../tests/unit/task_tags.test.js)
+[tests/unit/agenda.test.ts](../tests/unit/agenda.test.ts)
 
 | 対象                                | テストケース                                                                                      | 確認内容                                                                        |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
@@ -100,6 +102,16 @@ Electron アプリ全体を起動して確認する。
 | `src/features/tasks/utils/tree_control.ts` | `flattenVisibleTree は includeArchived=true で archived も並べる`                              | show_archived=ON 時の display 動作                                               |
 | `src/features/tasks/utils/tree_control.ts` | `stripArchivedNodes は archived の子孫を完全に取り除いた新ツリーを返す`                          | filter/tag 系の前処理が新ツリーを返し、元を破壊しない                            |
 | `src/features/tasks/utils/tree_control.ts` | `restoreNode で親を復元しても、独立 archived な子は archived のまま`                            | restore は対象ノードだけに作用する（cascade なし）                                |
+| `electron/workspace.js` | `normalizeTaskTags` 系 3 件 | タグの正規化（空白 / `#` / 重複 / カンマ区切りスカラー） |
+| `src/lib/utils/tags.ts` | `tag helpers (renderer)` 3 件 | タグ文字列の正規化と、非破壊な追加 / 削除 |
+| `electron/workspace.js` | `writes task tags into frontmatter and reads them back` | タスクタグの frontmatter 往復（sync / async 両経路） |
+| `electron/workspace.js` | `omits the frontmatter key entirely when a task has no tags` | タグなしのタスクに `tags:` を書かない |
+| `src/features/tasks/utils/tree_control.ts` | `filterTree with the tags filter` 3 件 | タグ絞り込みがタスクタグとメモタグの双方に一致する |
+| `src/features/workspace/utils/workspace_tree.ts` | `emits a task listed under two parents exactly once` | 複数の親を持つタスクをツリーへ 1 度だけ出す（keyed each の重複防止） |
+| `src/features/workspace/utils/workspace_tree.ts` | `round-trips task tags between the tree and workspace tasks` | タスクタグのツリー ⇄ WorkspaceTask 変換 |
+| `src/features/agenda/stores/agenda.ts` | `date helpers` 3 件 | ローカル日付の算出、日数差、期限グループの判定 |
+| `src/features/agenda/stores/agenda.ts` | `buildAgendaItemsForProject` 4 件 | ルート / 完了 / アーカイブ配下の除外、親タスク名の付与、タグの引き継ぎ |
+| `src/features/agenda/stores/agenda.ts` | `sortAgendaItems orders by due date and puts undated tasks last` | 期限昇順・期限なしを末尾に置く並び |
 
 ### 2.2 Component テスト
 
@@ -273,6 +285,6 @@ Electron アプリ全体を起動して確認する。
 
 | 種別         | 件数                              |
 | ------------ | --------------------------------- |
-| Test files   | unit 19 passed + component 18 passed (37) |
-| Tests        | unit 324 passed + component 126 passed / 7 skipped (450 / 7) |
-| svelte-check | 455 files / 0 errors / 0 warnings |
+| Test files   | unit 29 passed + component 24 passed (53) |
+| Tests        | unit 422 passed + component 209 passed / 7 skipped (631 / 7) |
+| svelte-check | 480 files / 0 errors / 0 warnings |
