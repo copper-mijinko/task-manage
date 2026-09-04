@@ -114,6 +114,8 @@ Electron アプリ全体を起動して確認する。
 | `src/features/agenda/stores/agenda.ts` | `date helpers` 3 件 | ローカル日付の算出、日数差、期限グループの判定 |
 | `src/features/agenda/stores/agenda.ts` | `buildAgendaItemsForProject` 4 件 | ルート / 完了 / アーカイブ配下の除外、親タスク名の付与、タグの引き継ぎ |
 | `src/features/agenda/stores/agenda.ts` | `sortAgendaItems orders by due date and puts undated tasks last` | 期限昇順・期限なしを末尾に置く並び |
+| `src/features/agenda/stores/agenda.ts` | `agenda_store.setStatus` 3 件 | 予定からの完了操作が差分パッチで保存され、一覧から外れる。失敗時は残す。同じプロジェクトが開いていればメモリのツリーも同期する |
+| `src/features/agenda/stores/agenda.ts` | `restoreStatus puts the item back with its previous status` | 取り消しで元のステータスへ戻し、一覧へ差し戻す |
 | `electron/window-state.js` | `sanitizeWindowState` 5 件 | 既定値へのフォールバック、最小 / 作業領域でのクランプ、画面外位置の破棄、最大化フラグ |
 | `electron/window-state.js` | `serializeWindowState` 2 件 | 保存値の丸めと、数値でないフィールドの除外 |
 | `electron/window-state.js` | `loadWindowState` 2 件 | 状態ファイルの往復と、欠損 / 壊れたファイルでの既定値 |

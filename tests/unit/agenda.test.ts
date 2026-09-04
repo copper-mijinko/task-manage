@@ -1,11 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { get } from "svelte/store";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  agenda_store,
   bucketForDueDate,
   buildAgendaItemsForProject,
   daysBetweenIsoDates,
   sortAgendaItems,
   todayIsoDate,
+  type AgendaItem,
 } from "../../src/features/agenda/stores/agenda";
+import { workspace_store } from "../../src/features/workspace/stores/workspace";
+import { tree_data } from "../../src/features/tasks/stores/tree";
+import type { ElectronAPI } from "../../src/types/app";
 import type { WorkspaceTask } from "../../src/types/workspace";
 
 const project = { name: "Proj", projectDir: "/ws/proj", rootId: "root" };
@@ -108,5 +114,131 @@ describe("sortAgendaItems", () => {
     );
 
     expect(sortAgendaItems(items).map((item) => item.name)).toEqual(["Soon", "Late", "None"]);
+  });
+});
+
+describe("agenda_store.setStatus", () => {
+  const testWindow = window as unknown as { electronAPI?: Partial<ElectronAPI> };
+
+  const item: AgendaItem = {
+    taskId: "task-a",
+    name: "A",
+    status: "Open",
+    dueDate: "2026-09-10",
+    tags: [],
+    projectName: "Proj",
+    projectDir: "/ws/proj",
+    projectRootId: "root",
+    parentPath: "",
+    bucket: "soon",
+    daysLeft: 7,
+  };
+
+  const workspaceTask: WorkspaceTask = {
+    id: "task-a",
+    name: "A",
+    status: "Open",
+    parents: ["root"],
+    memos: [],
+    createdAt: "2026-01-01",
+  };
+
+  afterEach(() => {
+    delete testWindow.electronAPI;
+    agenda_store.reset();
+    workspace_store.set({
+      workspaces: [],
+      activeWorkspacePath: null,
+      activeProjectDir: null,
+      projects: [],
+    });
+  });
+
+  it("writes the new status as a patch and drops the item from the list", async () => {
+    const wsWriteProjectPatch = vi.fn().mockResolvedValue({ success: true });
+    testWindow.electronAPI = {
+      wsReadProject: vi.fn().mockResolvedValue({ tasks: { "task-a": workspaceTask } }),
+      wsWriteProjectPatch,
+    } as Partial<ElectronAPI>;
+    agenda_store.set({ items: [item], loading: false, failedProjects: [], loadedAt: 0 });
+
+    const result = await agenda_store.setStatus(item, "Completed");
+
+    expect(result?.previousStatus).toBe("Open");
+    expect(get(agenda_store).items).toEqual([]);
+    expect(wsWriteProjectPatch).toHaveBeenCalledWith(
+      "/ws/proj",
+      { tasks: [{ ...workspaceTask, status: "Completed" }], deletedTaskIds: [] },
+      undefined
+    );
+  });
+
+  it("keeps the item listed when the write fails", async () => {
+    testWindow.electronAPI = {
+      wsReadProject: vi.fn().mockResolvedValue({ tasks: { "task-a": workspaceTask } }),
+      wsWriteProjectPatch: vi.fn().mockResolvedValue({ success: false, error: "nope" }),
+    } as Partial<ElectronAPI>;
+    agenda_store.set({ items: [item], loading: false, failedProjects: [], loadedAt: 0 });
+
+    expect(await agenda_store.setStatus(item, "Completed")).toBeNull();
+    expect(get(agenda_store).items).toHaveLength(1);
+  });
+
+  it("also syncs the in-memory tree when the same project is loaded", async () => {
+    testWindow.electronAPI = {
+      wsReadProject: vi.fn().mockResolvedValue({ tasks: { "task-a": workspaceTask } }),
+      wsWriteProjectPatch: vi.fn().mockResolvedValue({ success: true }),
+    } as Partial<ElectronAPI>;
+    workspace_store.set({
+      workspaces: [],
+      activeWorkspacePath: "/ws",
+      activeProjectDir: "/ws/proj",
+      projects: [],
+    });
+    tree_data.set({
+      headers: [],
+      data: {
+        id: "root",
+        data: {
+          name: "Proj",
+          status: "Open",
+          "start date": undefined,
+          "due date": undefined,
+          memo: [],
+        },
+        children: [
+          {
+            id: "task-a",
+            data: {
+              name: "A",
+              status: "Open",
+              "start date": undefined,
+              "due date": undefined,
+              memo: [],
+            },
+            children: [],
+          },
+        ],
+      },
+    });
+    agenda_store.set({ items: [item], loading: false, failedProjects: [], loadedAt: 0 });
+
+    await agenda_store.setStatus(item, "Completed");
+
+    expect(get(tree_data)?.data.children[0].data.status).toBe("Completed");
+  });
+
+  it("restoreStatus puts the item back with its previous status", async () => {
+    testWindow.electronAPI = {
+      wsReadProject: vi
+        .fn()
+        .mockResolvedValue({ tasks: { "task-a": { ...workspaceTask, status: "Completed" } } }),
+      wsWriteProjectPatch: vi.fn().mockResolvedValue({ success: true }),
+    } as Partial<ElectronAPI>;
+    agenda_store.set({ items: [], loading: false, failedProjects: [], loadedAt: 0 });
+
+    expect(await agenda_store.restoreStatus(item, "Open")).toBe(true);
+    expect(get(agenda_store).items.map((entry) => entry.name)).toEqual(["A"]);
+    expect(get(agenda_store).items[0].status).toBe("Open");
   });
 });

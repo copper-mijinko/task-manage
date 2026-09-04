@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import Card from "@lib/primitives/Card.svelte";
   import Loading from "@lib/primitives/Loading.svelte";
   import IconButton from "@lib/primitives/IconButton.svelte";
@@ -87,6 +87,35 @@
   function openTag(tag) {
     $active_tag = tag;
   }
+
+  /** 直前に完了にした行。取り消しバーの表示と復元に使う。 */
+  let lastCompleted = null;
+  let undoTimer = null;
+
+  function clearUndo() {
+    if (undoTimer) clearTimeout(undoTimer);
+    undoTimer = null;
+    lastCompleted = null;
+  }
+
+  async function completeItem(item) {
+    const result = await agenda_store.setStatus(item, "Completed");
+    if (!result) return;
+    if (undoTimer) clearTimeout(undoTimer);
+    lastCompleted = result;
+    // 取り消しは「今の操作の直後」に限る。放置したまま残り続けると
+    // どの行に対する取り消しなのか分からなくなるため自動で畳む。
+    undoTimer = setTimeout(clearUndo, 12000);
+  }
+
+  async function undoComplete() {
+    if (!lastCompleted) return;
+    const { item, previousStatus } = lastCompleted;
+    clearUndo();
+    await agenda_store.restoreStatus(item, previousStatus);
+  }
+
+  onDestroy(clearUndo);
 </script>
 
 <div class="AgendaRoot">
@@ -141,6 +170,13 @@
         <span class="ToolbarCount">{visibleItems.length}件 / {projectCount}プロジェクト</span>
       </div>
 
+      {#if lastCompleted}
+        <div class="UndoBar" role="status" aria-live="polite">
+          <span class="UndoText">「{lastCompleted.item.name}」を完了にしました</span>
+          <button type="button" class="UndoButton" on:click={undoComplete}>取り消す</button>
+        </div>
+      {/if}
+
       {#if $agenda_store.failedProjects.length > 0}
         <div class="LoadWarning" role="status">
           読み込めなかったプロジェクト: {$agenda_store.failedProjects.join("、")}
@@ -175,42 +211,59 @@
               <ul class="Items">
                 {#each group.items as item (item.projectDir + item.taskId)}
                   <li>
-                    <button type="button" class="Item" on:click={() => openItem(item)}>
-                      <span
-                        class="StatusDot"
+                    <div class="ItemRow">
+                      <button
+                        type="button"
+                        class="CompleteButton"
                         style={`--dot-color: ${STATUS_COLORS[item.status] ?? "var(--theme-color-Sub-main)"}`}
-                        title={STATUS_LABELS[item.status] ?? item.status}
-                      ></span>
-                      <span class="ItemMain">
-                        <span class="ItemName">{item.name}</span>
-                        <span class="ItemMeta">
-                          <span class="ProjectName">{item.projectName}</span>
-                          {#if item.parentPath}
-                            <span class="ParentPath">/ {item.parentPath}</span>
-                          {/if}
-                          <span class="StatusText">{STATUS_LABELS[item.status] ?? item.status}</span
-                          >
-                        </span>
-                      </span>
-                      {#if item.tags.length > 0}
-                        <span class="ItemTags">
-                          {#each item.tags.slice(0, 3) as tag (tag)}
-                            <!-- svelte-ignore a11y_click_events_have_key_events -->
-                            <!-- svelte-ignore a11y_no_static_element_interactions -->
-                            <span
-                              class="TagChip"
-                              title={`タグ ${tag} で絞り込む`}
-                              on:click|stopPropagation={() => openTag(tag)}
+                        title={`${STATUS_LABELS[item.status] ?? item.status} — クリックで完了にする`}
+                        aria-label={`${item.name} を完了にする`}
+                        on:click|stopPropagation={() => completeItem(item)}
+                      >
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path
+                            d="M5 12.5 10 17.5 19 7"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2.4"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          />
+                        </svg>
+                      </button>
+                      <button type="button" class="Item" on:click={() => openItem(item)}>
+                        <span class="ItemMain">
+                          <span class="ItemName">{item.name}</span>
+                          <span class="ItemMeta">
+                            <span class="ProjectName">{item.projectName}</span>
+                            {#if item.parentPath}
+                              <span class="ParentPath">/ {item.parentPath}</span>
+                            {/if}
+                            <span class="StatusText"
+                              >{STATUS_LABELS[item.status] ?? item.status}</span
                             >
-                              {tag}
-                            </span>
-                          {/each}
+                          </span>
                         </span>
-                      {/if}
-                      <span class="ItemDue" class:Overdue={item.bucket === "overdue"}>
-                        {dueLabel(item)}
-                      </span>
-                    </button>
+                        {#if item.tags.length > 0}
+                          <span class="ItemTags">
+                            {#each item.tags.slice(0, 3) as tag (tag)}
+                              <!-- svelte-ignore a11y_click_events_have_key_events -->
+                              <!-- svelte-ignore a11y_no_static_element_interactions -->
+                              <span
+                                class="TagChip"
+                                title={`タグ ${tag} で絞り込む`}
+                                on:click|stopPropagation={() => openTag(tag)}
+                              >
+                                {tag}
+                              </span>
+                            {/each}
+                          </span>
+                        {/if}
+                        <span class="ItemDue" class:Overdue={item.bucket === "overdue"}>
+                          {dueLabel(item)}
+                        </span>
+                      </button>
+                    </div>
                   </li>
                 {/each}
               </ul>
@@ -341,26 +394,105 @@
     display: flex;
     align-items: center;
     gap: var(--sp2);
-    width: 100%;
-    padding: var(--sp2) var(--sp3);
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: var(--sp2) var(--sp3) var(--sp2) 0;
     border: 0;
-    border-bottom: 1px solid color-mix(in srgb, var(--theme-color-Sub-dark) 18%, transparent);
     background: transparent;
     color: var(--theme-color-Sub-main);
     text-align: left;
     cursor: pointer;
   }
 
-  .Item:hover {
+  /* 行は「開く」と「完了にする」の 2 つの操作を持つので、ボタンを入れ子に
+     せず横並びにする（ボタンの中のボタンは不正な HTML になる）。 */
+  .ItemRow {
+    display: flex;
+    align-items: stretch;
+    width: 100%;
+    border-bottom: 1px solid color-mix(in srgb, var(--theme-color-Sub-dark) 18%, transparent);
+  }
+
+  .ItemRow:hover {
     background-color: color-mix(in srgb, var(--theme-color-Primary-main) 10%, transparent);
   }
 
-  .StatusDot {
+  .CompleteButton {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     flex: 0 0 auto;
+    width: 2.25rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: transparent;
+    cursor: pointer;
+  }
+
+  /* 通常はステータス色の点。ホバー / フォーカスでチェックに変わり、
+     「押すと完了になる」ことが分かるようにする。 */
+  .CompleteButton::before {
+    content: "";
+    position: absolute;
     width: 0.5rem;
     height: 0.5rem;
     border-radius: 50%;
     background-color: var(--dot-color);
+    transition: opacity 0.12s ease;
+  }
+
+  .CompleteButton svg {
+    width: 1.1rem;
+    height: 1.1rem;
+    position: relative;
+  }
+
+  .ItemRow:hover .CompleteButton,
+  .CompleteButton:hover,
+  .CompleteButton:focus-visible {
+    color: var(--theme-color-Success-main);
+  }
+
+  .ItemRow:hover .CompleteButton::before,
+  .CompleteButton:hover::before,
+  .CompleteButton:focus-visible::before {
+    opacity: 0;
+  }
+
+  .UndoBar {
+    display: flex;
+    align-items: center;
+    gap: var(--sp3);
+    padding: var(--sp1) var(--sp3);
+    background-color: color-mix(in srgb, var(--theme-color-Success-main) 16%, transparent);
+    color: var(--theme-color-Sub-main);
+    font-size: var(--font-label-md);
+  }
+
+  .UndoText {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .UndoButton {
+    flex: 0 0 auto;
+    padding: 0 var(--sp2);
+    border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 35%, transparent);
+    border-radius: var(--shape-xs);
+    background: transparent;
+    color: var(--theme-color-Sub-main);
+    font-size: var(--font-label-md);
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .UndoButton:hover {
+    border-color: var(--theme-color-Primary-main);
+    background-color: color-mix(in srgb, var(--theme-color-Primary-main) 14%, transparent);
   }
 
   .ItemMain {

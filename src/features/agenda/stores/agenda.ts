@@ -2,6 +2,8 @@ import { get, writable } from "svelte/store";
 import * as platform from "@lib/ipc/platform";
 import { normalizeTagList } from "@lib/utils/tags";
 import { workspace_store } from "@features/workspace/stores/workspace";
+import { tree_data } from "@features/tasks/stores/tree";
+import { updateNodeDataById } from "@features/tasks/utils/tree_control";
 import type { WorkspaceTask, WorkspaceTaskStatus } from "@app-types/workspace";
 
 /**
@@ -161,6 +163,43 @@ export function sortAgendaItems(items: AgendaItem[]): AgendaItem[] {
   });
 }
 
+/**
+ * 予定ビューからタスクのステータスを変える。
+ *
+ * 予定ビューを開いている間は `selected_type` が "WorkspaceProject" ではないため、
+ * `tree_data` の変更は保存経路に乗らない（保存は WorkspaceProject 表示時のみ）。
+ * そこでディスクへの反映は必ず差分パッチで main へ渡す。加えて、同じプロジェクトが
+ * まだ renderer のメモリに載っている場合はそのツリーも合わせて更新する。
+ * こうしないと、プロジェクト表示へ戻ったときに古いメモリ内容で保存され、
+ * ここでの変更が巻き戻ってしまう。
+ */
+async function writeStatus(item: AgendaItem, status: WorkspaceTaskStatus): Promise<boolean> {
+  let written = false;
+  try {
+    const project = await platform.wsReadProject(item.projectDir, { preferCache: true });
+    const task = project?.tasks?.[item.taskId];
+    if (!task) return false;
+    const result = await platform.wsWriteProjectPatch(item.projectDir, {
+      tasks: [{ ...task, status }],
+      deletedTaskIds: [],
+    });
+    written = result?.success !== false;
+  } catch {
+    return false;
+  }
+  if (!written) return false;
+
+  const { activeProjectDir } = get(workspace_store);
+  if (activeProjectDir === item.projectDir) {
+    const current = get(tree_data);
+    const data = current?.data ? updateNodeDataById(current.data, item.taskId, { status }) : null;
+    if (current && data && data !== current.data) {
+      tree_data.set({ ...current, data });
+    }
+  }
+  return true;
+}
+
 function createAgendaStore() {
   const { subscribe, set, update } = writable<AgendaState>({
     items: [],
@@ -224,6 +263,35 @@ function createAgendaStore() {
     set,
     update,
     load,
+
+    /**
+     * 予定の行から直接ステータスを変える。成功したらリストからは外し、
+     * 直前の状態を返して取り消せるようにする。
+     */
+    async setStatus(item: AgendaItem, status: WorkspaceTaskStatus) {
+      const ok = await writeStatus(item, status);
+      if (!ok) return null;
+      const previousStatus = item.status;
+      update((state) => ({
+        ...state,
+        items: state.items.filter(
+          (entry) => !(entry.taskId === item.taskId && entry.projectDir === item.projectDir)
+        ),
+      }));
+      return { item, previousStatus };
+    },
+
+    /** setStatus の取り消し。元のステータスへ戻し、リストへ差し戻す。 */
+    async restoreStatus(item: AgendaItem, previousStatus: WorkspaceTaskStatus) {
+      const ok = await writeStatus(item, previousStatus);
+      if (!ok) return false;
+      update((state) => ({
+        ...state,
+        items: sortAgendaItems([...state.items, { ...item, status: previousStatus }]),
+      }));
+      return true;
+    },
+
     reset() {
       loadToken += 1;
       set({ items: [], loading: false, failedProjects: [], loadedAt: null });
