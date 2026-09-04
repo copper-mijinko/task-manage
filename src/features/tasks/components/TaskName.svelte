@@ -25,6 +25,7 @@
    * delete (= archive) ではなく restore / permanently delete を出す。
    */
   export let archived = false;
+  export let completed = false;
   $: countPrefix = selectionCount > 1 ? `${selectionCount}件 ` : "";
   let draftText = text ?? "";
   let input;
@@ -47,6 +48,23 @@
   $: isMulti = selectionCount > 1;
 
   $: menuItems = withSeparators([
+    // 0. Completion toggle — the most frequent action, so it leads the menu.
+    //    Ctrl+Enter does the same thing from the keyboard.
+    ...(!isRoot
+      ? [
+          [
+            {
+              title: completed ? `${countPrefix}完了を取り消す` : `${countPrefix}完了にする`,
+              action: "toggleComplete",
+              disabled: archived,
+              icon: {
+                viewBox: "0 0 24 24",
+                path: "M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z",
+              },
+            },
+          ],
+        ]
+      : []),
     // 1. Rename — anchor-only; disabled in multi-select / archived.
     [
       {

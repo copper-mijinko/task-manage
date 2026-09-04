@@ -67,8 +67,15 @@
         <button
           type="button"
           data-testid={"select-" + row.id}
-          on:click={() => {
-            dispatch("select", { id: row.id, path: row.path });
+          on:click={(event) => {
+            // 実 row と同じく修飾キーを伝える（Ctrl+クリックの複数選択を
+            // テストから再現できるようにするため）。
+            dispatch("select", {
+              id: row.id,
+              path: row.path,
+              shiftKey: !!event.shiftKey,
+              ctrlKey: !!(event.ctrlKey || event.metaKey),
+            });
           }}
         >
           select

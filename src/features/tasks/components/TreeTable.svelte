@@ -1039,6 +1039,39 @@
     }
   }
 
+  /**
+   * 選択中タスクの「完了」をまとめて切り替える。
+   *
+   * 完了にする操作はタスク管理でいちばん頻度が高いのに、これまでは
+   * ステータスチップを開いて一覧から選ぶ 3 手が必要だった。対象が
+   * すべて完了なら未着手へ戻す（取り消し）ため、同じキーで往復できる。
+   * アーカイブ済みは行の UI 上も編集不可なので対象から外す。
+   */
+  function toggleCompletionForSelection(explicitId) {
+    if (!$tree_data?.data) return;
+    const rootId = $tree_data.data.id;
+    // 行メニューから来た場合、その行が複数選択に含まれていれば選択全体、
+    // 含まれていなければその行だけを対象にする（削除などと同じ扱い）。
+    const useSelection = explicitId ? isInMultiSelection(explicitId) : selectionSize > 1;
+    const baseIds = useSelection ? [...selectionSet] : [explicitId ?? $table_selected_id];
+    const candidateIds = baseIds.filter(
+      (id) => id && id !== rootId && !isNodeEffectivelyArchived(id, $tree_data.data)
+    );
+    if (candidateIds.length === 0) return;
+
+    const nodes = candidateIds.map((id) => getNode(id, $tree_data.data)).filter(Boolean);
+    if (nodes.length === 0) return;
+
+    const nextStatus = nodes.every((node) => node.data.status === "Completed")
+      ? "Open"
+      : "Completed";
+    const targetIds = new Set(nodes.map((node) => node.id));
+    const data = bulkUpdateNodeData($tree_data.data, targetIds, { status: nextStatus });
+    if (data && data !== $tree_data.data) {
+      $tree_data = { ...$tree_data, data };
+    }
+  }
+
   function handleBulkSetDate(event) {
     if (!$tree_data?.data || selectionSize === 0) return;
     const { key, value } = event.detail;
@@ -1153,6 +1186,11 @@
       return;
     }
     if (!$table_selected_id) return;
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+      e.preventDefault();
+      toggleCompletionForSelection();
+      return;
+    }
     if ((e.ctrlKey || e.metaKey) && (e.key === "c" || e.key === "C")) {
       e.preventDefault();
       if (selectionSize > 1 && $tree_data?.data) {
@@ -1401,6 +1439,7 @@
         on:outdentTask={handleOutdentTask}
         on:addBelow={handleAddBelow}
         on:addChild={handleAddChild}
+        on:toggleComplete={(event) => toggleCompletionForSelection(event.detail.id)}
         on:deleteTask={requestDelete}
         on:restoreTask={requestRestore}
         on:permanentDeleteTask={requestPermanentDelete}

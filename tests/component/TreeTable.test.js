@@ -364,6 +364,48 @@ describe("TreeTable", () => {
     }
   });
 
+  test("toggles completion on the selected task with Ctrl+Enter", async () => {
+    render(TreeTable);
+
+    await fireEvent.click(screen.getByTestId("select-task-1"));
+    await tick();
+
+    await fireEvent.keyDown(window, { key: "Enter", ctrlKey: true });
+    await tick();
+    expect(findNode(get(tree_data).data, "task-1").data.status).toBe("Completed");
+
+    // 同じキーで元に戻せる（取り消し操作を別に覚えなくてよい）。
+    await fireEvent.keyDown(window, { key: "Enter", ctrlKey: true });
+    await tick();
+    expect(findNode(get(tree_data).data, "task-1").data.status).toBe("Open");
+  });
+
+  test("Ctrl+Enter completes every task in a multi-selection", async () => {
+    render(TreeTable);
+
+    await fireEvent.click(screen.getByTestId("select-task-1"));
+    await tick();
+    await fireEvent.click(screen.getByTestId("select-task-1-1"), { ctrlKey: true });
+    await tick();
+
+    await fireEvent.keyDown(window, { key: "Enter", ctrlKey: true });
+    await tick();
+
+    expect(findNode(get(tree_data).data, "task-1").data.status).toBe("Completed");
+    expect(findNode(get(tree_data).data, "task-1-1").data.status).toBe("Completed");
+  });
+
+  test("Ctrl+Enter leaves the project root untouched", async () => {
+    render(TreeTable);
+
+    await fireEvent.click(screen.getByTestId("select-project-1"));
+    await tick();
+    await fireEvent.keyDown(window, { key: "Enter", ctrlKey: true });
+    await tick();
+
+    expect(get(tree_data).data.data.status).toBe("Open");
+  });
+
   test("copies the selected task when no document text is selected", async () => {
     render(TreeTable);
 
@@ -376,6 +418,15 @@ describe("TreeTable", () => {
     expect(get(copied_task)?.id).toBe("task-1");
     expect(get(copied_tasks).map((task) => task.id)).toEqual(["task-1"]);
   });
+
+  function findNode(node, id) {
+    if (node.id === id) return node;
+    for (const child of node.children ?? []) {
+      const found = findNode(child, id);
+      if (found) return found;
+    }
+    return undefined;
+  }
 
   function countNodes(node) {
     return 1 + (node.children ?? []).reduce((sum, child) => sum + countNodes(child), 0);

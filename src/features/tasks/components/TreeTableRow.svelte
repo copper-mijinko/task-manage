@@ -377,6 +377,7 @@
           selectionCount={selectionCountForMenu}
           {nodePath}
           archived={isArchived}
+          completed={data.status === "Completed"}
           on:commit={(e) => {
             commitData("name", e.detail.value);
           }}
@@ -400,6 +401,9 @@
           }}
           on:outdentTask={() => {
             dispatch("outdentTask", { id, path });
+          }}
+          on:toggleComplete={() => {
+            dispatch("toggleComplete", { id });
           }}
           on:deleteTask={() => {
             dispatch("deleteTask", { id });

@@ -38,6 +38,7 @@
     {
       title: "タスクツリー",
       items: [
+        { keys: ["Ctrl", "Enter"], description: "選択したタスクの完了 / 未完了を切り替え" },
         { keys: ["Ctrl", "A"], description: "表示中のタスクをすべて選択" },
         { keys: ["Esc"], description: "選択を解除" },
         { keys: ["Delete"], description: "選択したタスクをアーカイブ / 削除" },
