@@ -8,11 +8,7 @@
   import Dialog from "@lib/primitives/Dialog.svelte";
   import TaskMenu from "@features/tasks/components/TaskMenu.svelte";
   import TaskMemoTargetPicker from "@features/memos/components/TaskMemoTargetPicker.svelte";
-  import {
-    normalizeMemoFormat,
-    normalizeMemoKind,
-    isEmptyMemoContent,
-  } from "@features/memos/utils/memo_utils";
+  import { normalizeMemoFormat, isEmptyMemoContent } from "@features/memos/utils/memo_utils";
 
   export let memo = [];
   export let saveMemo;
@@ -27,7 +23,6 @@
   export let reorderMemo;
   export let saveMemoTags = null;
   export let changeMemoFormat = null;
-  export let changeMemoKind = null;
   export let allTags = [];
   export let disabled = false;
   export let isWorkspaceProject = false;
@@ -81,15 +76,6 @@
       .trim()
       .toLocaleLowerCase();
   }
-
-  $: selectedMemoKind = normalizeMemoKind(selectedMemo?.kind);
-  $: isKnowledge = selectedMemoKind === "knowledge";
-
-  /** 作業メモ ⇄ ナレッジ。本文には触れないので確認ダイアログは出さない。 */
-  const toggleMemoKind = () => {
-    if (!selectedMemo || !changeMemoKind) return;
-    changeMemoKind(selectedMemoIndex, isKnowledge ? "working" : "knowledge");
-  };
 
   const selectMemoByTitle = (title) => {
     const nextIndex = memo.findIndex(
@@ -375,38 +361,6 @@
       {/if}
     </div>
     {#if selectedMemo}
-      <div class="memo-kind-control">
-        <button
-          type="button"
-          class="KindToggle"
-          class:Knowledge={isKnowledge}
-          aria-pressed={isKnowledge ? "true" : "false"}
-          aria-label={isKnowledge ? "ナレッジを作業メモに戻す" : "このメモをナレッジに昇華する"}
-          disabled={disabled || !changeMemoKind}
-          on:click={toggleMemoKind}
-          use:tooltip={{
-            content: isKnowledge
-              ? "ナレッジ。タスクより長く残る記録として扱う"
-              : "作業メモ。ナレッジに昇華すると、タスクを終えても残る記録になる",
-            color: "var(--theme-color-Main-main)",
-            backgroundColor: "var(--theme-color-Sub-main)",
-            wrapped: true,
-          }}
-        >
-          <svg class="KindIcon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path
-              d="M12 3l2.4 5.3 5.6.6-4.2 3.9 1.2 5.7L12 15.6 6.9 18.5l1.2-5.7L4 8.9l5.6-.6z"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linejoin="round"
-              fill={isKnowledge ? "currentColor" : "none"}
-            />
-          </svg>
-          {#if isKnowledge}
-            <span>ナレッジ</span>
-          {/if}
-        </button>
-      </div>
       <div class="memo-format-control">
         <SegmentedControl
           options={memoFormatOptions}
@@ -698,54 +652,6 @@
     flex: 0 0 auto;
     margin: 0 var(--sp2);
   }
-  .memo-kind-control {
-    display: inline-flex;
-    align-items: center;
-    flex: 0 0 auto;
-    margin-left: var(--sp2);
-  }
-  /* 作業メモ（既定）はアイコンだけ、ナレッジはラベル付き。
-     メモタブの帯は元から詰まっていて、常時ラベルを出すとタブ名を押し出して
-     しまう。既定の状態を静かにして、昇華したものだけを目立たせる。
-     意味はツールチップと aria-label が常に持つ。 */
-  .KindToggle {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--sp1);
-    padding: 2px var(--sp1);
-    border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 28%, transparent);
-    border-radius: var(--shape-pill);
-    background: transparent;
-    color: color-mix(in srgb, var(--theme-color-Sub-main) 70%, transparent);
-    font-size: var(--font-label-sm);
-    font-weight: 600;
-    cursor: pointer;
-    white-space: nowrap;
-  }
-  .KindToggle:hover:not(:disabled) {
-    border-color: var(--theme-color-Primary-text);
-    color: var(--theme-color-Primary-text);
-  }
-  .KindToggle:focus-visible {
-    outline: 2px solid var(--theme-color-Primary-main);
-    outline-offset: 2px;
-  }
-  .KindToggle:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-  .KindToggle.Knowledge {
-    padding: 2px var(--sp2);
-    border-color: var(--theme-color-Primary-text);
-    background: color-mix(in srgb, var(--theme-color-Primary-main) 14%, transparent);
-    color: var(--theme-color-Primary-text);
-  }
-  .KindIcon {
-    width: 0.95em;
-    height: 0.95em;
-    flex-shrink: 0;
-  }
-
   .memotab-control {
     display: flex;
     flex-direction: row;

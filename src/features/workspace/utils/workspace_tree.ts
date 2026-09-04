@@ -1,11 +1,7 @@
 ﻿import { normalizeTagList } from "@lib/utils/tags";
 import type { WorkspaceParentLink, WorkspaceTask, WorkspaceTaskStatus } from "@app-types/workspace";
 import { normalizeParentLinks, orderUnderParent } from "@lib/utils/parent_links";
-import {
-  normalizeMemoFormat,
-  normalizeMemoKind,
-  toMarkdown,
-} from "@features/memos/utils/memo_utils";
+import { normalizeMemoFormat, toMarkdown } from "@features/memos/utils/memo_utils";
 import type { ProjectData, TreeData } from "@features/tasks/utils/tree_control";
 
 const DEFAULT_HEADERS = [
@@ -13,7 +9,6 @@ const DEFAULT_HEADERS = [
   { name: "status", default_ratio: 4 },
   { name: "start date", default_ratio: 4 },
   { name: "due date", default_ratio: 4 },
-  { name: "memo", default_ratio: 2 },
   { name: "attachments", default_ratio: 2 },
 ];
 
@@ -133,7 +128,6 @@ export function workspaceToProjectData(
           content: m.content,
           tags: m.tags,
           format: normalizeMemoFormat(m.format, "markdown"),
-          kind: normalizeMemoKind(m.kind),
           order: m.order,
           bodyLoaded: m.bodyLoaded,
         })),
@@ -293,7 +287,6 @@ export function projectDataToWorkspaceTasks(
           content: format === "markdown" ? toMarkdown(content) : content,
           tags: Array.isArray(m.tags) ? m.tags : [],
           format,
-          kind: normalizeMemoKind(m.kind),
           order: index,
           bodyLoaded: m.bodyLoaded,
         };

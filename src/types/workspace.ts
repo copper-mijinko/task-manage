@@ -1,4 +1,4 @@
-import type { MemoFormat, MemoKind } from "@features/memos/utils/memo_utils";
+import type { MemoFormat } from "@features/memos/utils/memo_utils";
 
 export type WorkspaceTaskStatus = "Open" | "Pending" | "In Progress" | "Completed" | "Canceled";
 
@@ -8,8 +8,6 @@ export interface WorkspaceMemo {
   content: unknown;
   tags: string[];
   format?: MemoFormat;
-  /** 記録の種別。省略時は作業メモ扱い。詳細は normalizeMemoKind を参照。 */
-  kind?: MemoKind;
   order?: number;
   bodyLoaded?: boolean;
 }

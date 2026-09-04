@@ -27,7 +27,6 @@ describe("column_settings store", () => {
     expect(settings.find((s) => s.id === "status").visible).toBe(true);
     expect(settings.find((s) => s.id === "start date").visible).toBe(true);
     expect(settings.find((s) => s.id === "due date").visible).toBe(true);
-    expect(settings.find((s) => s.id === "memo").visible).toBe(true);
     expect(settings.find((s) => s.id === "attachments").visible).toBe(true);
   });
 
@@ -111,14 +110,13 @@ describe("column_settings store", () => {
     const settings = get(column_settings);
     expect(settings.find((s) => s.id === "status").visible).toBe(false);
     expect(settings.find((s) => s.id === "start date").visible).toBe(true);
-    expect(settings.find((s) => s.id === "memo").visible).toBe(true);
     expect(settings.find((s) => s.id === "attachments").visible).toBe(true);
   });
 
   test("init preserves saved column ordering", async () => {
     const savedSettings = [
       { id: "name", label: "タスク名", visible: true },
-      { id: "memo", label: "メモ数", visible: false },
+      { id: "attachments", label: "添付数", visible: false },
       { id: "status", label: "ステータス", visible: true },
       { id: "due date", label: "期限日", visible: true },
     ];
@@ -128,7 +126,27 @@ describe("column_settings store", () => {
     await new Promise((r) => setTimeout(r, 0));
 
     const ids = get(column_settings).map((s) => s.id);
-    expect(ids.indexOf("memo")).toBeLessThan(ids.indexOf("status"));
+    expect(ids.indexOf("attachments")).toBeLessThan(ids.indexOf("status"));
+  });
+
+  // メモがノードになったので「メモ数」列は無くなった。列設定は id `memo` で
+  // 永続化されているため、その id を持つ古い設定が残っていても復活させない
+  // ことを確かめる。既存ユーザの meta.json には必ず入っている。
+  test("撤去した memo 列は、保存済み設定に残っていても復活しない", async () => {
+    const savedSettings = [
+      { id: "name", label: "タスク名", visible: true },
+      { id: "memo", label: "メモ数", visible: true },
+      { id: "status", label: "ステータス", visible: true },
+    ];
+    mockGetMetaData.mockResolvedValue(savedSettings);
+
+    await column_settings.init();
+    await new Promise((r) => setTimeout(r, 0));
+
+    const ids = get(column_settings).map((s) => s.id);
+    expect(ids).not.toContain("memo");
+    // 残りの列は保存済みの並びと表示状態をそのまま保つ。
+    expect(ids.indexOf("name")).toBeLessThan(ids.indexOf("status"));
   });
 
   test("init keeps defaults when metaData returns invalid data", async () => {

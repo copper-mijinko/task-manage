@@ -373,19 +373,6 @@ function normalizeMemoFormat(value, fallback = "markdown") {
   return value === "quill" || value === "markdown" ? value : fallback;
 }
 
-/**
- * メモの種別。記録の寿命と再利用性で分ける。
- *
- * - `working`  作業メモ。そのタスクの作業中だけ意味を持つ短命な記録
- * - `knowledge` ナレッジ。タスクより長生きし、他の文脈でも再利用される記録
- *
- * 既存ファイルには `kind:` が無いので、未指定は `working` として読む。
- * 「昇華」（working → knowledge）はユーザーの明示操作でだけ起きる。
- */
-function normalizeMemoKind(value, fallback = "working") {
-  return value === "knowledge" || value === "working" ? value : fallback;
-}
-
 function decodeMdEntities(text) {
   return String(text || "")
     .replace(/&nbsp;/g, " ")
@@ -932,7 +919,6 @@ function readMemos(taskDir, reservedFiles = ["_index.md"], options = {}) {
     }
     const tags = Array.isArray(data.tags) ? data.tags.map(String) : [];
     const format = normalizeMemoFormat(data.format, "markdown");
-    const kind = normalizeMemoKind(data.kind);
     const content = includeMemoContent
       ? format === "quill"
         ? parseQuillMemoBody(body)
@@ -944,7 +930,6 @@ function readMemos(taskDir, reservedFiles = ["_index.md"], options = {}) {
       content,
       tags,
       format,
-      kind,
       order: parseOrderValue(data.order),
       bodyLoaded: includeMemoContent,
       fileIndex,
@@ -1171,7 +1156,6 @@ function buildMemoEntry(file, fileIndex, raw, includeMemoContent) {
   }
   const tags = Array.isArray(data.tags) ? data.tags.map(String) : [];
   const format = normalizeMemoFormat(data.format, "markdown");
-  const kind = normalizeMemoKind(data.kind);
   const content = includeMemoContent
     ? format === "quill"
       ? parseQuillMemoBody(body)
@@ -1183,7 +1167,6 @@ function buildMemoEntry(file, fileIndex, raw, includeMemoContent) {
     content,
     tags,
     format,
-    kind,
     order: parseOrderValue(data.order),
     bodyLoaded: includeMemoContent,
     fileIndex,
@@ -1378,7 +1361,6 @@ function writeMemoFiles(taskDir, indexFileName, memos) {
           title: memo.title,
           tags: memo.tags ?? [],
           format: normalizeMemoFormat(memo.format),
-          kind: normalizeMemoKind(memo.kind),
           order: index,
         },
         serializeMemoBody(memo)
@@ -1404,7 +1386,6 @@ async function writeMemoFilesAsync(taskDir, indexFileName, memos, onWritten) {
           title: memo.title,
           tags: memo.tags ?? [],
           format: normalizeMemoFormat(memo.format),
-          kind: normalizeMemoKind(memo.kind),
           order: index,
         },
         serializeMemoBody(memo)
@@ -2064,7 +2045,6 @@ function exportProjectData(workspacePath, projectData, options = {}) {
             : memoContentToQuillDelta(m.content),
         tags: Array.isArray(m.tags) ? m.tags.map(String) : [],
         format: targetFormat,
-        kind: normalizeMemoKind(m.kind),
       };
     });
     const exportedTaskId = node === projectData.data ? exportedProjectId : node.id;
@@ -2150,7 +2130,6 @@ async function deleteProjectAsync(projectDir) {
 
 module.exports = {
   slugify,
-  normalizeMemoKind,
   normalizeParentLinks,
   normalizeTaskTags,
   parseFrontmatter,

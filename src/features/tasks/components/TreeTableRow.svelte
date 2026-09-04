@@ -98,9 +98,9 @@
   $: visibleRowTags = rowTags.slice(0, rowTags.length > 2 ? 1 : 2);
   $: hiddenRowTagCount = rowTags.length - visibleRowTags.length;
 
-  const COUNT_LABELS = { memo: "メモ", attachments: "添付" };
+  const COUNT_LABELS = { attachments: "添付" };
 
-  /** メモ / 添付の件数。未設定は 0 件として扱う。 */
+  /** 添付の件数。未設定は 0 件として扱う。 */
   function countCellValue(headerName) {
     const value = data[headerName];
     return Array.isArray(value) ? value.length : Number(value) || 0;
@@ -480,7 +480,7 @@
             {/if}
           </span>
         {/if}
-      {:else if header.name === "memo" || header.name === "attachments"}
+      {:else if header.name === "attachments"}
         <!-- 件数は 0 のほうが普通なので、0 のときは目に入れない。1 件以上の
              ときだけバッジで出す。全行に "0" を並べると、実際に中身がある
              行を探すのがかえって難しくなる。 -->
@@ -492,23 +492,13 @@
             aria-label={`${COUNT_LABELS[header.name]} ${count}件`}
           >
             <svg class="CountBadgeIcon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              {#if header.name === "memo"}
-                <path
-                  d="M5 4h14v16H5zM8 9h8M8 13h6"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-              {:else}
-                <path
-                  d="M18 8.5l-7 7a3 3 0 0 1-4.2-4.2l7.5-7.5a2 2 0 0 1 2.8 2.8l-7.5 7.5a1 1 0 0 1-1.4-1.4l6.8-6.8"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-              {/if}
+              <path
+                d="M18 8.5l-7 7a3 3 0 0 1-4.2-4.2l7.5-7.5a2 2 0 0 1 2.8 2.8l-7.5 7.5a1 1 0 0 1-1.4-1.4l6.8-6.8"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
             </svg>
             {count}
           </span>
@@ -763,7 +753,6 @@
   .TableData[data-column="due date"] {
     --col-min: var(--col-min-date);
   }
-  .TableData[data-column="memo"],
   .TableData[data-column="attachments"] {
     --col-min: var(--col-min-count);
   }

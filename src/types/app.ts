@@ -10,13 +10,7 @@ import type {
 } from "./workspace";
 
 export type ThemeName = "dark" | "light";
-export type SelectedType =
-  | "Projects"
-  | "WorkspaceProject"
-  | "Inbox"
-  | "Agenda"
-  | "Knowledge"
-  | undefined;
+export type SelectedType = "Projects" | "WorkspaceProject" | "Inbox" | "Agenda" | undefined;
 export type FilterState = Record<string, string[]>;
 export type SortDirection = "asc" | "desc";
 export interface SortState {
