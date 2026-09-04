@@ -185,6 +185,49 @@ describe("tree_control", () => {
     expect(filtered.children[0].id).toBe("task-1");
   });
 
+  // 件数バッジを出す列は件数で絞り込める。以前は「メモ数」だけが絞り込めて、
+  // 同じ件数列の「添付数」は絞り込めないという非対称があった。
+  test("filterTree filters by attachment count range", () => {
+    const tree = {
+      id: "root",
+      data: { name: "Root", status: "Open" },
+      children: [
+        { id: "none", data: { name: "None", status: "Open" }, children: [] },
+        {
+          id: "one",
+          data: { name: "One", status: "Open", attachments: [{ name: "a" }] },
+          children: [],
+        },
+        {
+          id: "three",
+          data: {
+            name: "Three",
+            status: "Open",
+            attachments: [{ name: "a" }, { name: "b" }, { name: "c" }],
+          },
+          children: [],
+        },
+      ],
+    };
+
+    // 下限だけ
+    expect(filterTree(tree, { attachments: ["1", ""] }).children.map((c) => c.id)).toEqual([
+      "one",
+      "three",
+    ]);
+    // 上限だけ。添付なしは 0 件として数える。
+    expect(filterTree(tree, { attachments: ["", "1"] }).children.map((c) => c.id)).toEqual([
+      "none",
+      "one",
+    ]);
+    // 範囲
+    expect(filterTree(tree, { attachments: ["2", "3"] }).children.map((c) => c.id)).toEqual([
+      "three",
+    ]);
+    // 該当なし
+    expect(filterTree(tree, { attachments: ["4", ""] })).toBeNull();
+  });
+
   test("filterTree with tags filter keeps only nodes carrying the tag", () => {
     const tree = {
       id: "root",

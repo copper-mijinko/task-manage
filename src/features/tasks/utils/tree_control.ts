@@ -128,6 +128,15 @@ export interface VisibleTreeRow {
 
 const FILTER_FLAG_KEYS = new Set(["search_memo"]);
 
+/**
+ * 件数で絞り込む列。値は `[最小, 最大]` の 2 要素で、空欄はその側の制限なし。
+ *
+ * 件数バッジを出す列は件数で絞り込めるべきなので、ここに集約する。以前は
+ * 「メモ数」だけが絞り込めて、隣の「添付数」は同じ件数列なのに絞り込めない
+ * という非対称があった。
+ */
+const COUNT_FILTER_KEYS = new Set(["attachments"]);
+
 function valueForFullText(value: unknown): string {
   if (value == null) return "";
   if (typeof value === "string") return value;
@@ -227,6 +236,15 @@ export function filterTree(
       } else {
         keyMatch = (!from || nodeDate >= from) && (!to || nodeDate <= to);
       }
+    } else if (COUNT_FILTER_KEYS.has(key)) {
+      // 件数列の範囲絞り込み。空欄はその側の上限／下限なしを意味する。
+      const minStr = keywords[0] ?? "";
+      const maxStr = keywords[1] ?? "";
+      const value = tree.data[key];
+      const count = Array.isArray(value) ? value.length : Number(value) || 0;
+      const minNum = minStr !== "" ? parseInt(minStr, 10) : null;
+      const maxNum = maxStr !== "" ? parseInt(maxStr, 10) : null;
+      keyMatch = (minNum === null || count >= minNum) && (maxNum === null || count <= maxNum);
     } else if (key === "status") {
       // 「なし」は空文字で表す状態のひとつなので、部分一致では絞れない
       // （あらゆる文字列が "" を含むので、全行に当たってしまう）。
