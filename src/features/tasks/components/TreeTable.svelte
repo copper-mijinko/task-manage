@@ -94,11 +94,24 @@
     ? flattenVisibleTree($filtered_data, $closed_row_paths, $show_archived)
     : [];
   /**
-   * Tab の停留点にする 1 行。選択行があればそれ、無ければ先頭行。全行を
-   * tabindex="0" にすると、テーブルを通り過ぎるだけで行数ぶん Tab を押す
-   * ことになる（矢印キーで移動できるようになったので停留点は 1 つで足りる）。
+   * いま操作している 1 行（＝辺）。選択はノード単位なので、多親ノードを選ぶと
+   * その出現すべてが選択色になる。どこを操作しているのかは行でしか分からない
+   * ので、経路で 1 行だけを「現在行」として別扱いする。
+   *
+   * Tab の停留点も同じ行。全行を tabindex="0" にすると、テーブルを通り過ぎる
+   * だけで行数ぶん Tab を押すことになる。
    */
-  $: tabStopRowPath = rows.find((row) => $selected_ids.has(row.id))?.path ?? rows[0]?.path ?? null;
+  let activeRowPath = null;
+  $: {
+    const stillValid = rows.some(
+      (row) => row.path === activeRowPath && ($selected_ids.size === 0 || $selected_ids.has(row.id))
+    );
+    if (!stillValid) {
+      activeRowPath = rows.find((row) => $selected_ids.has(row.id))?.path ?? rows[0]?.path ?? null;
+    }
+  }
+  $: tabStopRowPath = activeRowPath;
+  $: activeRowId = rows.find((row) => row.path === activeRowPath)?.id ?? null;
   $: inheritedDueDateMap = buildInheritedDueDateMap(rows);
   $: nodePathMap = buildNodePathMap(rows);
   $: lineNumberMap = buildLineNumberMap($filtered_data);
@@ -550,7 +563,8 @@
   };
 
   function handleSelectRow(event) {
-    const { id, shiftKey, ctrlKey } = event.detail;
+    const { id, path, shiftKey, ctrlKey } = event.detail;
+    if (path) activeRowPath = path;
     if (shiftKey && $selection_anchor_id) {
       selectRange(
         id,
@@ -568,7 +582,8 @@
   }
 
   function handleToggleCheckbox(event) {
-    const { id, shiftKey, ctrlKey } = event.detail;
+    const { id, path, shiftKey, ctrlKey } = event.detail;
+    if (path) activeRowPath = path;
     if (!$bulk_selection_active) {
       selectOnly(id);
       $bulk_selection_active = true;
@@ -635,6 +650,7 @@
     } else {
       selectOnly(id);
     }
+    activeRowPath = path;
     navigation_history.pushSelection();
     // 選択の反映で行が描き直されるため、DOM が落ち着いてから focus する。
     tick().then(() => focusRowByPath(path));
@@ -1292,6 +1308,7 @@
         nodePath={nodePathMap.get(row.id) ?? ""}
         lineNumber={lineNumberMap.get(row.path) ?? 0}
         isTabStop={row.path === tabStopRowPath}
+        isEchoRow={row.id === activeRowId && row.path !== activeRowPath}
         on:select={handleSelectRow}
         on:navigate={handleRowNavigate}
         on:toggleCheckbox={handleToggleCheckbox}

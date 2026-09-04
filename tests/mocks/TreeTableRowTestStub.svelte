@@ -13,6 +13,8 @@
   export let canOutdent = false;
   export let canOpenTaskFolder = false;
   export let isTabStop = false;
+  export let isEchoRow = false;
+  export let isPrimaryOccurrence = true;
 
   const NAVIGATION_KEYS = new Set([
     "ArrowUp",
@@ -27,7 +29,8 @@
 </script>
 
 <div
-  id={row.id}
+  id={isPrimaryOccurrence ? row.id : undefined}
+  data-node-id={row.id}
   data-row-path={row.path}
   role="row"
   class="TableRow"
@@ -40,6 +43,7 @@
   data-can-outdent={canOutdent ? "true" : "false"}
   data-selected={selected ? "true" : "false"}
   data-tab-stop={isTabStop ? "true" : "false"}
+  data-echo={isEchoRow ? "true" : "false"}
   tabindex={isTabStop ? 0 : -1}
   on:keydown={(e) => {
     if (!NAVIGATION_KEYS.has(e.key) || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -64,7 +68,7 @@
           type="button"
           data-testid={"select-" + row.id}
           on:click={() => {
-            dispatch("select", { id: row.id });
+            dispatch("select", { id: row.id, path: row.path });
           }}
         >
           select
