@@ -1,7 +1,7 @@
 ﻿<script>
   import { filter } from "@stores";
   import { column_settings } from "@features/tasks/stores/column_settings";
-  import { closed_node_ids } from "@stores/ui";
+  import { closed_row_paths } from "@stores/ui";
   import { sort_state, SORTABLE_COLUMNS } from "@features/tasks/stores/sort";
   import { activePanelId, newPanelId } from "@stores/panel_coordinator";
 
@@ -362,7 +362,7 @@
               activeColor="var(--theme-color-Primary-main)"
               ariaLabel="すべて展開"
               tooltipContent="すべて展開"
-              on:click={() => closed_node_ids.expandAll()}
+              on:click={() => closed_row_paths.expandAll()}
               style="margin: 0; width: var(--header-icon-size); height: var(--header-icon-size); box-shadow: none;"
             >
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -402,7 +402,7 @@
               activeColor="var(--theme-color-Primary-main)"
               ariaLabel="すべて折り畳み"
               tooltipContent="すべて折り畳み"
-              on:click={() => closed_node_ids.collapseAll()}
+              on:click={() => closed_row_paths.collapseAll()}
               style="margin: 0; width: var(--header-icon-size); height: var(--header-icon-size); box-shadow: none;"
             >
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">

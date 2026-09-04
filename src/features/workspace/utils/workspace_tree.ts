@@ -18,8 +18,7 @@ const DEFAULT_HEADERS = [
 
 /**
  * Convert a flat WorkspaceTask map to a ProjectData tree for display.
- * Uses DFS with a global visited set for cycle detection (DAG → tree projection).
- * Multi-parent tasks appear only under the first parent reached.
+ * DAG → 木の射影。多親ノードは親ごとに現れる（＝行は辺）。打ち切るのは循環だけ。
  */
 export function workspaceToProjectData(
   tasks: Record<string, WorkspaceTask>,
@@ -56,6 +55,21 @@ export function workspaceToProjectData(
   let emitted = 0;
 
   /**
+   * 同じノードの複数の出現は**同じオブジェクト**を共有する。
+   * 子の追加・削除・並べ替え・アーカイブはどれもノードの属性（`parents` /
+   * `order` / `archived`）であって辺の属性ではないので、片方の出現にだけ
+   * 効くのは誤り。共有すれば `children` 配列が 1 つになり、どの出現から
+   * 操作しても全出現に反映される（保存後の再読込を待たずに一致する）。
+   *
+   * 共有できるのは**経路に依らない**部分木だけ。循環の打ち切りが起きた部分木は
+   * 祖先集合に依存するので共有しない。
+   */
+  const shared = new Map<string, TreeData>();
+  const sharedSize = new Map<string, number>();
+
+  type Built = { node: TreeData; size: number; pathDependent: boolean };
+
+  /**
    * 多親ノードは**親ごとに**展開する。木は DAG の射影なので、同じノードが
    * 複数の経路に現れるのが正しい。
    *
@@ -66,15 +80,35 @@ export function workspaceToProjectData(
    * 同じ id のノードが複数現れるため、行の key はノード id ではなく
    * ルートからの経路にする必要がある（flattenVisibleTree の `path`）。
    */
-  function buildNode(id: string, ancestors: ReadonlySet<string>): TreeData {
+  function buildNode(id: string, ancestors: ReadonlySet<string>): Built {
+    const cached = shared.get(id);
+    if (cached) {
+      // 使い回しても「表示上は何行に展開されるか」は変わらないので、
+      // 安全弁の勘定には部分木のぶんを足す。
+      const size = sharedSize.get(id) ?? 1;
+      emitted += size;
+      return { node: cached, size, pathDependent: false };
+    }
+
     emitted += 1;
+    let size = 1;
+    let pathDependent = false;
     const task = tasks[id];
     const pathAncestors = new Set(ancestors).add(id);
     const children: TreeData[] = [];
     for (const cid of childrenMap.get(id) ?? []) {
-      if (pathAncestors.has(cid)) continue;
-      if (emitted >= MAX_TREE_NODES) break;
-      children.push(buildNode(cid, pathAncestors));
+      if (pathAncestors.has(cid)) {
+        pathDependent = true;
+        continue;
+      }
+      if (emitted >= MAX_TREE_NODES) {
+        pathDependent = true;
+        break;
+      }
+      const built = buildNode(cid, pathAncestors);
+      children.push(built.node);
+      size += built.size;
+      if (built.pathDependent) pathDependent = true;
     }
     const node: TreeData = {
       id,
@@ -102,7 +136,11 @@ export function workspaceToProjectData(
       node.archived = true;
       if (task.archivedAt) node.archivedAt = task.archivedAt;
     }
-    return node;
+    if (!pathDependent) {
+      shared.set(id, node);
+      sharedSize.set(id, size);
+    }
+    return { node, size, pathDependent };
   }
 
   if (!tasks[resolvedRootId]) {
@@ -122,7 +160,7 @@ export function workspaceToProjectData(
     };
   }
 
-  return { headers: DEFAULT_HEADERS, data: buildNode(resolvedRootId, new Set<string>()) };
+  return { headers: DEFAULT_HEADERS, data: buildNode(resolvedRootId, new Set<string>()).node };
 }
 
 /**

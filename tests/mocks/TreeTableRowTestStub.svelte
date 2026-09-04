@@ -74,7 +74,7 @@
             type="button"
             data-testid={"toggle-" + row.id}
             on:click={() => {
-              dispatch("toggle", { id: row.id });
+              dispatch("toggle", { id: row.id, path: row.path });
             }}
           >
             {row.expanded ? "collapse" : "expand"}

@@ -124,7 +124,7 @@
 
   function toggle(e) {
     e.stopPropagation();
-    dispatch("toggle", { id });
+    dispatch("toggle", { id, path });
   }
 
   /**
@@ -369,7 +369,7 @@
             dispatch("addChild", { id });
           }}
           on:toggleExpand={() => {
-            dispatch("toggle", { id });
+            dispatch("toggle", { id, path });
           }}
           on:moveUp={() => {
             dispatch("moveUp", { id });

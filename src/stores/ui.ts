@@ -1,5 +1,11 @@
 ﻿import { get, writable, type Writable } from "svelte/store";
-import { getNode, type TreeData } from "@features/tasks/utils/tree_control";
+import {
+  collectTreePaths,
+  getNode,
+  pathIncludesNode,
+  pathLeafId,
+  type TreeData,
+} from "@features/tasks/utils/tree_control";
 import { workspaceToProjectData } from "@features/workspace/utils/workspace_tree";
 import type { PendingTaskDetailSelection, SaveStatus, SelectedType } from "@app-types/app";
 import { clearHistory, tree_data } from "@features/tasks/stores/tree";
@@ -50,26 +56,26 @@ export interface SelectedIdStore extends Writable<string | undefined> {
   init: () => void;
 }
 
-export interface ClosedNodeIdsStore extends Writable<Set<string>> {
+/**
+ * 折り畳み状態は**行（＝辺）ごと**に持つ。多親ノードは親ごとに別の行として
+ * 現れるので、ノード id で持つと片方を畳んだだけで全部が畳まれてしまう。
+ * 集合の要素は `VisibleTreeRow.path`（`ルートid/親id/子id`）。
+ *
+ * ノード id しか分からない呼び出し（追加・貼り付け後の自動展開、削除後の
+ * 後始末）は `expandNodeEverywhere` / `pruneNodes` を使う。
+ */
+export interface ClosedRowPathsStore extends Writable<Set<string>> {
   init: () => void;
-  add: (nodeId: string) => void;
-  delete: (nodeId: string) => void;
+  add: (path: string) => void;
+  delete: (path: string) => void;
+  /** そのノードを、現れるすべての経路で開く。子孫の折り畳みは保つ。 */
+  expandNodeEverywhere: (nodeId: string) => void;
+  /** 消えたノードの残骸を捨てる。そのノードを通る経路をすべて外す。 */
   cleanupNodeMetadata: (nodeId: string) => void;
+  /** 同上をまとめて。ツリー差分で消えたノード群の後始末に使う。 */
+  pruneNodes: (nodeIds: Iterable<string>) => void;
   expandAll: () => void;
   collapseAll: () => void;
-}
-
-function collectNodeAndDescendantIds(node: TreeData | undefined): string[] {
-  if (!node) return [];
-
-  const ids = [node.id];
-  if (node.children && node.children.length > 0) {
-    for (const child of node.children) {
-      ids.push(...collectNodeAndDescendantIds(child));
-    }
-  }
-
-  return ids;
 }
 
 export const projectLoading = writable(false);
@@ -219,7 +225,16 @@ function createSelectedID(initialValue: string | undefined): SelectedIdStore {
   };
 }
 
-function createClosedNodeIds(initialValue: Set<string>): ClosedNodeIdsStore {
+/**
+ * 永続化キー。旧版はノード id の配列を `closed_nodes_<projectId>` に置いていた。
+ * 意味が「ノード」から「経路」に変わったので新しいキーにする（旧キーは読まない）。
+ * 影響は「移行後の初回だけ折り畳み状態が初期化される」ことだけ。
+ */
+function closedPathsMetaKey(projectId: string): string {
+  return `closed_paths_${projectId}`;
+}
+
+function createClosedRowPaths(initialValue: Set<string>): ClosedRowPathsStore {
   const projectExpandedStates = new Map<string, Set<string>>();
   const { subscribe, set, update } = writable<Set<string>>(initialValue || new Set());
 
@@ -227,7 +242,7 @@ function createClosedNodeIds(initialValue: Set<string>): ClosedNodeIdsStore {
     if (!projectId) return undefined;
 
     try {
-      const metaKey = `closed_nodes_${projectId}`;
+      const metaKey = closedPathsMetaKey(projectId);
       const result = await platform.getMetaData(metaKey);
 
       const newState = isStringArray(result) ? new Set(result) : new Set<string>();
@@ -243,40 +258,66 @@ function createClosedNodeIds(initialValue: Set<string>): ClosedNodeIdsStore {
     if (!projectId) return;
 
     try {
-      const metaKey = `closed_nodes_${projectId}`;
-      const idsArray = Array.from(state);
-      platform.setMetaData(metaKey, idsArray);
+      platform.setMetaData(closedPathsMetaKey(projectId), Array.from(state));
     } catch {
       // ignore save error
     }
+  };
+
+  /** 現在プロジェクトの折り畳み集合を書き換えて保存する共通処理。 */
+  const mutate = (apply: (draft: Set<string>) => void) => {
+    const projectId = get(selected_id);
+    if (!projectId) return;
+
+    update((currentState) => {
+      const newState = new Set(currentState);
+      apply(newState);
+      if (newState.size === currentState.size) {
+        let same = true;
+        for (const path of newState) {
+          if (!currentState.has(path)) {
+            same = false;
+            break;
+          }
+        }
+        if (same) return currentState;
+      }
+      projectExpandedStates.set(projectId, newState);
+      saveState(projectId, newState);
+      return newState;
+    });
   };
 
   return {
     subscribe,
     set,
     update,
-    add: (nodeId: string) => {
-      const projectId = get(selected_id);
-      if (!projectId) return;
-
-      update((currentState) => {
-        const newState = new Set(currentState);
-        newState.add(nodeId);
-        projectExpandedStates.set(projectId, newState);
-        saveState(projectId, newState);
-        return newState;
+    add: (path: string) => {
+      mutate((newState) => {
+        newState.add(path);
       });
     },
-    delete: (nodeId: string) => {
-      const projectId = get(selected_id);
-      if (!projectId) return;
-
-      update((currentState) => {
-        const newState = new Set(currentState);
-        newState.delete(nodeId);
-        projectExpandedStates.set(projectId, newState);
-        saveState(projectId, newState);
-        return newState;
+    delete: (path: string) => {
+      mutate((newState) => {
+        newState.delete(path);
+      });
+    },
+    expandNodeEverywhere: (nodeId: string) => {
+      if (!nodeId) return;
+      mutate((newState) => {
+        for (const path of [...newState]) {
+          // その行だけを開く。子孫の折り畳みはそのまま残す。
+          if (pathLeafId(path) === nodeId) newState.delete(path);
+        }
+      });
+    },
+    pruneNodes: (nodeIds: Iterable<string>) => {
+      const removed = new Set(nodeIds);
+      if (removed.size === 0) return;
+      mutate((newState) => {
+        for (const path of [...newState]) {
+          if (path.split("/").some((id) => removed.has(id))) newState.delete(path);
+        }
       });
     },
     init: () => {
@@ -303,35 +344,19 @@ function createClosedNodeIds(initialValue: Set<string>): ClosedNodeIdsStore {
       if (!projectId) return;
       const currentTreeData = get(tree_data);
       if (!currentTreeData?.data) return;
-      const allIds = collectNodeAndDescendantIds(currentTreeData.data);
-      const newState = new Set<string>(allIds);
+      const newState = new Set<string>(collectTreePaths(currentTreeData.data));
       projectExpandedStates.set(projectId, newState);
       saveState(projectId, newState);
       set(newState);
     },
     cleanupNodeMetadata: (nodeId: string) => {
-      const projectId = get(selected_id);
-      const currentTreeData = get(tree_data);
-      if (!projectId || !currentTreeData) return;
-
-      const node = getNode(nodeId, currentTreeData.data);
-      if (!node) return;
-
-      const nodeIds = collectNodeAndDescendantIds(node);
-
-      update((currentState) => {
-        const newState = new Set(currentState);
-        nodeIds.forEach((id) => {
-          newState.delete(id);
-        });
-
-        projectExpandedStates.set(projectId, newState);
-
-        const metaKey = `closed_nodes_${projectId}`;
-        const idsArray = Array.from(newState);
-        platform.setMetaData(metaKey, idsArray);
-
-        return newState;
+      if (!nodeId) return;
+      mutate((newState) => {
+        // そのノードを通る経路（自分の行と、そこから下の子孫の行）をまとめて外す。
+        // 他の親から辿る子孫の行は生きているので残す。
+        for (const path of [...newState]) {
+          if (pathIncludesNode(path, nodeId)) newState.delete(path);
+        }
       });
     },
   };
@@ -344,7 +369,7 @@ export let table_selected_id: Writable<string | undefined> = writable<string | u
   undefined
 );
 // eslint-disable-next-line prefer-const
-export let closed_node_ids: ClosedNodeIdsStore = createClosedNodeIds(new Set<string>());
+export let closed_row_paths: ClosedRowPathsStore = createClosedRowPaths(new Set<string>());
 // eslint-disable-next-line prefer-const
 export let selected_id: SelectedIdStore = createSelectedID(undefined);
 

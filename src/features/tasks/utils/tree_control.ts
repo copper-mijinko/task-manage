@@ -413,7 +413,8 @@ export function updateNodeDataById(
 
 export function flattenVisibleTree(
   tree_data: TreeData | undefined,
-  closedIds: Set<string> = new Set(),
+  /** 折り畳まれている**経路**の集合（ノード id ではない。`VisibleTreeRow.path` と同じ形式）。 */
+  closedPaths: Set<string> = new Set(),
   includeArchived: boolean = false
 ): VisibleTreeRow[] {
   if (!tree_data) {
@@ -439,8 +440,10 @@ export function flattenVisibleTree(
       return;
     }
     const hasChildren = !!(node.children && node.children.length > 0);
-    const expanded = !closedIds.has(node.id);
     const path = parentPath ? `${parentPath}/${node.id}` : node.id;
+    // 開閉は**辺ごと**に持つ。多親ノードは親ごとに別の行なので、片方の親の下で
+    // 畳んでも、もう片方の親の下では開いたままでなければならない。
+    const expanded = !closedPaths.has(path);
     const isPrimaryOccurrence = !seenNodeIds.has(node.id);
     seenNodeIds.add(node.id);
 
@@ -550,6 +553,37 @@ export function buildLineNumberMap(tree: TreeData | null | undefined): Map<strin
   };
   visit(tree, "");
   return result;
+}
+
+/**
+ * ツリー中のすべての経路（`親id/子id/…`）を列挙する。「すべて折りたたむ」が
+ * 全行を畳むために使う。折り畳み状態は見ずにツリー全体を辿る。
+ */
+export function collectTreePaths(tree: TreeData | undefined, parentPath: string = ""): string[] {
+  if (!tree) return [];
+  const path = parentPath ? `${parentPath}/${tree.id}` : tree.id;
+  const paths = [path];
+  for (const child of tree.children ?? []) {
+    paths.push(...collectTreePaths(child, path));
+  }
+  return paths;
+}
+
+/** 経路が指定ノードを通るか。ノードを消したときの後始末に使う。 */
+export function pathIncludesNode(path: string, nodeId: string): boolean {
+  return path.split("/").includes(nodeId);
+}
+
+/** 経路の終端ノード id（＝その行が指すノード）。 */
+export function pathLeafId(path: string): string {
+  const index = path.lastIndexOf("/");
+  return index < 0 ? path : path.slice(index + 1);
+}
+
+/** 経路の親側（`a/b/c` → `a/b`）。ルート行では空文字。 */
+export function parentPathOf(path: string): string {
+  const index = path.lastIndexOf("/");
+  return index < 0 ? "" : path.slice(0, index);
 }
 
 // ツリーテーブルのスクロール時に、ヘッダー直下のスティッキーバーへ表示する

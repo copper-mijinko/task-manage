@@ -2,7 +2,7 @@
   import { onDestroy, onMount } from "svelte";
   import {
     filtered_data,
-    closed_node_ids,
+    closed_row_paths,
     ganttScrollTop,
     ganttScale,
     theme,
@@ -22,7 +22,7 @@
     typeof navigator !== "undefined" && navigator.language ? navigator.language : undefined;
   let prevTimelineStartTs = null;
 
-  $: rows = $filtered_data ? flattenVisibleTree($filtered_data, $closed_node_ids) : [];
+  $: rows = $filtered_data ? flattenVisibleTree($filtered_data, $closed_row_paths) : [];
   $: inheritedMap = buildInheritedDueDateMap(rows);
 
   // Sync scroll position from TreeTable

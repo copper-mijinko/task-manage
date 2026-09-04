@@ -3,7 +3,13 @@ import {
   projectDataToWorkspaceTasks,
   workspaceToProjectData,
 } from "../../src/features/workspace/utils/workspace_tree";
-import { flattenVisibleTree } from "../../src/features/tasks/utils/tree_control";
+import {
+  collectTreePaths,
+  flattenVisibleTree,
+  parentPathOf,
+  pathIncludesNode,
+  pathLeafId,
+} from "../../src/features/tasks/utils/tree_control";
 import type { WorkspaceTask } from "../../src/types/workspace";
 
 /**
@@ -114,5 +120,110 @@ describe("多親ノードの往復", () => {
     const rows = flattenVisibleTree(project.data, new Set(), false);
 
     expect(new Set(rows.map((r) => r.path)).size).toBe(rows.length);
+  });
+});
+
+/**
+ * 折り畳みは行（＝辺）ごと。同じノードでも、片方の親の下で畳んだとき、
+ * もう片方の親の下は開いたままでなければならない。
+ */
+describe("経路ごとの折り畳み", () => {
+  function childOf(parent: string) {
+    return `root/${parent}/C`;
+  }
+
+  it("片方の親の下で畳んでも、もう片方の下では開いたまま", () => {
+    const tasks = multiParentProject();
+    tasks.C.memos = [];
+    // C に子を付けて、開閉の差が行数に出るようにする。
+    const withChild = { ...tasks, D: T("D", "詳細", ["C"]) };
+    const project = workspaceToProjectData(withChild, "root");
+
+    const rows = flattenVisibleTree(project.data, new Set([childOf("A")]), false);
+    const cRows = rows.filter((r) => r.id === "C");
+    expect(cRows.map((r) => [r.path, r.expanded])).toEqual([
+      [childOf("A"), false],
+      [childOf("B"), true],
+    ]);
+    // D は開いている方の経路にだけ現れる。
+    expect(rows.filter((r) => r.id === "D").map((r) => r.path)).toEqual([`${childOf("B")}/D`]);
+  });
+
+  it("ノード id で畳んでも効かない（経路でしか畳めない）", () => {
+    const project = workspaceToProjectData(multiParentProject(), "root");
+    const rows = flattenVisibleTree(project.data, new Set(["C"]), false);
+    expect(rows.every((r) => r.expanded)).toBe(true);
+  });
+
+  it("collectTreePaths は全行ぶんの経路を返す（すべて折りたたむ用）", () => {
+    const project = workspaceToProjectData(multiParentProject(), "root");
+    const paths = collectTreePaths(project.data);
+    const rows = flattenVisibleTree(project.data, new Set(), false);
+
+    expect(new Set(paths)).toEqual(new Set(rows.map((r) => r.path)));
+    // 多親ノードは経路の数だけ入る。
+    expect(paths.filter((p) => pathLeafId(p) === "C")).toHaveLength(2);
+  });
+
+  it("経路のヘルパは終端と親側を返し、通過ノードを判定できる", () => {
+    expect(pathLeafId("root/A/C")).toBe("C");
+    expect(pathLeafId("root")).toBe("root");
+    expect(parentPathOf("root/A/C")).toBe("root/A");
+    expect(parentPathOf("root")).toBe("");
+    expect(pathIncludesNode("root/A/C", "A")).toBe(true);
+    expect(pathIncludesNode("root/A/C", "B")).toBe(false);
+  });
+});
+
+/**
+ * `parents` / `order` / `archived` はノードの属性であって辺の属性ではない。
+ * 出現ごとに別オブジェクトだと、片方の出現に子を足しても他方に出ず、
+ * 保存して読み直すまで画面が食い違う。
+ */
+describe("多親ノードの出現はオブジェクトを共有する", () => {
+  it("同じノードの 2 つの出現は同一オブジェクト", () => {
+    const project = workspaceToProjectData(multiParentProject(), "root");
+    const a = project.data.children.find((c) => c.id === "A")!;
+    const b = project.data.children.find((c) => c.id === "B")!;
+
+    expect(a.children[0].id).toBe("C");
+    expect(a.children[0]).toBe(b.children[0]);
+  });
+
+  it("片方の出現に子を足すと、もう片方の出現にも出る", () => {
+    const project = workspaceToProjectData(multiParentProject(), "root");
+    const a = project.data.children.find((c) => c.id === "A")!;
+    a.children[0].children.push({
+      id: "D",
+      data: {
+        name: "詳細",
+        status: "Open",
+        "start date": undefined,
+        "due date": undefined,
+        memo: [],
+      },
+      children: [],
+    });
+
+    const rows = flattenVisibleTree(project.data, new Set(), false);
+    expect(
+      rows
+        .filter((r) => r.id === "D")
+        .map((r) => r.path)
+        .sort()
+    ).toEqual(["root/A/C/D", "root/B/C/D"]);
+  });
+
+  it("循環を打ち切った部分木は共有しない（経路に依存するため）", () => {
+    // root → X → Y → X（打ち切り）。X の出現は経路ごとに形が違う。
+    const cyclic = {
+      root: T("root", "プロジェクト", []),
+      X: T("X", "X", ["root", "Y"]),
+      Y: T("Y", "Y", ["X"]),
+    };
+    const project = workspaceToProjectData(cyclic, "root");
+    const rows = flattenVisibleTree(project.data, new Set(), false);
+
+    expect(rows.map((r) => r.path)).toEqual(["root", "root/X", "root/X/Y"]);
   });
 });

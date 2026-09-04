@@ -20,7 +20,7 @@ vi.mock("@lib/primitives/Dialog.svelte", async () => {
 
 import TreeTable from "@features/tasks/components/TreeTable.svelte";
 import {
-  closed_node_ids,
+  closed_row_paths,
   column_settings,
   filtered_data,
   selected_id,
@@ -115,7 +115,7 @@ describe("TreeTable", () => {
     table_selected_id.set(undefined);
     copied_task.set(null);
     copied_tasks.set([]);
-    closed_node_ids.set(new Set());
+    closed_row_paths.set(new Set());
     column_settings.set([
       { id: "name", label: "タスク名", visible: true },
       { id: "status", label: "ステータス", visible: true },
@@ -189,13 +189,13 @@ describe("TreeTable", () => {
     await fireEvent.click(screen.getByTestId("toggle-task-1"));
     await tick();
 
-    expect(get(closed_node_ids).has("task-1")).toBe(true);
+    expect(get(closed_row_paths).has("project-1/task-1")).toBe(true);
     expect(screen.queryByText("Nested Task")).not.toBeInTheDocument();
 
     await fireEvent.click(screen.getByTestId("toggle-task-1"));
     await tick();
 
-    expect(get(closed_node_ids).has("task-1")).toBe(false);
+    expect(get(closed_row_paths).has("project-1/task-1")).toBe(false);
     expect(screen.getByText("Nested Task")).toBeInTheDocument();
   });
 
@@ -452,7 +452,7 @@ describe("TreeTable", () => {
 
       await fireEvent.keyDown(rowOf("task-1"), { key: "ArrowLeft" });
       await tick();
-      expect(get(closed_node_ids).has("task-1")).toBe(true);
+      expect(get(closed_row_paths).has("project-1/task-1")).toBe(true);
       // 閉じただけで、まだ移動はしない。
       expect(get(table_selected_id)).toBeUndefined();
 
@@ -462,13 +462,13 @@ describe("TreeTable", () => {
     });
 
     test("ArrowRight expands a collapsed row, then steps into the first child", async () => {
-      closed_node_ids.set(new Set(["task-1"]));
+      closed_row_paths.set(new Set(["project-1/task-1"]));
       render(TreeTable);
       await tick();
 
       await fireEvent.keyDown(rowOf("task-1"), { key: "ArrowRight" });
       await tick();
-      expect(get(closed_node_ids).has("task-1")).toBe(false);
+      expect(get(closed_row_paths).has("project-1/task-1")).toBe(false);
 
       await fireEvent.keyDown(rowOf("task-1"), { key: "ArrowRight" });
       await tick();
