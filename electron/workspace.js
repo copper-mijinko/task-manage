@@ -650,12 +650,26 @@ function parseQuillMemoBody(body) {
   return markdownToQuillDelta(body);
 }
 
-function serializeMemoBody(memo) {
-  const format = normalizeMemoFormat(memo.format, "markdown");
+/**
+ * ノード本文の読み。
+ *
+ * ノードは 1 つだけ本文を持つ（「1 つのメモ ＝ 1 つのノード」）。Quill の
+ * ノードは本文を fenced code block の Delta として持つので、メモと同じ流儀で
+ * 取り出す。
+ */
+function parseNodeBody(body, format) {
+  return normalizeMemoFormat(format, "markdown") === "quill"
+    ? parseQuillMemoBody(body)
+    : String(body ?? "").trim();
+}
+
+/** ノード本文の書き。`parseNodeBody` の逆。 */
+function serializeNodeBody(task) {
+  const format = normalizeMemoFormat(task.format, "markdown");
   if (format === "quill") {
-    return `\`\`\`json\n${JSON.stringify(memoContentToQuillDelta(memo.content), null, 2)}\n\`\`\``;
+    return `\`\`\`json\n${JSON.stringify(memoContentToQuillDelta(task.body), null, 2)}\n\`\`\``;
   }
-  return legacyMemoContentToMarkdown(memo.content, memo.title);
+  return legacyMemoContentToMarkdown(task.body, task.name);
 }
 
 /**
@@ -847,6 +861,9 @@ function taskFrontmatterData(task) {
   if (typeof task.order === "number" && !(task.parents?.length > 0)) {
     data.order = task.order;
   }
+  // 本文の形式。既定（markdown）のときはキーを書かない。既存ファイルに
+  // 無用な差分を作らないため。タグや status と同じ流儀。
+  if (normalizeMemoFormat(task.format, "markdown") === "quill") data.format = "quill";
   const tags = normalizeTaskTags(task.tags);
   if (tags.length > 0) data.tags = tags;
   data.created = task.createdAt || new Date().toISOString().slice(0, 10);
@@ -935,6 +952,7 @@ function readMemos(taskDir, reservedFiles = ["_index.md"], options = {}) {
       format,
       order: parseOrderValue(data.order),
       bodyLoaded: includeMemoContent,
+      fileName: file,
       fileIndex,
     });
   });
@@ -1020,8 +1038,11 @@ function parentIdsOf(parents) {
 }
 
 function readRootTask(projectDir, options = {}) {
-  const content = fs.readFileSync(path.join(projectDir, "_project.md"), "utf8");
-  const { data } = parseFrontmatter(content);
+  const includeBody = options.includeMemoContent !== false;
+  const filePath = path.join(projectDir, "_project.md");
+  // 本文が要らない読み出しでは先頭だけ読む。frontmatter は必ず収まる。
+  const content = includeBody ? fs.readFileSync(filePath, "utf8") : readFilePrefix(filePath);
+  const { data, body } = parseFrontmatter(content);
   const task = {
     id: data.id,
     name: data.name || "",
@@ -1029,6 +1050,7 @@ function readRootTask(projectDir, options = {}) {
     startDate: data.start || undefined,
     dueDate: data.due || undefined,
     parents: [],
+    ...nodeBodyFields(body, data, includeBody),
     memos: readMemos(projectDir, ["_project.md"], options),
     attachments: readAttachments(projectDir),
     createdAt: data.created || "",
@@ -1044,8 +1066,10 @@ function readRootTask(projectDir, options = {}) {
 
 /** Read a regular task from its subdirectory. */
 function readTaskDir(taskDir, options = {}) {
-  const content = fs.readFileSync(path.join(taskDir, "_index.md"), "utf8");
-  const { data } = parseFrontmatter(content);
+  const includeBody = options.includeMemoContent !== false;
+  const filePath = path.join(taskDir, "_index.md");
+  const content = includeBody ? fs.readFileSync(filePath, "utf8") : readFilePrefix(filePath);
+  const { data, body } = parseFrontmatter(content);
   const parents = normalizeParentLinks(data.parents, parseOrderValue(data.order));
   const task = {
     id: data.id,
@@ -1054,6 +1078,7 @@ function readTaskDir(taskDir, options = {}) {
     startDate: data.start || undefined,
     dueDate: data.due || undefined,
     parents,
+    ...nodeBodyFields(body, data, includeBody),
     memos: readMemos(taskDir, ["_index.md"], options),
     attachments: readAttachments(taskDir),
     createdAt: data.created || "",
@@ -1068,6 +1093,70 @@ function readTaskDir(taskDir, options = {}) {
 }
 
 /**
+ * 旧メモ（`<task-dir>/<memo-id>.md`）をノードとして取り込む。
+ *
+ * 「1 つのメモ ＝ 1 つのノード」なので、メモはタスクの属性ではなく子ノードに
+ * なる。ファイルの移動は保存時に行う（`migrateLegacyMemoNode`）ので、読みは
+ * 置き場所を問わずノードとして見せることだけを引き受ける。
+ *
+ * 返り値の `legacyMemoFiles` は「まだ移行していないノード」の元ファイルを指す。
+ * 保存側はこれを見て、移行先を書いてから元を消す。
+ *
+ * 同じ id のディレクトリが既にある場合は取り込まない。移行の途中で落ちると
+ * 「新しいディレクトリ」と「消し残した旧ファイル」が並ぶが、そのときは
+ * ディレクトリを正とする（旧ファイルは次の保存で消える）。
+ */
+/** 旧メモをタスクの子として並べるときの順序の基点。実タスクの後ろに置く。 */
+const LEGACY_MEMO_ORDER_BASE = 1_000_000;
+
+function promoteLegacyMemos(tasks, taskDirs, memosByTaskId) {
+  const legacyMemoFiles = new Map();
+
+  for (const [taskId, memos] of memosByTaskId) {
+    const parent = tasks.get(taskId);
+    if (!parent) continue;
+    const dirName = taskDirs.get(taskId);
+
+    for (const [index, memo] of memos.entries()) {
+      if (!memo.id) continue;
+      // 旧メモの id はこれからディレクトリ名になる。ファイルを手で書いた場合に
+      // 危険な id が入っていることがあり、そのまま通すと保存のたびに例外が出て
+      // **プロジェクト全体が保存できなくなる**。中身は捨てずに id だけ振り直す。
+      let id = memo.id;
+      try {
+        assertSafePathSegment(id, "memo id");
+      } catch {
+        id = crypto.randomUUID();
+      }
+      if (tasks.has(id)) continue;
+
+      tasks.set(id, {
+        id,
+        name: memo.title || "memo",
+        // メモは進み具合を持たない。既定のステータスを与えると、ノート 1 つ
+        // 1 つが「未着手のタスク」として積み上がる。
+        status: undefined,
+        parents: [{ id: taskId, order: LEGACY_MEMO_ORDER_BASE + index }],
+        body: memo.content,
+        format: memo.format,
+        bodyLoaded: memo.bodyLoaded,
+        tags: memo.tags ?? [],
+        attachments: [],
+        memos: [],
+        createdAt: parent.createdAt || "",
+      });
+      // 画像は親ディレクトリの `assets/` にある。移行するまではそちらを見る。
+      taskDirs.set(id, dirName);
+      // 消すのは**ディスク上の実際のファイル名**。id から組み立てると、
+      // 振り直した id や危険な id のときに別の場所を指してしまう。
+      legacyMemoFiles.set(id, { dirName, fileName: memo.fileName });
+    }
+  }
+
+  return legacyMemoFiles;
+}
+
+/**
  * Read all tasks from a project directory.
  * Returns { tasks: Map<id, task>, taskDirs: Map<id, dirName> }
  */
@@ -1075,12 +1164,16 @@ function readProjectUnmeasured(projectDir, options = {}) {
   const tasks = new Map();
   const taskDirs = new Map();
 
+  const memosByTaskId = new Map();
+
   const rootFile = path.join(projectDir, "_project.md");
   if (fs.existsSync(rootFile)) {
     const root = readRootTask(projectDir, options);
     if (root.id) {
       tasks.set(root.id, root);
       taskDirs.set(root.id, "_project");
+      memosByTaskId.set(root.id, root.memos);
+      root.memos = [];
     }
   }
 
@@ -1094,19 +1187,110 @@ function readProjectUnmeasured(projectDir, options = {}) {
       if (task.id) {
         tasks.set(task.id, task);
         taskDirs.set(task.id, entry.name);
+        memosByTaskId.set(task.id, task.memos);
+        task.memos = [];
       }
     } catch {
       // Skip malformed task directories
     }
   }
 
-  return { tasks, taskDirs };
+  const legacyMemoFiles = promoteLegacyMemos(tasks, taskDirs, memosByTaskId);
+
+  return { tasks, taskDirs, legacyMemoFiles };
 }
 
 function readProject(projectDir, options = {}) {
   return performanceMetrics.measureSync("workspace.readProject", () =>
     readProjectUnmeasured(projectDir, options)
   );
+}
+
+/**
+ * 1 つのノードの本文を読む。
+ *
+ * プロジェクト読み出しは一覧目的なので本文を読まない（`bodyLoaded: false`）。
+ * ノードを開いたときにここで本文だけを取りに行く。
+ *
+ * 旧メモから来たノードはまだ親ディレクトリの中の 1 ファイルなので、
+ * `<dir>/_index.md` と `<dir>/<id>.md` の両方を見る。
+ */
+function nodeFilePathFor(projectDir, taskDirs, taskId) {
+  const dirName = taskDirs.get(taskId);
+  if (!dirName) throw new Error("Task directory was not found");
+  if (dirName === "_project") return path.join(projectDir, "_project.md");
+
+  const taskDir = path.join(projectDir, dirName);
+  const indexPath = path.join(taskDir, "_index.md");
+  try {
+    if (parseFrontmatter(readFilePrefix(indexPath)).data.id === taskId) return indexPath;
+  } catch {
+    // 読めなければ旧メモ側を試す。
+  }
+  return path.join(taskDir, `${taskId}.md`);
+}
+
+function readTaskBodyUnmeasured(projectDir, taskId, taskDirs) {
+  const raw = fs.readFileSync(nodeFilePathFor(projectDir, taskDirs, taskId), "utf8");
+  const { data, body } = parseFrontmatter(raw);
+  return {
+    body: parseNodeBody(body, data.format),
+    format: normalizeMemoFormat(data.format, "markdown"),
+  };
+}
+
+function readTaskBody(projectDir, taskId, taskDirs) {
+  return performanceMetrics.measureSync("workspace.readTaskBody", () =>
+    readTaskBodyUnmeasured(projectDir, taskId, taskDirs)
+  );
+}
+
+/** `nodeFilePathFor` の非同期版。対話パスは同期 I/O を踏まないこと。 */
+async function nodeFilePathForAsync(projectDir, taskDirs, taskId) {
+  const dirName = taskDirs.get(taskId);
+  if (!dirName) throw new Error("Task directory was not found");
+  if (dirName === "_project") return path.join(projectDir, "_project.md");
+
+  const taskDir = path.join(projectDir, dirName);
+  const indexPath = path.join(taskDir, "_index.md");
+  try {
+    const raw = await readFilePrefixAsync(indexPath);
+    if (parseFrontmatter(raw).data.id === taskId) return indexPath;
+  } catch {
+    // 読めなければ旧メモ側を試す。
+  }
+  return path.join(taskDir, `${taskId}.md`);
+}
+
+async function readTaskBodyAsync(projectDir, taskId, taskDirs) {
+  return performanceMetrics.measureAsync("workspace.readTaskBodyAsync", async () => {
+    const raw = await fs.promises.readFile(
+      await nodeFilePathForAsync(projectDir, taskDirs, taskId),
+      "utf8"
+    );
+    const { data, body } = parseFrontmatter(raw);
+    return {
+      body: parseNodeBody(body, data.format),
+      format: normalizeMemoFormat(data.format, "markdown"),
+    };
+  });
+}
+
+/**
+ * プロジェクト全体の本文を読む。全文検索の hydration 用。
+ *
+ * 置き場所（自分のディレクトリか、旧メモのファイルか）を意識しないで済むよう、
+ * 本文つきで読み直した結果をそのまま使う。
+ */
+async function readProjectBodiesAsync(projectDir) {
+  return performanceMetrics.measureAsync("workspace.readProjectBodiesAsync", async () => {
+    const { tasks } = await readProjectAsync(projectDir, { includeMemoContent: true });
+    const bodiesByTaskId = {};
+    for (const [id, task] of tasks) {
+      bodiesByTaskId[id] = { body: task.body ?? "", format: task.format ?? "markdown" };
+    }
+    return bodiesByTaskId;
+  });
 }
 
 function readTaskMemosUnmeasured(projectDir, taskId, taskDirs) {
@@ -1172,6 +1356,7 @@ function buildMemoEntry(file, fileIndex, raw, includeMemoContent) {
     format,
     order: parseOrderValue(data.order),
     bodyLoaded: includeMemoContent,
+    fileName: file,
     fileIndex,
   };
 }
@@ -1230,6 +1415,18 @@ async function readAttachmentsAsync(taskDir) {
   );
 }
 
+/**
+ * ノード本文の 3 フィールドをまとめて作る。読み手が 4 箇所あるので、
+ * 1 箇所でも欠けると「画面には出るがファイルに書かれない」形で壊れる。
+ */
+function nodeBodyFields(body, data, includeBody) {
+  return {
+    format: normalizeMemoFormat(data.format, "markdown"),
+    body: includeBody ? parseNodeBody(body, data.format) : "",
+    bodyLoaded: includeBody,
+  };
+}
+
 function buildTaskFromFrontmatter(data, extra) {
   const task = {
     id: data.id,
@@ -1250,24 +1447,42 @@ function buildTaskFromFrontmatter(data, extra) {
 }
 
 async function readRootTaskAsync(projectDir, options = {}) {
-  const content = await fs.promises.readFile(path.join(projectDir, "_project.md"), "utf8");
-  const { data } = parseFrontmatter(content);
+  const includeBody = options.includeMemoContent !== false;
+  const filePath = path.join(projectDir, "_project.md");
+  const content = includeBody
+    ? await fs.promises.readFile(filePath, "utf8")
+    : await readFilePrefixAsync(filePath);
+  const { data, body } = parseFrontmatter(content);
   const [memos, attachments] = await Promise.all([
     readMemosAsync(projectDir, ["_project.md"], options),
     readAttachmentsAsync(projectDir),
   ]);
-  return buildTaskFromFrontmatter(data, { parents: [], memos, attachments });
+  return buildTaskFromFrontmatter(data, {
+    parents: [],
+    memos,
+    attachments,
+    ...nodeBodyFields(body, data, includeBody),
+  });
 }
 
 async function readTaskDirAsync(taskDir, options = {}) {
-  const content = await fs.promises.readFile(path.join(taskDir, "_index.md"), "utf8");
-  const { data } = parseFrontmatter(content);
+  const includeBody = options.includeMemoContent !== false;
+  const filePath = path.join(taskDir, "_index.md");
+  const content = includeBody
+    ? await fs.promises.readFile(filePath, "utf8")
+    : await readFilePrefixAsync(filePath);
+  const { data, body } = parseFrontmatter(content);
   const parents = normalizeParentLinks(data.parents, parseOrderValue(data.order));
   const [memos, attachments] = await Promise.all([
     readMemosAsync(taskDir, ["_index.md"], options),
     readAttachmentsAsync(taskDir),
   ]);
-  return buildTaskFromFrontmatter(data, { parents, memos, attachments });
+  return buildTaskFromFrontmatter(data, {
+    parents,
+    memos,
+    attachments,
+    ...nodeBodyFields(body, data, includeBody),
+  });
 }
 
 /**
@@ -1283,7 +1498,7 @@ async function readProjectAsyncUnmeasured(projectDir, options = {}) {
   try {
     entries = await fs.promises.readdir(projectDir, { withFileTypes: true });
   } catch (err) {
-    if (err.code === "ENOENT") return { tasks, taskDirs };
+    if (err.code === "ENOENT") return { tasks, taskDirs, legacyMemoFiles: new Map() };
     throw err;
   }
 
@@ -1314,18 +1529,26 @@ async function readProjectAsyncUnmeasured(projectDir, options = {}) {
     ),
   ]);
 
+  const memosByTaskId = new Map();
+
   if (root?.id) {
     tasks.set(root.id, root);
     taskDirs.set(root.id, "_project");
+    memosByTaskId.set(root.id, root.memos);
+    root.memos = [];
   }
 
   for (const entry of regularTasks) {
     if (!entry) continue;
     tasks.set(entry.task.id, entry.task);
     taskDirs.set(entry.task.id, entry.name);
+    memosByTaskId.set(entry.task.id, entry.task.memos);
+    entry.task.memos = [];
   }
 
-  return { tasks, taskDirs };
+  const legacyMemoFiles = promoteLegacyMemos(tasks, taskDirs, memosByTaskId);
+
+  return { tasks, taskDirs, legacyMemoFiles };
 }
 
 async function readProjectAsync(projectDir, options = {}) {
@@ -1351,68 +1574,13 @@ async function readTaskMemosAsync(projectDir, taskId, taskDirs) {
   );
 }
 
-function writeMemoFiles(taskDir, indexFileName, memos) {
-  const existing = fs.readdirSync(taskDir).filter((f) => f.endsWith(".md") && f !== indexFileName);
-  for (const f of existing) fs.unlinkSync(path.join(taskDir, f));
-  for (const [index, memo] of (memos || []).entries()) {
-    const id = assertSafePathSegment(memo.id || crypto.randomUUID(), "memo id");
-    fs.writeFileSync(
-      path.join(taskDir, `${id}.md`),
-      stringifyFrontmatter(
-        {
-          id,
-          title: memo.title,
-          tags: memo.tags ?? [],
-          format: normalizeMemoFormat(memo.format),
-          order: index,
-        },
-        serializeMemoBody(memo)
-      )
-    );
-  }
-}
-
-async function writeMemoFilesAsync(taskDir, indexFileName, memos, onWritten) {
-  const existing = (await fs.promises.readdir(taskDir)).filter(
-    (f) => f.endsWith(".md") && f !== indexFileName
-  );
-  const nextFiles = new Set();
-
-  for (const [index, memo] of (memos || []).entries()) {
-    const id = assertSafePathSegment(memo.id || crypto.randomUUID(), "memo id");
-    nextFiles.add(`${id}.md`);
-    await writeFileIfChanged(
-      path.join(taskDir, `${id}.md`),
-      stringifyFrontmatter(
-        {
-          id,
-          title: memo.title,
-          tags: memo.tags ?? [],
-          format: normalizeMemoFormat(memo.format),
-          order: index,
-        },
-        serializeMemoBody(memo)
-      ),
-      undefined,
-      onWritten
-    );
-  }
-
-  for (const f of existing) {
-    if (!nextFiles.has(f)) {
-      await retryFileOperation(() => fs.promises.unlink(path.join(taskDir, f)));
-    }
-  }
-}
-
 /** Write root task to _project.md. */
 function writeRootTask(projectDir, task) {
   fs.mkdirSync(projectDir, { recursive: true });
   fs.writeFileSync(
     path.join(projectDir, "_project.md"),
-    stringifyFrontmatter(taskFrontmatterData(task))
+    stringifyFrontmatter(taskFrontmatterData(task), serializeNodeBody(task))
   );
-  writeMemoFiles(projectDir, "_project.md", task.memos);
 }
 
 /** Write root task to _project.md using atomic async file writes. */
@@ -1420,11 +1588,64 @@ async function writeRootTaskAsync(projectDir, task, onWritten) {
   await fs.promises.mkdir(projectDir, { recursive: true });
   await writeFileIfChanged(
     path.join(projectDir, "_project.md"),
-    stringifyFrontmatter(taskFrontmatterData(task)),
+    stringifyFrontmatter(taskFrontmatterData(task), serializeNodeBody(task)),
     undefined,
     onWritten
   );
-  await writeMemoFilesAsync(projectDir, "_project.md", task.memos, onWritten);
+}
+
+/**
+ * 本文が参照している `assets/` のファイル名を拾う。
+ *
+ * Markdown は `![](./assets/x.png)`、Quill は `{insert:{image:"./assets/x.png"}}`
+ * の形で持つ。どちらも JSON 文字列にしてしまえば同じ 1 本の正規表現で拾える。
+ */
+function referencedAssetNames(body) {
+  const text = typeof body === "string" ? body : JSON.stringify(body ?? "");
+  const names = new Set();
+  const pattern = /(?:\.\/)?assets\/([^)\s"'\\]+)/g;
+  let match;
+  while ((match = pattern.exec(text)) !== null) {
+    try {
+      names.add(decodeURIComponent(match[1]));
+    } catch {
+      names.add(match[1]);
+    }
+  }
+  return [...names];
+}
+
+/**
+ * 旧メモを自分のディレクトリへ移すときに、参照している画像を運ぶ。
+ *
+ * 本文の `./assets/x.png` は**そのノードのディレクトリ相対**で解決される
+ * （`resolveMemoAssetPathCandidate` は `..` で外へ出る参照を拒否する）。
+ * つまり親のディレクトリに置いたままでは解決できないので、移行のときに
+ * 参照ぶんだけを新しい場所へ運ぶ必要がある。
+ *
+ * **コピーであって移動ではない。** 同じ画像を親の本文や別のメモも参照して
+ * いることがあり、動かすとそちらが壊れる。実体は重複するが、失われない。
+ */
+async function copyReferencedAssetsAsync(sourceDir, targetDir, body) {
+  const names = referencedAssetNames(body);
+  if (names.length === 0) return;
+
+  const sourceAssets = path.join(sourceDir, "assets");
+  const targetAssets = path.join(targetDir, "assets");
+  let created = false;
+
+  for (const name of names) {
+    // 外へ出る名前は運ばない（`assets/` 直下のファイルだけが対象）。
+    if (name.includes("/") || name.includes("\\") || name.includes("\0")) continue;
+    const from = path.join(sourceAssets, name);
+    const to = path.join(targetAssets, name);
+    if (!(await pathExists(from)) || (await pathExists(to))) continue;
+    if (!created) {
+      await fs.promises.mkdir(targetAssets, { recursive: true });
+      created = true;
+    }
+    await retryFileOperation(() => fs.promises.copyFile(from, to));
+  }
 }
 
 /**
@@ -1449,17 +1670,15 @@ function writeTask(projectDir, task, taskDirs) {
 
   fs.writeFileSync(
     path.join(taskDir, "_index.md"),
-    stringifyFrontmatter(taskFrontmatterData(task))
+    stringifyFrontmatter(taskFrontmatterData(task), serializeNodeBody(task))
   );
-
-  writeMemoFiles(taskDir, "_index.md", task.memos);
 }
 
 /**
  * Async atomic variant for the interactive save path. The synchronous
  * writeTask stays available for export/migrate batch operations.
  */
-async function writeTaskAsync(projectDir, task, taskDirs, onWritten) {
+async function writeTaskAsync(projectDir, task, taskDirs, onWritten, migration) {
   assertSafePathSegment(task.id, "task id");
   if (!task.parents || task.parents.length === 0) {
     await writeRootTaskAsync(projectDir, task, onWritten);
@@ -1467,7 +1686,12 @@ async function writeTaskAsync(projectDir, task, taskDirs, onWritten) {
     return;
   }
 
-  let dirName = taskDirs.get(task.id);
+  // 旧メモから来たノードは、まだ親ディレクトリの中の 1 ファイルとして存在する。
+  // `taskDirs` はその親を指している（画像をそこから解決するため）ので、その
+  // ままだと親の `_index.md` を上書きしてしまう。移行対象は必ず新しい
+  // ディレクトリを取る。
+  const legacy = migration?.legacyMemoFiles?.get(task.id);
+  let dirName = legacy ? undefined : taskDirs.get(task.id);
   if (!dirName) {
     dirName = task.id;
     taskDirs.set(task.id, dirName);
@@ -1475,14 +1699,37 @@ async function writeTaskAsync(projectDir, task, taskDirs, onWritten) {
   const taskDir = path.join(projectDir, dirName);
   await fs.promises.mkdir(taskDir, { recursive: true });
 
+  if (legacy) {
+    // 先に画像を運んでから本体を書く。消すのは全部書けたあと（第 2 パス）。
+    await copyReferencedAssetsAsync(path.join(projectDir, legacy.dirName), taskDir, task.body);
+    migration.legacyMemoFiles.delete(task.id);
+    migration.migrated.push(legacy);
+  }
+
   await writeFileIfChanged(
     path.join(taskDir, "_index.md"),
-    stringifyFrontmatter(taskFrontmatterData(task)),
+    stringifyFrontmatter(taskFrontmatterData(task), serializeNodeBody(task)),
     undefined,
     onWritten
   );
+}
 
-  await writeMemoFilesAsync(taskDir, "_index.md", task.memos, onWritten);
+/**
+ * 移行し終えた旧メモファイルを消す（第 2 パス）。
+ *
+ * **全ノードの書き出しが済んでから**呼ぶ。移行先を書く前に元を消すと、途中で
+ * 落ちたときに本文が失われる。逆順（コピー→削除）なら、途中で止まっても
+ * 元が残るだけで済む。
+ */
+async function removeMigratedLegacyMemos(projectDir, migrated) {
+  for (const legacy of migrated) {
+    const filePath = path.join(projectDir, legacy.dirName, legacy.fileName);
+    try {
+      await retryFileOperation(() => fs.promises.rm(filePath, { force: true }));
+    } catch {
+      // 消せなくてもデータは失われない（次の保存でもう一度試す）。
+    }
+  }
 }
 
 function getTaskTargetDir(projectDir, taskDirs, taskId) {
@@ -1665,28 +1912,68 @@ function deleteTaskDir(projectDir, taskDirs, taskId) {
   taskDirs.delete(taskId);
 }
 
-async function deleteTaskDirAsync(projectDir, taskDirs, taskId) {
+async function deleteTaskDirAsync(projectDir, taskDirs, taskId, legacyMemoFiles) {
+  // 旧メモから来たノードはまだ自分のディレクトリを持たず、`taskDirs` は
+  // **親**を指している（画像をそこから解決するため）。そのままディレクトリを
+  // 消すと親とその子が丸ごと消えるので、消すのはその 1 ファイルだけにする。
+  const legacy = legacyMemoFiles?.get(taskId);
+  if (legacy) {
+    const filePath = path.join(projectDir, legacy.dirName, legacy.fileName);
+    await retryFileOperation(() => fs.promises.rm(filePath, { force: true }));
+    legacyMemoFiles.delete(taskId);
+    taskDirs.delete(taskId);
+    return;
+  }
+
   const dirName = taskDirs.get(taskId);
   if (!dirName || dirName === "_project") return;
   const taskDir = path.join(projectDir, dirName);
+
+  // 呼び出し側が `legacyMemoFiles` を持っていないこともある（IPC の単発削除は
+  // キャッシュ経由で、そこには載っていない）。そのときのために、ディレクトリが
+  // 本当にこのノードのものかを `_index.md` の id で確かめてから消す。
+  // 違っていれば旧メモなので、その 1 ファイルだけを消す。
+  if (!(await ownsTaskDirAsync(taskDir, taskId))) {
+    const filePath = path.join(taskDir, `${taskId}.md`);
+    await retryFileOperation(() => fs.promises.rm(filePath, { force: true }));
+    taskDirs.delete(taskId);
+    return;
+  }
+
   await retryFileOperation(() => fs.promises.rm(taskDir, { recursive: true, force: true }));
   taskDirs.delete(taskId);
 }
 
+/** そのディレクトリの `_index.md` が指す id が taskId と一致するか。 */
+async function ownsTaskDirAsync(taskDir, taskId) {
+  try {
+    const raw = await readFilePrefixAsync(path.join(taskDir, "_index.md"));
+    return parseFrontmatter(raw).data.id === taskId;
+  } catch {
+    // 読めないディレクトリは、従来どおりディレクトリとして扱う。
+    return true;
+  }
+}
+
 async function writeProjectAsyncUnmeasured(projectDir, tasks, options = {}) {
   const { onWritten } = options;
-  const { taskDirs } = await readProjectAsync(projectDir, { includeMemoContent: false });
+  const { taskDirs, legacyMemoFiles } = await readProjectAsync(projectDir, {
+    includeMemoContent: false,
+  });
   const nextTaskIds = new Set(tasks.map((task) => task.id));
+  const migration = { legacyMemoFiles, migrated: [] };
 
   for (const id of [...taskDirs.keys()]) {
     if (!nextTaskIds.has(id)) {
-      await deleteTaskDirAsync(projectDir, taskDirs, id);
+      await deleteTaskDirAsync(projectDir, taskDirs, id, legacyMemoFiles);
     }
   }
 
   for (const task of tasks) {
-    await writeTaskAsync(projectDir, task, taskDirs, onWritten);
+    await writeTaskAsync(projectDir, task, taskDirs, onWritten, migration);
   }
+
+  await removeMigratedLegacyMemos(projectDir, migration.migrated);
 
   return {
     tasks: new Map(tasks.map((task) => [task.id, task])),
@@ -1702,21 +1989,26 @@ async function writeProjectAsync(projectDir, tasks, options = {}) {
 
 async function writeProjectPatchAsyncUnmeasured(projectDir, patch, options = {}) {
   const { onWritten } = options;
-  const { tasks, taskDirs } = await readProjectAsync(projectDir, { includeMemoContent: false });
+  const { tasks, taskDirs, legacyMemoFiles } = await readProjectAsync(projectDir, {
+    includeMemoContent: false,
+  });
+  const migration = { legacyMemoFiles, migrated: [] };
   const nextTasks = Array.isArray(patch?.tasks) ? patch.tasks.filter((task) => task?.id) : [];
   const deletedTaskIds = Array.isArray(patch?.deletedTaskIds)
     ? [...new Set(patch.deletedTaskIds.filter((id) => typeof id === "string" && id.length > 0))]
     : [];
 
   for (const id of deletedTaskIds) {
-    await deleteTaskDirAsync(projectDir, taskDirs, id);
+    await deleteTaskDirAsync(projectDir, taskDirs, id, legacyMemoFiles);
     tasks.delete(id);
   }
 
   for (const task of nextTasks) {
-    await writeTaskAsync(projectDir, task, taskDirs, onWritten);
+    await writeTaskAsync(projectDir, task, taskDirs, onWritten, migration);
     tasks.set(task.id, task);
   }
+
+  await removeMigratedLegacyMemos(projectDir, migration.migrated);
 
   return {
     tasks,
@@ -2035,22 +2327,8 @@ function exportProjectData(workspacePath, projectData, options = {}) {
   const exportedProjectId = crypto.randomUUID();
 
   function traverse(node, parentIds, siblingIndex) {
-    const memos = (node.data.memo || []).map((m) => {
-      const title = String(m.title || "Memo");
-      const sourceFormat = normalizeMemoFormat(m.format, "quill");
-      const targetFormat = exportMemoFormat === "markdown" ? "markdown" : sourceFormat;
-      return {
-        id: crypto.randomUUID(),
-        title,
-        content:
-          targetFormat === "markdown"
-            ? legacyMemoContentToMarkdown(m.content, title)
-            : memoContentToQuillDelta(m.content),
-        tags: Array.isArray(m.tags) ? m.tags.map(String) : [],
-        format: targetFormat,
-      };
-    });
     const exportedTaskId = node === projectData.data ? exportedProjectId : node.id;
+    const children = node.children || [];
 
     tasks.push({
       id: exportedTaskId,
@@ -2060,15 +2338,38 @@ function exportProjectData(workspacePath, projectData, options = {}) {
       dueDate: node.data["due date"] || undefined,
       // 並び順は辺の属性。エクスポート先でも親と組で持たせる。
       parents: parentIds.map((id) => ({ id, order: siblingIndex })),
-      memos,
+      memos: [],
       tags: normalizeTaskTags(node.data.tags),
       createdAt: today,
       // ルート（親なし）だけがタスク直下の order を持つ。
       order: parentIds.length === 0 ? siblingIndex : undefined,
     });
 
-    for (const [index, child] of (node.children || []).entries()) {
+    for (const [index, child] of children.entries()) {
       traverse(child, [exportedTaskId], index);
+    }
+
+    // db.json のメモも「1 つのメモ ＝ 1 つのノード」に従って子ノードにする。
+    // 実タスクの子の後ろへ並べる。
+    for (const [index, memo] of (node.data.memo || []).entries()) {
+      const title = String(memo.title || "Memo");
+      const sourceFormat = normalizeMemoFormat(memo.format, "quill");
+      const targetFormat = exportMemoFormat === "markdown" ? "markdown" : sourceFormat;
+      tasks.push({
+        id: crypto.randomUUID(),
+        name: title,
+        // メモは進み具合を持たないので、ステータスを与えない。
+        status: undefined,
+        parents: [{ id: exportedTaskId, order: children.length + index }],
+        body:
+          targetFormat === "markdown"
+            ? legacyMemoContentToMarkdown(memo.content, title)
+            : memoContentToQuillDelta(memo.content),
+        format: targetFormat,
+        memos: [],
+        tags: Array.isArray(memo.tags) ? memo.tags.map(String) : [],
+        createdAt: today,
+      });
     }
   }
 
@@ -2144,6 +2445,9 @@ module.exports = {
   readProjectAsync,
   readTaskMemos,
   readTaskMemosAsync,
+  readTaskBody,
+  readTaskBodyAsync,
+  readProjectBodiesAsync,
   writeTask,
   writeTaskAsync,
   writeProjectAsync,

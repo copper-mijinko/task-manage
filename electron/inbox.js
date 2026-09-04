@@ -106,7 +106,6 @@ async function addInboxItem(workspacePath, partialItem = {}, options = {}) {
     startDate: partialItem.startDate || undefined,
     dueDate: partialItem.dueDate || undefined,
     parents: [{ id: rootId, order: nextSiblingOrder(tasks, rootId) }],
-    memos: Array.isArray(partialItem.memos) ? partialItem.memos : [],
     createdAt: today,
   };
   await workspace.writeTaskAsync(projectDir, task, taskDirs, options.onWritten);

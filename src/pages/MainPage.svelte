@@ -22,7 +22,11 @@
     selected_type,
     ui_density,
   } from "@stores";
-  import { convertMemoContent, normalizeMemoFormat } from "@features/memos/utils/memo_utils";
+  import {
+    convertMemoContent,
+    isEmptyMemoContent,
+    normalizeMemoFormat,
+  } from "@features/memos/utils/memo_utils";
   import {
     getNode,
     addNode,
@@ -244,31 +248,30 @@
     outerCollapsedPane = detailPaneVisible ? "end" : null;
   }
 
-  function getBulkMemoId(node, entry, index) {
-    return `${node.id}:${entry.id ?? "memo"}:${index}`;
-  }
-
+  /**
+   * 一括変換の対象は「本文を持つノード」。メモがノードになったので、
+   * タスク 1 つにつき本文 1 つを見ればよい。
+   */
   function collectProjectMemosForFormat(node, targetFormat, fallbackFormat) {
     if (!node) return [];
 
-    const ownItems = (node.data.memo ?? []).flatMap((entry, index) => {
-      const currentFormat = normalizeMemoFormat(entry.format, fallbackFormat);
-      if (currentFormat === targetFormat) {
-        return [];
-      }
-      return [
-        {
-          id: getBulkMemoId(node, entry, index),
-          taskId: node.id,
-          taskName: node.data?.name || "Untitled task",
-          memoTitle: entry.title || `memo ${index + 1}`,
-          fromFormat: currentFormat,
-          toFormat: targetFormat,
-          status: "pending",
-          error: "",
-        },
-      ];
-    });
+    const currentFormat = normalizeMemoFormat(node.data.format, fallbackFormat);
+    // 空の本文には変換するものが無い。ここを数えると、まだ何も書いていない
+    // ノードまで「変換対象」に並び、件数が意味を失う。
+    const ownItems =
+      currentFormat === targetFormat || isEmptyMemoContent(node.data.body)
+        ? []
+        : [
+            {
+              id: node.id,
+              taskId: node.id,
+              taskName: node.data?.name || "Untitled node",
+              fromFormat: currentFormat,
+              toFormat: targetFormat,
+              status: "pending",
+              error: "",
+            },
+          ];
 
     return ownItems.concat(
       (node.children ?? []).flatMap((child) =>
@@ -279,9 +282,11 @@
 
   function countProjectMemosForFormat(node, targetFormat, fallbackFormat) {
     if (!node) return 0;
-    const ownCount = (node.data.memo ?? []).filter(
-      (memo) => normalizeMemoFormat(memo.format, fallbackFormat) !== targetFormat
-    ).length;
+    const ownCount =
+      normalizeMemoFormat(node.data.format, fallbackFormat) === targetFormat ||
+      isEmptyMemoContent(node.data.body)
+        ? 0
+        : 1;
     return (
       ownCount +
       (node.children ?? []).reduce(
@@ -292,38 +297,27 @@
   }
 
   function convertNodeMemosToFormatWithResults(node, targetFormat, fallbackFormat, resultMap) {
-    const memo = (node.data.memo ?? []).map((entry, index) => {
-      const currentFormat = normalizeMemoFormat(entry.format, fallbackFormat);
-      if (currentFormat === targetFormat) {
-        return { ...entry, format: currentFormat };
-      }
+    const currentFormat = normalizeMemoFormat(node.data.format, fallbackFormat);
+    let data = node.data;
 
-      const result = resultMap.get(getBulkMemoId(node, entry, index));
+    if (currentFormat !== targetFormat && !isEmptyMemoContent(node.data.body)) {
+      const result = resultMap.get(node.id);
       try {
-        const content = convertMemoContent(entry.content, currentFormat, targetFormat);
-        if (result) {
-          result.status = "ok";
-        }
-        return {
-          ...entry,
-          format: targetFormat,
-          content,
-        };
+        const body = convertMemoContent(node.data.body, currentFormat, targetFormat);
+        if (result) result.status = "ok";
+        data = { ...node.data, format: targetFormat, body };
       } catch (error) {
         if (result) {
           result.status = "error";
           result.error = error instanceof Error ? error.message : String(error);
         }
-        return { ...entry, format: currentFormat };
+        data = { ...node.data, format: currentFormat };
       }
-    });
+    }
 
     return {
       ...node,
-      data: {
-        ...node.data,
-        memo,
-      },
+      data,
       children: (node.children ?? []).map((child) =>
         convertNodeMemosToFormatWithResults(child, targetFormat, fallbackFormat, resultMap)
       ),
@@ -1265,7 +1259,7 @@
           <ul class="bulk-list">
             {#each bulkMemoItems as item (item.id)}
               <li class="bulk-item">
-                <span class="bulk-item-title">{item.taskName} / {item.memoTitle}</span>
+                <span class="bulk-item-title">{item.taskName}</span>
                 <span class="bulk-item-format">
                   {getMemoFormatLabel(item.fromFormat)} → {getMemoFormatLabel(item.toFormat)}
                 </span>
@@ -1287,7 +1281,7 @@
             <ul class="bulk-result-list">
               {#each successfulBulkMemoItems as item (item.id)}
                 <li class="bulk-result-ok">
-                  OK: {item.taskName} / {item.memoTitle} ({getMemoFormatLabel(item.fromFormat)}
+                  OK: {item.taskName} ({getMemoFormatLabel(item.fromFormat)}
                   → {getMemoFormatLabel(item.toFormat)})
                 </li>
               {/each}
@@ -1299,7 +1293,7 @@
             <ul class="bulk-result-list">
               {#each failedBulkMemoItems as item (item.id)}
                 <li class="bulk-result-err">
-                  Error: {item.taskName} / {item.memoTitle}: {item.error}
+                  Error: {item.taskName}: {item.error}
                 </li>
               {/each}
             </ul>

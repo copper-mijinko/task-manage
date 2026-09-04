@@ -18,11 +18,13 @@ import type {
   WorkspaceAttachment,
   WorkspaceProject,
   WorkspaceProjectListItem,
-  WorkspaceMemo,
+  NodeBody,
   WorkspaceProjectPatch,
   WorkspaceTask,
 } from "@app-types/workspace";
 import type { ProjectData } from "@features/tasks/utils/tree_control";
+import { promoteLegacyMemosToNodes } from "@features/tasks/utils/tree_control";
+import type { MemoFormat } from "@features/memos/utils/memo_utils";
 
 // Single point where the Electron runtime is accessed.
 // Returns Partial<ElectronAPI> so method-level guards work correctly
@@ -40,8 +42,16 @@ export function isPlatformAvailable(): boolean {
 // Legacy project operations
 // ---------------------------------------------------------------------------
 
+/**
+ * `db.json` プロジェクトの読み出し。
+ *
+ * 旧メモ配列はここで子ノードに直す（[data.md](../../../docs/data.md) § 6）。
+ * `db.json` は生の JSON が renderer に届くので、入口で 1 回直さないと既存の
+ * メモが画面から消える。ワークスペース側は main プロセスが同じことをする。
+ */
 export function getTreeData(projectId?: string): Promise<ProjectData | undefined> {
-  return api()?.getTreeData?.(projectId) ?? Promise.resolve(undefined);
+  const result = api()?.getTreeData?.(projectId);
+  return result ? result.then(promoteLegacyMemosToNodes) : Promise.resolve(undefined);
 }
 
 export function setTreeData(treeData: ProjectData): Promise<void> {
@@ -49,7 +59,8 @@ export function setTreeData(treeData: ProjectData): Promise<void> {
 }
 
 export function getInitialTreeData(): Promise<ProjectData | undefined> {
-  return api()?.getInitialTreeData?.() ?? Promise.resolve(undefined);
+  const result = api()?.getInitialTreeData?.();
+  return result ? result.then(promoteLegacyMemosToNodes) : Promise.resolve(undefined);
 }
 
 export function getProjectIDs(): Promise<ProjectListItem[]> {
@@ -269,17 +280,20 @@ export function wsReadProject(
   return options ? readProject(projectDir, options) : readProject(projectDir);
 }
 
-export function wsReadTaskMemos(
+export function wsReadTaskBody(
   projectDir: string,
   taskId: string
-): Promise<{ memos: WorkspaceMemo[]; error?: string }> {
-  return api()?.wsReadTaskMemos?.(projectDir, taskId) ?? Promise.resolve({ memos: [] });
+): Promise<{ body: unknown; format: MemoFormat; error?: string }> {
+  return (
+    api()?.wsReadTaskBody?.(projectDir, taskId) ??
+    Promise.resolve({ body: "", format: "markdown" as MemoFormat })
+  );
 }
 
-export function wsReadProjectMemos(
+export function wsReadProjectBodies(
   projectDir: string
-): Promise<{ memosByTaskId: Record<string, WorkspaceMemo[]>; error?: string }> {
-  return api()?.wsReadProjectMemos?.(projectDir) ?? Promise.resolve({ memosByTaskId: {} });
+): Promise<{ bodiesByTaskId: Record<string, NodeBody>; error?: string }> {
+  return api()?.wsReadProjectBodies?.(projectDir) ?? Promise.resolve({ bodiesByTaskId: {} });
 }
 
 export function wsWriteTask(

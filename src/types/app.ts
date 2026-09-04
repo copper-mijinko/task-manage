@@ -1,8 +1,9 @@
 ﻿import type { ProjectData } from "@features/tasks/utils/tree_control";
+import type { MemoFormat } from "@features/memos/utils/memo_utils";
 import type {
   WorkspaceInfo,
   WorkspaceAttachment,
-  WorkspaceMemo,
+  NodeBody,
   WorkspaceProject,
   WorkspaceProjectPatch,
   WorkspaceProjectListItem,
@@ -156,13 +157,13 @@ export interface ElectronAPI {
     projectDir: string,
     options?: { preferCache?: boolean }
   ) => Promise<WorkspaceProject>;
-  wsReadTaskMemos: (
+  wsReadTaskBody: (
     projectDir: string,
     taskId: string
-  ) => Promise<{ memos: WorkspaceMemo[]; error?: string }>;
-  wsReadProjectMemos: (
+  ) => Promise<{ body: unknown; format: MemoFormat; error?: string }>;
+  wsReadProjectBodies: (
     projectDir: string
-  ) => Promise<{ memosByTaskId: Record<string, WorkspaceMemo[]>; error?: string }>;
+  ) => Promise<{ bodiesByTaskId: Record<string, NodeBody>; error?: string }>;
   wsWriteTask: (
     projectDir: string,
     task: WorkspaceTask

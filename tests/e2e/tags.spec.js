@@ -90,7 +90,7 @@ async function closeTagsApp(app) {
   }
 }
 
-test("tag browser appears in sidebar when workspace project has tagged memos", async () => {
+test("tag browser appears in sidebar when workspace project has tagged nodes", async () => {
   const app = await launchTagsApp();
   try {
     await expect(app.window.locator(".TagContents")).toBeVisible();
@@ -159,11 +159,11 @@ test("tag input adds a chip and the tag persists after app restart", async () =>
     // Dispatch click directly on the row element to avoid child stopPropagation
     await window1.locator(`#${WS_TASK_ID}`).dispatchEvent("click");
 
-    // タスク自身のタグ欄とメモのタグ欄が同居するので、メモ側を明示的に選ぶ。
-    const tagInput = window1.locator('.tag-input[aria-label="メモタグ"]');
+    // メモがノードになったので、タグの持ち主はノードだけになった。
+    const tagInput = window1.locator('.tag-input[aria-label="タスクのタグ"]');
     await tagInput.fill("ux");
     await tagInput.press("Enter");
-    await expect(window1.locator('[aria-label="Remove tag ux"]')).toBeVisible();
+    await expect(window1.locator('[aria-label="タグ ux を外す"]')).toBeVisible();
 
     // Wait for debounced save (500ms) + buffer
     await window1.waitForTimeout(1000);
@@ -183,7 +183,7 @@ test("tag input adds a chip and the tag persists after app restart", async () =>
     await expect(window2.locator(`#${WS_TASK_ID}`)).toBeVisible();
     await window2.locator(`#${WS_TASK_ID}`).dispatchEvent("click");
 
-    await expect(window2.locator('[aria-label="Remove tag ux"]')).toBeVisible();
+    await expect(window2.locator('[aria-label="タグ ux を外す"]')).toBeVisible();
   } finally {
     await app2.close();
     fs.rmSync(tempDir, { recursive: true, force: true });

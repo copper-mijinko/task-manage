@@ -4,7 +4,8 @@
   import IconButton from "@lib/primitives/IconButton.svelte";
   import StatusSelect from "@features/tasks/components/StatusSelect.svelte";
   import DateInput from "@lib/primitives/DateInput.svelte";
-  import MemoTab from "@features/memos/components/MemoTab.svelte";
+  import Memo from "@features/memos/components/Memo.svelte";
+  import SegmentedControl from "@lib/primitives/SegmentedControl.svelte";
   import {
     convertMemoContent,
     isQuillDelta,
@@ -23,10 +24,15 @@
   const DEFAULT_MEMO_FORMAT = "markdown";
 
   $: isDark = $theme === "dark";
-  $: memos = item?.memos ?? [];
+  $: nodeBody = item?.body ?? "";
+  $: bodyFormat = normalizeMemoFormat(item?.format, DEFAULT_MEMO_FORMAT);
+  const bodyFormatOptions = [
+    { value: "markdown", label: "Markdown", ariaLabel: "Markdown形式を使用" },
+    { value: "quill", label: "Quill", ariaLabel: "Quill形式を使用" },
+  ];
   $: allTags = [...$tag_index.keys()].sort();
   $: workspaceProjectDir = $inbox_store.projectDir ?? null;
-  // Keep MemoTab focused on the current item when switching rows.
+  // Keep the editor focused on the current item when switching rows.
   $: detailKey = item?.id ?? "";
   let detailCollapsed = false;
   let previousUiDensity;
@@ -62,85 +68,28 @@
     updateField("dueDate", e.currentTarget?.value || undefined);
   }
 
-  // ── Memo handlers (mirror TaskDetail's patterns but bound to inbox_store) ──
+  // ── ノード本文（旧メモタブ）──
+  // Inbox アイテムもノードなので、本文を 1 つだけ持つ。
 
-  function updateMemos(nextMemos) {
-    if (!item) return;
-    inbox_store.updateItem(item.id, { memos: nextMemos });
-  }
-
-  function modifyMemoAtIndex(index, updater) {
+  function saveBody(editedContent) {
     if (!item) return false;
-    const list = item.memos ?? [];
-    const current = list[index];
-    if (!current) return false;
-    const next = updater(current);
-    if (!next) return false;
-    const out = list.slice();
-    out[index] = next;
-    updateMemos(out);
+    const targetFormat = normalizeMemoFormat(item.format, DEFAULT_MEMO_FORMAT);
+    const sourceFormat = isQuillDelta(editedContent) ? "quill" : "markdown";
+    inbox_store.updateItem(item.id, {
+      body: convertMemoContent(editedContent, sourceFormat, targetFormat),
+    });
     return true;
   }
 
-  function addMemo(title) {
-    if (!item || !title) return false;
-    const newMemo = {
-      id: uuidV4(),
-      title,
-      content: "",
-      tags: [],
-      format: DEFAULT_MEMO_FORMAT,
-    };
-    updateMemos([...(item.memos ?? []), newMemo]);
-    return true;
-  }
-
-  function deleteMemo(index) {
+  function changeBodyFormat(nextFormat) {
     if (!item) return false;
-    const next = (item.memos ?? []).filter((_, i) => i !== index);
-    updateMemos(next);
+    const currentFormat = normalizeMemoFormat(item.format, DEFAULT_MEMO_FORMAT);
+    if (currentFormat === nextFormat) return false;
+    inbox_store.updateItem(item.id, {
+      format: nextFormat,
+      body: convertMemoContent(item.body, currentFormat, nextFormat),
+    });
     return true;
-  }
-
-  function saveMemo(editedContent, index) {
-    return modifyMemoAtIndex(index, (current) => {
-      const targetFormat = normalizeMemoFormat(current.format, DEFAULT_MEMO_FORMAT);
-      const sourceFormat = isQuillDelta(editedContent) ? "quill" : "markdown";
-      return {
-        ...current,
-        content: convertMemoContent(editedContent, sourceFormat, targetFormat),
-      };
-    });
-  }
-
-  function renameMemo(newTitle, index) {
-    if (!newTitle) return false;
-    return modifyMemoAtIndex(index, (current) => ({ ...current, title: newTitle }));
-  }
-
-  function reorderMemo(fromIndex, toIndex) {
-    if (!item) return;
-    const list = (item.memos ?? []).slice();
-    if (fromIndex < 0 || fromIndex >= list.length) return;
-    const [moved] = list.splice(fromIndex, 1);
-    list.splice(toIndex, 0, moved);
-    updateMemos(list);
-  }
-
-  function saveMemoTags(index, tags) {
-    return modifyMemoAtIndex(index, (current) => ({ ...current, tags }));
-  }
-
-  function changeMemoFormat(index, nextFormat) {
-    return modifyMemoAtIndex(index, (current) => {
-      const currentFormat = normalizeMemoFormat(current.format, DEFAULT_MEMO_FORMAT);
-      if (currentFormat === nextFormat) return current;
-      return {
-        ...current,
-        format: nextFormat,
-        content: convertMemoContent(current.content, currentFormat, nextFormat),
-      };
-    });
   }
 </script>
 
@@ -230,36 +179,35 @@
                 />
               </div>
             </label>
-
-            <div class="detail-field">
-              <span class="detail-label" id="lbl-memo-count">メモ数</span>
-              <output class="detail-readonly" aria-labelledby="lbl-memo-count"
-                >{memos.length}</output
-              >
-            </div>
           </div>
         </div>
       {/if}
 
       <div class="memo-pane">
-        <div class="memotab-container">
-          {#key detailKey}
-            <MemoTab
-              memo={memos}
-              {saveMemo}
-              {addMemo}
-              {deleteMemo}
-              {renameMemo}
-              {reorderMemo}
-              {saveMemoTags}
-              {changeMemoFormat}
-              {allTags}
-              isWorkspaceProject={true}
-              defaultMemoFormat={DEFAULT_MEMO_FORMAT}
-              {workspaceProjectDir}
-              taskId={item.id}
+        <div class="body-container">
+          <div class="body-toolbar">
+            <span class="body-label">本文</span>
+            <SegmentedControl
+              options={bodyFormatOptions}
+              value={bodyFormat}
+              ariaLabel="本文の形式"
+              size="md"
+              on:change={(e) => changeBodyFormat(e.detail.value)}
             />
-          {/key}
+          </div>
+          <div class="body-editor">
+            {#key detailKey}
+              <Memo
+                saveMemo={saveBody}
+                content={nodeBody}
+                currentMemoTitle={item.name ?? ""}
+                isWorkspaceProject={true}
+                format={bodyFormat}
+                {workspaceProjectDir}
+                taskId={item.id}
+              />
+            {/key}
+          </div>
         </div>
       </div>
     </div>
@@ -364,15 +312,34 @@
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--theme-color-Primary-main) 25%, transparent);
   }
 
-  .detail-readonly {
-    color: var(--theme-color-Sub-main);
-    font-variant-numeric: tabular-nums;
-  }
-
-  .memotab-container {
+  .body-container {
     display: flex;
     flex-direction: column;
     flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    padding: var(--sp3) var(--sp4);
+  }
+
+  .body-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp2);
+    flex: 0 0 auto;
+    padding-bottom: var(--sp1);
+  }
+
+  .body-label {
+    font-size: var(--font-label-sm);
+    font-weight: 600;
+    color: color-mix(in srgb, var(--theme-color-Sub-main) 75%, transparent);
+  }
+
+  .body-editor {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
     min-height: 0;
     overflow: hidden;
   }

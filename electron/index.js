@@ -597,27 +597,24 @@ app.on("ready", () => {
     return fresh;
   }
 
-  async function withLoadedMemoBodies(projectDir, tasks, taskDirs) {
+  /**
+   * 本文を読み込んでいないノードは、書く前にディスクから本文を取り戻す。
+   *
+   * プロジェクト読み出しは一覧目的なので本文を読まない（`bodyLoaded: false`）。
+   * そのまま書くと「開かなかったノードの本文が空で上書きされる」形の事故に
+   * なるので、書き出しの直前にここで埋める。
+   */
+  async function withLoadedNodeBodies(projectDir, tasks, taskDirs) {
     return Promise.all(
       tasks.map(async (task) => {
-        if (!task?.memos?.some((memo) => memo?.bodyLoaded === false)) {
+        if (!task || task.bodyLoaded !== false) return task;
+        try {
+          const { body, format } = await workspace.readTaskBodyAsync(projectDir, task.id, taskDirs);
+          return { ...task, body, format: task.format ?? format, bodyLoaded: true };
+        } catch {
+          // 新規ノードなど、まだディスクに無いものはそのまま書く。
           return task;
         }
-
-        const diskMemos = await workspace.readTaskMemosAsync(projectDir, task.id, taskDirs);
-        const diskMemoById = new Map(diskMemos.map((memo) => [memo.id, memo]));
-        return {
-          ...task,
-          memos: task.memos.map((memo) => {
-            if (memo?.bodyLoaded !== false) return memo;
-            const diskMemo = diskMemoById.get(memo.id);
-            return {
-              ...memo,
-              content: diskMemo?.content ?? memo.content,
-              bodyLoaded: true,
-            };
-          }),
-        };
       })
     );
   }
@@ -669,7 +666,7 @@ app.on("ready", () => {
   workspaceWriteQueue = new WorkspaceWriteQueue({
     writeProject: async (projectDir, tasks) => {
       const cached = await ensureWorkspaceCacheAsync(projectDir);
-      const tasksToWrite = await withLoadedMemoBodies(projectDir, tasks, cached.taskDirs);
+      const tasksToWrite = await withLoadedNodeBodies(projectDir, tasks, cached.taskDirs);
       const updated = await workspace.writeProjectAsync(projectDir, tasksToWrite, {
         onWritten: recordWrite,
       });
@@ -680,7 +677,7 @@ app.on("ready", () => {
     },
     writeProjectPatch: async (projectDir, patch) => {
       const cached = await ensureWorkspaceCacheAsync(projectDir);
-      const tasksToWrite = await withLoadedMemoBodies(projectDir, patch.tasks, cached.taskDirs);
+      const tasksToWrite = await withLoadedNodeBodies(projectDir, patch.tasks, cached.taskDirs);
       const updated = await workspace.writeProjectPatchAsync(
         projectDir,
         {
@@ -1540,45 +1537,45 @@ app.on("ready", () => {
     }
   });
 
-  trustedHandle("ws:read-task-memos", async (event, { projectDir, taskId }) => {
+  trustedHandle("ws:read-task-body", async (event, { projectDir, taskId }) => {
     try {
       await workspaceAuthorizer.assertKnownProject(projectDir);
       const cached = await ensureWorkspaceCacheAsync(projectDir);
-      const memos = await workspace.readTaskMemosAsync(projectDir, taskId, cached.taskDirs);
+      const { body, format } = await workspace.readTaskBodyAsync(
+        projectDir,
+        taskId,
+        cached.taskDirs
+      );
       const task = cached.tasks.get(taskId);
       if (task) {
-        task.memos = memos;
+        task.body = body;
+        task.format = format;
+        task.bodyLoaded = true;
       }
-      return { memos };
+      return { body, format };
     } catch (err) {
-      log.error("ws:read-task-memos error:", err.message);
-      return { memos: [], error: err.message };
+      log.error("ws:read-task-body error:", err.message);
+      return { body: "", format: "markdown", error: err.message };
     }
   });
 
-  trustedHandle("ws:read-project-memos", async (event, { projectDir }) => {
+  trustedHandle("ws:read-project-bodies", async (event, { projectDir }) => {
     try {
       await workspaceAuthorizer.assertKnownProject(projectDir);
       const cached = await ensureWorkspaceCacheAsync(projectDir);
-      const memosByTaskId = {};
-      // Read every task's memos concurrently so per-file disk latency overlaps
-      // instead of serializing on the main event loop.
-      const taskIds = [...cached.taskDirs.keys()];
-      const memosList = await Promise.all(
-        taskIds.map((taskId) => workspace.readTaskMemosAsync(projectDir, taskId, cached.taskDirs))
-      );
-      taskIds.forEach((taskId, index) => {
-        const memos = memosList[index];
-        memosByTaskId[taskId] = memos;
+      const bodiesByTaskId = await workspace.readProjectBodiesAsync(projectDir);
+      for (const [taskId, entry] of Object.entries(bodiesByTaskId)) {
         const task = cached.tasks.get(taskId);
         if (task) {
-          task.memos = memos;
+          task.body = entry.body;
+          task.format = entry.format;
+          task.bodyLoaded = true;
         }
-      });
-      return { memosByTaskId };
+      }
+      return { bodiesByTaskId };
     } catch (err) {
-      log.error("ws:read-project-memos error:", err.message);
-      return { memosByTaskId: {}, error: err.message };
+      log.error("ws:read-project-bodies error:", err.message);
+      return { bodiesByTaskId: {}, error: err.message };
     }
   });
 
@@ -1587,7 +1584,7 @@ app.on("ready", () => {
       await workspaceAuthorizer.assertKnownProject(projectDir);
       const cached = await ensureWorkspaceCacheAsync(projectDir);
       const { tasks, taskDirs } = cached;
-      const [taskToWrite] = await withLoadedMemoBodies(projectDir, [task], taskDirs);
+      const [taskToWrite] = await withLoadedNodeBodies(projectDir, [task], taskDirs);
 
       // Cycle check when parents are being set
       if (taskToWrite.parents && taskToWrite.parents.length > 0) {

@@ -173,9 +173,9 @@ describe("tree_control", () => {
     expect(filterTree(tree, { full_text: ['"ship release" missing'] })).toBeNull();
   });
 
-  test("filterTree can include memo content in full-text search", () => {
+  test("filterTree can include node bodies in full-text search", () => {
     const tree = createTree();
-    tree.children[0].data.memo = [{ id: "m1", title: "Note", content: "launch notes", tags: [] }];
+    tree.children[0].data.body = "launch notes";
 
     expect(filterTree(tree, { full_text: ["launch"] })).toBeNull();
 
@@ -185,27 +185,19 @@ describe("tree_control", () => {
     expect(filtered.children[0].id).toBe("task-1");
   });
 
-  test("filterTree with tags filter keeps only tasks whose memos contain the tag", () => {
+  test("filterTree with tags filter keeps only nodes carrying the tag", () => {
     const tree = {
       id: "root",
-      data: { name: "Root", status: "Open", memo: [] },
+      data: { name: "Root", status: "Open" },
       children: [
         {
           id: "task-a",
-          data: {
-            name: "Task A",
-            status: "Open",
-            memo: [{ id: "m1", title: "Note", content: "text", tags: ["design"] }],
-          },
+          data: { name: "Task A", status: "Open", tags: ["design"] },
           children: [],
         },
         {
           id: "task-b",
-          data: {
-            name: "Task B",
-            status: "Open",
-            memo: [{ id: "m2", title: "Note", content: "text", tags: ["backend"] }],
-          },
+          data: { name: "Task B", status: "Open", tags: ["backend"] },
           children: [],
         },
       ],
@@ -220,19 +212,15 @@ describe("tree_control", () => {
   test("filterTree with tags filter does not expand children of matching parent", () => {
     const tree = {
       id: "root",
-      data: { name: "Root", status: "Open", memo: [] },
+      data: { name: "Root", status: "Open" },
       children: [
         {
           id: "task-parent",
-          data: {
-            name: "Parent",
-            status: "Open",
-            memo: [{ id: "m1", title: "Note", content: "text", tags: ["design"] }],
-          },
+          data: { name: "Parent", status: "Open", tags: ["design"] },
           children: [
             {
               id: "task-child",
-              data: { name: "Child", status: "Open", memo: [] },
+              data: { name: "Child", status: "Open" },
               children: [],
             },
           ],
@@ -548,15 +536,29 @@ describe("cloneWithNewIds", () => {
     expect(clonedGrandchild.data.name).toBe(originalGrandchild.data.name);
   });
 
-  test("modifying cloned memo does not affect original", () => {
+  // メモは子ノードになったので、`data` に残る配列は添付だけ。複製した側を
+  // 触っても元に響かないことを確かめる。
+  test("複製した添付を触っても元のノードに影響しない", () => {
     const node = {
       id: "a",
-      data: { name: "task", status: "Open", memo: [{ text: "hello" }] },
+      data: { name: "task", status: "Open", attachments: [{ name: "a.png" }] },
       children: [],
     };
     const cloned = cloneWithNewIds(node);
-    cloned.data.memo.push({ text: "world" });
-    expect(node.data.memo.length).toBe(1);
+    cloned.data.attachments.push({ name: "b.png" });
+    expect(node.data.attachments.length).toBe(1);
+  });
+
+  // 本文はノードの属性なので、複製にもそのまま乗る。
+  test("本文も複製される", () => {
+    const node = {
+      id: "a",
+      data: { name: "task", status: "Open", body: "本文", format: "markdown" },
+      children: [],
+    };
+    const cloned = cloneWithNewIds(node);
+    expect(cloned.data.body).toBe("本文");
+    expect(cloned.id).not.toBe(node.id);
   });
 });
 

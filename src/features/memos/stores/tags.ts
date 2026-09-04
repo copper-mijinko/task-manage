@@ -33,12 +33,9 @@ function rebuildTagIndex() {
         if (!index.has(normalized)) index.set(normalized, new Set());
         index.get(normalized)!.add(node.id);
       };
-      // タスク自身のタグとメモのタグを 1 つの索引にまとめる。サイドバーから
-      // タグを選んだときに「そのタグが付いたタスク」を漏れなく絞り込める。
+      // メモがノードになったので、タグの持ち主はノードだけになった。旧メモの
+      // タグは取り込みのときにそのノードのタグとして引き継がれる。
       for (const tag of (node.data.tags as string[]) ?? []) addTag(tag);
-      for (const memo of node.data.memo ?? []) {
-        for (const tag of (memo.tags as string[]) ?? []) addTag(tag);
-      }
       walk(node.children ?? [], archivedHere);
     }
   }

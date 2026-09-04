@@ -76,22 +76,13 @@ describe("filter store", () => {
     expect(get(table_selected_id)).toBe("project-1");
   });
 
-  test("hydrates workspace memo bodies when memo full-text search is enabled", async () => {
+  test("本文検索を有効にすると、未読込のノード本文を取りに行く", async () => {
     filter.init();
     const projectDir = "C:/workspace/project";
     window.electronAPI = {
-      wsReadProjectMemos: vi.fn().mockResolvedValue({
-        memosByTaskId: {
-          "task-1": [
-            {
-              id: "memo-1",
-              title: "Notes",
-              content: "launch checklist",
-              tags: [],
-              format: "markdown",
-              bodyLoaded: true,
-            },
-          ],
+      wsReadProjectBodies: vi.fn().mockResolvedValue({
+        bodiesByTaskId: {
+          "task-1": { body: "launch checklist", format: "markdown" },
         },
       }),
     };
@@ -107,16 +98,9 @@ describe("filter store", () => {
         name: "Task",
         status: "Open",
         parents: [{ id: "project-1" }],
-        memos: [
-          {
-            id: "memo-1",
-            title: "Notes",
-            content: "",
-            tags: [],
-            format: "markdown",
-            bodyLoaded: false,
-          },
-        ],
+        body: "",
+        format: "markdown",
+        bodyLoaded: false,
         createdAt: "2026-05-22",
       },
     });
@@ -130,7 +114,6 @@ describe("filter store", () => {
           name: "Workspace Project",
           status: "Open",
           "due date": undefined,
-          memo: [],
         },
         children: [
           {
@@ -139,16 +122,9 @@ describe("filter store", () => {
               name: "Task",
               status: "Open",
               "due date": undefined,
-              memo: [
-                {
-                  id: "memo-1",
-                  title: "Notes",
-                  content: "",
-                  tags: [],
-                  format: "markdown",
-                  bodyLoaded: false,
-                },
-              ],
+              body: "",
+              format: "markdown",
+              bodyLoaded: false,
             },
             children: [],
           },
@@ -159,8 +135,8 @@ describe("filter store", () => {
     filter.set({ full_text: ["launch"], search_memo: ["1"] });
 
     await waitFor(() => {
-      expect(window.electronAPI.wsReadProjectMemos).toHaveBeenCalledWith(projectDir);
-      expect(get(tree_data).data.children[0].data.memo[0].content).toBe("launch checklist");
+      expect(window.electronAPI.wsReadProjectBodies).toHaveBeenCalledWith(projectDir);
+      expect(get(tree_data).data.children[0].data.body).toBe("launch checklist");
     });
     await waitFor(() => {
       expect(get(filtered_data).children[0].id).toBe("task-1");

@@ -1,5 +1,9 @@
 ﻿import { uuidV4 } from "@lib/utils/uuid";
-import { memoContentForSearch, type MemoFormat } from "@features/memos/utils/memo_utils";
+import {
+  memoContentForSearch,
+  normalizeMemoFormat,
+  type MemoFormat,
+} from "@features/memos/utils/memo_utils";
 import type { SortState } from "@app-types/app";
 
 export type TaskStatus = "Open" | "Pending" | "In Progress" | "Completed" | "Canceled";
@@ -18,16 +22,6 @@ export type TaskStatus = "Open" | "Pending" | "In Progress" | "Completed" | "Can
 export const NO_STATUS = "";
 export type NodeStatus = TaskStatus | typeof NO_STATUS;
 
-export interface MemoEntry {
-  id: string;
-  title: string;
-  content: unknown;
-  tags: string[];
-  format?: MemoFormat;
-  order?: number;
-  bodyLoaded?: boolean;
-}
-
 export interface TaskAttachmentEntry {
   id: string;
   name: string;
@@ -42,10 +36,18 @@ export interface TreeNodeData {
   status: NodeStatus;
   "start date": `${string}-${string}-${string}` | undefined;
   "due date": `${string}-${string}-${string}` | undefined;
-  memo: MemoEntry[];
   /**
-   * タスク自身に付けたタグ。メモのタグ (`MemoEntry.tags`) とは別に、タスクを
-   * 横断的に分類するために使う。未設定は「タグなし」と同じ扱い。
+   * ノード本文。「1 つのメモ ＝ 1 つのノード」なので 1 つだけ持つ。
+   * 複数の記録はタブではなく子ノードで表す。
+   */
+  body?: unknown;
+  /** 本文の形式。 */
+  format?: MemoFormat;
+  /** 本文を読み込み済みか。 */
+  bodyLoaded?: boolean;
+  /**
+   * ノードに付けたタグ。未設定は「タグなし」と同じ扱い。旧メモのタグは
+   * 取り込みのときにそのノードのタグとして引き継ぐ。
    */
   tags?: string[];
   attachments?: TaskAttachmentEntry[];
@@ -148,23 +150,17 @@ function fullTextMatches(
   data: TreeNodeData,
   ancestorNames: string[],
   keywords: string[],
-  includeMemo: boolean
+  includeBody: boolean
 ): boolean {
   const pathText = ancestorNames.filter(Boolean).join(" ");
+  // 本文は別枠で扱う（本文まで探すかは絞り込みの切り替えで決まる）。メモは
+  // ノードになったので、ここで見る `memo` は残っていない。
   const fieldText = Object.entries(data)
-    .filter(([key]) => key !== "memo")
+    .filter(([key]) => key !== "memo" && key !== "body")
     .map(([, value]) => valueForFullText(value))
     .join(" ");
-  const memoText = includeMemo
-    ? (data.memo ?? [])
-        .map((entry) =>
-          [entry.title, memoContentForSearch(entry.content), (entry.tags ?? []).join(" ")]
-            .filter(Boolean)
-            .join(" ")
-        )
-        .join(" ")
-    : "";
-  const text = `${pathText} ${fieldText} ${memoText}`.toLowerCase();
+  const bodyText = includeBody ? memoContentForSearch(data.body) : "";
+  const text = `${pathText} ${fieldText} ${bodyText}`.toLowerCase();
   const tokens = keywords.flatMap((keyword) => tokenizeFullTextQuery(keyword));
   if (tokens.length === 0) return true;
   return tokens.every((token) => text.includes(token.toLowerCase()));
@@ -220,16 +216,8 @@ export function filterTree(
       nameFilterMatch = keyMatch; // Record if name filter matched
     } else if (key === "tags") {
       const tag = keywords[0].toLowerCase();
-      // タグはタスク自身にもメモにも付く。どちらで一致しても、そのタスクは
-      // そのタグの付いたタスクとして扱う。
-      const taskTagMatch = ((tree.data.tags as string[]) ?? []).some(
-        (t) => t.toLowerCase() === tag
-      );
-      keyMatch =
-        taskTagMatch ||
-        (tree.data.memo ?? []).some((entry) =>
-          ((entry.tags as string[]) ?? []).some((t) => t.toLowerCase() === tag)
-        );
+      // メモがノードになったので、タグの持ち主はノードだけになった。
+      keyMatch = ((tree.data.tags as string[]) ?? []).some((t) => t.toLowerCase() === tag);
     } else if (key === "start date" || key === "due date") {
       const from = keywords[0] ?? "";
       const to = keywords[1] ?? "";
@@ -295,12 +283,65 @@ function cloneTreeWithAllChildren(tree: TreeData): TreeData {
   return { ...tree, children };
 }
 
+/**
+ * `db.json` の旧メモ配列を子ノードに直す。
+ *
+ * 「1 つのメモ ＝ 1 つのノード」なので、メモという別の入れ物は無くなった。
+ * ワークスペース側は main プロセスが取り込む（`promoteLegacyMemos`）が、
+ * `db.json` は生の JSON がそのまま renderer に届くので、入口で 1 回直す。
+ * 直さないと、既存の `db.json` プロジェクトのメモが画面から消える。
+ *
+ * 元の `memo` 配列は落とす。残すと、同じ内容がノードとメモの両方に見える。
+ */
+export function promoteLegacyMemosToNodes(project: ProjectData | undefined) {
+  if (!project?.data) return project;
+
+  let changed = false;
+
+  const convert = (node: TreeData): TreeData => {
+    const children = (node.children ?? []).map(convert);
+    const legacyMemos = Array.isArray(node.data?.memo)
+      ? (node.data.memo as Array<Record<string, unknown>>)
+      : [];
+    const childrenChanged = children.some((child, index) => child !== node.children?.[index]);
+
+    if (legacyMemos.length === 0) {
+      if (!childrenChanged && !("memo" in (node.data ?? {}))) return node;
+      const { memo: _memo, ...data } = node.data as Record<string, unknown>;
+      changed = true;
+      return { ...node, data: data as TreeNodeData, children };
+    }
+
+    changed = true;
+    const { memo: _memo, ...data } = node.data as Record<string, unknown>;
+    // メモから生まれたノードは実タスクの子の後ろに並べる。
+    const memoNodes = legacyMemos.map((memo, index) => ({
+      id: typeof memo.id === "string" && memo.id ? memo.id : `${uuidV4()}`,
+      data: {
+        name: (typeof memo.title === "string" && memo.title) || `memo ${index + 1}`,
+        // メモは進み具合を持たないので、ステータスを与えない。
+        status: NO_STATUS,
+        "start date": undefined,
+        "due date": undefined,
+        body: memo.content,
+        format: normalizeMemoFormat(memo.format, "quill"),
+        tags: Array.isArray(memo.tags) ? (memo.tags as string[]) : [],
+      } as TreeNodeData,
+      children: [],
+    }));
+
+    return { ...node, data: data as TreeNodeData, children: [...children, ...memoNodes] };
+  };
+
+  const data = convert(project.data);
+  return changed ? { ...project, data } : project;
+}
+
 export function cloneWithNewIds(node: TreeData): TreeData {
   return {
     id: `${uuidV4()}`,
     data: {
       ...node.data,
-      memo: [...node.data.memo],
       attachments: node.data.attachments ? [...node.data.attachments] : undefined,
     },
     children: node.children.map((child) => cloneWithNewIds(child)),
@@ -315,7 +356,6 @@ export function getDefaultNode(): TreeData {
       status: "Open",
       "start date": undefined,
       "due date": undefined,
-      memo: [],
     },
     children: [],
   };
@@ -352,7 +392,6 @@ export function getDefaultProject(): ProjectData {
         status: "Open",
         "start date": undefined,
         "due date": undefined,
-        memo: [],
         attachments: [],
       },
       children: [],

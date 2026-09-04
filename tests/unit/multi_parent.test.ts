@@ -24,7 +24,6 @@ const T = (id: string, name: string, parents: string[], over: Partial<WorkspaceT
     name,
     status: "Open",
     parents: parents.map((parentId) => ({ id: parentId })),
-    memos: [],
     createdAt: "2026-09-03",
     ...over,
   }) as WorkspaceTask;
@@ -206,7 +205,6 @@ describe("多親ノードの出現はオブジェクトを共有する", () => {
         status: "Open",
         "start date": undefined,
         "due date": undefined,
-        memo: [],
       },
       children: [],
     });
@@ -218,6 +216,33 @@ describe("多親ノードの出現はオブジェクトを共有する", () => {
         .map((r) => r.path)
         .sort()
     ).toEqual(["root/A/C/D", "root/B/C/D"]);
+  });
+
+  // 本文はノードの属性（辺の属性ではない）。統一でノード数が大きく増えるので、
+  // 「片方の出現にだけ効く」壊れ方が出やすい。
+  it("片方の出現で本文を直すと、もう片方の出現にも効く", () => {
+    const project = workspaceToProjectData(multiParentProject(), "root");
+    const a = project.data.children.find((c) => c.id === "A")!;
+    const b = project.data.children.find((c) => c.id === "B")!;
+
+    a.children[0].data.body = "書いた本文";
+
+    expect(b.children[0].data.body).toBe("書いた本文");
+  });
+
+  // 本文はノードごとに 1 つ。多親ノードを書き戻すときに出現ごとに 1 件ずつ
+  // 出してしまうと、id をキーにした後段で最初の 1 件だけが残る。
+  it("多親ノードの本文は、書き戻しても 1 件だけ出る", () => {
+    const project = workspaceToProjectData(multiParentProject(), "root");
+    const a = project.data.children.find((c) => c.id === "A")!;
+    a.children[0].data.body = "本文";
+
+    const tasks = projectDataToWorkspaceTasks(project, {});
+    const cNodes = tasks.filter((task) => task.id === "C");
+
+    expect(cNodes).toHaveLength(1);
+    expect(cNodes[0].body).toBe("本文");
+    expect(cNodes[0].parents.map((parent) => parent.id).sort()).toEqual(["A", "B"]);
   });
 
   it("循環を打ち切った部分木は共有しない（経路に依存するため）", () => {

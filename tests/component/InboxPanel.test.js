@@ -136,17 +136,19 @@ describe("InboxPanel", () => {
     expect(screen.getByLabelText("1件を削除")).toBeInTheDocument();
   });
 
-  test("reserves the memo column for every row so Inbox fields stay aligned", async () => {
+  // ノードは本文を 1 つだけ持つので、件数ではなく有無を出す。列そのものは
+  // 全行に置いて、フィールドの位置が揃うようにする。
+  test("本文の有無の列は全行にあり、Inbox の項目がずれない", async () => {
     await prepareInbox([
-      { id: "item-with-memo", name: "メモあり", memos: [{ id: "memo-1", title: "memo" }] },
-      { id: "item-without-memo", name: "メモなし", memos: [] },
+      { id: "item-with-body", name: "本文あり", body: "書いた" },
+      { id: "item-without-body", name: "本文なし", body: "" },
     ]);
     const { container } = render(InboxPanel);
     await tick();
 
     const badges = container.querySelectorAll(".MemoBadge");
     expect(badges).toHaveLength(2);
-    expect(badges[0]).toHaveTextContent("1");
+    expect(badges[0]).not.toHaveClass("MemoBadgeEmpty");
     expect(badges[1]).toHaveClass("MemoBadgeEmpty");
   });
 

@@ -25,7 +25,7 @@ src/
 │   │   ├── MultiSelect.svelte
 │   │   ├── SearchBox.svelte
 │   │   ├── DateInput.svelte
-│   │   ├── TagField.svelte      # タグのチップ入力（タスクタグ / メモタグ共用）
+│   │   ├── TagField.svelte      # タグのチップ入力（ノードのタグ）
 │   │   └── Loading.svelte       # 共通ローディング表示（opacity 呼吸アニメ）
 │   ├── layouts/                 # レイアウトプリミティブ
 │   │   ├── Pane.svelte
@@ -126,7 +126,7 @@ src/
 | ドメイン     | スコープ                                            |
 | ------------ | --------------------------------------------------- |
 | `tasks`      | タスクツリー、ノードCRUD、行/列操作、状態           |
-| `memos`      | メモ本体、タグ管理、Markdown/Quill エディタ         |
+| `memos`      | ノード本文のエディタ（Markdown/Quill）とタグ管理     |
 | `gantt`      | 時系列可視化                                        |
 | `workspace`  | ワークスペース（ディレクトリ＋Markdown ベース）管理 |
 | `inbox`      | Workspace 横断のクイックキャプチャ専用バケット      |
@@ -261,8 +261,7 @@ import LocalComponent from "./LocalComponent.svelte";
 | ガントペイン                                                       | `src/features/gantt/components/GanttPanel.svelte`                                                                                                |
 | 右ペイン（Task Detail + Memo の単一 Card / Card 内部で上下分割）   | `src/features/tasks/components/TaskDetail.svelte`                                                                                                |
 | タスク添付ファイル UI                                              | `src/features/tasks/components/TaskAttachments.svelte`                                                                                           |
-| メモパネル                                                         | `src/features/memos/components/MemoTab.svelte`                                                                                                   |
-| メモエディタ                                                       | `src/features/memos/components/Memo.svelte` → `MarkdownMemo.svelte` / `QuillMemo.svelte`                                                         |
+| ノード本文エディタ                                                 | `src/features/memos/components/Memo.svelte` → `MarkdownMemo.svelte` / `QuillMemo.svelte`                                                         |
 | セグメントコントロール                                             | `src/lib/primitives/SegmentedControl.svelte`（Memo フォーマット切替・Markdown Read/Edit 切替で共用）                                             |
 | ダイアログ                                                         | `@lib/primitives/Dialog.svelte` を使用した個別実装（タスク削除、プロジェクト削除、ワークスペースプロジェクト削除、ルート兄弟挿入のアラートなど） |
 | ページ内ハイライト検索                                             | `Header.svelte` の検索ボックス + `@features/search/utils/page_search_highlighter.ts`                                                             |
@@ -311,7 +310,7 @@ import LocalComponent from "./LocalComponent.svelte";
 - `CSS.highlights.set("page-search", new Highlight(...ranges))` で全マッチを着色
 - `next()` / `prev()` で現在の一致を `page-search-current` という別 highlight 名に切替、scroll-into-view
 - 公開する readable store: `pageSearchMatchCount`、`pageSearchCurrentIndex`
-- `startAutoRescan()` で `MutationObserver` を起動し、DOM 変更時に再スキャン（メモ表示後など）
+- `startAutoRescan()` で `MutationObserver` を起動し、DOM 変更時に再スキャン（本文表示後など）
 - 除外条件
   - `script` / `style` / `noscript` / `template`
   - `input` / `textarea` / `select`（検索ボックス自体の文字列を拾わないため）
@@ -503,16 +502,16 @@ capture phase を選ぶ理由は、CodeMirror / Quill が自前のキーマッ�
 
 フォーマットは `@stores/preferences` の `date_time_format` から取得する。
 
-### 8.11 メモフォーマットの責務分離
+### 8.11 本文フォーマットの責務分離
 
-メモ単位のフォーマット（Markdown / Quill）は次の責務分担で扱う。
+ノード単位のフォーマット（Markdown / Quill）は次の責務分担で扱う。
 
 - **レンダラ分岐**: `src/features/memos/components/Memo.svelte` が `MemoEntry.format` を参照し、`MarkdownMemo.svelte` / `QuillMemo.svelte` のいずれかをマウントする
 - **正規化と変換**: `src/features/memos/utils/memo_utils.ts` が省略時デフォルトの解決と Markdown ⇄ Quill 変換を行う。個別変換・一括変換のいずれも本ユーティリティを経由する
-- **ワークスペース保存形式**: `electron/workspace.js` が `.md` ファイルへのシリアライズとパースを担当する。Quill メモは `format: quill` の YAML フロントマター + fenced JSON Delta の単一 `.md` 形式で保持する
+- **ワークスペース保存形式**: `electron/workspace.js` が `.md` ファイルへのシリアライズとパースを担当する。Quill の本文は `format: quill` の YAML フロントマター + fenced JSON Delta を `_index.md` の本文として保持する
 - **一括変換の Undo 記録**: 一括変換は現在開いている `tree_data` を 1 回だけ書き換える形で実装し、既存の Undo / Redo 履歴に単一アクションとして記録する。これにより 1 回の Undo でプロジェクト全体の変換が元に戻る
-- **UI セグメント**: 各メモのフォーマット切替と、Markdown の Read / Edit モード切替は共通プリミティブ `src/lib/primitives/SegmentedControl.svelte` を使用し、アクティブ状態・セパレータ・キーボードフォーカス表現を統一する
-- **エクスポート時の挙動**: `db.json` → Workspace エクスポートは `electron/workspace.js` で実装され、ワークスペースルートとメモには新規 UUID を発行する（コピー操作。ソース ID は引き継がない）。通常のフォーマット変換はコピーではないためメモ ID を維持する
+- **UI セグメント**: 本文のフォーマット切替と、Markdown の Read / Edit モード切替は共通プリミティブ `src/lib/primitives/SegmentedControl.svelte` を使用し、アクティブ状態・セパレータ・キーボードフォーカス表現を統一する
+- **エクスポート時の挙動**: `db.json` → Workspace エクスポートは `electron/workspace.js` で実装され、ワークスペースルートと、メモから生まれたノードには新規 UUID を発行する（コピー操作。ソース ID は引き継がない）。通常のフォーマット変換はコピーではないためノード ID を維持する
 
 ### 8.12 ページ遷移履歴（戻る・進む）
 
@@ -554,7 +553,7 @@ capture phase を選ぶ理由は、CodeMirror / Quill が自前のキーマッ�
 #### 表示パイプライン
 1. `tree_data` (raw)
 2. `search.ts` の `archivedAdjustedTree`：`show_archived` が false なら `stripArchivedNodes` で archived 子孫を取り除いた新ツリーを後段に渡す
-3. `filterTree`：名前/状態/メモ等のフィルタを適用
+3. `filterTree`：名前/状態/本文等のフィルタを適用
 4. `filtered_data`
 5. `TreeTable` の `flattenVisibleTree(filtered, closedIds, $show_archived)` — `includeArchived` で 2 段目の安全網（show_archived=true でも子孫の archived 連動非表示を担う設計だが、フィルター済みデータ上ではほぼ素通り）
 

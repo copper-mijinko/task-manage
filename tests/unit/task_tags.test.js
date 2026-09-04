@@ -135,12 +135,16 @@ describe("filterTree with the tags filter", () => {
     expect(result.children.map((child) => child.id)).toEqual(["a"]);
   });
 
-  it("still matches a tag that only exists on a memo", () => {
+  // メモがノードになったので、タグの付いた記録は「タグの付いた子ノード」に
+  // なる。親ではなくその子が一致する。
+  it("子ノードに付いたタグで、その子ノードが残る", () => {
     const tree = {
       ...node("root", "Root"),
-      children: [node("a", "A", { memo: [{ id: "m", title: "m", content: "", tags: ["ops"] }] })],
+      children: [{ ...node("a", "A"), children: [node("m", "m", { tags: ["ops"] })] }],
     };
-    expect(filterTree(tree, { tags: ["ops"] }).children.map((c) => c.id)).toEqual(["a"]);
+    const result = filterTree(tree, { tags: ["ops"] });
+    expect(result.children.map((c) => c.id)).toEqual(["a"]);
+    expect(result.children[0].children.map((c) => c.id)).toEqual(["m"]);
   });
 
   it("ignores case differences between filter and task tag", () => {
