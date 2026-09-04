@@ -16,8 +16,8 @@ import {
   createProjectAsync,
   readProject,
   readProjectAsync,
-  readTaskMemos,
-  readTaskMemosAsync,
+  readTaskBody,
+  readTaskBodyAsync,
   writeTask,
   writeTaskAsync,
   writeProjectAsync,
@@ -336,28 +336,44 @@ describe("file system operations", () => {
     expect(root.parents).toEqual([]);
   });
 
-  it("writeTask + readProject round-trips root memos", () => {
+  it("writeTask + readProject round-trips the root node body", () => {
     const { projectDir } = createProject(tmpDir, "Proj", "root-id");
     const taskDirs = new Map([["root-id", "_project"]]);
-    const rootTask = {
-      id: "root-id",
-      name: "Proj",
-      status: "Open",
-      parents: [],
-      memos: [{ id: "root-memo", title: "Root Notes", content: "# Root Notes\n\nStored here" }],
-      createdAt: "2026-04-24",
-    };
-
-    writeTask(projectDir, rootTask, taskDirs);
-
-    expect(fs.existsSync(path.join(projectDir, "root-memo.md"))).toBe(true);
+    writeTask(
+      projectDir,
+      {
+        id: "root-id",
+        name: "Proj",
+        status: "Open",
+        parents: [],
+        body: "# Root Notes\n\nStored here",
+        format: "markdown",
+        createdAt: "2026-04-24",
+      },
+      taskDirs
+    );
 
     const { tasks } = readProject(projectDir);
-    const loaded = tasks.get("root-id");
-    expect(loaded.memos).toHaveLength(1);
-    expect(loaded.memos[0].id).toBe("root-memo");
-    expect(loaded.memos[0].title).toBe("Root Notes");
-    expect(loaded.memos[0].content).toContain("Stored here");
+    expect(tasks.get("root-id").body).toContain("Stored here");
+  });
+
+  // 旧メモはタスクの属性ではなくノードになる。ルート直下に置かれていた
+  // メモファイルも、ルートの子ノードとして現れる。
+  it("ルート直下の旧メモファイルは、ルートの子ノードとして読まれる", () => {
+    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
+    fs.writeFileSync(
+      path.join(projectDir, "root-memo.md"),
+      "---\nid: root-memo\ntitle: Root Notes\n---\n\nStored here\n"
+    );
+
+    const { tasks, legacyMemoFiles } = readProject(projectDir);
+    const promoted = tasks.get("root-memo");
+    expect(promoted.name).toBe("Root Notes");
+    expect(promoted.body).toContain("Stored here");
+    expect(promoted.parents.map((parent) => parent.id)).toEqual(["root-id"]);
+    // メモは進み具合を持たない。
+    expect(promoted.status).toBeUndefined();
+    expect(legacyMemoFiles.has("root-memo")).toBe(true);
   });
 
   it("readProjectAsync matches readProject for a multi-task project with memos", async () => {
@@ -416,7 +432,7 @@ describe("file system operations", () => {
     expect(result.taskDirs.size).toBe(0);
   });
 
-  it("readTaskMemosAsync matches readTaskMemos", async () => {
+  it("readTaskBodyAsync matches readTaskBody", async () => {
     const { projectDir } = createProject(tmpDir, "Proj", "root-id");
     const taskDirs = new Map([["root-id", "_project"]]);
     writeTask(
@@ -426,18 +442,17 @@ describe("file system operations", () => {
         name: "Child A",
         status: "Open",
         parents: [{ id: "root-id" }],
-        memos: [
-          { id: "m1", title: "One", content: "first" },
-          { id: "m2", title: "Two", content: "second" },
-        ],
+        body: "first and second",
+        format: "markdown",
         createdAt: "2026-04-24",
       },
       taskDirs
     );
 
-    const sync = readTaskMemos(projectDir, "child-a", taskDirs);
-    const asyncResult = await readTaskMemosAsync(projectDir, "child-a", taskDirs);
+    const sync = readTaskBody(projectDir, "child-a", taskDirs);
+    const asyncResult = await readTaskBodyAsync(projectDir, "child-a", taskDirs);
     expect(asyncResult).toEqual(sync);
+    expect(sync.body).toBe("first and second");
   });
 
   it("listProjectsAsync matches listProjects including order", async () => {
@@ -455,36 +470,37 @@ describe("file system operations", () => {
     expect(result).toEqual([]);
   });
 
-  it("writeTask + readProject preserves memo order independently of filenames", () => {
+  // 旧メモの `order:` は、取り込んだノードの「親の下での並び順」になる。
+  // ファイル名の辞書順ではなく order が効くことを確かめる。
+  it("旧メモの order が、子ノードの並び順として引き継がれる", () => {
     const { projectDir } = createProject(tmpDir, "Proj", "root-id");
     const taskDirs = new Map([["root-id", "_project"]]);
-    const task = {
-      id: "task-memo-order",
-      name: "Memo Order",
-      status: "Open",
-      parents: [{ id: "root-id" }],
-      memos: [
-        { id: "z-memo", title: "First", content: "First content" },
-        { id: "a-memo", title: "Second", content: "Second content" },
-      ],
-      createdAt: "2026-04-24",
-    };
-
-    writeTask(projectDir, task, taskDirs);
-
-    const firstFile = fs.readFileSync(
-      path.join(projectDir, "task-memo-order", "z-memo.md"),
-      "utf8"
+    writeTask(
+      projectDir,
+      {
+        id: "task-memo-order",
+        name: "Memo Order",
+        status: "Open",
+        parents: [{ id: "root-id" }],
+        createdAt: "2026-04-24",
+      },
+      taskDirs
     );
-    const secondFile = fs.readFileSync(
-      path.join(projectDir, "task-memo-order", "a-memo.md"),
-      "utf8"
+    const taskDir = path.join(projectDir, "task-memo-order");
+    // ファイル名は z が先、a が後。order は逆に付けてある。
+    fs.writeFileSync(
+      path.join(taskDir, "z-memo.md"),
+      "---\nid: z-memo\ntitle: First\norder: 0\n---\n"
     );
-    expect(firstFile).toContain("order: 0");
-    expect(secondFile).toContain("order: 1");
+    fs.writeFileSync(
+      path.join(taskDir, "a-memo.md"),
+      "---\nid: a-memo\ntitle: Second\norder: 1\n---\n"
+    );
 
     const { tasks } = readProject(projectDir);
-    expect(tasks.get("task-memo-order").memos.map((memo) => memo.id)).toEqual(["z-memo", "a-memo"]);
+    const orderUnder = (id) =>
+      tasks.get(id).parents.find((parent) => parent.id === "task-memo-order").order;
+    expect(orderUnder("z-memo")).toBeLessThan(orderUnder("a-memo"));
   });
 
   it("writeTask + readProject round-trips a regular task", () => {
@@ -497,15 +513,14 @@ describe("file system operations", () => {
       startDate: "2026-05-20",
       dueDate: "2026-06-01",
       parents: [{ id: "root-id" }],
-      memos: [{ id: "memo-uuid-1", title: "Notes", content: "# Notes\n\nSome content" }],
+      body: "# Notes\n\nSome content",
+      format: "markdown",
       createdAt: "2026-04-24",
     };
     writeTask(projectDir, task, taskDirs);
 
     // Task directory should be named after task.id (UUID)
     expect(fs.existsSync(path.join(projectDir, "task-1"))).toBe(true);
-    // Memo file should be named after memo.id
-    expect(fs.existsSync(path.join(projectDir, "task-1", "memo-uuid-1.md"))).toBe(true);
 
     const { tasks } = readProject(projectDir);
     const loaded = tasks.get("task-1");
@@ -515,41 +530,36 @@ describe("file system operations", () => {
     expect(loaded.startDate).toBe("2026-05-20");
     expect(loaded.dueDate).toBe("2026-06-01");
     expect(loaded.parents).toEqual([{ id: "root-id" }]);
-    expect(loaded.memos).toHaveLength(1);
-    expect(loaded.memos[0].id).toBe("memo-uuid-1");
-    expect(loaded.memos[0].title).toBe("Notes");
+    expect(loaded.body).toContain("Some content");
   });
 
-  it("readProject can defer memo bodies and read them for one task later", () => {
+  it("readProject can defer node bodies and read one later", () => {
     const { projectDir } = createProject(tmpDir, "Proj", "root-id");
     const taskDirs = new Map([["root-id", "_project"]]);
-    const task = {
-      id: "task-lazy-memo",
-      name: "Lazy Memo Task",
-      status: "Open",
-      parents: [{ id: "root-id" }],
-      memos: [
-        {
-          id: "memo-lazy",
-          title: "Lazy Notes",
-          content: "# Lazy Notes\n\nLoaded later",
-          tags: ["lazy"],
-        },
-      ],
-      createdAt: "2026-04-24",
-    };
-    writeTask(projectDir, task, taskDirs);
+    writeTask(
+      projectDir,
+      {
+        id: "task-lazy",
+        name: "Lazy Node",
+        status: "Open",
+        parents: [{ id: "root-id" }],
+        body: "# Lazy Notes\n\nLoaded later",
+        format: "markdown",
+        tags: ["lazy"],
+        createdAt: "2026-04-24",
+      },
+      taskDirs
+    );
 
     const summary = readProject(projectDir, { includeMemoContent: false });
-    const summaryMemo = summary.tasks.get("task-lazy-memo").memos[0];
-    expect(summaryMemo.title).toBe("Lazy Notes");
-    expect(summaryMemo.tags).toEqual(["lazy"]);
-    expect(summaryMemo.content).toBe("");
-    expect(summaryMemo.bodyLoaded).toBe(false);
+    const summaryTask = summary.tasks.get("task-lazy");
+    expect(summaryTask.name).toBe("Lazy Node");
+    expect(summaryTask.tags).toEqual(["lazy"]);
+    expect(summaryTask.body).toBe("");
+    expect(summaryTask.bodyLoaded).toBe(false);
 
-    const loadedMemos = readTaskMemos(projectDir, "task-lazy-memo", summary.taskDirs);
-    expect(loadedMemos[0].content).toContain("Loaded later");
-    expect(loadedMemos[0].bodyLoaded).toBe(true);
+    const loaded = readTaskBody(projectDir, "task-lazy", summary.taskDirs);
+    expect(loaded.body).toContain("Loaded later");
   });
 
   it("writeTask + readProject round-trips the order on the parent link", () => {
@@ -617,159 +627,153 @@ describe("file system operations", () => {
     expect(loaded.order).toBeUndefined();
   });
 
-  it("writeTask + readProject round-trips memo tags", () => {
+  // 旧メモのタグは、取り込んだノード自身のタグになる（メモという別の持ち主が
+  // 無くなったので、タグの行き先はノードしかない）。
+  it("旧メモのタグは、取り込んだノードのタグとして残る", () => {
     const { projectDir } = createProject(tmpDir, "Proj", "root-id");
     const taskDirs = new Map([["root-id", "_project"]]);
-    const task = {
-      id: "task-tags",
-      name: "Tagged Task",
-      status: "Open",
-      parents: [{ id: "root-id" }],
-      memos: [
-        {
-          id: "memo-tagged",
-          title: "Notes",
-          content: "Some content",
-          tags: ["design", "frontend"],
-        },
-      ],
-      createdAt: "2026-04-24",
-    };
-    writeTask(projectDir, task, taskDirs);
-
-    const memoFile = fs.readFileSync(path.join(projectDir, "task-tags", "memo-tagged.md"), "utf8");
-    expect(memoFile).toContain("tags:");
-    expect(memoFile).toContain("- design");
-    expect(memoFile).toContain("- frontend");
-
-    const { tasks } = readProject(projectDir);
-    const loaded = tasks.get("task-tags");
-    expect(loaded.memos[0].tags).toEqual(["design", "frontend"]);
-  });
-
-  it("writeTask + readProject round-trips a Quill memo in markdown file JSON", () => {
-    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
-    const taskDirs = new Map([["root-id", "_project"]]);
-    const delta = { ops: [{ insert: "Rich memo\n", attributes: { bold: true } }] };
-    const task = {
-      id: "task-quill",
-      name: "Quill Task",
-      status: "Open",
-      parents: [{ id: "root-id" }],
-      memos: [
-        {
-          id: "memo-quill",
-          title: "Quill",
-          content: delta,
-          tags: ["rich"],
-          format: "quill",
-        },
-      ],
-      createdAt: "2026-04-24",
-    };
-
-    writeTask(projectDir, task, taskDirs);
-
-    const memoFile = fs.readFileSync(path.join(projectDir, "task-quill", "memo-quill.md"), "utf8");
-    expect(memoFile).toContain("format: quill");
-    expect(memoFile).toContain("```json");
-    expect(memoFile).toContain('"ops"');
-
-    const { tasks } = readProject(projectDir);
-    const loaded = tasks.get("task-quill");
-    expect(loaded.memos[0].format).toBe("quill");
-    expect(loaded.memos[0].content).toEqual(delta);
-  });
-
-  it("memo tags default to empty array when absent from frontmatter", () => {
-    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
-    const taskDirs = new Map([["root-id", "_project"]]);
-    const task = {
-      id: "task-no-tags",
-      name: "Untagged Task",
-      status: "Open",
-      parents: [{ id: "root-id" }],
-      memos: [{ id: "memo-no-tags", title: "Notes", content: "Content" }],
-      createdAt: "2026-04-24",
-    };
-    writeTask(projectDir, task, taskDirs);
-
-    const { tasks } = readProject(projectDir);
-    const loaded = tasks.get("task-no-tags");
-    expect(loaded.memos[0].tags).toEqual([]);
-  });
-
-  it("preserves memo tab titles for empty workspace memos", () => {
-    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
-    const taskDirs = new Map([["root-id", "_project"]]);
-    const task = {
-      id: "task-empty-memo",
-      name: "Task With Empty Memo",
-      status: "Open",
-      parents: [{ id: "root-id" }],
-      memos: [{ id: "memo-uuid-empty", title: "Scratch", content: "" }],
-      createdAt: "2026-04-24",
-    };
-
-    writeTask(projectDir, task, taskDirs);
-
-    const memoFile = fs.readFileSync(
-      path.join(projectDir, "task-empty-memo", "memo-uuid-empty.md"),
-      "utf8"
+    writeTask(
+      projectDir,
+      {
+        id: "task-tags",
+        name: "Tagged",
+        status: "Open",
+        parents: [{ id: "root-id" }],
+        createdAt: "2026-04-24",
+      },
+      taskDirs
     );
-    expect(memoFile).toContain("title: Scratch");
+    fs.writeFileSync(
+      path.join(projectDir, "task-tags", "memo-tagged.md"),
+      "---\nid: memo-tagged\ntitle: Notes\ntags:\n  - design\n  - frontend\n---\n\nSome content\n"
+    );
 
     const { tasks } = readProject(projectDir);
-    const loaded = tasks.get("task-empty-memo");
-    expect(loaded.memos[0].id).toBe("memo-uuid-empty");
-    expect(loaded.memos[0].title).toBe("Scratch");
+    expect(tasks.get("memo-tagged").tags).toEqual(["design", "frontend"]);
   });
 
-  it("does not expose ids as tab titles for old empty workspace memos", () => {
+  // 取り込んだノードを保存すると、タグはノードの `tags:` として書かれる。
+  it("ノードのタグは frontmatter に往復する", () => {
     const { projectDir } = createProject(tmpDir, "Proj", "root-id");
     const taskDirs = new Map([["root-id", "_project"]]);
-    const task = {
-      id: "task-old-empty-memo",
-      name: "Task With Old Empty Memo",
-      status: "Open",
-      parents: [{ id: "root-id" }],
-      memos: [],
-      createdAt: "2026-04-24",
-    };
-    writeTask(projectDir, task, taskDirs);
+    writeTask(
+      projectDir,
+      {
+        id: "node-tags",
+        name: "Tagged Node",
+        status: "Open",
+        parents: [{ id: "root-id" }],
+        tags: ["design", "frontend"],
+        createdAt: "2026-04-24",
+      },
+      taskDirs
+    );
 
-    const taskDir = path.join(projectDir, "task-old-empty-memo");
-    fs.writeFileSync(path.join(taskDir, "memo-uuid-old.md"), "---\nid: memo-uuid-old\n---\n");
-
-    const { tasks } = readProject(projectDir);
-    const loaded = tasks.get("task-old-empty-memo");
-    expect(loaded.memos[0].id).toBe("memo-uuid-old");
-    expect(loaded.memos[0].title).toBe("memo");
+    const file = fs.readFileSync(path.join(projectDir, "node-tags", "_index.md"), "utf8");
+    expect(file).toContain("tags:");
+    expect(file).toContain("- design");
+    expect(readProject(projectDir).tasks.get("node-tags").tags).toEqual(["design", "frontend"]);
   });
 
-  it("readMemos assigns a generated id to legacy memo files without frontmatter", () => {
+  it("writeTask + readProject round-trips a Quill node body as JSON in the markdown file", () => {
     const { projectDir } = createProject(tmpDir, "Proj", "root-id");
     const taskDirs = new Map([["root-id", "_project"]]);
-    const task = {
-      id: "task-legacy",
-      name: "Legacy",
-      status: "Open",
-      parents: [{ id: "root-id" }],
-      memos: [],
-      createdAt: "2026-04-24",
-    };
-    writeTask(projectDir, task, taskDirs);
+    const delta = { ops: [{ insert: "Rich body\n", attributes: { bold: true } }] };
+    writeTask(
+      projectDir,
+      {
+        id: "task-quill",
+        name: "Quill Node",
+        status: "Open",
+        parents: [{ id: "root-id" }],
+        body: delta,
+        format: "quill",
+        tags: ["rich"],
+        createdAt: "2026-04-24",
+      },
+      taskDirs
+    );
 
-    // Write an old-format memo file directly (no frontmatter)
-    const taskDir = path.join(projectDir, "task-legacy");
-    fs.writeFileSync(path.join(taskDir, "old-memo.md"), "# Old Memo\n\nLegacy content");
+    const file = fs.readFileSync(path.join(projectDir, "task-quill", "_index.md"), "utf8");
+    expect(file).toContain("format: quill");
+    expect(file).toContain("```json");
+    expect(file).toContain('"ops"');
+
+    const loaded = readProject(projectDir).tasks.get("task-quill");
+    expect(loaded.format).toBe("quill");
+    expect(loaded.body).toEqual(delta);
+  });
+
+  it("node tags default to an empty array when absent from frontmatter", () => {
+    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
+    const taskDirs = new Map([["root-id", "_project"]]);
+    writeTask(
+      projectDir,
+      {
+        id: "task-no-tags",
+        name: "Untagged",
+        status: "Open",
+        parents: [{ id: "root-id" }],
+        createdAt: "2026-04-24",
+      },
+      taskDirs
+    );
+
+    expect(readProject(projectDir).tasks.get("task-no-tags").tags).toEqual([]);
+  });
+
+  // 取り込んだノードの名前は「frontmatter の title → 先頭の見出し →
+  // ファイル名 → memo」の順で決める。作成時に名前を要求しない方針の裏返しで、
+  // ここが崩れると Inbox 的に書いたメモが id で並ぶことになる。
+  it("旧メモの title は、取り込んだノードの名前になる", () => {
+    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
+    const taskDirs = new Map([["root-id", "_project"]]);
+    writeTask(
+      projectDir,
+      { id: "t", name: "T", status: "Open", parents: [{ id: "root-id" }], createdAt: "2026-04-24" },
+      taskDirs
+    );
+    fs.writeFileSync(
+      path.join(projectDir, "t", "memo-uuid-empty.md"),
+      "---\nid: memo-uuid-empty\ntitle: Scratch\n---\n"
+    );
+
+    const promoted = readProject(projectDir).tasks.get("memo-uuid-empty");
+    expect(promoted.name).toBe("Scratch");
+  });
+
+  it("title も見出しも無い旧メモは、id ではなく memo という名前になる", () => {
+    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
+    const taskDirs = new Map([["root-id", "_project"]]);
+    writeTask(
+      projectDir,
+      { id: "t", name: "T", status: "Open", parents: [{ id: "root-id" }], createdAt: "2026-04-24" },
+      taskDirs
+    );
+    fs.writeFileSync(
+      path.join(projectDir, "t", "memo-uuid-old.md"),
+      "---\nid: memo-uuid-old\n---\n"
+    );
+
+    expect(readProject(projectDir).tasks.get("memo-uuid-old").name).toBe("memo");
+  });
+
+  it("frontmatter の無い旧メモは、先頭の見出しを名前にして id を発行する", () => {
+    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
+    const taskDirs = new Map([["root-id", "_project"]]);
+    writeTask(
+      projectDir,
+      { id: "t", name: "T", status: "Open", parents: [{ id: "root-id" }], createdAt: "2026-04-24" },
+      taskDirs
+    );
+    fs.writeFileSync(path.join(projectDir, "t", "old-memo.md"), "# Old Memo\n\nLegacy content");
 
     const { tasks } = readProject(projectDir);
-    const loaded = tasks.get("task-legacy");
-    expect(loaded.memos).toHaveLength(1);
-    expect(loaded.memos[0].title).toBe("Old Memo");
-    expect(typeof loaded.memos[0].id).toBe("string");
-    expect(loaded.memos[0].id.length).toBeGreaterThan(0);
+    const promoted = [...tasks.values()].find((task) => task.name === "Old Memo");
+    expect(promoted).toBeDefined();
+    expect(typeof promoted.id).toBe("string");
+    expect(promoted.id.length).toBeGreaterThan(0);
+    expect(promoted.body).toContain("Legacy content");
   });
 
   it("deleteTaskDir removes the task directory", () => {
@@ -1015,14 +1019,15 @@ describe("file system operations", () => {
       name: "Async Task",
       status: "Open",
       parents: [{ id: "root-id" }],
-      memos: [{ id: "memo-async", title: "Notes", content: "Async content" }],
+      body: "Async content",
+      format: "markdown",
       createdAt: "2026-04-24",
     };
 
     await writeTaskAsync(projectDir, task, taskDirs);
 
     const { tasks } = readProject(projectDir);
-    expect(tasks.get("task-async").memos[0].content).toBe("Async content");
+    expect(tasks.get("task-async").body).toBe("Async content");
     expect(
       fs.readdirSync(path.join(projectDir, "task-async")).some((e) => e.includes(".tmp"))
     ).toBe(false);
@@ -1042,18 +1047,49 @@ describe("file system operations", () => {
     await expect(writeTaskAsync(projectDir, task, taskDirs)).rejects.toThrow(/Invalid task id/);
   });
 
-  it("writeTaskAsync rejects memo ids that escape the task directory", async () => {
+  // 旧メモの id はこれからディレクトリ名になる。手書きファイルに危険な id が
+  // 入っていても、保存のたびに例外が出て**プロジェクト全体が保存できなくなる**
+  // ことがあってはいけない。中身は捨てず、id だけ振り直す。
+  it("危険な id の旧メモは、id を振り直して取り込む", () => {
     const { projectDir } = createProject(tmpDir, "Proj", "root-id");
     const taskDirs = new Map([["root-id", "_project"]]);
-    const task = {
-      id: "root-id",
-      name: "Root",
-      status: "Open",
-      parents: [],
-      memos: [{ id: "../outside", title: "Unsafe", content: "x", tags: [] }],
-    };
+    writeTask(
+      projectDir,
+      { id: "t", name: "T", status: "Open", parents: [{ id: "root-id" }], createdAt: "2026-04-24" },
+      taskDirs
+    );
+    fs.writeFileSync(
+      path.join(projectDir, "t", "evil.md"),
+      "---\nid: ../outside\ntitle: Evil\n---\n\nbody\n"
+    );
 
-    await expect(writeTaskAsync(projectDir, task, taskDirs)).rejects.toThrow(/Invalid memo id/);
+    const { tasks, legacyMemoFiles } = readProject(projectDir);
+    const promoted = [...tasks.values()].find((task) => task.name === "Evil");
+    expect(promoted.id).not.toBe("../outside");
+    expect(promoted.body).toContain("body");
+    // 消す対象は**ディスク上の実際のファイル名**であること。id から組み立てると
+    // ディレクトリの外を指してしまう。
+    expect([...legacyMemoFiles.values()].map((entry) => entry.fileName)).toEqual(["evil.md"]);
+  });
+
+  it("移行はディレクトリの外へ書き出さない", async () => {
+    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
+    const taskDirs = new Map([["root-id", "_project"]]);
+    writeTask(
+      projectDir,
+      { id: "t", name: "T", status: "Open", parents: [{ id: "root-id" }], createdAt: "2026-04-24" },
+      taskDirs
+    );
+    fs.writeFileSync(
+      path.join(projectDir, "t", "evil.md"),
+      "---\nid: ../outside\ntitle: Evil\n---\n\nbody\n"
+    );
+
+    const { tasks } = readProject(projectDir);
+    await writeProjectAsync(projectDir, [...tasks.values()]);
+
+    expect(fs.existsSync(path.join(projectDir, "..", "outside.md"))).toBe(false);
+    expect(fs.readdirSync(path.join(projectDir, "t"))).toEqual(["_index.md"]);
   });
 
   it("saveMemoImageAsync writes pasted images atomically", async () => {
@@ -1160,14 +1196,13 @@ describe("file system operations", () => {
     }
   });
 
-  it("writeProjectAsync skips unchanged task and memo files", async () => {
+  it("writeProjectAsync skips unchanged node files", async () => {
     const { projectDir } = createProject(tmpDir, "Proj", "root-id");
     const rootTask = {
       id: "root-id",
       name: "Proj",
       status: "Open",
       parents: [],
-      memos: [],
       createdAt: "2026-04-24",
     };
     const childTask = {
@@ -1175,42 +1210,46 @@ describe("file system operations", () => {
       name: "Stable",
       status: "Open",
       parents: [{ id: "root-id" }],
-      memos: [{ id: "memo-stable", title: "Notes", content: "Stable content" }],
+      body: "Stable content",
+      format: "markdown",
       createdAt: "2026-04-24",
     };
     await writeProjectAsync(projectDir, [rootTask, childTask]);
 
     const taskFile = path.join(projectDir, "task-stable", "_index.md");
-    const memoFile = path.join(projectDir, "task-stable", "memo-stable.md");
     const oldTime = new Date("2020-01-01T00:00:00.000Z");
     fs.utimesSync(taskFile, oldTime, oldTime);
-    fs.utimesSync(memoFile, oldTime, oldTime);
 
     await writeProjectAsync(projectDir, [rootTask, childTask]);
 
     expect(fs.statSync(taskFile).mtimeMs).toBe(oldTime.getTime());
-    expect(fs.statSync(memoFile).mtimeMs).toBe(oldTime.getTime());
   });
 
-  it("writeProjectAsync touches only changed memo files and deletes removed tasks", async () => {
+  it("writeProjectAsync touches only changed nodes and deletes removed ones", async () => {
     const { projectDir } = createProject(tmpDir, "Proj", "root-id");
     const rootTask = {
       id: "root-id",
       name: "Proj",
       status: "Open",
       parents: [],
-      memos: [],
       createdAt: "2026-04-24",
     };
-    const childTask = {
-      id: "task-change",
-      name: "Changing",
+    const keepTask = {
+      id: "node-keep",
+      name: "Keep",
       status: "Open",
       parents: [{ id: "root-id" }],
-      memos: [
-        { id: "memo-keep", title: "Keep", content: "Keep content" },
-        { id: "memo-change", title: "Change", content: "Before" },
-      ],
+      body: "Keep content",
+      format: "markdown",
+      createdAt: "2026-04-24",
+    };
+    const changeTask = {
+      id: "node-change",
+      name: "Change",
+      status: "Open",
+      parents: [{ id: "root-id" }],
+      body: "Before",
+      format: "markdown",
       createdAt: "2026-04-24",
     };
     const removedTask = {
@@ -1218,34 +1257,21 @@ describe("file system operations", () => {
       name: "Remove",
       status: "Open",
       parents: [{ id: "root-id" }],
-      memos: [],
       createdAt: "2026-04-24",
     };
-    await writeProjectAsync(projectDir, [rootTask, childTask, removedTask]);
+    await writeProjectAsync(projectDir, [rootTask, keepTask, changeTask, removedTask]);
 
-    const taskFile = path.join(projectDir, "task-change", "_index.md");
-    const keepMemoFile = path.join(projectDir, "task-change", "memo-keep.md");
-    const changedMemoFile = path.join(projectDir, "task-change", "memo-change.md");
+    const keepFile = path.join(projectDir, "node-keep", "_index.md");
+    const changeFile = path.join(projectDir, "node-change", "_index.md");
     const removedTaskDir = path.join(projectDir, "task-remove");
     const oldTime = new Date("2020-01-01T00:00:00.000Z");
-    fs.utimesSync(taskFile, oldTime, oldTime);
-    fs.utimesSync(keepMemoFile, oldTime, oldTime);
-    fs.utimesSync(changedMemoFile, oldTime, oldTime);
+    fs.utimesSync(keepFile, oldTime, oldTime);
+    fs.utimesSync(changeFile, oldTime, oldTime);
 
-    await writeProjectAsync(projectDir, [
-      rootTask,
-      {
-        ...childTask,
-        memos: [
-          { id: "memo-keep", title: "Keep", content: "Keep content" },
-          { id: "memo-change", title: "Change", content: "After" },
-        ],
-      },
-    ]);
+    await writeProjectAsync(projectDir, [rootTask, keepTask, { ...changeTask, body: "After" }]);
 
-    expect(fs.statSync(taskFile).mtimeMs).toBe(oldTime.getTime());
-    expect(fs.statSync(keepMemoFile).mtimeMs).toBe(oldTime.getTime());
-    expect(fs.statSync(changedMemoFile).mtimeMs).not.toBe(oldTime.getTime());
+    expect(fs.statSync(keepFile).mtimeMs).toBe(oldTime.getTime());
+    expect(fs.statSync(changeFile).mtimeMs).not.toBe(oldTime.getTime());
     expect(fs.existsSync(removedTaskDir)).toBe(false);
   });
 
@@ -1264,7 +1290,8 @@ describe("file system operations", () => {
       name: "Stable",
       status: "Open",
       parents: [{ id: "root-id" }],
-      memos: [{ id: "memo-stable", title: "Stable", content: "Stable content" }],
+      body: "Stable content",
+      format: "markdown",
       createdAt: "2026-04-24",
       order: 0,
     };
@@ -1273,7 +1300,8 @@ describe("file system operations", () => {
       name: "Changing",
       status: "Open",
       parents: [{ id: "root-id" }],
-      memos: [{ id: "memo-changing", title: "Changing", content: "Before" }],
+      body: "Before",
+      format: "markdown",
       createdAt: "2026-04-24",
       order: 1,
     };
@@ -1289,12 +1317,10 @@ describe("file system operations", () => {
     await writeProjectAsync(projectDir, [rootTask, stableTask, changingTask, removedTask]);
 
     const stableTaskFile = path.join(projectDir, "task-stable", "_index.md");
-    const stableMemoFile = path.join(projectDir, "task-stable", "memo-stable.md");
     const changingTaskFile = path.join(projectDir, "task-changing", "_index.md");
     const removedTaskDir = path.join(projectDir, "task-remove");
     const oldTime = new Date("2020-01-01T00:00:00.000Z");
     fs.utimesSync(stableTaskFile, oldTime, oldTime);
-    fs.utimesSync(stableMemoFile, oldTime, oldTime);
     fs.utimesSync(changingTaskFile, oldTime, oldTime);
 
     const result = await writeProjectPatchAsync(projectDir, {
@@ -1303,7 +1329,6 @@ describe("file system operations", () => {
     });
 
     expect(fs.statSync(stableTaskFile).mtimeMs).toBe(oldTime.getTime());
-    expect(fs.statSync(stableMemoFile).mtimeMs).toBe(oldTime.getTime());
     expect(fs.statSync(changingTaskFile).mtimeMs).not.toBe(oldTime.getTime());
     expect(fs.existsSync(removedTaskDir)).toBe(false);
     expect(result.tasks.get("task-changing").name).toBe("Changed");
@@ -1440,15 +1465,17 @@ describe("migrateProjectData", () => {
 
     const entries = fs.readdirSync(tmpDir, { withFileTypes: true });
     const projectDir = path.join(tmpDir, entries.find((e) => e.isDirectory()).name);
-    const memoFiles = fs
-      .readdirSync(projectDir)
-      .filter((entry) => entry.endsWith(".md") && entry !== "_project.md");
-    expect(memoFiles).toHaveLength(1);
-    expect(memoFiles[0]).not.toBe("delta-memo.md");
-    const memoFile = fs.readFileSync(path.join(projectDir, memoFiles[0]), "utf8");
+    // メモはノードになったので、エクスポート先では子ノードのディレクトリになる。
+    const memoDirs = fs
+      .readdirSync(projectDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory());
+    expect(memoDirs).toHaveLength(1);
+    expect(memoDirs[0].name).not.toBe("delta-memo");
+    const memoFile = fs.readFileSync(path.join(projectDir, memoDirs[0].name, "_index.md"), "utf8");
     const { data: memoData } = parseFrontmatter(memoFile);
 
     expect(memoData.id).not.toBe("delta-memo");
+    expect(memoData.name).toBe("Delta Memo");
     expect(memoFile).toContain("# Title");
     expect(memoFile).toContain("**bold**");
     expect(memoFile).toContain("[link](https://example.com)");
@@ -1496,12 +1523,12 @@ describe("migrateProjectData", () => {
 
     const entries = fs.readdirSync(tmpDir, { withFileTypes: true });
     const projectDir = path.join(tmpDir, entries.find((e) => e.isDirectory()).name);
-    const memoFiles = fs
-      .readdirSync(projectDir)
-      .filter((entry) => entry.endsWith(".md") && entry !== "_project.md");
-    expect(memoFiles).toHaveLength(1);
-    expect(memoFiles[0]).not.toBe("preserve-memo.md");
-    const memoFile = fs.readFileSync(path.join(projectDir, memoFiles[0]), "utf8");
+    const memoDirs = fs
+      .readdirSync(projectDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory());
+    expect(memoDirs).toHaveLength(1);
+    expect(memoDirs[0].name).not.toBe("preserve-memo");
+    const memoFile = fs.readFileSync(path.join(projectDir, memoDirs[0].name, "_index.md"), "utf8");
     const { data: memoData } = parseFrontmatter(memoFile);
 
     expect(memoData.id).not.toBe("preserve-memo");

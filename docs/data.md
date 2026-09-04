@@ -169,7 +169,6 @@ Inbox はワークスペースごとに 1 つ存在する、プロジェクト�
 │   ├── _project.md             ← Inbox のルートマーカー（kind: inbox）
 │   ├── <uuid-a>/
 │   │   ├── _index.md           ← Inbox アイテム
-│   │   ├── <memo-id>.md        ← メモ（任意の数）
 │   │   └── assets/             ← ペースト画像など
 │   └── <uuid-b>/...
 ├── プロジェクトA/
@@ -187,7 +186,7 @@ Inbox はワークスペースごとに 1 つ存在する、プロジェクト�
 | `ws:ensure-inbox` | `{ workspacePath }` | `_inbox/` と `_project.md` を必要なら作成し、`{ projectDir, rootId }` を返す |
 | `ws:read-inbox` | `{ workspacePath }` | `ws:read-project` 相当。Inbox の全アイテムを読み出す |
 | `ws:add-inbox-item` | `{ workspacePath, item }` | 1 件追加。書込→再ロード不要にするため `workspace-project-updated` も発火する |
-| `ws:send-inbox-items` | `{ workspacePath, targetProjectDir, targetRootId, targetParentId?, taskIds }` | 指定したアイテムを対象プロジェクトに移動。`targetParentId` を指定するとそのノードの子の末尾に、省略時はプロジェクトのルート直下に追加。ディレクトリごと `rename` するためメモ・アセットがそのまま運ばれる |
+| `ws:send-inbox-items` | `{ workspacePath, targetProjectDir, targetRootId, targetParentId?, taskIds }` | 指定したアイテムを対象プロジェクトに移動。`targetParentId` を指定するとそのノードの子の末尾に、省略時はプロジェクトのルート直下に追加。ディレクトリごと `rename` するため本文・アセットがそのまま運ばれる |
 
 Inbox 全体の永続化には既存の `ws:write-project(<inbox-projectDir>, items, options)` を再利用する。Inbox ディレクトリは構造的にワークスペースプロジェクトと同等のため、`WorkspaceWriteQueue` / `WorkspaceReconciler` / `wsCache` がそのまま機能する。
 
@@ -203,7 +202,7 @@ Inbox 全体の永続化には既存の `ws:write-project(<inbox-projectDir>, it
    - `parents` を解決後の親 ID で書き換え、`order` を解決後親の既存子の末尾に連番採番し、`writeTaskAsync` で `_index.md` を更新
 4. 双方の `wsCache` を最新化し、`workspace-project-updated` を双方の projectDir 向けに送出
 
-タスク内のメモ・assets は `_index.md` と同階層に保存されているため、ディレクトリ移動だけで相対パスは破綻しない。
+本文と assets は `_index.md` と同階層に保存されているため、ディレクトリ移動だけで相対パスは破綻しない。
 
 ## 4. ワークスペースプロジェクト
 
@@ -255,7 +254,7 @@ created: 2026-08-24
 - 「アーカイブされた扱いか」は、**ルートから archived を通らずに辿り着けるか**で決める（`isNodeEffectivelyArchived`）。片方の親がアーカイブでも、もう片方から生きて辿れるならそのノードは生きている。復元（`restoreNode`）はクリックした行の祖先だけを解除する
 - Shift 選択の範囲も行で決まる。起点は `selection_anchor_path`（id だけだとどの出現が起点か決まらない）
 - 移動・インデント・アウトデントは「どの**辺**を動かすか」の操作なので、**クリックした行の親**に効く（`moveNodeUp` などが取る `rowPath`）。ノード id から親を引くと、最初に見つかった親＝別の行が動いてしまう。ツールバーとショートカットも `active_row_path`（ツリーでいま操作している行）を見る
-- **同じノードの複数の出現は同一オブジェクトを共有する**。`archived` とノードの中身（名前・状態・メモ）はノードの属性なので、片方の出現にだけ子が足されるのは誤り（並び順だけは辺の属性で、`parents[].order` に持つ）。共有できるのは経路に依らない部分木だけで、循環を打ち切った部分木は共有しない。ツリーを作り直す関数（`updateNodeDataById` / `bulkUpdateNodeData` / `bulkRemoveNodes`）は同じ入力に同じ出力を返して共有を保つ
+- **同じノードの複数の出現は同一オブジェクトを共有する**。`archived` とノードの中身（名前・状態・本文）はノードの属性なので、片方の出現にだけ子が足されるのは誤り（並び順だけは辺の属性で、`parents[].order` に持つ）。共有できるのは経路に依らない部分木だけで、循環を打ち切った部分木は共有しない。ツリーを作り直す関数（`updateNodeDataById` / `bulkUpdateNodeData` / `bulkRemoveNodes`）は同じ入力に同じ出力を返して共有を保つ
 
 #### 孤児を作らない
 
@@ -293,7 +292,9 @@ created: 2026-09-01
 
 #### 添付ファイル
 
-ワークスペースタスクは、任意ファイルをタスク単位の添付として保持できる。添付は `db.json` には保存せず、ワークスペースプロジェクトのタスクディレクトリ配下に実ファイルとして置く。
+ワークスペースの**ノード**は、任意ファイルを添付として保持できる。添付は `db.json` には保存せず、ノードのディレクトリ配下に実ファイルとして置く。
+
+メモもノードなので、**メモにも添付を付けられる**（統一前はタスクだけが添付の入れ物だった）。添付そのものはノードにしない。バイナリは frontmatter を持てないため、ノード化すると全ての添付にサイドカーの `.md` が要る。少数のための恩恵に、全添付が代償を払う形になる。
 
 ```
 <projectDir>/
@@ -303,7 +304,7 @@ created: 2026-09-01
 └── <task-id>/
     ├── _index.md
     ├── <memo-id>.md
-    ├── assets/               ← メモ内ペースト画像
+    ├── assets/               ← 本文にペーストした画像
     └── attachments/          ← 通常タスクの添付
         └── <file>
 ```
@@ -318,7 +319,9 @@ created: 2026-09-01
 
 | チャネル | ペイロード | 役割 |
 | --- | --- | --- |
-| `ws:save-task-attachment` | `{ projectDir, taskId, fileName, bytes }` | ファイルを対象タスクの `attachments/` へコピーし、作成された `WorkspaceAttachment` を返す |
+| `ws:read-task-body` | `{ projectDir, taskId }` | 1 つのノードの本文と形式を読む。一覧目的の読み出しでは本文を読まないので、開いたときにここで取りに行く |
+| `ws:read-project-bodies` | `{ projectDir }` | プロジェクト全体の本文を読む。全文検索で本文まで探すときの hydration 用 |
+| `ws:save-task-attachment` | `{ projectDir, taskId, fileName, bytes }` | ファイルを対象ノードの `attachments/` へコピーし、作成された `WorkspaceAttachment` を返す |
 | `ws:delete-task-attachment` | `{ projectDir, taskId, attachmentPath }` | `./attachments/<file>` を削除し、削除後の添付一覧を返す |
 | `ws:open-task-attachment` | `{ projectDir, taskId, attachmentPath }` | 添付ファイルを OS の既定アプリで開く |
 | `ws:open-task-attachment-with` | `{ projectDir, taskId, attachmentPath }` | Windows の「プログラムから開く」ダイアログを表示する |
@@ -392,66 +395,114 @@ Workspace の通常編集では、renderer 側の Svelte store を単一の信�
   わけではないので、期限があるなら出す
 - 回帰テストは `tests/unit/no_status.test.ts`
 
-## 6. メモ
+## 6. ノードの本文
 
-各メモは次の情報を持つ。
+**1 つのメモ ＝ 1 つのノード。** メモはタスクの属性ではなく、タスクと同じノード空間に住む。ノードは本文を 1 つだけ持ち、複数の記録は子ノードで表す。
 
-- `title` — メモタブ名
-- `content` — メモ本文
+各ノードの本文は次の情報で決まる。
+
+- `body` — 本文そのもの（Markdown なら文字列、Quill なら Delta）
 - `format` — `"markdown"` または `"quill"`
 
-> **実装上の注意**：メモのフィールドは 5 箇所で個別に列挙されている。新しいフィールドを足すときは**すべてに追加する**こと。1 つでも漏れると、画面とキャッシュだけが変わってファイルに書かれない、という形で壊れる。
+### 6.0 ファイル上の形
+
+ノードの本文は `_index.md`（ルートは `_project.md`）の**フロントマターより後ろ**に、そのまま置く。
+
+```yaml
+---
+id: n-1
+name: 設計メモ
+parents:
+  - id: t-1
+    order: 3
+tags:
+  - 設計
+created: 2026-09-04
+---
+
+この方式にした理由。
+```
+
+- `format:` は既定（`markdown`）のときは**書かない**。既存ファイルに無用な差分を作らないため。タグや `status` と同じ流儀
+- Quill の本文は、フロントマターの `format: quill` と、本文に置いた fenced code block の Delta（JSON）で表す
+- 一覧目的の読み出しでは本文を読まない（`bodyLoaded: false`）。ノードを開いたときに `ws:read-task-body` で 1 件だけ読む。統一でノード数が大きく増えるので、ここを一括読みに戻すと開くたびに全文を読むことになる
+
+> **実装上の注意**：本文のフィールドは 5 箇所で個別に列挙されている。新しいフィールドを足すときは**すべてに追加する**こと。
 >
-> 1. `electron/workspace.js` の `readMemos` / `buildMemoEntry`（読み）
-> 2. `electron/workspace.js` の `writeMemoFiles` / `writeMemoFilesAsync`（書き）
+> 1. `electron/workspace.js` の `nodeBodyFields`（読み。4 つの読み手が共有する）
+> 2. `electron/workspace.js` の `serializeNodeBody` / `taskFrontmatterData`（書き）
 > 3. `src/features/workspace/utils/workspace_tree.ts`（ワークスペース → ツリー）
-> 4. 同ファイル（ツリー → ワークスペース）
+> 4. 同ファイルの `nodeBodyFor`（ツリー → ワークスペース）
 > 5. `src/features/tasks/stores/tree.ts` の `comparableWorkspaceTask`（**差分判定**。ここに無いフィールドは「変更なし」と見なされ、ディスクに書かれない）
 >
 > 5 が落ちると「画面とキャッシュだけが変わってファイルに書かれない」という形で
 > 壊れる。過去に `kind` で実際に起きた。
 
+**本文を読み込んでいないノードを、空で上書きしないこと。** 一覧目的の読み出しでは本文が空なので、そのまま書き戻すと「開かなかったノードの本文が消える」事故になる。受け止めは 2 箇所にある。
+
+- renderer 側 `nodeBodyFor` … `bodyLoaded === false` のときは既存の本文を残す
+- main 側 `withLoadedNodeBodies` … 書き出しの直前にディスクから本文を取り戻す
+
+### 6.0a 旧メモ（`<task-dir>/<memo-id>.md`）の取り込みと移行
+
+以前はメモをタスクディレクトリ直下の `.md` ファイルとして持っていた。統一後もそのファイルはそのまま読めて、**ノードとして**現れる。
+
+- **読み**（`promoteLegacyMemos`）。各メモファイルを、そのタスクの子ノードとして取り込む。`title` → ノード名、本文 → `body`、`tags` → ノードのタグ。**ステータスは与えない**（メモは進み具合を持たない）
+- 並び順は実タスクの子の後ろ。保存時にツリーから振り直されるので、初期配置だけの値
+- 同じ id のディレクトリが既にあるときは取り込まない。移行の途中で落ちると「新しいディレクトリ」と「消し残した旧ファイル」が並ぶが、そのときは**ディレクトリを正**とする
+- 危険な id（`../` を含むなど）はディレクトリ名にできない。中身は捨てず、**id だけ振り直す**。そのまま通すと保存のたびに例外が出て、プロジェクト全体が保存できなくなる
+- **書き**（移行）。そのノードを次に保存したときに `<node-id>/_index.md` へ移る。差分保存でも起きるので、移行は 1 件ずつ進む。移行スクリプトは要らない
+
+移行は **コピー → 削除の 2 パス**で行う。全ノードを書き終えてから元のファイルを消す。逆順にすると、途中で落ちたときに本文が失われる。
+
+**画像は運ぶ必要がある。** 本文の `./assets/x.png` は**そのノードのディレクトリ相対**で解決され、`..` で外へ出る参照は拒否される（`resolveMemoAssetPathCandidate`）。だから移行のときに、本文が参照している assets を新しいディレクトリへ運ぶ。
+
+- **コピーであって移動ではない。** 同じ画像を親の本文や別のメモも参照していることがあり、動かすとそちらが壊れる。実体は重複するが、失われない
+- 参照していない画像は運ばない
+- 消すのは**ディスク上の実際のファイル名**。id から組み立てると、振り直した id のときに別の場所を指してしまう
+
+**まだ移行していないノードの削除に注意。** 旧メモノードの `taskDirs` は**親**を指している（画像をそこから解決するため）。素直にディレクトリを消すと親とその子が丸ごと消える。`deleteTaskDirAsync` は消す前に `_index.md` の id が一致するかを確かめ、違えばその 1 ファイルだけを消す。
+
+Inbox はフラットなので、`_inbox/` 配下の旧メモは**それぞれ独立した Inbox アイテム**になる（`readInbox` が親をルートにクランプする）。別々の記録が別々の行になるだけで、失われるものは無い。
+
+`db.json` プロジェクトの `memo` 配列も同じ考えで子ノードに直す。生の JSON がそのまま renderer に届くので、入口（`platform.getTreeData`）で 1 回 `promoteLegacyMemosToNodes` を通す。通さないと既存のメモが画面から消える。
+
+回帰テストは `tests/unit/memo_to_node.test.ts`。
+
 ### 6.1 フォーマットの決定ルール
 
-フォーマットはメモごとに保持される。省略時のデフォルトはプロジェクトの保存先によって異なる。
+フォーマットはノードごとに保持される。省略時のデフォルトはプロジェクトの保存先によって異なる。
 
-- `db.json` プロジェクトのメモで `format` が省略されている場合 → `"quill"` として扱う
-- ワークスペースプロジェクトのメモで `format` が省略されている場合 → `"markdown"` として扱う
+- `db.json` プロジェクトで `format` が省略されている場合 → `"quill"` として扱う
+- ワークスペースプロジェクトで `format` が省略されている場合 → `"markdown"` として扱う
 
-新規作成するメモのデフォルトもプロジェクトの保存先に従う。
+新規作成するノードのデフォルトもプロジェクトの保存先に従う。
 
 - `db.json` プロジェクト → `"quill"`
 - ワークスペースプロジェクト → `"markdown"`
 
-### 6.2 ワークスペースメモのファイル形式
-
-ワークスペースプロジェクトのメモは、フォーマットに関わらずすべて `.md` ファイルとして保存される。内部構造はフォーマットによって異なる。
-
-- **Markdown メモ**：YAML フロントマター + Markdown 本文
-- **Quill メモ**：フロントマターに `format: quill` を追加し、本文は Quill Delta を JSON として fenced コードブロックに格納する
-
 ### 6.3 フォーマット変換
 
-メモのフォーマットは個別または一括で切り替えられる。
+本文のフォーマットは個別または一括で切り替えられる。
 
-- **個別変換**：各メモのフォーマット切替 UI で Markdown ⇄ Quill を切り替える
-- **一括変換**：ツールバーの「全メモを Markdown / Quill に一括変換」ボタンで、現在開いているプロジェクトの全メモを変換する
+- **個別変換**：タスク詳細の形式切替で Markdown ⇄ Quill を切り替える。中身があるときは、装飾や埋め込みが落ちうることを確認する。**本文が空なら確認を出さない**（落ちるものが無いため）
+- **一括変換**：ツールバーのボタンで、現在開いているプロジェクトの全ノードの本文を変換する。**本文が空のノードは対象にしない**。数えると、まだ何も書いていないノードまで「変換対象」に並び、件数が意味を失う
   - 変換内容の警告フェーズと、完了結果フェーズを持つモーダルで確認する
   - プロジェクト全体の変換は単一の Undo アクションとして記録され、1 回の Undo で元に戻せる
 
 ### 6.4 Markdown プレビュー
 
-Markdown メモのプレビューでは次の表現を扱う。
+Markdown 本文のプレビューでは次の表現を扱う。
 
 - 見出し、箇条書き、引用、コード、表などの GitHub Flavored Markdown
 - task list / Markdown 画像記法
-- 同一タスク内メモへの `[[Wiki Link]]` と `[[Wiki Link|Alias]]`
+- 同じ親の下のノードへの `[[Wiki Link]]` と `[[Wiki Link|Alias]]`
 - 外部 URL への wiki link
 
 画像ペーストの保存先は保存モードによって異なる。
 
-- ワークスペースプロジェクト：画像を対象タスク配下の `assets/` に保存し、本文には `![](./assets/<file>)` の相対パスを挿入する
-- `db.json` プロジェクト：対応するタスクディレクトリがないため、画像を `data:image/...;base64,...` の data URL として本文に埋め込む
+- ワークスペースプロジェクト：画像を対象ノード配下の `assets/` に保存し、本文には `![](./assets/<file>)` の相対パスを挿入する
+- `db.json` プロジェクト：対応するノードディレクトリがないため、画像を `data:image/...;base64,...` の data URL として本文に埋め込む
 - プレビュー時、外部 URL と `data:` URL はそのまま表示し、ワークスペース内の相対画像パスは Electron 側で file URL へ解決する
 
 旧 Quill 形式の Delta オブジェクト（`{ ops: [...] }`）が文字列フィールドに残っている場合は、表示時に `ops[].insert` を連結してプレーンテキストへ変換する。それ以外の非文字列値は後方互換用に JSON 文字列として表示する。

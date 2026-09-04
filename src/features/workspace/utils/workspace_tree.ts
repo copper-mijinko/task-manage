@@ -120,17 +120,11 @@ export function workspaceToProjectData(
       data: {
         name: task.name,
         status: task.status ?? NO_STATUS,
+        body: task.body,
+        format: normalizeMemoFormat(task.format, "markdown"),
+        bodyLoaded: task.bodyLoaded,
         "start date": task.startDate as `${string}-${string}-${string}` | undefined,
         "due date": task.dueDate as `${string}-${string}-${string}` | undefined,
-        memo: task.memos.map((m) => ({
-          id: m.id,
-          title: m.title,
-          content: m.content,
-          tags: m.tags,
-          format: normalizeMemoFormat(m.format, "markdown"),
-          order: m.order,
-          bodyLoaded: m.bodyLoaded,
-        })),
         tags: normalizeTagList(task.tags),
         attachments: task.attachments ?? [],
       },
@@ -161,7 +155,6 @@ export function workspaceToProjectData(
           status: "Open",
           "start date": undefined,
           "due date": undefined,
-          memo: [],
         },
         children: [],
       },
@@ -221,6 +214,27 @@ export function workspaceToProjectData(
 }
 
 /**
+ * ノード本文を書き戻す形にする。
+ *
+ * **本文を読み込んでいないノードは、既存の本文をそのまま残す。** 一覧目的の
+ * 読み出しでは本文を読まない（`bodyLoaded: false`）ので、そこで空文字を書き
+ * 戻すと「開かなかったノードの本文が消える」形の事故になる。メモの content が
+ * 同じ理由で同じ扱いをしている。
+ */
+function nodeBodyFor(node: TreeData, existing: WorkspaceTask | undefined) {
+  const format = normalizeMemoFormat(node.data.format, "markdown");
+  if (node.data.bodyLoaded === false) {
+    return { body: existing?.body, format, bodyLoaded: false };
+  }
+  const body = node.data.body;
+  return {
+    body: format === "markdown" ? toMarkdown(body) : body,
+    format,
+    bodyLoaded: node.data.bodyLoaded,
+  };
+}
+
+/**
  * Convert a ProjectData tree back to a flat WorkspaceTask array.
  * Preserves createdAt from existingTasks when available.
  */
@@ -276,21 +290,7 @@ export function projectDataToWorkspaceTasks(
       startDate: node.data["start date"] || undefined,
       dueDate: node.data["due date"] || undefined,
       parents: resolvedParents,
-      memos: (node.data.memo || []).map((m, index) => {
-        const format = normalizeMemoFormat(m.format, "markdown");
-        const existingMemo =
-          existing?.memos.find((memo) => memo.id === m.id) ?? existing?.memos[index];
-        const content = m.bodyLoaded === false && existingMemo ? existingMemo.content : m.content;
-        return {
-          id: m.id || "",
-          title: m.title || "",
-          content: format === "markdown" ? toMarkdown(content) : content,
-          tags: Array.isArray(m.tags) ? m.tags : [],
-          format,
-          order: index,
-          bodyLoaded: m.bodyLoaded,
-        };
-      }),
+      ...nodeBodyFor(node, existing),
       tags: normalizeTagList(node.data.tags),
       attachments: Array.isArray(node.data.attachments)
         ? node.data.attachments

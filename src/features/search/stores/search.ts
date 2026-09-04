@@ -20,32 +20,30 @@ import {
 import { sort_state } from "@features/tasks/stores/sort";
 import { workspace_store, workspace_tasks_cache } from "@features/workspace/stores/workspace";
 import * as platform from "@lib/ipc/platform";
-import type { WorkspaceMemo } from "@app-types/workspace";
+import type { NodeBody } from "@app-types/workspace";
 
 export interface FilterStore extends Writable<FilterState> {
   init: () => void;
 }
 
-let workspaceMemoHydrationKey = "";
+let workspaceBodyHydrationKey = "";
 
-function hasMemoBodySearch(current: FilterState): boolean {
+function hasBodySearch(current: FilterState): boolean {
   return (
     (current?.search_memo?.length ?? 0) > 0 &&
     (current?.full_text ?? []).some((keyword) => String(keyword || "").trim())
   );
 }
 
-function treeHasUnloadedMemo(node: TreeData | undefined): boolean {
+function treeHasUnloadedBody(node: TreeData | undefined): boolean {
   if (!node) return false;
-  if ((node.data.memo ?? []).some((entry) => entry?.bodyLoaded === false)) {
-    return true;
-  }
-  return (node.children ?? []).some(treeHasUnloadedMemo);
+  if (node.data.bodyLoaded === false) return true;
+  return (node.children ?? []).some(treeHasUnloadedBody);
 }
 
-function mergeProjectMemos(
+function mergeProjectBodies(
   node: TreeData,
-  memosByTaskId: Record<string, WorkspaceMemo[]>,
+  bodiesByTaskId: Record<string, NodeBody>,
   // 多親ノードの複数の出現は同じオブジェクトを共有している（workspace_tree の
   // 射影を参照）。作り直すときに出現ごとに別オブジェクトを作ると共有が壊れ、
   // 以後の編集が片方の出現にしか効かなくなる。同じ入力には同じ出力を返す。
@@ -55,12 +53,14 @@ function mergeProjectMemos(
   if (already) return already;
 
   let changed = false;
-  const ownMemos = memosByTaskId[node.id];
-  const data = ownMemos ? { ...node.data, memo: ownMemos } : node.data;
-  if (ownMemos) changed = true;
+  const own = bodiesByTaskId[node.id];
+  const data = own
+    ? { ...node.data, body: own.body, format: own.format, bodyLoaded: true }
+    : node.data;
+  if (own) changed = true;
 
   const children = (node.children ?? []).map((child) => {
-    const merged = mergeProjectMemos(child, memosByTaskId, rebuilt);
+    const merged = mergeProjectBodies(child, bodiesByTaskId, rebuilt);
     if (merged.changed) changed = true;
     return merged.node;
   });
@@ -72,22 +72,22 @@ function mergeProjectMemos(
   return result;
 }
 
-async function hydrateWorkspaceMemosForSearch(current: FilterState, currentTreeData: ProjectData) {
-  if (!hasMemoBodySearch(current)) return;
+async function hydrateWorkspaceBodiesForSearch(current: FilterState, currentTreeData: ProjectData) {
+  if (!hasBodySearch(current)) return;
   if (get(selected_type) !== "WorkspaceProject") return;
-  if (!treeHasUnloadedMemo(currentTreeData.data)) return;
+  if (!treeHasUnloadedBody(currentTreeData.data)) return;
 
   const { activeProjectDir } = get(workspace_store);
   const projectId = get(selected_id);
   if (!activeProjectDir || !projectId) return;
 
   const key = `${activeProjectDir}:${projectId}`;
-  if (workspaceMemoHydrationKey === key) return;
-  workspaceMemoHydrationKey = key;
+  if (workspaceBodyHydrationKey === key) return;
+  workspaceBodyHydrationKey = key;
 
   try {
-    const result = await platform.wsReadProjectMemos(activeProjectDir);
-    if (!result?.memosByTaskId || get(selected_type) !== "WorkspaceProject") return;
+    const result = await platform.wsReadProjectBodies(activeProjectDir);
+    if (!result?.bodiesByTaskId || get(selected_type) !== "WorkspaceProject") return;
     if (
       get(workspace_store).activeProjectDir !== activeProjectDir ||
       get(selected_id) !== projectId
@@ -97,23 +97,28 @@ async function hydrateWorkspaceMemosForSearch(current: FilterState, currentTreeD
 
     const latestTreeData = get(tree_data);
     if (!latestTreeData?.data) return;
-    const merged = mergeProjectMemos(latestTreeData.data, result.memosByTaskId);
+    const merged = mergeProjectBodies(latestTreeData.data, result.bodiesByTaskId);
     if (!merged.changed) return;
 
     tree_data.setFromSource({ ...latestTreeData, data: merged.node });
     workspace_tasks_cache.update((cache) => {
       let changed = false;
       const next = { ...cache };
-      for (const [taskId, memos] of Object.entries(result.memosByTaskId)) {
+      for (const [taskId, entry] of Object.entries(result.bodiesByTaskId)) {
         if (!next[taskId]) continue;
         changed = true;
-        next[taskId] = { ...next[taskId], memos };
+        next[taskId] = {
+          ...next[taskId],
+          body: entry.body,
+          format: entry.format,
+          bodyLoaded: true,
+        };
       }
       return changed ? next : cache;
     });
   } finally {
-    if (workspaceMemoHydrationKey === key) {
-      workspaceMemoHydrationKey = "";
+    if (workspaceBodyHydrationKey === key) {
+      workspaceBodyHydrationKey = "";
     }
   }
 }
@@ -139,13 +144,13 @@ function createFilter(initialValue: FilterState): FilterStore {
   ) => {
     if (!currentTreeData) {
       applyFilteredData.cancel();
-      workspaceMemoHydrationKey = "";
+      workspaceBodyHydrationKey = "";
       filtered_data.set(undefined);
       table_selected_id.set(undefined);
       return;
     }
 
-    hydrateWorkspaceMemosForSearch(current, currentTreeData);
+    hydrateWorkspaceBodiesForSearch(current, currentTreeData);
 
     const visibleTreeData = archivedAdjustedTree(currentTreeData);
     if (!visibleTreeData?.data) {

@@ -1,4 +1,4 @@
-﻿import { fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
+﻿import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { get } from "svelte/store";
 import { tick } from "svelte";
 import { vi } from "vitest";
@@ -9,14 +9,7 @@ vi.mock("@features/memos/components/Memo.svelte", async () => {
 });
 
 import TaskDetail from "@features/tasks/components/TaskDetail.svelte";
-import {
-  selected_id,
-  selected_type,
-  table_selected_id,
-  tag_index,
-  tree_data,
-  workspace_store,
-} from "@stores";
+import { selected_id, selected_type, table_selected_id, tree_data, workspace_store } from "@stores";
 import { clearSelection } from "@stores/ui";
 
 function createProjectData() {
@@ -25,7 +18,6 @@ function createProjectData() {
       { name: "name", default_ratio: 10 },
       { name: "status", default_ratio: 4 },
       { name: "due date", default_ratio: 4 },
-      { name: "memo", default_ratio: 2 },
     ],
     data: {
       id: "project-1",
@@ -33,7 +25,6 @@ function createProjectData() {
         name: "Sample Project",
         status: "Open",
         "due date": undefined,
-        memo: [],
       },
       children: [
         {
@@ -42,7 +33,6 @@ function createProjectData() {
             name: "First Task",
             status: "Open",
             "due date": undefined,
-            memo: [],
           },
           children: [],
         },
@@ -52,7 +42,8 @@ function createProjectData() {
             name: "Second Task",
             status: "Pending",
             "due date": undefined,
-            memo: [{ id: "memo-review", title: "review", content: "" }],
+            body: "",
+            format: "markdown",
           },
           children: [],
         },
@@ -89,15 +80,16 @@ describe("TaskDetail", () => {
     expect(screen.getByText("タスクを選択してください")).toBeInTheDocument();
   });
 
-  test("shows an actionable empty state when the selected task has no notes", () => {
+  // タブが無くなったので「メモはまだありません」という空状態も無くなった。
+  // ノードは常に本文を 1 つ持ち、いつでも書き始められる。
+  test("選択したノードには常に本文エディタが出る", () => {
     table_selected_id.set("task-1");
     render(TaskDetail);
 
-    expect(screen.getByText("メモはまだありません")).toBeInTheDocument();
-    expect(screen.getByText("補足や記録を残すためのメモを追加できます。")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "メモを追加" })).toBeInTheDocument();
+    expect(screen.getByTestId("memo-stub")).toBeInTheDocument();
+    expect(screen.getByText("本文")).toBeInTheDocument();
     expect(screen.getByText("First Task")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Storage mode")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "メモを追加" })).not.toBeInTheDocument();
   });
 
   test("opens the selected task detail from the card header action", async () => {
@@ -212,18 +204,10 @@ describe("TaskDetail", () => {
     expect(container.querySelector(".task-detail-card-body")).toHaveClass("detail-mini");
   });
 
-  test("hydrates workspace memo bodies for the selected task", async () => {
+  test("選択したノードの本文だけを読みに行く", async () => {
     const project = createProjectData();
-    project.data.children[1].data.memo = [
-      {
-        id: "memo-review",
-        title: "review",
-        content: "",
-        tags: [],
-        format: "markdown",
-        bodyLoaded: false,
-      },
-    ];
+    project.data.children[1].data.body = "";
+    project.data.children[1].data.bodyLoaded = false;
     tree_data.set(project);
     workspace_store.set({
       workspaces: [],
@@ -234,30 +218,22 @@ describe("TaskDetail", () => {
     selected_type.set("WorkspaceProject");
     table_selected_id.set("task-2");
     window.electronAPI = {
-      wsReadTaskMemos: vi.fn().mockResolvedValue({
-        memos: [
-          {
-            id: "memo-review",
-            title: "review",
-            content: "Loaded memo body",
-            tags: [],
-            format: "markdown",
-            bodyLoaded: true,
-          },
-        ],
+      wsReadTaskBody: vi.fn().mockResolvedValue({
+        body: "Loaded node body",
+        format: "markdown",
       }),
     };
 
     render(TaskDetail);
 
     await waitFor(() => {
-      expect(window.electronAPI.wsReadTaskMemos).toHaveBeenCalledWith(
+      expect(window.electronAPI.wsReadTaskBody).toHaveBeenCalledWith(
         "C:\\workspace\\project-1",
         "task-2"
       );
-      expect(screen.getByTestId("memo-stub")).toHaveTextContent("Loaded memo body");
+      expect(screen.getByTestId("memo-stub")).toHaveTextContent("Loaded node body");
     });
-    expect(get(tree_data).data.children[1].data.memo[0].bodyLoaded).toBe(true);
+    expect(get(tree_data).data.children[1].data.bodyLoaded).toBe(true);
   });
 
   test("adds a file attachment to a workspace task", async () => {
@@ -482,185 +458,32 @@ describe("TaskDetail", () => {
     expect(task.status).toBe("In Progress");
     expect(task["start date"]).toBe("2026-06-01");
     expect(task["due date"]).toBe("2026-06-10");
-    expect(screen.getByLabelText("メモ数")).toHaveTextContent("0");
+    // メモ数の欄は撤去した（メモは子ノードになり、ツリーで見える）。
+    expect(screen.queryByLabelText("メモ数")).not.toBeInTheDocument();
   });
 
-  test("adds a memo tab to the selected task", async () => {
-    table_selected_id.set("task-1");
-    render(TaskDetail);
+  // ── 本文（旧メモタブ）──────────────────────────────────────────────
+  // タブ・複製・並べ替え・タブごとのタグは、メモがノードになったことで
+  // 「子ノードを足す / 動かす / タグを付ける」に置き換わった。ここで確かめる
+  // のは、ノードが 1 つの本文を持ち、それが保存され、形式を変えられること。
 
-    await fireEvent.click(screen.getByRole("button", { name: "メモを追加" }));
-    await tick();
-
-    expect(screen.getByRole("button", { name: "メモ「memo」を選択" })).toHaveClass("selected");
-    expect(get(tree_data).data.children[0].data.memo).toEqual([
-      expect.objectContaining({ title: "memo", content: "" }),
-    ]);
-  });
-
-  test("duplicates the selected memo with a copy title and inserts it right after the original", async () => {
+  test("本文を編集するとノードの body に入る", async () => {
     const project = createProjectData();
-    project.data.children[0].data.memo = [
-      {
-        id: "memo-draft",
-        title: "draft",
-        content: "hello",
-        tags: ["design"],
-        format: "markdown",
-      },
-      { id: "memo-notes", title: "notes", content: "" },
-    ];
+    project.data.children[0].data.format = "markdown";
     tree_data.set(project);
     table_selected_id.set("task-1");
-
     render(TaskDetail);
 
-    await fireEvent.click(screen.getByRole("button", { name: "メモ「draft」を選択" }));
-    await fireEvent.click(screen.getByRole("button", { name: "このメモを複製" }));
-    await tick();
-    await fireEvent.click(screen.getByRole("menuitem", { name: "このタスク内に複製" }));
+    await fireEvent.click(screen.getByTestId("memo-save"));
     await tick();
 
-    const memo = get(tree_data).data.children[0].data.memo;
-    expect(memo).toHaveLength(3);
-    expect(memo[0]).toEqual(expect.objectContaining({ id: "memo-draft", title: "draft" }));
-    expect(memo[1]).toEqual(
-      expect.objectContaining({
-        title: "draft のコピー",
-        content: "hello",
-        tags: ["design"],
-        format: "markdown",
-      })
-    );
-    expect(memo[1].id).not.toBe("memo-draft");
-    expect(memo[2]).toEqual(expect.objectContaining({ id: "memo-notes", title: "notes" }));
-
-    expect(screen.getByRole("button", { name: "メモ「draft のコピー」を選択" })).toHaveClass(
-      "selected"
-    );
+    expect(get(tree_data).data.children[0].data.body).toBe("edited");
   });
 
-  test("appends a numeric suffix when duplicating a memo whose copy title already exists", async () => {
+  test("本文の形式を変えるときは、情報が落ちうることを確認する", async () => {
     const project = createProjectData();
-    project.data.children[0].data.memo = [
-      { id: "memo-draft", title: "draft", content: "" },
-      { id: "memo-draft-copy", title: "draft のコピー", content: "" },
-    ];
-    tree_data.set(project);
-    table_selected_id.set("task-1");
-
-    render(TaskDetail);
-
-    await fireEvent.click(screen.getByRole("button", { name: "メモ「draft」を選択" }));
-    await fireEvent.click(screen.getByRole("button", { name: "このメモを複製" }));
-    await tick();
-    await fireEvent.click(screen.getByRole("menuitem", { name: "このタスク内に複製" }));
-    await tick();
-
-    const memo = get(tree_data).data.children[0].data.memo;
-    expect(memo.map((entry) => entry.title)).toEqual([
-      "draft",
-      "draft のコピー 2",
-      "draft のコピー",
-    ]);
-  });
-
-  test("hides memo actions when there are no memos", () => {
-    table_selected_id.set("task-1");
-    render(TaskDetail);
-
-    expect(screen.queryByRole("button", { name: "このメモを複製" })).not.toBeInTheDocument();
-  });
-
-  test("deletes the selected memo after confirmation", async () => {
-    const project = createProjectData();
-    project.data.children[0].data.memo = [{ id: "memo-draft", title: "draft", content: "" }];
-    tree_data.set(project);
-    table_selected_id.set("task-1");
-
-    render(TaskDetail);
-
-    await fireEvent.click(screen.getByRole("button", { name: "このメモを削除" }));
-    expect(screen.getByText('Do you really delete "draft"?')).toBeInTheDocument();
-
-    await fireEvent.click(screen.getByRole("button", { name: "ok" }));
-    await tick();
-
-    expect(get(tree_data).data.children[0].data.memo).toEqual([]);
-    expect(screen.getByText("メモはまだありません")).toBeInTheDocument();
-  });
-
-  test("creates the first memo from the tab add action", async () => {
-    table_selected_id.set("task-1");
-    render(TaskDetail);
-
-    await fireEvent.click(screen.getByRole("button", { name: "メモを追加" }));
-    await tick();
-
-    expect(screen.getByRole("button", { name: "メモ「memo」を選択" })).toHaveClass("selected");
-    expect(get(tree_data).data.children[0].data.memo).toEqual([
-      expect.objectContaining({ title: "memo", content: "" }),
-    ]);
-  });
-
-  test("reorders memo tabs and writes the new order into task data", async () => {
-    const project = createProjectData();
-    project.data.children[0].data.memo = [
-      { id: "memo-first", title: "first", content: "" },
-      { id: "memo-second", title: "second", content: "" },
-    ];
-    tree_data.set(project);
-    table_selected_id.set("task-1");
-
-    render(TaskDetail);
-
-    const firstTab = screen.getByRole("button", { name: "メモ「first」を選択" });
-    const secondTab = screen.getByRole("button", { name: "メモ「second」を選択" });
-    const dataTransfer = { effectAllowed: "", dropEffect: "" };
-    const dragStart = new Event("dragstart", { bubbles: true, cancelable: true });
-    Object.defineProperty(dragStart, "dataTransfer", { value: dataTransfer });
-    const drop = new Event("drop", { bubbles: true, cancelable: true });
-    Object.defineProperties(drop, {
-      dataTransfer: { value: dataTransfer },
-      clientX: { value: 0 },
-    });
-
-    secondTab.dispatchEvent(dragStart);
-    firstTab.dispatchEvent(drop);
-    await tick();
-
-    expect(get(tree_data).data.children[0].data.memo.map((memo) => memo.id)).toEqual([
-      "memo-second",
-      "memo-first",
-    ]);
-  });
-
-  test("saves memo tags immediately and updates the tag index", async () => {
-    table_selected_id.set("task-2");
-    render(TaskDetail);
-
-    // タスク自身のタグ欄とメモのタグ欄が同居するので、メモ側を明示的に選ぶ。
-    const tagInput = document.querySelector('.tag-input[aria-label="メモタグ"]');
-    await fireEvent.input(tagInput, { target: { value: "Design " } });
-    await fireEvent.keyDown(tagInput, { key: "Enter" });
-    await tick();
-
-    expect(get(tree_data).data.children[1].data.memo[0].tags).toEqual(["design"]);
-    expect(get(tag_index).get("design")).toEqual(new Set(["task-2"]));
-    expect(screen.getByLabelText("Remove tag design")).toBeInTheDocument();
-  });
-
-  test("converts the selected memo format after warning", async () => {
-    const project = createProjectData();
-    project.data.children[0].data.memo = [
-      {
-        id: "memo-quill",
-        title: "quill",
-        content: { ops: [{ insert: "hello\n" }] },
-        tags: [],
-        format: "quill",
-      },
-    ];
+    project.data.children[0].data.body = { ops: [{ insert: "hello\n" }] };
+    project.data.children[0].data.format = "quill";
     tree_data.set(project);
     table_selected_id.set("task-1");
 
@@ -672,27 +495,34 @@ describe("TaskDetail", () => {
     await fireEvent.click(screen.getByRole("button", { name: "ok" }));
     await tick();
 
-    const memo = get(tree_data).data.children[0].data.memo[0];
-    expect(memo.format).toBe("markdown");
-    expect(memo.content).toBe("hello");
-    expect(screen.getByRole("button", { name: "Markdown形式を使用" })).toHaveAttribute(
-      "aria-pressed",
-      "true"
-    );
+    const data = get(tree_data).data.children[0].data;
+    expect(data.format).toBe("markdown");
+    expect(data.body).toBe("hello");
     expect(screen.getByTestId("memo-stub")).toHaveAttribute("data-format", "markdown");
   });
 
-  test("keeps the converted format when the previous editor saves during remount", async () => {
+  test("本文が空なら、確認を出さずにそのまま形式を変える", async () => {
     const project = createProjectData();
-    project.data.children[0].data.memo = [
-      {
-        id: "memo-markdown",
-        title: "markdown",
-        content: "before",
-        tags: [],
-        format: "markdown",
-      },
-    ];
+    project.data.children[0].data.body = "";
+    project.data.children[0].data.format = "markdown";
+    tree_data.set(project);
+    table_selected_id.set("task-1");
+
+    render(TaskDetail);
+
+    await fireEvent.click(screen.getByRole("button", { name: "Quill形式を使用" }));
+    await tick();
+
+    expect(screen.queryByText(/情報が損なわれる可能性/)).not.toBeInTheDocument();
+    expect(get(tree_data).data.children[0].data.format).toBe("quill");
+  });
+
+  // 実際にあったバグの型。形式を変えた直後、前のエディタが破棄されるときに
+  // 遅れて保存してくると、変換後の形式を古い中身で踏み潰してしまう。
+  test("形式を変えた直後に前のエディタが保存しても、変換後の形式が残る", async () => {
+    const project = createProjectData();
+    project.data.children[0].data.body = "before";
+    project.data.children[0].data.format = "markdown";
     tree_data.set(project);
     table_selected_id.set("task-1");
     window.__memoStubSaveOnDestroy = "stale markdown save";
@@ -703,78 +533,19 @@ describe("TaskDetail", () => {
     await fireEvent.click(screen.getByRole("button", { name: "ok" }));
     await tick();
 
-    const memo = get(tree_data).data.children[0].data.memo[0];
-    expect(memo.format).toBe("quill");
-    expect(memo.content).toEqual({ ops: [{ insert: "stale markdown save\n" }] });
-    expect(screen.getByRole("button", { name: "Quill形式を使用" })).toHaveAttribute(
-      "aria-pressed",
-      "true"
-    );
+    const data = get(tree_data).data.children[0].data;
+    expect(data.format).toBe("quill");
     expect(screen.getByTestId("memo-stub")).toHaveAttribute("data-format", "quill");
   });
 
-  test("resets the selected memo tab when the selected task changes", async () => {
-    const project = createProjectData();
-    project.data.children[0].data.memo = [
-      { id: "memo-draft", title: "draft", content: "" },
-      { id: "memo-notes", title: "notes", content: "" },
-    ];
-    tree_data.set(project);
-    table_selected_id.set("task-1");
-
-    render(TaskDetail);
-
-    await fireEvent.click(screen.getByRole("button", { name: "メモ「notes」を選択" }));
-    expect(screen.getByRole("button", { name: "メモ「notes」を選択" })).toHaveClass("selected");
-
-    table_selected_id.set("task-2");
-    await tick();
-
-    expect(screen.getByRole("button", { name: "メモ「review」を選択" })).toHaveClass("selected");
-  });
-
-  test("shows empty content after switching from existing memo to new empty memo and back", async () => {
-    const project = createProjectData();
-    project.data.children[0].data.memo = [
-      { id: "memo-existing", title: "existing", content: "some content" },
-    ];
-    tree_data.set(project);
-    table_selected_id.set("task-1");
-
-    const { container } = render(TaskDetail);
-
-    // Add a new empty memo
-    const addButton = container.querySelectorAll(".memotab-control button")[0];
-    await fireEvent.click(addButton);
-    await tick();
-
-    // Now on the new empty memo (index 1) - verify "memo" tab is selected
-    expect(screen.getByRole("button", { name: "メモ「memo」を選択" })).toHaveClass("selected");
-
-    // Switch to existing memo (index 0)
-    await fireEvent.click(screen.getByRole("button", { name: "メモ「existing」を選択" }));
-    await tick();
-    expect(screen.getByRole("button", { name: "メモ「existing」を選択" })).toHaveClass("selected");
-
-    // Switch back to the empty memo (index 1)
-    await fireEvent.click(screen.getByRole("button", { name: "メモ「memo」を選択" }));
-    await tick();
-
-    expect(screen.getByRole("button", { name: "メモ「memo」を選択" })).toHaveClass("selected");
-    // content should be empty string for the new empty memo
-    expect(screen.getByTestId("memo-stub").textContent.trim()).toBe("");
-  });
-
-  test("does not apply a workspace memo save after switching to Projects with the same ids", async () => {
+  // 保存先を切り替えた直後に、前の保存先向けの保存が遅れて届くことがある。
+  // id が同じでも、別の保存先の内容を書き換えてはいけない。
+  test("保存先を切り替えたあとに、前の保存先の本文保存を適用しない", async () => {
     const workspaceProject = createProjectData();
-    workspaceProject.data.children[0].data.memo = [
-      { id: "memo-shared", title: "shared", content: "workspace old" },
-    ];
+    workspaceProject.data.children[0].data.body = "workspace old";
 
     const projectsProject = createProjectData();
-    projectsProject.data.children[0].data.memo = [
-      { id: "memo-shared", title: "shared", content: "project old" },
-    ];
+    projectsProject.data.children[0].data.body = "project old";
 
     workspace_store.set({
       workspaces: [],
@@ -790,7 +561,8 @@ describe("TaskDetail", () => {
     render(TaskDetail);
 
     await fireEvent.click(screen.getByTestId("memo-save"));
-    expect(get(tree_data).data.children[0].data.memo[0].content).toBe("edited");
+    await tick();
+    expect(get(tree_data).data.children[0].data.body).toBe("edited");
 
     selected_type.set("Projects");
     selected_id.set("project-1");
@@ -799,143 +571,6 @@ describe("TaskDetail", () => {
 
     await new Promise((resolve) => setTimeout(resolve, 600));
 
-    expect(get(tree_data).data.children[0].data.memo[0].content).toBe("project old");
-  });
-
-  test("duplicates a memo into another task via the cross-task picker", async () => {
-    const project = createProjectData();
-    project.data.children[0].data.memo = [
-      {
-        id: "memo-draft",
-        title: "draft",
-        content: "hello",
-        tags: ["design"],
-        format: "markdown",
-      },
-    ];
-    tree_data.set(project);
-    table_selected_id.set("task-1");
-
-    render(TaskDetail);
-
-    await fireEvent.click(screen.getByRole("button", { name: "メモ「draft」を選択" }));
-    await fireEvent.click(screen.getByRole("button", { name: "このメモを複製" }));
-    await tick();
-    await fireEvent.click(screen.getByRole("menuitem", { name: "別のタスクへ複製…" }));
-    await tick();
-
-    await fireEvent.click(within(screen.getByRole("dialog")).getByText("Second Task"));
-    await fireEvent.click(screen.getByRole("button", { name: "複製" }));
-    await tick();
-
-    // Source task is untouched — no in-place insert happened.
-    expect(get(tree_data).data.children[0].data.memo).toEqual([
-      expect.objectContaining({ id: "memo-draft", title: "draft" }),
-    ]);
-
-    // Target task gets an appended copy with a fresh id, the same title
-    // (no collision), and copied content/format/tags.
-    const targetMemo = get(tree_data).data.children[1].data.memo;
-    expect(targetMemo).toHaveLength(2);
-    expect(targetMemo[1]).toEqual(
-      expect.objectContaining({
-        title: "draft",
-        content: "hello",
-        tags: ["design"],
-        format: "markdown",
-      })
-    );
-    expect(targetMemo[1].id).not.toBe("memo-draft");
-
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  });
-
-  test("resolves title collisions against the target task's memos when duplicating across tasks", async () => {
-    const project = createProjectData();
-    project.data.children[0].data.memo = [
-      { id: "memo-draft", title: "draft", content: "hello", tags: [] },
-    ];
-    project.data.children[1].data.memo = [
-      { id: "memo-review", title: "review", content: "" },
-      { id: "memo-existing-draft", title: "draft", content: "existing" },
-    ];
-    tree_data.set(project);
-    table_selected_id.set("task-1");
-
-    render(TaskDetail);
-
-    await fireEvent.click(screen.getByRole("button", { name: "メモ「draft」を選択" }));
-    await fireEvent.click(screen.getByRole("button", { name: "このメモを複製" }));
-    await tick();
-    await fireEvent.click(screen.getByRole("menuitem", { name: "別のタスクへ複製…" }));
-    await tick();
-
-    await fireEvent.click(within(screen.getByRole("dialog")).getByText("Second Task"));
-    await fireEvent.click(screen.getByRole("button", { name: "複製" }));
-    await tick();
-
-    const targetMemo = get(tree_data).data.children[1].data.memo;
-    expect(targetMemo.map((entry) => entry.title)).toEqual(["review", "draft", "draft のコピー"]);
-  });
-
-  test("hides archived tasks from the cross-task duplicate picker", async () => {
-    const project = createProjectData();
-    project.data.children[0].data.memo = [{ id: "memo-draft", title: "draft", content: "" }];
-    project.data.children.push({
-      id: "task-archived",
-      data: { name: "Archived Task", status: "Open", "due date": undefined, memo: [] },
-      children: [],
-      archived: true,
-      archivedAt: new Date().toISOString(),
-    });
-    tree_data.set(project);
-    table_selected_id.set("task-1");
-
-    render(TaskDetail);
-
-    await fireEvent.click(screen.getByRole("button", { name: "メモ「draft」を選択" }));
-    await fireEvent.click(screen.getByRole("button", { name: "このメモを複製" }));
-    await tick();
-    await fireEvent.click(screen.getByRole("menuitem", { name: "別のタスクへ複製…" }));
-    await tick();
-
-    const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByText("Second Task")).toBeInTheDocument();
-    expect(within(dialog).queryByText("Archived Task")).not.toBeInTheDocument();
-  });
-
-  test("disables memo duplication while workspace memo bodies are still hydrating", async () => {
-    const project = createProjectData();
-    project.data.children[1].data.memo = [
-      {
-        id: "memo-review",
-        title: "review",
-        content: "",
-        tags: [],
-        format: "markdown",
-        bodyLoaded: false,
-      },
-    ];
-    tree_data.set(project);
-    workspace_store.set({
-      workspaces: [],
-      activeWorkspacePath: "C:\\workspace",
-      activeProjectDir: "C:\\workspace\\project-1",
-      projects: [],
-    });
-    selected_type.set("WorkspaceProject");
-    table_selected_id.set("task-2");
-    window.electronAPI = {
-      // Never resolves — simulates hydration still in flight.
-      wsReadTaskMemos: vi.fn().mockReturnValue(new Promise(() => {})),
-    };
-
-    render(TaskDetail);
-
-    await waitFor(() => {
-      expect(window.electronAPI.wsReadTaskMemos).toHaveBeenCalled();
-    });
-
-    expect(screen.getByRole("button", { name: "このメモを複製" })).toBeDisabled();
+    expect(get(tree_data).data.children[0].data.body).toBe("project old");
   });
 });

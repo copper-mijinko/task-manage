@@ -165,7 +165,6 @@ function createInboxStore(): InboxStore {
         name: "Inbox",
         status: "Open",
         parents: [],
-        memos: [],
         createdAt: new Date().toISOString().slice(0, 10),
       };
       const tasks: WorkspaceTask[] = [

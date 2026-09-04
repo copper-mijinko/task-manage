@@ -68,7 +68,9 @@ describe("workspace tree conversion", () => {
     ]);
   });
 
-  it("preserves existing memo content when a workspace memo body is not loaded", () => {
+  // 一覧目的の読み出しでは本文を読まない（`bodyLoaded: false`）。そこで空の
+  // 本文を書き戻すと「開かなかったノードの本文が消える」事故になる。
+  it("本文を読み込んでいないノードは、既存の本文をそのまま残す", () => {
     const tasks = projectDataToWorkspaceTasks(
       {
         headers: [],
@@ -79,16 +81,9 @@ describe("workspace tree conversion", () => {
             status: "Open",
             "start date": undefined,
             "due date": undefined,
-            memo: [
-              {
-                id: "memo-1",
-                title: "Notes",
-                content: "",
-                tags: ["keep"],
-                format: "markdown",
-                bodyLoaded: false,
-              },
-            ],
+            body: "",
+            format: "markdown",
+            bodyLoaded: false,
           },
           children: [],
         },
@@ -99,22 +94,15 @@ describe("workspace tree conversion", () => {
           name: "Project",
           status: "Open",
           parents: [],
-          memos: [
-            {
-              id: "memo-1",
-              title: "Notes",
-              content: "Existing body",
-              tags: ["keep"],
-              format: "markdown",
-            },
-          ],
+          body: "Existing body",
+          format: "markdown",
           createdAt: "2026-05-20",
         },
       }
     );
 
-    expect(tasks[0].memos[0].content).toBe("Existing body");
-    expect(tasks[0].memos[0].bodyLoaded).toBe(false);
+    expect(tasks[0].body).toBe("Existing body");
+    expect(tasks[0].bodyLoaded).toBe(false);
   });
 
   it("round-trips task attachments through workspace tree conversion", () => {

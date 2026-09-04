@@ -22,7 +22,9 @@
   import debounce from "lodash/debounce";
   import { onDestroy } from "svelte";
   import { get } from "svelte/store";
-  import MemoTab from "@features/memos/components/MemoTab.svelte";
+  import Memo from "@features/memos/components/Memo.svelte";
+  import SegmentedControl from "@lib/primitives/SegmentedControl.svelte";
+  import Dialog from "@lib/primitives/Dialog.svelte";
   import Card from "@lib/primitives/Card.svelte";
   import IconButton from "@lib/primitives/IconButton.svelte";
   import StatusSelect from "@features/tasks/components/StatusSelect.svelte";
@@ -39,6 +41,7 @@
   } from "@features/workspace/utils/workspace_tree";
   import {
     convertMemoContent,
+    isEmptyMemoContent,
     isQuillDelta,
     normalizeMemoFormat,
   } from "@features/memos/utils/memo_utils";
@@ -52,13 +55,23 @@
     $table_selected_id && $tree_data ? getNode($table_selected_id, $tree_data.data) : undefined;
   $: name = node ? node.data["name"] : "Select Task";
   $: cardTitle = titleOverride || name;
-  $: memo = node ? node.data["memo"] : [];
+  $: nodeBody = node ? (node.data["body"] ?? "") : "";
+  $: bodyFormat = normalizeMemoFormat(node?.data?.["format"], defaultMemoFormat);
+  // `[[…]]` の補完候補。統一後は「同じタスクのメモ」ではなく、自分の子ノードが
+  // それにあたる（旧メモは子ノードになる）。
+  $: siblingNodeNames = (node?.children ?? [])
+    .map((child) => child?.data?.name)
+    .filter((childName) => Boolean(childName) && childName !== node?.data?.name);
   $: attachments = node ? (node.data["attachments"] ?? []) : [];
   $: projectTree = $tree_data?.data ?? null;
   $: isArchived = isNodeEffectivelyArchived($table_selected_id, $tree_data?.data);
   $: isWorkspaceProject = $selected_type === "WorkspaceProject";
   $: workspaceProjectDir = isWorkspaceProject ? $workspace_store.activeProjectDir : null;
   $: defaultMemoFormat = isWorkspaceProject ? "markdown" : "quill";
+  const bodyFormatOptions = [
+    { value: "markdown", label: "Markdown", ariaLabel: "Markdown形式を使用" },
+    { value: "quill", label: "Quill", ariaLabel: "Quill形式を使用" },
+  ];
   $: isDark = $theme === "dark";
   const detailDateStyle =
     "border: 0; padding: 0 var(--sp7) 0 var(--sp2); font-size: 1rem; background-color: transparent;";
@@ -107,66 +120,53 @@
     context.tableSelectedId === $table_selected_id &&
     context.activeProjectDir === $workspace_store.activeProjectDir;
 
-  let memoHydrationKey = "";
-  let memoBodyLoading = false;
+  let bodyHydrationKey = "";
+  let bodyLoading = false;
 
-  function mergeLoadedMemos(currentMemos, loadedMemos) {
-    const loadedById = new Map(loadedMemos.map((entry) => [entry.id, entry]));
-    return (currentMemos ?? []).map((entry) => {
-      const loaded = loadedById.get(entry.id);
-      return loaded ? { ...entry, ...loaded, bodyLoaded: true } : entry;
-    });
-  }
-
-  async function hydrateWorkspaceTaskMemos(taskId, editContext = getEditContext()) {
+  /**
+   * 開いたノードの本文だけを読みに行く。
+   *
+   * プロジェクト読み出しは一覧目的なので本文を読まない（`bodyLoaded: false`）。
+   * 統一でノード数が大きく増えるため、ここを一括読みに戻すと開くたびに全文を
+   * 読むことになる。
+   */
+  async function hydrateWorkspaceNodeBody(taskId, editContext = getEditContext()) {
     if (!editContext.activeProjectDir || !taskId) return;
     const key = `${editContext.activeProjectDir}:${taskId}`;
-    if (memoHydrationKey === key) return;
+    if (bodyHydrationKey === key) return;
 
-    memoHydrationKey = key;
-    memoBodyLoading = true;
+    bodyHydrationKey = key;
+    bodyLoading = true;
     try {
-      const result = await platform.wsReadTaskMemos(editContext.activeProjectDir, taskId);
-      if (!contextMatches(editContext) || !result?.memos) return;
+      const result = await platform.wsReadTaskBody(editContext.activeProjectDir, taskId);
+      if (!contextMatches(editContext) || !result || result.error) return;
 
       const liveTreeData = get(tree_data);
       if (!liveTreeData?.data) return;
-      const liveNode = getNode(taskId, liveTreeData.data);
-      if (!liveNode) return;
+      if (!getNode(taskId, liveTreeData.data)) return;
 
-      const nextMemos = mergeLoadedMemos(liveNode.data.memo ?? [], result.memos);
-      const data = updateNodeDataById(liveTreeData.data, taskId, { memo: nextMemos });
+      const loaded = { body: result.body, format: result.format, bodyLoaded: true };
+      const data = updateNodeDataById(liveTreeData.data, taskId, loaded);
       if (data !== liveTreeData.data) {
         tree_data.setFromSource({ ...liveTreeData, data });
       }
       workspace_tasks_cache.update((cache) => {
         const cachedTask = cache[taskId];
         if (!cachedTask) return cache;
-        return {
-          ...cache,
-          [taskId]: {
-            ...cachedTask,
-            memos: mergeLoadedMemos(cachedTask.memos ?? [], result.memos),
-          },
-        };
+        return { ...cache, [taskId]: { ...cachedTask, ...loaded } };
       });
     } finally {
       if (contextMatches(editContext)) {
-        memoBodyLoading = false;
+        bodyLoading = false;
       }
-      if (memoHydrationKey === key) {
-        memoHydrationKey = "";
+      if (bodyHydrationKey === key) {
+        bodyHydrationKey = "";
       }
     }
   }
 
-  $: if (
-    isWorkspaceProject &&
-    workspaceProjectDir &&
-    node?.id &&
-    memo.some((entry) => entry?.bodyLoaded === false)
-  ) {
-    hydrateWorkspaceTaskMemos(node.id);
+  $: if (isWorkspaceProject && workspaceProjectDir && node?.id && node.data?.bodyLoaded === false) {
+    hydrateWorkspaceNodeBody(node.id);
   }
 
   const changeData = (node, key, value, editContext = getEditContext()) => {
@@ -194,22 +194,6 @@
       return undefined;
     }
     return getNode(editContext.tableSelectedId, liveTreeData.data);
-  };
-
-  const changeMemoAtIndex = (selectedMemoIndex, updater, editContext = getEditContext()) => {
-    const liveNode = getLiveNode(editContext);
-    if (!liveNode) return false;
-
-    const updatedMemo = [...(liveNode.data["memo"] ?? [])];
-    const currentMemo = updatedMemo[selectedMemoIndex];
-    if (!currentMemo) return false;
-
-    const nextMemo = updater(currentMemo);
-    if (!nextMemo) return false;
-
-    updatedMemo[selectedMemoIndex] = nextMemo;
-    changeData(liveNode, "memo", updatedMemo, editContext);
-    return true;
   };
 
   $: editContextKey = [
@@ -241,157 +225,76 @@
     changeTaskField("tags", normalizeTagList(nextTags));
   };
 
-  const addMemo = (newMemoTitle) => {
-    if (newMemoTitle) {
-      const editContext = getEditContext();
-      const liveNode = getLiveNode(editContext);
-      if (!liveNode) return false;
-      let newMemo = {
-        id: uuidV4(),
-        title: newMemoTitle,
-        content: "",
-        tags: [],
-        format: defaultMemoFormat,
-      };
-      changeData(liveNode, "memo", [...(liveNode.data.memo ?? []), newMemo], editContext);
-      return true;
-    }
-  };
-  const copyMemo = (index) => {
+  /**
+   * ノード本文の保存。
+   *
+   * ノードは本文を 1 つだけ持つ（「1 つのメモ ＝ 1 つのノード」）。複数の記録を
+   * 残したいときはタブではなく子ノードを足す。
+   */
+  const saveBody = (editedContent) => {
     const editContext = getEditContext();
     const liveNode = getLiveNode(editContext);
     if (!liveNode) return false;
-    const currentMemo = (liveNode.data.memo ?? [])[index];
-    if (!currentMemo) return false;
-
-    const existingTitles = new Set((liveNode.data.memo ?? []).map((entry) => entry.title));
-    const baseTitle = `${currentMemo.title} のコピー`;
-    let newTitle = baseTitle;
-    let suffix = 2;
-    while (existingTitles.has(newTitle)) {
-      newTitle = `${baseTitle} ${suffix}`;
-      suffix += 1;
-    }
-
-    const newMemo = {
-      ...currentMemo,
-      id: uuidV4(),
-      title: newTitle,
-      tags: [...(currentMemo.tags ?? [])],
-    };
-
-    const updatedMemo = [...(liveNode.data.memo ?? [])];
-    updatedMemo.splice(index + 1, 0, newMemo);
-    changeData(liveNode, "memo", updatedMemo, editContext);
-    return true;
-  };
-  // Cross-task duplicate: appends a copy of memo[index] (from the currently
-  // selected task) onto targetTaskId's memo list. Scoped to the current
-  // project — targetTaskId is looked up in the same tree_data as the source.
-  // Unlike copyMemo (in-place), title collision is checked against the
-  // TARGET task's memos, and the original title is kept unchanged when it
-  // doesn't collide there.
-  const copyMemoToTask = (index, targetTaskId) => {
-    const editContext = getEditContext();
-    const liveNode = getLiveNode(editContext);
-    if (!liveNode) return { success: false, error: "コピー元のタスクが見つかりません" };
-
-    const sourceMemo = (liveNode.data.memo ?? [])[index];
-    if (!sourceMemo) return { success: false, error: "コピー元のメモが見つかりません" };
-    if (sourceMemo.bodyLoaded === false) {
-      // Memo body not hydrated yet (workspace project) — copying now would
-      // duplicate a stub instead of the real content.
-      return { success: false, error: "メモを読み込み中です。しばらく待ってから複製してください" };
-    }
-
-    const liveTreeData = get(tree_data);
-    if (!liveTreeData?.data) return { success: false, error: "プロジェクトを読み込めませんでした" };
-
-    const targetNode = getNode(targetTaskId, liveTreeData.data);
-    if (!targetNode) return { success: false, error: "複製先のタスクが見つかりません" };
-    if (isNodeEffectivelyArchived(targetTaskId, liveTreeData.data)) {
-      return { success: false, error: "アーカイブ済みのタスクへは複製できません" };
-    }
-
-    const targetMemos = targetNode.data.memo ?? [];
-    const existingTitles = new Set(targetMemos.map((entry) => entry.title));
-    let newTitle = sourceMemo.title;
-    if (existingTitles.has(newTitle)) {
-      const baseTitle = `${sourceMemo.title} のコピー`;
-      newTitle = baseTitle;
-      let suffix = 2;
-      while (existingTitles.has(newTitle)) {
-        newTitle = `${baseTitle} ${suffix}`;
-        suffix += 1;
-      }
-    }
-
-    const newMemo = {
-      ...sourceMemo,
-      id: uuidV4(),
-      title: newTitle,
-      tags: [...(sourceMemo.tags ?? [])],
-    };
-
-    changeData(targetNode, "memo", [...targetMemos, newMemo], editContext);
-    return { success: true, targetTaskId, title: newTitle };
-  };
-  const deleteMemo = (index) => {
-    const editContext = getEditContext();
-    const liveNode = getLiveNode(editContext);
-    if (!liveNode) return false;
+    const targetFormat = normalizeMemoFormat(liveNode.data.format, defaultMemoFormat);
+    const sourceFormat = isQuillDelta(editedContent) ? "quill" : "markdown";
     changeData(
       liveNode,
-      "memo",
-      (liveNode.data.memo ?? []).filter((_, i) => i !== index),
+      "body",
+      convertMemoContent(editedContent, sourceFormat, targetFormat),
       editContext
     );
     return true;
   };
-  const saveMemo = (editedContent, selectedMemoIndex) => {
-    const editContext = getEditContext();
-    return changeMemoAtIndex(
-      selectedMemoIndex,
-      (currentMemo) => {
-        const targetFormat = normalizeMemoFormat(currentMemo.format, defaultMemoFormat);
-        const sourceFormat = isQuillDelta(editedContent) ? "quill" : "markdown";
-        return {
-          ...currentMemo,
-          content: convertMemoContent(editedContent, sourceFormat, targetFormat),
-        };
-      },
-      editContext
-    );
+
+  let show_format_confirm = false;
+  let pendingBodyFormat = null;
+
+  const toggle_format_confirm = () => {
+    show_format_confirm = !show_format_confirm;
+    if (!show_format_confirm) pendingBodyFormat = null;
   };
-  const renameMemo = (newMemoTitle, selectedMemoIndex) => {
-    if (newMemoTitle) {
-      const editContext = getEditContext();
-      memo = [...node.data["memo"]];
-      memo[selectedMemoIndex].title = newMemoTitle;
-      changeDataDebounce(node, "memo", memo, editContext);
-      return true;
+
+  const callback_format_confirm = () => {
+    const nextFormat = pendingBodyFormat;
+    pendingBodyFormat = null;
+    if (nextFormat) applyBodyFormat(nextFormat);
+  };
+
+  /**
+   * 形式の切り替えを要求する。
+   *
+   * Markdown ⇄ Quill の変換では装飾や埋め込みが落ちうるので、中身があるときは
+   * 必ず確認を挟む。空の本文なら落ちるものが無いので、そのまま変換する。
+   */
+  const requestBodyFormat = (nextFormat) => {
+    const liveNode = getLiveNode(getEditContext());
+    if (!liveNode) return;
+    if (normalizeMemoFormat(liveNode.data.format, defaultMemoFormat) === nextFormat) return;
+    pendingBodyFormat = nextFormat;
+    if (isEmptyMemoContent(liveNode.data.body)) {
+      callback_format_confirm();
+      return;
     }
+    show_format_confirm = true;
   };
-  const reorderMemo = (fromIndex, toIndex) => {
+
+  /** 本文の形式を切り替える。中身も合わせて変換する。 */
+  const applyBodyFormat = (nextFormat) => {
     const editContext = getEditContext();
     const liveNode = getLiveNode(editContext);
     if (!liveNode) return false;
-    const updatedMemo = [...(liveNode.data["memo"] ?? [])];
-    if (fromIndex < 0 || fromIndex >= updatedMemo.length) return false;
-    if (toIndex < 0 || toIndex >= updatedMemo.length) return false;
-    const [moved] = updatedMemo.splice(fromIndex, 1);
-    updatedMemo.splice(toIndex, 0, moved);
-    changeData(liveNode, "memo", updatedMemo, editContext);
-    return true;
-  };
-  const saveMemoTags = (selectedMemoIndex, tags) => {
-    const editContext = getEditContext();
-    return changeMemoAtIndex(
-      selectedMemoIndex,
-      (currentMemo) => ({ ...currentMemo, tags }),
+    const currentFormat = normalizeMemoFormat(liveNode.data.format, defaultMemoFormat);
+    if (currentFormat === nextFormat) return false;
+    changeData(
+      liveNode,
+      "body",
+      convertMemoContent(liveNode.data.body, currentFormat, nextFormat),
       editContext
     );
+    changeData(liveNode, "format", nextFormat, editContext);
+    return true;
   };
+
   const saveAttachments = (nextAttachments) => {
     const editContext = getEditContext();
     const liveNode = getLiveNode(editContext);
@@ -399,23 +302,6 @@
     changeData(liveNode, "attachments", nextAttachments, editContext);
     return true;
   };
-  const changeMemoFormat = (selectedMemoIndex, nextFormat) => {
-    const editContext = getEditContext();
-    return changeMemoAtIndex(
-      selectedMemoIndex,
-      (currentMemo) => {
-        const currentFormat = normalizeMemoFormat(currentMemo.format, defaultMemoFormat);
-        if (currentFormat === nextFormat) return currentMemo;
-        return {
-          ...currentMemo,
-          format: nextFormat,
-          content: convertMemoContent(currentMemo.content, currentFormat, nextFormat),
-        };
-      },
-      editContext
-    );
-  };
-
   /**
    * 親の付け外し。
    *
@@ -989,13 +875,6 @@
               </div>
             </label>
 
-            <div class="detail-field">
-              <span class="detail-label" id="lbl-memo-count">メモ数</span>
-              <output class="detail-readonly" aria-labelledby="lbl-memo-count" aria-label="メモ数"
-                >{memo.length}</output
-              >
-            </div>
-
             {#if isWorkspaceProject && node && !isProjectRoot}
               <div class="detail-field detail-field-wide">
                 <span class="detail-label" id="lbl-task-parents">親</span>
@@ -1063,30 +942,44 @@
       ></div>
 
       <div class="memo-pane" class:archived={isArchived} bind:this={memoPane}>
-        <div class="memotab-container">
-          <MemoTab
-            {memo}
-            {saveMemo}
-            {addMemo}
-            {copyMemo}
-            {copyMemoToTask}
-            {projectTree}
-            {deleteMemo}
-            {renameMemo}
-            {reorderMemo}
-            {saveMemoTags}
-            {changeMemoFormat}
-            {allTags}
-            disabled={memoBodyLoading}
-            {isWorkspaceProject}
-            {defaultMemoFormat}
-            {workspaceProjectDir}
-            taskId={$table_selected_id ?? null}
-          />
+        <div class="body-container">
+          <div class="body-toolbar" data-page-search-skip>
+            <span class="body-label">本文</span>
+            <div class="body-format-control">
+              <SegmentedControl
+                options={bodyFormatOptions}
+                value={bodyFormat}
+                ariaLabel="本文の形式"
+                size="md"
+                disabled={isArchived || bodyLoading}
+                on:change={(e) => requestBodyFormat(e.detail.value)}
+              />
+            </div>
+          </div>
+          <div class="body-editor">
+            <Memo
+              saveMemo={saveBody}
+              content={nodeBody}
+              readOnly={isArchived || bodyLoading}
+              memoTitles={siblingNodeNames}
+              currentMemoTitle={node?.data?.name ?? ""}
+              {isWorkspaceProject}
+              format={bodyFormat}
+              {workspaceProjectDir}
+              taskId={$table_selected_id ?? null}
+            />
+          </div>
         </div>
       </div>
     </div>
   </Card>
+  <Dialog
+    show={show_format_confirm}
+    toggle={toggle_format_confirm}
+    header="本文形式の変換"
+    content={`Markdown と Quill の変換では、装飾や埋め込みなど一部の情報が損なわれる可能性があります。\n変換後は元に戻す / やり直しで取り消しできます。\n\nこのノードの本文を ${pendingBodyFormat === "markdown" ? "Markdown" : "Quill"} に変換しますか？`}
+    callback={callback_format_confirm}
+  />
 {:else}
   <div class="empty-state" role="status">
     <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -1210,7 +1103,7 @@
     flex: 0 0 0;
   }
   .task-detail-card-body.detail-mini .detail-container,
-  .task-detail-card-body.memo-mini .memotab-container {
+  .task-detail-card-body.memo-mini .body-container {
     display: none;
   }
   .card-split-resizer {
@@ -1383,12 +1276,6 @@
     border-color: var(--theme-color-Primary-main);
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--theme-color-Primary-main) 18%, transparent);
   }
-  .detail-readonly {
-    padding: var(--sp1) var(--sp2);
-    font-size: var(--font-body-md);
-    font-weight: 600;
-    color: var(--theme-color-Sub-main);
-  }
   .detail-control :global(.StatusContainer) {
     gap: var(--sp1);
     padding: 0 var(--sp1);
@@ -1404,8 +1291,9 @@
   .detail-control :global(.Date) {
     font-size: 1rem;
   }
-  .memotab-container {
+  .body-container {
     display: flex;
+    flex-direction: column;
     flex: 1;
     width: 100%;
     height: 100%;
@@ -1415,7 +1303,34 @@
     padding: var(--memotab-pad);
     overflow: hidden;
   }
-  .memotab-container > :global(.container) {
+  /* 見出しと形式切替の帯。タブが無くなったので、本文がどこから始まるかを
+     示すのはこの 1 行だけになる。 */
+  .body-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp2);
+    flex: 0 0 auto;
+    padding-bottom: var(--sp1);
+  }
+  .body-label {
+    font-size: var(--font-label-sm);
+    font-weight: 600;
+    color: color-mix(in srgb, var(--theme-color-Sub-main) 75%, transparent);
+  }
+  .body-format-control {
+    display: inline-flex;
+    align-items: center;
+    flex: 0 0 auto;
+  }
+  .body-editor {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .body-editor > :global(.container) {
     flex: 1 1 auto;
     min-width: 0;
     min-height: 0;

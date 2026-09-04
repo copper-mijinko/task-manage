@@ -180,16 +180,11 @@ export function comparableWorkspaceTask(task: WorkspaceTask) {
     // 並び順は辺の属性なので、親 id だけでなく order も差分に含める
     // （これを落とすと「親ごとの並べ替え」がディスクに書かれない）。
     parents: (task.parents ?? []).map((link) => ({ id: link.id, order: link.order ?? null })),
-    memos: (task.memos ?? []).map((memo) => ({
-      id: memo.id,
-      title: memo.title,
-      content: memoContentForCompare(memo.content),
-      tags: memo.tags ?? [],
-      format: memo.format ?? "markdown",
-      // kind を落とすと「種別だけ変えた」編集が差分なしと判定され、
-      // ディスクに書かれないまま画面とキャッシュだけが変わる。
-      order: memo.order ?? null,
-    })),
+    // 本文と形式を落とすと、本文だけを直した編集が「変更なし」と判定され、
+    // 画面とキャッシュだけが変わってディスクに書かれない。過去に kind で
+    // 実際に起きた事故と同じ形。
+    body: memoContentForCompare(task.body),
+    format: task.format ?? "markdown",
     attachments: (task.attachments ?? []).map((attachment) => ({
       id: attachment.id,
       name: attachment.name,

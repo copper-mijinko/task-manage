@@ -133,9 +133,9 @@ const electronAPI = {
     ipcRenderer.invoke("ws:set-project-order", { workspacePath, projects }),
   wsReadProject: (projectDir, options) =>
     ipcRenderer.invoke("ws:read-project", { projectDir, ...options }),
-  wsReadTaskMemos: (projectDir, taskId) =>
-    ipcRenderer.invoke("ws:read-task-memos", { projectDir, taskId }),
-  wsReadProjectMemos: (projectDir) => ipcRenderer.invoke("ws:read-project-memos", { projectDir }),
+  wsReadTaskBody: (projectDir, taskId) =>
+    ipcRenderer.invoke("ws:read-task-body", { projectDir, taskId }),
+  wsReadProjectBodies: (projectDir) => ipcRenderer.invoke("ws:read-project-bodies", { projectDir }),
   wsWriteTask: (projectDir, task) => ipcRenderer.invoke("ws:write-task", { projectDir, task }),
   wsSaveMemoImage: (projectDir, taskId, bytes, mimeType) =>
     ipcRenderer.invoke("ws:save-memo-image", { projectDir, taskId, bytes, mimeType }),

@@ -2,14 +2,10 @@ import type { MemoFormat } from "@features/memos/utils/memo_utils";
 
 export type WorkspaceTaskStatus = "Open" | "Pending" | "In Progress" | "Completed" | "Canceled";
 
-export interface WorkspaceMemo {
-  id: string;
-  title: string;
-  content: unknown;
-  tags: string[];
-  format?: MemoFormat;
-  order?: number;
-  bodyLoaded?: boolean;
+/** ノード本文の遅延読み込みで返るもの。 */
+export interface NodeBody {
+  body: unknown;
+  format: MemoFormat;
 }
 
 export interface WorkspaceAttachment {
@@ -45,7 +41,17 @@ export interface WorkspaceTask {
   dueDate?: string; // YYYY-MM-DD
   /** Empty array means this is the root task (project itself). */
   parents: WorkspaceParentLink[];
-  memos: WorkspaceMemo[];
+  /**
+   * ノード本文。`_index.md` のフロントマターより後ろがそのまま入る。
+   *
+   * 「1 つのメモ ＝ 1 つのノード」なので、ノードは 1 つだけ本文を持つ。
+   * 複数の記録を持ちたいときは、タブではなく**子ノード**にする。
+   */
+  body?: unknown;
+  /** 本文の形式。省略時はワークスペースでは `markdown`。 */
+  format?: MemoFormat;
+  /** 本文を読み込み済みか。一覧目的の読み出しでは本文を読まない。 */
+  bodyLoaded?: boolean;
   /** Tags on the task itself. Persisted in `_index.md` / `_project.md` frontmatter. */
   tags?: string[];
   attachments?: WorkspaceAttachment[];

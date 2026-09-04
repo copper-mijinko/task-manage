@@ -23,7 +23,7 @@ function createProjectData(tags = ["design"]) {
             name: "Task",
             status: "Open",
             "due date": undefined,
-            memo: [{ id: "memo-1", title: "Memo", content: "", tags }],
+            tags,
           },
           children: [],
         },
@@ -39,7 +39,9 @@ describe("tag stores", () => {
     tree_data.set(createProjectData());
   });
 
-  test("indexes memo tags by task id", () => {
+  // 旧メモのタグは、取り込みのときにそのノードのタグとして引き継がれる。
+  // 索引の持ち主はノードだけになった。
+  test("indexes node tags by node id", () => {
     expect(get(tag_index).get("design")).toEqual(new Set(["task-1"]));
   });
 

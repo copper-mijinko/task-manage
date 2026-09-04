@@ -265,34 +265,29 @@ describe("ProjectPage", () => {
     expect(screen.getByTestId("task-detail-stub")).toBeInTheDocument();
   });
 
-  test("bulk converts current project memos to Markdown after confirmation", async () => {
+  // 一括変換の対象は「本文を持つノード」。メモがノードになったので、
+  // 一覧はメモ名ではなくノード名で並ぶ。
+  test("プロジェクト全体の本文を、確認のあと Markdown へ一括変換する", async () => {
     const data = createProjectData();
-    data.data.children[0].data.memo = [
-      {
-        id: "memo-quill",
-        title: "Quill memo",
-        content: { ops: [{ insert: "launch\n" }] },
-        tags: [],
-        format: "quill",
-      },
-    ];
+    data.data.children[0].data.body = { ops: [{ insert: "launch\n" }] };
+    data.data.children[0].data.format = "quill";
     tree_data.set(data);
 
     render(ProjectPage);
 
     await fireEvent.click(screen.getByRole("button", { name: "全メモをMarkdownへ変換" }));
     expect(screen.getByText("変換対象（1件）")).toBeInTheDocument();
-    expect(screen.getByText("First Task / Quill memo")).toBeInTheDocument();
+    expect(screen.getByText("First Task")).toBeInTheDocument();
     expect(screen.getByText(/情報が損なわれる可能性/)).toBeInTheDocument();
 
     await fireEvent.click(screen.getByRole("button", { name: "変換" }));
     await tick();
 
-    const memo = get(tree_data).data.children[0].data.memo[0];
-    expect(memo.format).toBe("markdown");
-    expect(memo.content).toBe("launch");
+    const node = get(tree_data).data.children[0].data;
+    expect(node.format).toBe("markdown");
+    expect(node.body).toBe("launch");
     expect(screen.getByText("変換済み（1件）")).toBeInTheDocument();
-    expect(screen.getByText(/OK: First Task \/ Quill memo/)).toBeInTheDocument();
+    expect(screen.getByText(/OK: First Task/)).toBeInTheDocument();
     expect(screen.getByText("変換が完了しました。")).toBeInTheDocument();
   });
 

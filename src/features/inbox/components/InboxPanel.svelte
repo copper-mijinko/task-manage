@@ -267,6 +267,13 @@
       sendError = result.error || "送信に失敗しました";
     }
   }
+
+  /** 本文を持つか。Quill の本文は Delta なので、文字列とは限らない。 */
+  function hasBody(item) {
+    const body = item?.body;
+    if (typeof body === "string") return body.trim().length > 0;
+    return Boolean(body && Object.keys(body).length > 0);
+  }
 </script>
 
 <div class="InboxRoot">
@@ -485,18 +492,20 @@
                         on:change={(e) => handleDueChange(item.id, e)}
                       />
                     </div>
+                    <!-- ノードは本文を 1 つだけ持つので、件数ではなく有無を出す。
+                         0 件を並べても中身のある行を探しにくくなるだけ。 -->
                     <span
                       class="MemoBadge"
-                      class:MemoBadgeEmpty={(item.memos?.length ?? 0) === 0}
-                      aria-hidden={(item.memos?.length ?? 0) === 0 ? "true" : undefined}
+                      class:MemoBadgeEmpty={!hasBody(item)}
+                      aria-hidden={!hasBody(item) ? "true" : undefined}
                       use:tooltip={{
-                        content: `メモ ${item.memos?.length ?? 0}件`,
-                        disable: (item.memos?.length ?? 0) === 0,
+                        content: "本文あり",
+                        disable: !hasBody(item),
                         color: "var(--theme-color-Sub-main)",
                         backgroundColor: "var(--theme-color-Main-light)",
                       }}
                     >
-                      📝 {item.memos?.length ?? 0}
+                      {hasBody(item) ? "📝" : "—"}
                     </span>
                   </li>
                 {/each}
