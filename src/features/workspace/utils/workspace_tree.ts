@@ -2,7 +2,7 @@
 import type { WorkspaceParentLink, WorkspaceTask, WorkspaceTaskStatus } from "@app-types/workspace";
 import { normalizeParentLinks, orderUnderParent } from "@lib/utils/parent_links";
 import { normalizeMemoFormat, toMarkdown } from "@features/memos/utils/memo_utils";
-import type { ProjectData, TreeData } from "@features/tasks/utils/tree_control";
+import { NO_STATUS, type ProjectData, type TreeData } from "@features/tasks/utils/tree_control";
 
 const DEFAULT_HEADERS = [
   { name: "name", default_ratio: 10 },
@@ -119,7 +119,7 @@ export function workspaceToProjectData(
       id,
       data: {
         name: task.name,
-        status: task.status,
+        status: task.status ?? NO_STATUS,
         "start date": task.startDate as `${string}-${string}-${string}` | undefined,
         "due date": task.dueDate as `${string}-${string}-${string}` | undefined,
         memo: task.memos.map((m) => ({
@@ -272,7 +272,7 @@ export function projectDataToWorkspaceTasks(
     const task: WorkspaceTask = {
       id: node.id,
       name: node.data.name,
-      status: (node.data.status as WorkspaceTaskStatus) || "Open",
+      status: (node.data.status as WorkspaceTaskStatus) || undefined,
       startDate: node.data["start date"] || undefined,
       dueDate: node.data["due date"] || undefined,
       parents: resolvedParents,

@@ -4,6 +4,20 @@ import type { SortState } from "@app-types/app";
 
 export type TaskStatus = "Open" | "Pending" | "In Progress" | "Completed" | "Canceled";
 
+/**
+ * 「ステータス無し」を表す値。
+ *
+ * メモがノードになったので、ノードには「期限やステータスで追跡するもの」と
+ * 「ただ書いてあるもの」の両方が実在する。後者に既定のステータスを与えると、
+ * ノート 1 つ 1 つが「未着手のタスク」として積み上がり、ステータス列と
+ * 絞り込みが意味を失う。だから「無し」は既定値ではなく**状態のひとつ**。
+ *
+ * 空文字を使うのは、ステータスが選択コントロールの値として往復するため。
+ * ファイル上は `status:` キーを書かないことで表す（[data.md](../../../docs/data.md) § 4）。
+ */
+export const NO_STATUS = "";
+export type NodeStatus = TaskStatus | typeof NO_STATUS;
+
 export interface MemoEntry {
   id: string;
   title: string;
@@ -24,7 +38,8 @@ export interface TaskAttachmentEntry {
 
 export interface TreeNodeData {
   name: string;
-  status: TaskStatus;
+  /** ステータス。`NO_STATUS`（空）は「追跡しないノード」を表す状態のひとつ。 */
+  status: NodeStatus;
   "start date": `${string}-${string}-${string}` | undefined;
   "due date": `${string}-${string}-${string}` | undefined;
   memo: MemoEntry[];
@@ -224,6 +239,12 @@ export function filterTree(
       } else {
         keyMatch = (!from || nodeDate >= from) && (!to || nodeDate <= to);
       }
+    } else if (key === "status") {
+      // 「なし」は空文字で表す状態のひとつなので、部分一致では絞れない
+      // （あらゆる文字列が "" を含むので、全行に当たってしまう）。
+      // ステータスは値の集合が閉じているため完全一致で見る。
+      const nodeStatus = ((tree.data.status as string) || NO_STATUS).toLowerCase();
+      keyMatch = keywords.some((keyword) => keyword.toLowerCase() === nodeStatus);
     } else {
       // For other filters
       keyMatch = keywords.some(
@@ -974,12 +995,15 @@ export function indentNode(target: string, tree_data: TreeData, rowPath?: string
   return tree_data;
 }
 
-const STATUS_ORDER: Record<TaskStatus, number> = {
+// ステータス無しのノードは最後に置く。並べ替えは「進み具合を見る」ための
+// 操作なので、進み具合を持たないものを間に挟むと列が読みにくくなる。
+const STATUS_ORDER: Record<NodeStatus, number> = {
   Open: 0,
   "In Progress": 1,
   Pending: 2,
   Completed: 3,
   Canceled: 4,
+  [NO_STATUS]: 5,
 };
 
 export function sortTree(

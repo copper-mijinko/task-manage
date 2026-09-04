@@ -17,12 +17,15 @@
 
   const STATUS_DOT_COLOR: Record<string, string> = {
     Open: "var(--theme-color-Primary-main)",
+    "": "transparent",
     Pending: "var(--theme-color-Warning-main)",
     "In Progress": "var(--theme-color-Info-main)",
     Completed: "var(--theme-color-Success-main)",
     Canceled: "var(--theme-color-Sub-main)",
   };
   const STATUS_LABEL: Record<string, string> = {
+    // 「なし」は空文字。ラベルが無いと選択肢が空欄で並ぶ。
+    "": "なし",
     Open: "未着手",
     Pending: "保留",
     "In Progress": "進行中",
