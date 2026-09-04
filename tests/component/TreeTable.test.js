@@ -181,6 +181,99 @@ describe("TreeTable", () => {
     expect(screen.getByTestId("row-task-1")).toHaveAttribute("data-selected", "true");
   });
 
+  test("多親ノードは全出現が選択色になり、操作中の行だけが強い表示になる", async () => {
+    // 同じノードを 2 つの親の下に置く。表示上は 2 行だが実体は 1 つなので、
+    // ツリーでも同じオブジェクトを共有する（workspaceToProjectData と同じ形）。
+    const projectData = createProjectData();
+    const shared = projectData.data.children[0].children[0];
+    projectData.data.children.push({
+      id: "task-2",
+      data: {
+        name: "Other Parent",
+        status: "Open",
+        "due date": undefined,
+        memo: [],
+        attachments: [],
+      },
+      children: [shared],
+    });
+    tree_data.set(projectData);
+    filtered_data.set(projectData.data);
+    const { container } = render(TreeTable);
+    await tick();
+
+    const rowAt = (path) => container.querySelector(`[data-row-path="${path}"]`);
+    const first = "project-1/task-1/task-1-1";
+    const second = "project-1/task-2/task-1-1";
+    expect(rowAt(first)).not.toBeNull();
+    expect(rowAt(second)).not.toBeNull();
+    // DOM の id は最初の出現にだけ付く（重複 id を作らない）。
+    expect(rowAt(first).id).toBe("task-1-1");
+    expect(rowAt(second).id).toBe("");
+
+    await fireEvent.click(rowAt(second).querySelector("button[data-testid^='select-']"));
+    await tick();
+
+    // 選択はノード単位なので両方に色が付く。
+    expect(rowAt(first).dataset.selected).toBe("true");
+    expect(rowAt(second).dataset.selected).toBe("true");
+    // ただし操作中の行は「クリックした方」で、もう一方が弱い表示になる。
+    expect(rowAt(second).dataset.echo).toBe("false");
+    expect(rowAt(second).dataset.tabStop).toBe("true");
+    expect(rowAt(first).dataset.echo).toBe("true");
+    expect(rowAt(first).dataset.tabStop).toBe("false");
+  });
+
+  test("同じノードでも、別の親の下の行は別々に折りたためる", async () => {
+    const projectData = createProjectData();
+    const shared = projectData.data.children[0].children[0];
+    shared.children = [
+      {
+        id: "task-1-1-1",
+        data: {
+          name: "Grandchild",
+          status: "Open",
+          "due date": undefined,
+          memo: [],
+          attachments: [],
+        },
+        children: [],
+      },
+    ];
+    projectData.data.children.push({
+      id: "task-2",
+      data: {
+        name: "Other Parent",
+        status: "Open",
+        "due date": undefined,
+        memo: [],
+        attachments: [],
+      },
+      children: [shared],
+    });
+    tree_data.set(projectData);
+    filtered_data.set(projectData.data);
+    const { container } = render(TreeTable);
+    await tick();
+
+    const paths = () =>
+      [...container.querySelectorAll("[data-row-path]")].map((el) => el.dataset.rowPath);
+    expect(paths()).toContain("project-1/task-1/task-1-1/task-1-1-1");
+    expect(paths()).toContain("project-1/task-2/task-1-1/task-1-1-1");
+
+    await fireEvent.click(
+      container
+        .querySelector('[data-row-path="project-1/task-1/task-1-1"]')
+        .querySelector("button[data-testid^='toggle-']")
+    );
+    await tick();
+
+    expect(get(closed_row_paths)).toEqual(new Set(["project-1/task-1/task-1-1"]));
+    expect(paths()).not.toContain("project-1/task-1/task-1-1/task-1-1-1");
+    // もう片方の親の下は開いたまま。
+    expect(paths()).toContain("project-1/task-2/task-1-1/task-1-1-1");
+  });
+
   test("collapses and expands a branch by toggling the row", async () => {
     render(TreeTable);
 

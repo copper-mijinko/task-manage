@@ -35,6 +35,13 @@
    * `data-node-id` で引ける。
    */
   export let isPrimaryOccurrence = true;
+  /**
+   * いま操作している行と同じノードを指す、別の親の下の行。選択はノード単位
+   * なので多親ノードを選ぶと出現がすべて選択色になるが、「同じものがここにも
+   * ある」ことと「いま触っている行」は別物なので、こちらは弱く表示する。
+   * いま触っている行は tabindex の停留点（`isTabStop`）と一致する。
+   */
+  export let isEchoRow = false;
   export let isDark = false;
   export let canDrop = () => false;
   export let canMoveUp = false;
@@ -108,6 +115,7 @@
     e.stopPropagation();
     dispatch("select", {
       id,
+      path,
       shiftKey: !!e.shiftKey,
       ctrlKey: !!(e.ctrlKey || e.metaKey),
     });
@@ -117,6 +125,7 @@
     e.stopPropagation();
     dispatch("toggleCheckbox", {
       id,
+      path,
       shiftKey: !!e.shiftKey,
       ctrlKey: !!(e.ctrlKey || e.metaKey),
     });
@@ -245,7 +254,7 @@
     // If this row is part of an existing multi-selection, keep the selection
     // intact and let the menu act on the whole set. Otherwise reduce to this row.
     if (!$selected_ids.has(id)) {
-      dispatch("select", { id, shiftKey: false, ctrlKey: false });
+      dispatch("select", { id, path, shiftKey: false, ctrlKey: false });
     }
     taskName?.openMenuAt({
       x: e.clientX,
@@ -261,6 +270,7 @@
   role="row"
   class:TableRow={true}
   class:Selected={selected}
+  class:EchoRow={isEchoRow}
   class:Anchor={isAnchor && anyMultiSelected}
   class:Dragging={isDragging}
   class:MenuOpen={isMenuOpen}
@@ -663,6 +673,26 @@
   .TableRow.Anchor::after {
     background-color: var(--theme-color-Primary-dark);
     width: 0.3rem;
+  }
+  /*
+   * 同じノードを指す別の行（別の親の下の出現）。ノード単位の選択なので色は
+   * 付くが、操作中の行と同じ強さだと「どこを触っているか」が分からなくなる。
+   * 塗りを薄くし、左のバーを破線にして「ここにもある」だけを伝える。
+   */
+  .TableRow.Selected.EchoRow {
+    --backgroundColor: color-mix(
+      in srgb,
+      var(--theme-color-Primary-main) 6%,
+      var(--theme-color-Main-light)
+    );
+  }
+  .TableRow.Selected.EchoRow::after {
+    background-color: transparent;
+    background-image: repeating-linear-gradient(
+      to bottom,
+      var(--theme-color-Primary-main) 0 4px,
+      transparent 4px 9px
+    );
   }
   .CheckboxCell {
     flex: 0 0 1.75rem;
