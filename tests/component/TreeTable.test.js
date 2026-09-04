@@ -29,7 +29,13 @@ import {
   theme,
   tree_data,
 } from "@stores";
-import { clearSelection, copied_task, copied_tasks, selected_ids } from "@stores/ui";
+import {
+  active_row_path,
+  clearSelection,
+  copied_task,
+  copied_tasks,
+  selected_ids,
+} from "@stores/ui";
 import { workspace_store } from "@features/workspace/stores/workspace";
 
 function createProjectData() {
@@ -116,6 +122,7 @@ describe("TreeTable", () => {
     copied_task.set(null);
     copied_tasks.set([]);
     closed_row_paths.set(new Set());
+    active_row_path.set(undefined);
     column_settings.set([
       { id: "name", label: "タスク名", visible: true },
       { id: "status", label: "ステータス", visible: true },

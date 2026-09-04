@@ -9,6 +9,7 @@
     selected_type,
     filtered_data,
     closed_row_paths,
+    active_row_path,
     table_selected_id,
     theme,
     column_settings,
@@ -29,6 +30,8 @@
     rmNode,
     getNode,
     getParent,
+    getNodeByPath,
+    parentPathOf,
     getDefaultNode,
     moveNodeUp,
     moveNodeDown,
@@ -102,17 +105,18 @@
    * Tab の停留点も同じ行。全行を tabindex="0" にすると、テーブルを通り過ぎる
    * だけで行数ぶん Tab を押すことになる。
    */
-  let activeRowPath = null;
   $: {
     const stillValid = rows.some(
-      (row) => row.path === activeRowPath && ($selected_ids.size === 0 || $selected_ids.has(row.id))
+      (row) =>
+        row.path === $active_row_path && ($selected_ids.size === 0 || $selected_ids.has(row.id))
     );
     if (!stillValid) {
-      activeRowPath = rows.find((row) => $selected_ids.has(row.id))?.path ?? rows[0]?.path ?? null;
+      $active_row_path =
+        rows.find((row) => $selected_ids.has(row.id))?.path ?? rows[0]?.path ?? undefined;
     }
   }
-  $: tabStopRowPath = activeRowPath;
-  $: activeRowId = rows.find((row) => row.path === activeRowPath)?.id ?? null;
+  $: tabStopRowPath = $active_row_path;
+  $: activeRowId = rows.find((row) => row.path === $active_row_path)?.id ?? null;
   $: inheritedDueDateMap = buildInheritedDueDateMap(rows);
   $: nodePathMap = buildNodePathMap(rows);
   $: lineNumberMap = buildLineNumberMap($filtered_data);
@@ -565,7 +569,7 @@
 
   function handleSelectRow(event) {
     const { id, path, shiftKey, ctrlKey } = event.detail;
-    if (path) activeRowPath = path;
+    if (path) $active_row_path = path;
     if (shiftKey && $selection_anchor_id) {
       selectRange(
         id,
@@ -584,7 +588,7 @@
 
   function handleToggleCheckbox(event) {
     const { id, path, shiftKey, ctrlKey } = event.detail;
-    if (path) activeRowPath = path;
+    if (path) $active_row_path = path;
     if (!$bulk_selection_active) {
       selectOnly(id);
       $bulk_selection_active = true;
@@ -651,7 +655,7 @@
     } else {
       selectOnly(id);
     }
-    activeRowPath = path;
+    $active_row_path = path;
     navigation_history.pushSelection();
     // 選択の反映で行が描き直されるため、DOM が落ち着いてから focus する。
     tick().then(() => focusRowByPath(path));
@@ -764,48 +768,61 @@
     }
   }
 
+  /**
+   * 操作対象の行。多親ノードは同じ id の行が複数あるので、経路が来ていれば
+   * それを優先する（来なければ操作中の行、最後に最初の出現）。
+   */
+  function rowFor(id, path) {
+    return (
+      rows.find((item) => item.path === path) ??
+      rows.find((item) => item.id === id && item.path === $active_row_path) ??
+      rows.find((item) => item.id === id)
+    );
+  }
+
   function isInMultiSelection(id) {
     return selectionSize > 1 && $selected_ids.has(id);
   }
 
   function handleMoveUp(event) {
-    const { id } = event.detail;
+    const { id, path } = event.detail;
     if (isInMultiSelection(id)) {
       handleBulkMoveUp();
       return;
     }
-    const row = rows.find((item) => item.id === id);
+    const row = rowFor(id, path);
     if (!row?.canMoveUp) {
       return;
     }
 
-    const data = moveNodeUp(id, $tree_data.data);
+    const data = moveNodeUp(id, $tree_data.data, row.path);
     $tree_data = { ...$tree_data, data };
   }
 
   function handleMoveDown(event) {
-    const { id } = event.detail;
+    const { id, path } = event.detail;
     if (isInMultiSelection(id)) {
       handleBulkMoveDown();
       return;
     }
-    const row = rows.find((item) => item.id === id);
+    const row = rowFor(id, path);
     if (!row?.canMoveDown) {
       return;
     }
 
-    const data = moveNodeDown(id, $tree_data.data);
+    const data = moveNodeDown(id, $tree_data.data, row.path);
     $tree_data = { ...$tree_data, data };
   }
 
   function handleIndentTask(event) {
-    const { id } = event.detail;
+    const { id, path } = event.detail;
     if (isInMultiSelection(id)) {
       handleBulkIndent();
       return;
     }
-    const row = rows.find((item) => item.id === id);
-    const parentNode = getParent(id, $tree_data.data);
+    const row = rowFor(id, path);
+    // 多親ノードは行ごとに親が違うので、親はクリックした行の経路から引く。
+    const parentNode = getNodeByPath($tree_data.data, parentPathOf(row?.path ?? ""));
     const currentIndex = parentNode?.children.findIndex((child) => child.id === id) ?? -1;
     const newParentId = currentIndex > 0 ? parentNode.children[currentIndex - 1]?.id : undefined;
 
@@ -813,24 +830,24 @@
       return;
     }
 
-    const data = indentNode(id, $tree_data.data);
+    const data = indentNode(id, $tree_data.data, row.path);
     $tree_data = { ...$tree_data, data };
 
     closed_row_paths.expandNodeEverywhere(newParentId);
   }
 
   function handleOutdentTask(event) {
-    const { id } = event.detail;
+    const { id, path } = event.detail;
     if (isInMultiSelection(id)) {
       handleBulkOutdent();
       return;
     }
-    const row = rows.find((item) => item.id === id);
+    const row = rowFor(id, path);
     if (!row?.canOutdent) {
       return;
     }
 
-    const data = outdentNode(id, $tree_data.data);
+    const data = outdentNode(id, $tree_data.data, row.path);
     $tree_data = { ...$tree_data, data };
   }
 
@@ -1317,7 +1334,7 @@
         nodePath={nodePathMap.get(row.id) ?? ""}
         lineNumber={lineNumberMap.get(row.path) ?? 0}
         isTabStop={row.path === tabStopRowPath}
-        isEchoRow={row.id === activeRowId && row.path !== activeRowPath}
+        isEchoRow={row.id === activeRowId && row.path !== $active_row_path}
         on:select={handleSelectRow}
         on:navigate={handleRowNavigate}
         on:toggleCheckbox={handleToggleCheckbox}

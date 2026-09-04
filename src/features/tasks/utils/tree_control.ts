@@ -776,8 +776,43 @@ export function reorderTree(
   return tree_data;
 }
 
-function getSiblingContext(target: string, tree_data: TreeData) {
-  const parent = getParent(target, tree_data);
+/**
+ * 経路（`ルートid/親id/子id`）でノードを引く。多親ノードはノード id では
+ * 一意に決まらないので、「どの行か」を要求する操作はこちらで引く。
+ */
+export function getNodeByPath(
+  tree_data: TreeData | undefined,
+  path: string | undefined
+): TreeData | undefined {
+  if (!tree_data || !path) return undefined;
+  const segments = path.split("/");
+  if (segments[0] !== tree_data.id) return undefined;
+  let node: TreeData = tree_data;
+  for (const id of segments.slice(1)) {
+    const next = node.children?.find((child) => child.id === id);
+    if (!next) return undefined;
+    node = next;
+  }
+  return node;
+}
+
+/**
+ * 移動・インデントは「どの辺を動かすか」の操作なので、多親ノードでは
+ * **クリックした行の親**を使わなければならない。`rowPath` を渡さない
+ * 呼び出し（テストや、行が分からない経路）は従来どおり最初の親を使う。
+ */
+function resolveRowParent(
+  target: string,
+  tree_data: TreeData,
+  rowPath?: string
+): TreeData | undefined {
+  const byPath = rowPath ? getNodeByPath(tree_data, parentPathOf(rowPath)) : undefined;
+  if (byPath?.children?.some((child) => child.id === target)) return byPath;
+  return getParent(target, tree_data);
+}
+
+function getSiblingContext(target: string, tree_data: TreeData, rowPath?: string) {
+  const parent = resolveRowParent(target, tree_data, rowPath);
   if (!parent) {
     return undefined;
   }
@@ -790,32 +825,32 @@ function getSiblingContext(target: string, tree_data: TreeData) {
   return { parent, index };
 }
 
-export function canMoveNodeUp(target: string, tree_data: TreeData): boolean {
-  const context = getSiblingContext(target, tree_data);
+export function canMoveNodeUp(target: string, tree_data: TreeData, rowPath?: string): boolean {
+  const context = getSiblingContext(target, tree_data, rowPath);
   return !!context && context.index > 0;
 }
 
-export function canMoveNodeDown(target: string, tree_data: TreeData): boolean {
-  const context = getSiblingContext(target, tree_data);
+export function canMoveNodeDown(target: string, tree_data: TreeData, rowPath?: string): boolean {
+  const context = getSiblingContext(target, tree_data, rowPath);
   return !!context && context.index < context.parent.children.length - 1;
 }
 
-export function canIndentNode(target: string, tree_data: TreeData): boolean {
-  const context = getSiblingContext(target, tree_data);
+export function canIndentNode(target: string, tree_data: TreeData, rowPath?: string): boolean {
+  const context = getSiblingContext(target, tree_data, rowPath);
   return !!context && context.index > 0;
 }
 
-export function canOutdentNode(target: string, tree_data: TreeData): boolean {
-  const parent = getParent(target, tree_data);
+export function canOutdentNode(target: string, tree_data: TreeData, rowPath?: string): boolean {
+  const parent = resolveRowParent(target, tree_data, rowPath);
   if (!parent) {
     return false;
   }
 
-  return !!getParent(parent.id, tree_data);
+  return !!resolveRowParent(parent.id, tree_data, parentPathOf(rowPath ?? ""));
 }
 
-export function moveNodeUp(target: string, tree_data: TreeData): TreeData {
-  const context = getSiblingContext(target, tree_data);
+export function moveNodeUp(target: string, tree_data: TreeData, rowPath?: string): TreeData {
+  const context = getSiblingContext(target, tree_data, rowPath);
   if (!context || context.index === 0) {
     return tree_data;
   }
@@ -829,8 +864,8 @@ export function moveNodeUp(target: string, tree_data: TreeData): TreeData {
   return tree_data;
 }
 
-export function moveNodeDown(target: string, tree_data: TreeData): TreeData {
-  const context = getSiblingContext(target, tree_data);
+export function moveNodeDown(target: string, tree_data: TreeData, rowPath?: string): TreeData {
+  const context = getSiblingContext(target, tree_data, rowPath);
   if (!context || context.index >= context.parent.children.length - 1) {
     return tree_data;
   }
@@ -844,8 +879,8 @@ export function moveNodeDown(target: string, tree_data: TreeData): TreeData {
   return tree_data;
 }
 
-export function indentNode(target: string, tree_data: TreeData): TreeData {
-  const context = getSiblingContext(target, tree_data);
+export function indentNode(target: string, tree_data: TreeData, rowPath?: string): TreeData {
+  const context = getSiblingContext(target, tree_data, rowPath);
   if (!context || context.index === 0) {
     return tree_data;
   }
@@ -901,13 +936,14 @@ export function sortTree(
   return { ...tree, children: sortedChildren };
 }
 
-export function outdentNode(target: string, tree_data: TreeData): TreeData {
-  const parent = getParent(target, tree_data);
+export function outdentNode(target: string, tree_data: TreeData, rowPath?: string): TreeData {
+  const parentPath = parentPathOf(rowPath ?? "");
+  const parent = resolveRowParent(target, tree_data, rowPath);
   if (!parent) {
     return tree_data;
   }
 
-  const grandParent = getParent(parent.id, tree_data);
+  const grandParent = resolveRowParent(parent.id, tree_data, parentPath);
   if (!grandParent) {
     return tree_data;
   }
