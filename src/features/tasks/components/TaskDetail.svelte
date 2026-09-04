@@ -477,12 +477,20 @@
   function buildNodePathLabels(root) {
     const labels = {};
     if (!root) return labels;
+    // 多親ノードは経路が複数ある。1 本目だけ出すと、経路で見分けるという
+    // この欄の目的が、いちばん見分けたい相手で果たせない。残りは件数で示す。
+    const pathsById = {};
     const walk = (treeNode, trail) => {
-      if (labels[treeNode.id] === undefined) labels[treeNode.id] = trail.join(" / ");
+      const label = trail.join(" / ");
+      const seen = (pathsById[treeNode.id] ??= []);
+      if (!seen.includes(label)) seen.push(label);
       const nextTrail = [...trail, treeNode.data?.name ?? ""];
       for (const child of treeNode.children ?? []) walk(child, nextTrail);
     };
     walk(root, []);
+    for (const [id, paths] of Object.entries(pathsById)) {
+      labels[id] = paths.length > 1 ? `${paths[0]} 他 ${paths.length - 1} 件` : (paths[0] ?? "");
+    }
     return labels;
   }
 
