@@ -1769,7 +1769,7 @@ app.on("ready", () => {
 
       // Orphan check: any task whose only parent is taskId would be orphaned
       const wouldOrphan = [...tasks.values()].some(
-        (t) => t.parents.length === 1 && t.parents[0] === taskId
+        (t) => t.parents.length === 1 && t.parents[0]?.id === taskId
       );
       if (wouldOrphan) {
         return { success: false, error: "Cannot delete because this would orphan child tasks" };

@@ -53,7 +53,7 @@ function tasksRecordToItems(tasks: Record<string, WorkspaceTask>, rootId: string
   const items: WorkspaceTask[] = [];
   for (const task of Object.values(tasks)) {
     if (task.id === rootId) continue;
-    if (task.parents.length === 1 && task.parents[0] === rootId) {
+    if (task.parents.length === 1 && task.parents[0]?.id === rootId) {
       items.push(task);
     }
   }
@@ -170,10 +170,11 @@ function createInboxStore(): InboxStore {
       };
       const tasks: WorkspaceTask[] = [
         rootTask,
+        // Inbox はフラットなので親は 1 つ。並び順はその辺に持たせる。
         ...state.items.map((item, index) => ({
           ...item,
-          parents: [state.rootId!],
-          order: index,
+          parents: [{ id: state.rootId!, order: index }],
+          order: undefined,
         })),
       ];
       try {
@@ -274,7 +275,7 @@ function createInboxStore(): InboxStore {
       next[index] = {
         ...next[index],
         ...patch,
-        parents: [current.rootId],
+        parents: [{ id: current.rootId }],
       };
       setState((state) => ({ ...state, items: sortItems(next) }));
       scheduleWrite();

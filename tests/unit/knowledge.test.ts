@@ -23,7 +23,7 @@ function task(over: Partial<WorkspaceTask> & { id: string }): WorkspaceTask {
   return {
     name: over.id,
     status: "Open",
-    parents: ["root"],
+    parents: [{ id: "root" }],
     memos: [],
     createdAt: "2026-09-03",
     ...over,
@@ -77,7 +77,7 @@ describe("buildKnowledgeItemsForProject", () => {
         child: task({
           id: "child",
           name: "子",
-          parents: ["parent"],
+          parents: [{ id: "parent" }],
           memos: [memo("m1", "知見", "knowledge")],
         }),
       },
@@ -95,7 +95,7 @@ describe("buildKnowledgeItemsForProject", () => {
         child: task({
           id: "child",
           name: "画面設計",
-          parents: ["parent"],
+          parents: [{ id: "parent" }],
           memos: [memo("m1", "方針", "knowledge")],
         }),
       },

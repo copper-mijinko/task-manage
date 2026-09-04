@@ -34,7 +34,7 @@ function createWorkspaceTasks(content: unknown) {
       id: "task-a",
       name: "Task A",
       status: "Open" as const,
-      parents: ["root-id"],
+      parents: [{ id: "root-id" }],
       memos: [
         {
           id: "memo-1",

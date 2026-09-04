@@ -64,7 +64,11 @@ export function buildKnowledgeItemsForProject(
     changed = false;
     for (const task of Object.values(tasks)) {
       if (archived.has(task.id)) continue;
-      if ((task.parents ?? []).some((parentId) => archived.has(parentId))) {
+      // 親が全てアーカイブされて初めて、そのタスクも辿れなくなる。多親では
+      // 片方がアーカイブでも、もう片方から生きて辿れる（ツリーの
+      // isNodeEffectivelyArchived と同じ規則）。
+      const parents = task.parents ?? [];
+      if (parents.length > 0 && parents.every((parent) => archived.has(parent.id))) {
         archived.add(task.id);
         changed = true;
       }
@@ -74,7 +78,7 @@ export function buildKnowledgeItemsForProject(
   const items: KnowledgeItem[] = [];
   for (const task of Object.values(tasks)) {
     const parentNames = (task.parents ?? [])
-      .map((parentId) => nameById.get(parentId))
+      .map((parent) => nameById.get(parent.id))
       .filter((name): name is string => Boolean(name) && name !== project.name);
 
     for (const memo of task.memos ?? []) {

@@ -22,7 +22,7 @@ const item = {
   id: "inbox-item-1",
   name: "Inbox item",
   status: "Open",
-  parents: ["inbox-root"],
+  parents: [{ id: "inbox-root" }],
   memos: [],
 };
 

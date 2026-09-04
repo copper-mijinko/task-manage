@@ -32,6 +32,7 @@
   import ParentField from "@features/tasks/components/ParentField.svelte";
   import { normalizeTagList } from "@lib/utils/tags";
   import * as platform from "@lib/ipc/platform";
+  import { parentIdsOf } from "@lib/utils/parent_links";
   import {
     projectDataToWorkspaceTasks,
     workspaceToProjectData,
@@ -444,10 +445,19 @@
    * ツリー側で親を表現しようとすると、多親を単親に潰すことになる。
    */
   $: isProjectRoot = Boolean(node && $tree_data?.data && node.id === $tree_data.data.id);
-  $: currentParentIds = normalizeParentIds($workspace_tasks_cache[node?.id]?.parents);
+  $: currentParentIds = parentIdsOf($workspace_tasks_cache[node?.id]?.parents);
 
-  function normalizeParentIds(value) {
-    return Array.isArray(value) ? value.filter((id) => typeof id === "string" && id) : [];
+  /** 追加する親の下での並び順。その親の既存の子の末尾に置く。 */
+  function nextOrderUnder(tasks, parentId) {
+    let max = -1;
+    for (const task of Object.values(tasks ?? {})) {
+      for (const link of task.parents ?? []) {
+        if (link.id === parentId && typeof link.order === "number") {
+          max = Math.max(max, link.order);
+        }
+      }
+    }
+    return max + 1;
   }
 
   /** id → 名前。チップと候補の表示に使う。 */
@@ -496,14 +506,21 @@
 
   function saveParents(nextParentIds) {
     if (!node || !isWorkspaceProject || !workspaceProjectDir) return;
-    const normalized = normalizeParentIds(nextParentIds);
+    const normalized = (Array.isArray(nextParentIds) ? nextParentIds : []).filter(
+      (id) => typeof id === "string" && id
+    );
     // 孤児は作らない。空になる操作は受け付けない。
     if (normalized.length === 0) return;
 
     const cached = $workspace_tasks_cache[node.id];
     if (!cached) return;
 
-    const nextTask = { ...cached, parents: normalized };
+    // 並び順は辺の属性。残る親の順序はそのまま、増えた親は末尾に置く。
+    const existingLinks = new Map((cached.parents ?? []).map((link) => [link.id, link]));
+    const nextParents = normalized.map(
+      (id) => existingLinks.get(id) ?? { id, order: nextOrderUnder($workspace_tasks_cache, id) }
+    );
+    const nextTask = { ...cached, parents: nextParents };
     const nextTasks = { ...$workspace_tasks_cache, [node.id]: nextTask };
     workspace_tasks_cache.set(nextTasks);
 

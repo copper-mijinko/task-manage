@@ -66,8 +66,8 @@ async function readInbox(workspacePath, options = {}) {
   // (User-edited frontmatter or merge artefacts could otherwise leak through.)
   for (const task of tasks.values()) {
     if (task.id === rootId) continue;
-    if (task.parents.length !== 1 || task.parents[0] !== rootId) {
-      task.parents = [rootId];
+    if (task.parents.length !== 1 || task.parents[0]?.id !== rootId) {
+      task.parents = [{ id: rootId, order: task.parents[0]?.order }];
     }
   }
   return { projectDir, rootId, tasks, taskDirs };
@@ -76,13 +76,17 @@ async function readInbox(workspacePath, options = {}) {
 function nextSiblingOrder(tasks, parentId) {
   const siblings = [];
   for (const task of tasks.values()) {
-    if (task.parents.length === 1 && task.parents[0] === parentId) {
+    if (task.parents.length === 1 && task.parents[0]?.id === parentId) {
       siblings.push(task);
     }
   }
   if (siblings.length === 0) return 0;
   const maxOrder = siblings
-    .map((task) => (typeof task.order === "number" ? task.order : -1))
+    // 並び順は辺の属性なので、その親へのリンクから取る。
+    .map((task) => {
+      const link = task.parents.find((parent) => parent.id === parentId);
+      return typeof link?.order === "number" ? link.order : -1;
+    })
     .reduce((a, b) => Math.max(a, b), -1);
   return maxOrder + 1;
 }
@@ -101,10 +105,9 @@ async function addInboxItem(workspacePath, partialItem = {}, options = {}) {
     status: partialItem.status || "Open",
     startDate: partialItem.startDate || undefined,
     dueDate: partialItem.dueDate || undefined,
-    parents: [rootId],
+    parents: [{ id: rootId, order: nextSiblingOrder(tasks, rootId) }],
     memos: Array.isArray(partialItem.memos) ? partialItem.memos : [],
     createdAt: today,
-    order: nextSiblingOrder(tasks, rootId),
   };
   await workspace.writeTaskAsync(projectDir, task, taskDirs, options.onWritten);
   tasks.set(task.id, task);
@@ -202,8 +205,9 @@ async function sendInboxItemsToProject(
 
       const updatedTask = {
         ...inboxTask,
-        parents: [resolvedParentId],
-        order: nextOrder,
+        // 並び順は辺の属性。移動先の親と組で持たせる。
+        parents: [{ id: resolvedParentId, order: nextOrder }],
+        order: undefined,
       };
       nextOrder += 1;
 

@@ -5,7 +5,7 @@ import {
 } from "../../src/features/workspace/utils/workspace_tree";
 
 describe("workspace tree conversion", () => {
-  it("preserves root order while assigning child sibling order", () => {
+  it("preserves root order and puts child sibling order on the parent link", () => {
     const tasks = projectDataToWorkspaceTasks(
       {
         headers: [],
@@ -57,9 +57,15 @@ describe("workspace tree conversion", () => {
       }
     );
 
+    // ルート（プロジェクト自身）の並び順だけがタスク直下の order。
     expect(tasks.find((task) => task.id === "root-id")?.order).toBe(7);
-    expect(tasks.find((task) => task.id === "child-a")?.order).toBe(0);
-    expect(tasks.find((task) => task.id === "child-b")?.order).toBe(1);
+    // 通常タスクの並び順は「その親へのリンク」に載る。
+    expect(tasks.find((task) => task.id === "child-a")?.parents).toEqual([
+      { id: "root-id", order: 0 },
+    ]);
+    expect(tasks.find((task) => task.id === "child-b")?.parents).toEqual([
+      { id: "root-id", order: 1 },
+    ]);
   });
 
   it("preserves existing memo content when a workspace memo body is not loaded", () => {
@@ -167,7 +173,7 @@ describe("workspace tree conversion", () => {
           id: "task-1",
           name: "Task One",
           status: "Open",
-          parents: ["actual-root"],
+          parents: [{ id: "actual-root" }],
           memos: [],
           createdAt: "2026-05-21",
         },
@@ -199,7 +205,7 @@ describe("workspace tree conversion", () => {
           id: "parent",
           name: "Parent",
           status: "Open",
-          parents: ["root"],
+          parents: [{ id: "root" }],
           memos: [],
           createdAt: "2026-01-01",
           order: 0,
@@ -208,7 +214,7 @@ describe("workspace tree conversion", () => {
           id: "shared",
           name: "Shared",
           status: "Open",
-          parents: ["root", "parent"],
+          parents: [{ id: "root" }, { id: "parent" }],
           memos: [],
           createdAt: "2026-01-01",
           order: 1,
@@ -244,7 +250,7 @@ describe("workspace tree conversion", () => {
           id: "a",
           name: "A",
           status: "Open",
-          parents: ["root", "b"],
+          parents: [{ id: "root" }, { id: "b" }],
           memos: [],
           createdAt: "2026-01-01",
         },
@@ -252,7 +258,7 @@ describe("workspace tree conversion", () => {
           id: "b",
           name: "B",
           status: "Open",
-          parents: ["a"],
+          parents: [{ id: "a" }],
           memos: [],
           createdAt: "2026-01-01",
         },

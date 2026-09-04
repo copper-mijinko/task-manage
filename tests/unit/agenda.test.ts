@@ -14,7 +14,7 @@ function task(overrides: Partial<WorkspaceTask> & { id: string }): WorkspaceTask
   return {
     name: overrides.id,
     status: "Open",
-    parents: ["root"],
+    parents: [{ id: "root" }],
     memos: [],
     createdAt: "2026-01-01",
     ...overrides,
@@ -65,8 +65,8 @@ describe("buildAgendaItemsForProject", () => {
     const tasks = {
       root,
       archived: task({ id: "archived", name: "Archived", archived: true }),
-      child: task({ id: "child", name: "Child", parents: ["archived"] }),
-      grandchild: task({ id: "grandchild", name: "Grandchild", parents: ["child"] }),
+      child: task({ id: "child", name: "Child", parents: [{ id: "archived" }] }),
+      grandchild: task({ id: "grandchild", name: "Grandchild", parents: [{ id: "child" }] }),
       live: task({ id: "live", name: "Live" }),
     };
 
@@ -79,7 +79,7 @@ describe("buildAgendaItemsForProject", () => {
     const tasks = {
       root,
       parent: task({ id: "parent", name: "Parent" }),
-      child: task({ id: "child", name: "Child", parents: ["parent"] }),
+      child: task({ id: "child", name: "Child", parents: [{ id: "parent" }] }),
     };
 
     const items = buildAgendaItemsForProject(tasks, project, today);

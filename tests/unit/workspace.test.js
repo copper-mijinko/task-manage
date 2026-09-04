@@ -106,10 +106,16 @@ describe("stringifyFrontmatter", () => {
     expect(result.data).toMatchObject(data);
   });
 
-  it("round-trips array fields", () => {
-    const data = { parents: ["p1", "p2"] };
+  it("round-trips scalar and map array fields", () => {
+    // タグのようなスカラー配列と、親リンクのようなマップ配列の両方を扱う。
+    const data = {
+      tags: ["a", "b"],
+      parents: [{ id: "p1", order: 1 }, "p2"],
+    };
     const result = parseFrontmatter(stringifyFrontmatter(data));
-    expect(result.data.parents).toEqual(["p1", "p2"]);
+    expect(result.data.tags).toEqual(["a", "b"]);
+    // 自前パーサなので数値は文字列で返る（読み込み側で正規化する）。
+    expect(result.data.parents).toEqual([{ id: "p1", order: "1" }, "p2"]);
   });
 
   it("omits null/undefined values", () => {
@@ -128,7 +134,7 @@ describe("stringifyFrontmatter", () => {
 // ── wouldCreateCycle ──────────────────────────────────────────────────────────
 
 function makeTasks(spec) {
-  // spec: { id: { parents: [ids] } }
+  // spec: { id: { parents: [{ id: ids }] } }
   const tasks = new Map();
   for (const [id, { parents }] of Object.entries(spec)) {
     tasks.set(id, { id, parents, name: id, status: "Open", memos: [], createdAt: "" });
@@ -138,12 +144,12 @@ function makeTasks(spec) {
 
 describe("wouldCreateCycle", () => {
   it("returns false for empty newParents", () => {
-    const tasks = makeTasks({ root: { parents: [] }, a: { parents: ["root"] } });
+    const tasks = makeTasks({ root: { parents: [] }, a: { parents: [{ id: "root" }] } });
     expect(wouldCreateCycle(tasks, "a", [])).toBe(false);
   });
 
   it("detects direct self-cycle", () => {
-    const tasks = makeTasks({ root: { parents: [] }, a: { parents: ["root"] } });
+    const tasks = makeTasks({ root: { parents: [] }, a: { parents: [{ id: "root" }] } });
     expect(wouldCreateCycle(tasks, "a", ["a"])).toBe(true);
   });
 
@@ -151,8 +157,8 @@ describe("wouldCreateCycle", () => {
     // root → a → b; asking if we can set root's parent to b (b is descendant of root)
     const tasks = makeTasks({
       root: { parents: [] },
-      a: { parents: ["root"] },
-      b: { parents: ["a"] },
+      a: { parents: [{ id: "root" }] },
+      b: { parents: [{ id: "a" }] },
     });
     expect(wouldCreateCycle(tasks, "root", ["b"])).toBe(true);
   });
@@ -160,8 +166,8 @@ describe("wouldCreateCycle", () => {
   it("returns false for a valid new parent", () => {
     const tasks = makeTasks({
       root: { parents: [] },
-      a: { parents: ["root"] },
-      b: { parents: ["root"] },
+      a: { parents: [{ id: "root" }] },
+      b: { parents: [{ id: "root" }] },
     });
     // Adding b as another parent of a is fine (diamond DAG)
     expect(wouldCreateCycle(tasks, "a", ["b"])).toBe(false);
@@ -183,8 +189,8 @@ describe("bfsFromRoot", () => {
   it("returns BFS order for linear chain", () => {
     const tasks = makeTasks({
       root: { parents: [] },
-      a: { parents: ["root"] },
-      b: { parents: ["a"] },
+      a: { parents: [{ id: "root" }] },
+      b: { parents: [{ id: "a" }] },
     });
     expect(bfsFromRoot(tasks, "root")).toEqual(["root", "a", "b"]);
   });
@@ -193,9 +199,9 @@ describe("bfsFromRoot", () => {
     // root → a, root → b, a → c, b → c
     const tasks = makeTasks({
       root: { parents: [] },
-      a: { parents: ["root"] },
-      b: { parents: ["root"] },
-      c: { parents: ["a", "b"] },
+      a: { parents: [{ id: "root" }] },
+      b: { parents: [{ id: "root" }] },
+      c: { parents: [{ id: "a" }, { id: "b" }] },
     });
     const order = bfsFromRoot(tasks, "root");
     expect(order.filter((id) => id === "c")).toHaveLength(1);
@@ -209,8 +215,8 @@ describe("bfsFromRoot", () => {
     // Simulate corrupt data: a ↔ b cycle
     const tasks = makeTasks({
       root: { parents: [] },
-      a: { parents: ["root", "b"] },
-      b: { parents: ["a"] },
+      a: { parents: [{ id: "root" }, { id: "b" }] },
+      b: { parents: [{ id: "a" }] },
     });
     const order = bfsFromRoot(tasks, "root");
     // Should terminate and visit each at most once
@@ -375,7 +381,7 @@ describe("file system operations", () => {
         id: "child-a",
         name: "Child A",
         status: "Open",
-        parents: ["root-id"],
+        parents: [{ id: "root-id" }],
         memos: [{ id: "memo-a", title: "A", content: "alpha" }],
         createdAt: "2026-04-24",
       },
@@ -387,7 +393,7 @@ describe("file system operations", () => {
         id: "child-b",
         name: "Child B",
         status: "Open",
-        parents: ["root-id"],
+        parents: [{ id: "root-id" }],
         memos: [],
         createdAt: "2026-04-24",
       },
@@ -419,7 +425,7 @@ describe("file system operations", () => {
         id: "child-a",
         name: "Child A",
         status: "Open",
-        parents: ["root-id"],
+        parents: [{ id: "root-id" }],
         memos: [
           { id: "m1", title: "One", content: "first" },
           { id: "m2", title: "Two", content: "second" },
@@ -456,7 +462,7 @@ describe("file system operations", () => {
       id: "task-memo-order",
       name: "Memo Order",
       status: "Open",
-      parents: ["root-id"],
+      parents: [{ id: "root-id" }],
       memos: [
         { id: "z-memo", title: "First", content: "First content" },
         { id: "a-memo", title: "Second", content: "Second content" },
@@ -490,7 +496,7 @@ describe("file system operations", () => {
       status: "In Progress",
       startDate: "2026-05-20",
       dueDate: "2026-06-01",
-      parents: ["root-id"],
+      parents: [{ id: "root-id" }],
       memos: [{ id: "memo-uuid-1", title: "Notes", content: "# Notes\n\nSome content" }],
       createdAt: "2026-04-24",
     };
@@ -508,7 +514,7 @@ describe("file system operations", () => {
     expect(loaded.status).toBe("In Progress");
     expect(loaded.startDate).toBe("2026-05-20");
     expect(loaded.dueDate).toBe("2026-06-01");
-    expect(loaded.parents).toEqual(["root-id"]);
+    expect(loaded.parents).toEqual([{ id: "root-id" }]);
     expect(loaded.memos).toHaveLength(1);
     expect(loaded.memos[0].id).toBe("memo-uuid-1");
     expect(loaded.memos[0].title).toBe("Notes");
@@ -521,7 +527,7 @@ describe("file system operations", () => {
       id: "task-lazy-memo",
       name: "Lazy Memo Task",
       status: "Open",
-      parents: ["root-id"],
+      parents: [{ id: "root-id" }],
       memos: [
         {
           id: "memo-lazy",
@@ -546,24 +552,50 @@ describe("file system operations", () => {
     expect(loadedMemos[0].bodyLoaded).toBe(true);
   });
 
-  it("writeTask + readProject round-trips order field", () => {
+  it("writeTask + readProject round-trips the order on the parent link", () => {
     const { projectDir } = createProject(tmpDir, "Proj", "root-id");
     const taskDirs = new Map([["root-id", "_project"]]);
     const task = {
       id: "task-order",
       name: "Ordered Task",
       status: "Open",
-      parents: ["root-id"],
+      // 並び順は辺の属性なので、親リンクに載せて往復させる。
+      parents: [{ id: "root-id", order: 2 }],
       memos: [],
       createdAt: "2026-04-24",
-      order: 2,
     };
     writeTask(projectDir, task, taskDirs);
 
     const { tasks } = readProject(projectDir);
     const loaded = tasks.get("task-order");
     expect(loaded).toBeDefined();
-    expect(loaded.order).toBe(2);
+    expect(loaded.parents).toEqual([{ id: "root-id", order: 2 }]);
+  });
+
+  it("writeTask + readProject: 旧形式（id の配列 + タスク直下の order）も読める", () => {
+    const { projectDir } = createProject(tmpDir, "Proj", "root-id");
+    const taskDir = path.join(projectDir, "legacy-task");
+    fs.mkdirSync(taskDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(taskDir, "_index.md"),
+      [
+        "---",
+        "id: legacy-task",
+        "name: Legacy",
+        "status: Open",
+        "parents:",
+        "  - root-id",
+        "order: 3",
+        "created: 2026-04-24",
+        "---",
+        "",
+      ].join("\n")
+    );
+
+    const { tasks } = readProject(projectDir);
+    const loaded = tasks.get("legacy-task");
+    // 旧形式のタスク直下 order は、全ての辺に配られる。
+    expect(loaded.parents).toEqual([{ id: "root-id", order: 3 }]);
   });
 
   it("writeTask + readProject: task without order reads as undefined", () => {
@@ -573,7 +605,7 @@ describe("file system operations", () => {
       id: "task-no-order",
       name: "No Order Task",
       status: "Open",
-      parents: ["root-id"],
+      parents: [{ id: "root-id" }],
       memos: [],
       createdAt: "2026-04-24",
     };
@@ -592,7 +624,7 @@ describe("file system operations", () => {
       id: "task-tags",
       name: "Tagged Task",
       status: "Open",
-      parents: ["root-id"],
+      parents: [{ id: "root-id" }],
       memos: [
         {
           id: "memo-tagged",
@@ -623,7 +655,7 @@ describe("file system operations", () => {
       id: "task-quill",
       name: "Quill Task",
       status: "Open",
-      parents: ["root-id"],
+      parents: [{ id: "root-id" }],
       memos: [
         {
           id: "memo-quill",
@@ -656,7 +688,7 @@ describe("file system operations", () => {
       id: "task-no-tags",
       name: "Untagged Task",
       status: "Open",
-      parents: ["root-id"],
+      parents: [{ id: "root-id" }],
       memos: [{ id: "memo-no-tags", title: "Notes", content: "Content" }],
       createdAt: "2026-04-24",
     };
@@ -674,7 +706,7 @@ describe("file system operations", () => {
       id: "task-empty-memo",
       name: "Task With Empty Memo",
       status: "Open",
-      parents: ["root-id"],
+      parents: [{ id: "root-id" }],
       memos: [{ id: "memo-uuid-empty", title: "Scratch", content: "" }],
       createdAt: "2026-04-24",
     };
@@ -700,7 +732,7 @@ describe("file system operations", () => {
       id: "task-old-empty-memo",
       name: "Task With Old Empty Memo",
       status: "Open",
-      parents: ["root-id"],
+      parents: [{ id: "root-id" }],
       memos: [],
       createdAt: "2026-04-24",
     };
@@ -722,7 +754,7 @@ describe("file system operations", () => {
       id: "task-legacy",
       name: "Legacy",
       status: "Open",
-      parents: ["root-id"],
+      parents: [{ id: "root-id" }],
       memos: [],
       createdAt: "2026-04-24",
     };
@@ -747,7 +779,7 @@ describe("file system operations", () => {
       id: "task-del",
       name: "To Delete",
       status: "Open",
-      parents: ["root-id"],
+      parents: [{ id: "root-id" }],
       memos: [],
       createdAt: "2026-04-24",
     };
@@ -768,7 +800,7 @@ describe("file system operations", () => {
       id: "task-assets",
       name: "Assets",
       status: "Open",
-      parents: ["root-id"],
+      parents: [{ id: "root-id" }],
       memos: [],
       createdAt: "2026-04-24",
     };
@@ -794,7 +826,7 @@ describe("file system operations", () => {
       id: "task-preview",
       name: "Preview",
       status: "Open",
-      parents: ["root-id"],
+      parents: [{ id: "root-id" }],
       memos: [],
       createdAt: "2026-04-24",
     };
@@ -825,7 +857,7 @@ describe("file system operations", () => {
       id: "task-attachments",
       name: "Attachments",
       status: "Open",
-      parents: ["root-id"],
+      parents: [{ id: "root-id" }],
       memos: [],
       createdAt: "2026-04-24",
     };
@@ -869,7 +901,7 @@ describe("file system operations", () => {
       id: "task-delete-attachment",
       name: "Attachments",
       status: "Open",
-      parents: ["root-id"],
+      parents: [{ id: "root-id" }],
       memos: [],
       createdAt: "2026-04-24",
     };
@@ -982,7 +1014,7 @@ describe("file system operations", () => {
       id: "task-async",
       name: "Async Task",
       status: "Open",
-      parents: ["root-id"],
+      parents: [{ id: "root-id" }],
       memos: [{ id: "memo-async", title: "Notes", content: "Async content" }],
       createdAt: "2026-04-24",
     };
@@ -1003,7 +1035,7 @@ describe("file system operations", () => {
       id: "../outside",
       name: "Unsafe",
       status: "Open",
-      parents: ["root-id"],
+      parents: [{ id: "root-id" }],
       memos: [],
     };
 
@@ -1031,7 +1063,7 @@ describe("file system operations", () => {
       id: "task-async-assets",
       name: "Assets",
       status: "Open",
-      parents: ["root-id"],
+      parents: [{ id: "root-id" }],
       memos: [],
       createdAt: "2026-04-24",
     };
@@ -1056,7 +1088,7 @@ describe("file system operations", () => {
       id: "task-del-async",
       name: "Delete",
       status: "Open",
-      parents: ["root-id"],
+      parents: [{ id: "root-id" }],
       memos: [],
       createdAt: "2026-04-24",
     };
@@ -1078,7 +1110,7 @@ describe("file system operations", () => {
       id: "async-io-child",
       name: "Child",
       status: "Open",
-      parents: ["async-io-root"],
+      parents: [{ id: "async-io-root" }],
       memos: [],
       createdAt: "2026-04-24",
     };
@@ -1142,7 +1174,7 @@ describe("file system operations", () => {
       id: "task-stable",
       name: "Stable",
       status: "Open",
-      parents: ["root-id"],
+      parents: [{ id: "root-id" }],
       memos: [{ id: "memo-stable", title: "Notes", content: "Stable content" }],
       createdAt: "2026-04-24",
     };
@@ -1174,7 +1206,7 @@ describe("file system operations", () => {
       id: "task-change",
       name: "Changing",
       status: "Open",
-      parents: ["root-id"],
+      parents: [{ id: "root-id" }],
       memos: [
         { id: "memo-keep", title: "Keep", content: "Keep content" },
         { id: "memo-change", title: "Change", content: "Before" },
@@ -1185,7 +1217,7 @@ describe("file system operations", () => {
       id: "task-remove",
       name: "Remove",
       status: "Open",
-      parents: ["root-id"],
+      parents: [{ id: "root-id" }],
       memos: [],
       createdAt: "2026-04-24",
     };
@@ -1231,7 +1263,7 @@ describe("file system operations", () => {
       id: "task-stable",
       name: "Stable",
       status: "Open",
-      parents: ["root-id"],
+      parents: [{ id: "root-id" }],
       memos: [{ id: "memo-stable", title: "Stable", content: "Stable content" }],
       createdAt: "2026-04-24",
       order: 0,
@@ -1240,7 +1272,7 @@ describe("file system operations", () => {
       id: "task-changing",
       name: "Changing",
       status: "Open",
-      parents: ["root-id"],
+      parents: [{ id: "root-id" }],
       memos: [{ id: "memo-changing", title: "Changing", content: "Before" }],
       createdAt: "2026-04-24",
       order: 1,
@@ -1249,7 +1281,7 @@ describe("file system operations", () => {
       id: "task-remove",
       name: "Remove",
       status: "Open",
-      parents: ["root-id"],
+      parents: [{ id: "root-id" }],
       memos: [],
       createdAt: "2026-04-24",
       order: 2,
@@ -1361,15 +1393,16 @@ describe("migrateProjectData", () => {
     expect(tasks.has("root-2")).toBe(false);
     const root = Array.from(tasks.values()).find((task) => task.parents.length === 0);
     expect(root.id).not.toBe("root-2");
-    expect(tasks.get("child-a").parents).toEqual([root.id]);
-    expect(tasks.get("child-b").parents).toEqual([root.id]);
-    expect(tasks.get("grandchild").parents).toEqual(["child-b"]);
+    expect(tasks.get("child-a").parents.map((p) => p.id)).toEqual([root.id]);
+    expect(tasks.get("child-b").parents.map((p) => p.id)).toEqual([root.id]);
+    expect(tasks.get("grandchild").parents.map((p) => p.id)).toEqual(["child-b"]);
     expect(tasks.get("child-a").startDate).toBe("2026-04-20");
     expect(tasks.get("child-a").dueDate).toBe("2026-05-01");
     expect(tasks.get("child-b").status).toBe("Completed");
-    expect(tasks.get("child-a").order).toBe(0);
-    expect(tasks.get("child-b").order).toBe(1);
-    expect(tasks.get("grandchild").order).toBe(0);
+    // 並び順は「その親へのリンク」に載る。
+    expect(tasks.get("child-a").parents[0].order).toBe(0);
+    expect(tasks.get("child-b").parents[0].order).toBe(1);
+    expect(tasks.get("grandchild").parents[0].order).toBe(0);
   });
 
   it("exports Quill Delta memo content to Markdown without mutating source data", () => {
