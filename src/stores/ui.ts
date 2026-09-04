@@ -2,6 +2,7 @@
 import {
   collectTreePaths,
   getNode,
+  getNodeByPath,
   pathIncludesNode,
   pathLeafId,
   type TreeData,
@@ -72,6 +73,13 @@ export interface ClosedRowPathsStore extends Writable<Set<string>> {
   expandNodeEverywhere: (nodeId: string) => void;
   /** 消えたノードの残骸を捨てる。そのノードを通る経路をすべて外す。 */
   pruneNodes: (nodeIds: Iterable<string>) => void;
+  /**
+   * 移動でノードの経路が変わったとき、折り畳み状態を新しい経路へ移す。
+   * これをしないと、畳んだノードを動かした瞬間に開いてしまう。
+   */
+  rekey: (oldPath: string, newPath: string) => void;
+  /** ツリーに存在しない経路を捨てる。移動を繰り返しても溜まらないように。 */
+  pruneMissing: (tree: TreeData | undefined) => void;
   expandAll: () => void;
   collapseAll: () => void;
 }
@@ -328,6 +336,24 @@ function createClosedRowPaths(initialValue: Set<string>): ClosedRowPathsStore {
           } else {
             await loadState(projectId);
           }
+        }
+      });
+    },
+    rekey: (oldPath: string, newPath: string) => {
+      if (!oldPath || !newPath || oldPath === newPath) return;
+      mutate((newState) => {
+        for (const path of [...newState]) {
+          if (path !== oldPath && !path.startsWith(`${oldPath}/`)) continue;
+          newState.delete(path);
+          newState.add(`${newPath}${path.slice(oldPath.length)}`);
+        }
+      });
+    },
+    pruneMissing: (tree: TreeData | undefined) => {
+      if (!tree) return;
+      mutate((newState) => {
+        for (const path of [...newState]) {
+          if (!getNodeByPath(tree, path)) newState.delete(path);
         }
       });
     },

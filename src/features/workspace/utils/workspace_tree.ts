@@ -71,6 +71,8 @@ export function workspaceToProjectData(
    */
   const shared = new Map<string, TreeData>();
   const sharedSize = new Map<string, number>();
+  /** 循環で描けなかった辺。子 id → 描けなかった親 id の集合。 */
+  const cutParentsByChild = new Map<string, Set<string>>();
 
   type Built = { node: TreeData; size: number; pathDependent: boolean };
 
@@ -101,9 +103,12 @@ export function workspaceToProjectData(
     const task = tasks[id];
     const pathAncestors = new Set(ancestors).add(id);
     const children: TreeData[] = [];
+    // 循環で描けなかった辺（この親 → その子）。保存で消さないため子側に残す。
+    const cutChildIds: string[] = [];
     for (const cid of childrenMap.get(id) ?? []) {
       if (pathAncestors.has(cid)) {
         pathDependent = true;
+        cutChildIds.push(cid);
         continue;
       }
       if (emitted >= MAX_TREE_NODES) {
@@ -140,6 +145,10 @@ export function workspaceToProjectData(
     if (task.archived) {
       node.archived = true;
       if (task.archivedAt) node.archivedAt = task.archivedAt;
+    }
+    // 打ち切った辺は「子から見た親」として記録する。
+    for (const cid of cutChildIds) {
+      cutParentsByChild.set(cid, (cutParentsByChild.get(cid) ?? new Set()).add(id));
     }
     if (!pathDependent) {
       shared.set(id, node);
@@ -201,6 +210,18 @@ export function workspaceToProjectData(
   }
   // てっぺんが無いかたまり（ルートに繋がらない循環）はここで拾う。
   for (const id of unreachable) rescue(id);
+
+  // 打ち切った辺を、そのノードに載せて保存側へ渡す。
+  if (cutParentsByChild.size > 0) {
+    const applyCuts = (node: TreeData, seen: Set<TreeData>) => {
+      if (seen.has(node)) return;
+      seen.add(node);
+      const cut = cutParentsByChild.get(node.id);
+      if (cut && cut.size > 0) node.cutParentIds = [...cut];
+      for (const child of node.children) applyCuts(child, seen);
+    };
+    applyCuts(root, new Set<TreeData>());
+  }
 
   return { headers: DEFAULT_HEADERS, data: root };
 }
@@ -289,6 +310,13 @@ export function projectDataToWorkspaceTasks(
     if (node.archived) {
       task.archived = true;
       task.archivedAt = node.archivedAt ?? existing?.archivedAt;
+    }
+    // 循環で描けなかった辺を戻す。木からは導けないので、ここでしか復元できない。
+    for (const cutId of node.cutParentIds ?? []) {
+      if (!task.parents.some((parent) => parent.id === cutId)) {
+        const previous = existing?.parents?.find((parent) => parent.id === cutId);
+        task.parents.push(previous ?? { id: cutId });
+      }
     }
     emittedIndexById.set(node.id, result.length);
     result.push(task);

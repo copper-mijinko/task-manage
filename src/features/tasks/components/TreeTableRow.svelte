@@ -414,7 +414,7 @@
             dispatch("copyTask", { id });
           }}
           on:pasteTask={() => {
-            dispatch("pasteTask", { id });
+            dispatch("pasteTask", { id, path });
           }}
           on:menuVisibilityChange={({ detail }) => {
             isMenuOpen = detail.open;

@@ -5,7 +5,9 @@ import {
   workspaceToProjectData,
 } from "../../src/features/workspace/utils/workspace_tree";
 import {
+  addNode,
   buildLineNumberMap,
+  bulkAddNodes,
   bulkIndent,
   canIndentNode,
   buildInheritedDueDateMap,
@@ -13,6 +15,7 @@ import {
   buildStickyTrail,
   bulkMoveUp,
   bulkRemoveNodes,
+  bulkRestoreNodes,
   getTopLevelSelection,
   isNodeEffectivelyArchived,
   reorderTree,
@@ -417,5 +420,115 @@ describe("循環を作らせない・作られても落ちない", () => {
 
     const back = projectDataToWorkspaceTasks({ headers: [], data: tree }, {});
     expect(back.map((t) => t.id).sort()).toEqual(["B", "C", "root"]);
+  });
+});
+
+/**
+ * 木は DAG の射影なので、循環があると「データにはあるが描かれない辺」が出る。
+ * 保存は木を辿って親を導くため、そのままだとファイルから消える。
+ */
+describe("循環で打ち切られた辺は保存で消えない", () => {
+  const cyclicTasks = () =>
+    ({
+      root: { id: "root", name: "root", status: "Open", parents: [], memos: [], createdAt: "x" },
+      X: {
+        id: "X",
+        name: "X",
+        status: "Open",
+        parents: [{ id: "root" }, { id: "Y" }],
+        memos: [],
+        createdAt: "x",
+      },
+      Y: {
+        id: "Y",
+        name: "Y",
+        status: "Open",
+        parents: [{ id: "X" }],
+        memos: [],
+        createdAt: "x",
+      },
+    }) as never;
+
+  it("往復しても Y → X の辺が残る", () => {
+    const tasks = cyclicTasks();
+    const project = workspaceToProjectData(tasks, "root");
+    // 表示は打ち切られる（root → X → Y まで）。
+    expect(flattenVisibleTree(project.data, new Set(), false).map((r) => r.path)).toEqual([
+      "root",
+      "root/X",
+      "root/X/Y",
+    ]);
+
+    const back = projectDataToWorkspaceTasks(project, tasks);
+    const x = back.find((t) => t.id === "X")!;
+    expect(x.parents.map((p) => p.id).sort()).toEqual(["Y", "root"]);
+  });
+
+  it("何度往復しても消えない", () => {
+    let rec = cyclicTasks() as Record<string, never>;
+    for (let i = 0; i < 3; i++) {
+      const back = projectDataToWorkspaceTasks(workspaceToProjectData(rec, "root"), rec);
+      const next: Record<string, never> = {};
+      for (const t of back) next[t.id] = t as never;
+      rec = next;
+    }
+    expect((rec.X as { parents: { id: string }[] }).parents.map((p) => p.id).sort()).toEqual([
+      "Y",
+      "root",
+    ]);
+  });
+});
+
+describe("インデント可否は、循環になる場合も見る", () => {
+  it("直前の兄弟が自分の子孫なら、行の canIndent が false", () => {
+    const shared = N("C");
+    const tree = N("root", [shared, N("B", [shared])]);
+    const rows = flattenVisibleTree(tree, new Set(), false);
+
+    const b = rows.find((r) => r.path === "root/B")!;
+    expect(b.canIndent).toBe(false);
+  });
+
+  it("ふつうの兄弟なら true のまま", () => {
+    const tree = N("root", [N("A"), N("B")]);
+    const rows = flattenVisibleTree(tree, new Set(), false);
+    expect(rows.find((r) => r.path === "root/B")!.canIndent).toBe(true);
+  });
+});
+
+describe("復元は、解除が最小になる経路を選ぶ", () => {
+  it("生きた親から辿れるなら、アーカイブされた別の親は解除しない", () => {
+    const shared = N("C");
+    shared.archived = true;
+    const live = N("B", [shared]);
+    const archivedParent = N("A", [shared]);
+    archivedParent.archived = true;
+    const tree = N("root", [archivedParent, live]);
+
+    bulkRestoreNodes(tree, new Set(["C"]));
+
+    expect(shared.archived).toBeUndefined();
+    // A は畳まれたまま（C は B から生きて辿れるので解除は要らない）。
+    expect(tree.children[0].archived).toBe(true);
+  });
+});
+
+describe("辺は集合：すでに親であるノードの下へ動かしても二重にならない", () => {
+  it("addNode（append）は既存の子を足さない", () => {
+    const shared = N("C");
+    const tree = N("root", [N("A", [shared]), N("B", [shared])]);
+    const b = tree.children[1];
+
+    addNode(shared, "B", tree, "append", "root/B");
+    expect(b.children.map((c) => c.id)).toEqual(["C"]);
+  });
+
+  it("bulkAddNodes も同じ", () => {
+    const shared = N("C");
+    const tree = N("root", [N("A", [shared]), N("B", [shared, N("B2")])]);
+    const b = tree.children[1];
+
+    bulkAddNodes([shared, N("D")], "B", tree, "append", "root/B");
+    expect(b.children.map((c) => c.id)).toEqual(["C", "B2", "D"]);
   });
 });

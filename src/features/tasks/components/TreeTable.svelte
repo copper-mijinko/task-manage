@@ -777,8 +777,15 @@
       const draggedNodes = topLevelIds.map((id) => getNode(id, $tree_data.data)).filter((n) => n);
       if (draggedNodes.length === 0) return;
 
-      let data = bulkRemoveNodes($tree_data.data, new Set(topLevelIds));
-      if (!data) return;
+      // 単一行のドラッグと同じく、**掴んだ辺だけ**を外す。すべての辺を外すと
+      // 多親ノードの親が黙って 1 つに減る。掴んだ行の親を基準にし、そこに
+      // 無いノードだけ最初の辺を外す。
+      const sourceParentPath = parentPathOf(draggedPath ?? "");
+      let data = $tree_data.data;
+      for (const id of topLevelIds) {
+        const edgePath = sourceParentPath ? `${sourceParentPath}/${id}` : undefined;
+        data = rmNode(id, data, getNodeByPath(data, edgePath) ? edgePath : undefined);
+      }
       data = bulkAddNodes(draggedNodes, targetId, data, mode, targetPath);
       $tree_data = { ...$tree_data, data };
     }
@@ -852,6 +859,8 @@
     }
 
     const data = indentNode(id, $tree_data.data, row.path);
+    // 経路が変わるので、畳んだ状態も一緒に移す。
+    closed_row_paths.rekey(row.path, `${parentPathOf(row.path)}/${newParentId}/${id}`);
     $tree_data = { ...$tree_data, data };
 
     closed_row_paths.expandNodeEverywhere(newParentId);
@@ -869,15 +878,24 @@
     }
 
     const data = outdentNode(id, $tree_data.data, row.path);
+    // 1 段上がるので、経路から親を 1 つ抜いたものが新しい経路。
+    closed_row_paths.rekey(row.path, `${parentPathOf(parentPathOf(row.path))}/${id}`);
     $tree_data = { ...$tree_data, data };
   }
 
-  function focusNewNode(newNodeId) {
+  /**
+   * 追加したノードへ移動する。DOM の `id` は最初の出現にしか付かないので、
+   * 経路が分かるならそれで引く（分からなければ従来どおり id で引く）。
+   */
+  function focusNewNode(newNodeId, newNodePath) {
     setTimeout(() => {
-      selectOnly(newNodeId);
+      selectOnly(newNodeId, newNodePath);
+      if (newNodePath) $active_row_path = newNodePath;
 
       setTimeout(() => {
-        const newRow = document.getElementById(newNodeId);
+        const newRow = newNodePath
+          ? table_root?.querySelector(`[role="row"][data-row-path="${CSS.escape(newNodePath)}"]`)
+          : document.getElementById(newNodeId);
         if (newRow) {
           newRow.scrollIntoView({ behavior: "smooth", block: "nearest" });
         }
@@ -912,7 +930,9 @@
 
     if (parentId) closed_row_paths.expandNodeEverywhere(parentId);
 
-    focusNewNode(newNode.id);
+    // 新しい行の経路は「足した先の行の経路 + 新 id」。
+    const newParentPath = addAction === "append" ? rowPath : parentPathOf(rowPath ?? "");
+    focusNewNode(newNode.id, newParentPath ? `${newParentPath}/${newNode.id}` : undefined);
   }
 
   function handleAddBelow(event) {
@@ -965,17 +985,20 @@
   // (context-menu "paste as child", Ctrl+V, and bulk paste all call this
   // function), so fixing it here covers all of them.
   function handlePasteTask(event) {
-    const { id } = event.detail;
+    const { id, path } = event.detail;
     if (!id || !$tree_data?.data) return;
+    // 貼り付け先はクリックした行。多親ノードは行ごとに位置が違う。
+    const pastePath = rowFor(id, path)?.path;
     if ($copied_tasks && $copied_tasks.length > 1) {
       const sources = $copied_tasks;
       const cloned = sources.map((n) => cloneWithNewIds(n));
       $copied_tasks = sources.map((n) => cloneWithNewIds(n));
       $copied_task = $copied_tasks[0] ?? null;
-      const data = bulkAddNodes(cloned, id, $tree_data.data, "append");
+      const data = bulkAddNodes(cloned, id, $tree_data.data, "append", pastePath);
       $tree_data = { ...$tree_data, data };
       closed_row_paths.expandNodeEverywhere(id);
-      if (cloned[0]) focusNewNode(cloned[0].id);
+      if (cloned[0])
+        focusNewNode(cloned[0].id, pastePath ? `${pastePath}/${cloned[0].id}` : undefined);
       return;
     }
     const source = $copied_task ?? $copied_tasks?.[0] ?? null;
@@ -983,10 +1006,10 @@
     const cloned = cloneWithNewIds(source);
     $copied_task = cloneWithNewIds(source);
     $copied_tasks = [$copied_task];
-    const data = addNode(cloned, id, $tree_data.data, "append");
+    const data = addNode(cloned, id, $tree_data.data, "append", pastePath);
     $tree_data = { ...$tree_data, data };
     closed_row_paths.expandNodeEverywhere(id);
-    focusNewNode(cloned.id);
+    focusNewNode(cloned.id, pastePath ? `${pastePath}/${cloned.id}` : undefined);
   }
 
   function showTaskFolderOpenError(message) {
