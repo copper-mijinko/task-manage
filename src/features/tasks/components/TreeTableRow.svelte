@@ -405,7 +405,7 @@
             dispatch("deleteTask", { id });
           }}
           on:restoreTask={() => {
-            dispatch("restoreTask", { id });
+            dispatch("restoreTask", { id, path });
           }}
           on:permanentDeleteTask={() => {
             dispatch("permanentDeleteTask", { id });

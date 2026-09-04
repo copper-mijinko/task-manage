@@ -458,7 +458,11 @@
     if ($table_selected_id) {
       const node = getNode($table_selected_id, $tree_data.data);
       if (!node || node.id === $tree_data.data.id) return;
-      $tree_data.data = restoreNode($table_selected_id, $tree_data.data);
+      $tree_data.data = restoreNode(
+        $table_selected_id,
+        $tree_data.data,
+        pathLeafId($active_row_path ?? "") === $table_selected_id ? $active_row_path : undefined
+      );
       $tree_data = { ...$tree_data, data: $tree_data.data };
     }
   }

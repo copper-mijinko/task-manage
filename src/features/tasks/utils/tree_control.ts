@@ -520,13 +520,32 @@ function findPathToNode(
   return visit(tree_data) ? path : undefined;
 }
 
+/**
+ * そのノードが「アーカイブされた扱い」か。自分が archived か、ルートから
+ * archived を通らずに辿り着けない場合に true。
+ *
+ * 多親なので、最初に見つかった経路で決めてはいけない。片方の親がアーカイブ
+ * されていても、もう片方から生きて辿れるならそのノードは生きている
+ * （画面でも、その行は編集できる状態で出ている）。
+ */
 export function isNodeEffectivelyArchived(
   target: string | undefined,
   tree_data: TreeData | undefined
 ): boolean {
-  if (!target) return false;
-  const path = findPathToNode(target, tree_data);
-  return !!path?.some(({ node }) => node.archived);
+  if (!target || !tree_data) return false;
+  // ツリーに無いものは判定できない（従来どおり false）。
+  if (!getNode(target, tree_data)) return false;
+
+  const visited = new Set<string>();
+  const reachableAlive = (node: TreeData): boolean => {
+    if (node.archived) return false;
+    if (node.id === target) return true;
+    if (visited.has(node.id)) return false;
+    visited.add(node.id);
+    return (node.children ?? []).some(reachableAlive);
+  };
+
+  return !reachableAlive(tree_data);
 }
 
 // 各行に対し、ルートから現在ノードまでの名前パス ("root / a / b / current") を返す。
@@ -1061,10 +1080,36 @@ export function archiveNode(target: string, tree_data: TreeData): TreeData {
   return tree_data;
 }
 
-/** ノードの archived を解除する。`archivedAt` も消す。 */
-export function restoreNode(target: string, tree_data: TreeData): TreeData {
+/**
+ * 経路（`ルートid/親id/子id`）を `TreePathEntry[]` に開く。多親ノードは
+ * 「どの行から復元したか」で解除すべき祖先が変わるので、経路が分かるなら使う。
+ */
+function pathEntriesFor(tree_data: TreeData, rowPath?: string): TreePathEntry[] | undefined {
+  if (!rowPath) return undefined;
+  const segments = rowPath.split("/");
+  if (segments[0] !== tree_data.id) return undefined;
+  const entries: TreePathEntry[] = [{ node: tree_data }];
+  let node = tree_data;
+  for (const id of segments.slice(1)) {
+    const next = node.children?.find((child) => child.id === id);
+    if (!next) return undefined;
+    entries.push({ node: next, parent: node });
+    node = next;
+  }
+  return entries;
+}
+
+/**
+ * ノードの archived を解除する。`archivedAt` も消す。
+ * 経路を渡すと、その行の祖先だけを解除する（多親ノードで、たまたま最初に
+ * 見つかった別の親側を解除してしまうのを防ぐ）。
+ */
+export function restoreNode(target: string, tree_data: TreeData, rowPath?: string): TreeData {
   if (target === tree_data.id) return tree_data;
-  const path = findPathToNode(target, tree_data);
+  const path =
+    pathEntriesFor(tree_data, rowPath)?.at(-1)?.node.id === target
+      ? pathEntriesFor(tree_data, rowPath)
+      : findPathToNode(target, tree_data);
   if (!path) return tree_data;
 
   for (const { node, parent } of path) {

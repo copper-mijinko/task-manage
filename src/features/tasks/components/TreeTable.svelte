@@ -1181,7 +1181,7 @@
   }
 
   function requestRestore(event) {
-    const { id } = event.detail;
+    const { id, path } = event.detail;
     if (isInMultiSelection(id)) {
       if (!$tree_data?.data || selectionSize === 0) return;
       const rootId = $tree_data.data.id;
@@ -1193,7 +1193,9 @@
     }
     const node = getNode(id, $tree_data.data);
     if (!node || node.id === $tree_data.data.id) return;
-    $tree_data.data = restoreNode(id, $tree_data.data);
+    // 復元はクリックした行の祖先だけを解除する（多親ノードで別の親側を
+    // 巻き添えにしない）。
+    $tree_data.data = restoreNode(id, $tree_data.data, rowFor(id, path)?.path);
     $tree_data = { ...$tree_data, data: $tree_data.data };
   }
 
