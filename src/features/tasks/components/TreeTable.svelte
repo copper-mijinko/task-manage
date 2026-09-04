@@ -176,13 +176,14 @@
   // scrollTop) does not rebuild it for every frame. Likewise cache the row
   // height and only recompute it when the theme changes, avoiding a forced
   // style recalc (getComputedStyle) on every scroll event.
-  $: rowById = new Map(rows.map((row) => [row.id, row]));
+  // 祖先を辿るキーは経路。多親ノードは同じ id の行が複数あるので id では引けない。
+  $: rowByPath = new Map(rows.map((row) => [row.path, row]));
   let stickyRowHeightPx = 0;
   $: {
     void $theme;
     stickyRowHeightPx = getRowHeightPx();
   }
-  $: stickyTrail = buildStickyTrail(rows, scrollTop, stickyRowHeightPx, rowById);
+  $: stickyTrail = buildStickyTrail(rows, scrollTop, stickyRowHeightPx, rowByPath);
 
   let showDeleteConfirm = false;
   let deleteTargetId;
@@ -202,8 +203,13 @@
   $: anchorRowExists = $selection_anchor_id !== undefined;
   $: selectionSet = $selected_ids;
   $: selectionSize = selectionSet.size;
-  $: canSiblingMove = selectionSize > 0 && isContiguousSiblingBlock($tree_data?.data, selectionSet);
-  $: canTreeOp = selectionSize > 0 && areAllSiblings($tree_data?.data, selectionSet);
+  // 一括操作の基準の親は、いま操作している行の親（多親ノードが混ざったとき、
+  // どの親の下でまとめて動かすのかを画面と一致させる）。
+  $: bulkParentPath = parentPathOf($active_row_path ?? "");
+  $: canSiblingMove =
+    selectionSize > 0 && isContiguousSiblingBlock($tree_data?.data, selectionSet, bulkParentPath);
+  $: canTreeOp =
+    selectionSize > 0 && areAllSiblings($tree_data?.data, selectionSet, bulkParentPath);
   // Outdent is permitted iff the shared parent has its own parent.
   $: canBulkOutdent = (() => {
     if (!canTreeOp || !$tree_data?.data) return false;
@@ -573,12 +579,14 @@
     if (shiftKey && $selection_anchor_id) {
       selectRange(
         id,
-        rows.map((r) => r.id)
+        rows.map((r) => r.id),
+        rows,
+        rowFor(id, path)?.path
       );
     } else if (ctrlKey) {
       toggleSelection(id);
     } else {
-      selectOnly(id);
+      selectOnly(id, path);
     }
     // ユーザの能動的なタスク行選択は、ページ遷移と同等の navigation event として
     // 履歴に積む。subscriber 経路で同ページ内の table_selected_id 変更を in-place
@@ -590,14 +598,16 @@
     const { id, path, shiftKey, ctrlKey } = event.detail;
     if (path) $active_row_path = path;
     if (!$bulk_selection_active) {
-      selectOnly(id);
+      selectOnly(id, path);
       $bulk_selection_active = true;
       return;
     }
     if (shiftKey && $selection_anchor_id) {
       selectRange(
         id,
-        rows.map((r) => r.id)
+        rows.map((r) => r.id),
+        rows,
+        rowFor(id, path)?.path
       );
     } else if (ctrlKey) {
       toggleSelection(id);
@@ -650,10 +660,12 @@
     if (shiftKey && $selection_anchor_id) {
       selectRange(
         id,
-        rows.map((r) => r.id)
+        rows.map((r) => r.id),
+        rows,
+        rowFor(id, path)?.path
       );
     } else {
-      selectOnly(id);
+      selectOnly(id, path);
     }
     $active_row_path = path;
     navigation_history.pushSelection();
@@ -737,7 +749,7 @@
   }
 
   function handleReorder(event) {
-    const { draggedIds, targetId, mode } = event.detail;
+    const { draggedIds, draggedPath, targetId, targetPath, mode } = event.detail;
     if (!draggedIds || draggedIds.length === 0) return;
     if (!$tree_data?.data) return;
 
@@ -747,7 +759,11 @@
     }
 
     if (draggedIds.length === 1) {
-      const data = reorderTree(draggedIds[0], targetId, $tree_data.data, mode);
+      // 掴んだ辺を外して、落とした行の位置に付け直す（どちらも経路で決まる）。
+      const data = reorderTree(draggedIds[0], targetId, $tree_data.data, mode, {
+        targetPath: draggedPath,
+        basePath: targetPath,
+      });
       $tree_data = { ...$tree_data, data };
     } else {
       // Multi-row D&D: collapse to top-level ancestors, capture node references,
@@ -758,7 +774,7 @@
 
       let data = bulkRemoveNodes($tree_data.data, new Set(topLevelIds));
       if (!data) return;
-      data = bulkAddNodes(draggedNodes, targetId, data, mode);
+      data = bulkAddNodes(draggedNodes, targetId, data, mode, targetPath);
       $tree_data = { ...$tree_data, data };
     }
 
@@ -1011,19 +1027,23 @@
 
   function handleBulkMoveUp() {
     if (!$tree_data?.data || !canSiblingMove) return;
-    const data = bulkMoveUp(selectionSet, $tree_data.data);
+    const data = bulkMoveUp(selectionSet, $tree_data.data, bulkParentPath);
     $tree_data = { ...$tree_data, data };
   }
 
   function handleBulkMoveDown() {
     if (!$tree_data?.data || !canSiblingMove) return;
-    const data = bulkMoveDown(selectionSet, $tree_data.data);
+    const data = bulkMoveDown(selectionSet, $tree_data.data, bulkParentPath);
     $tree_data = { ...$tree_data, data };
   }
 
   function handleBulkIndent() {
     if (!$tree_data?.data || !canTreeOp) return;
-    const { tree_data: data, new_parent_ids } = bulkIndent(selectionSet, $tree_data.data);
+    const { tree_data: data, new_parent_ids } = bulkIndent(
+      selectionSet,
+      $tree_data.data,
+      bulkParentPath
+    );
     $tree_data = { ...$tree_data, data };
     for (const pid of new_parent_ids) {
       closed_row_paths.expandNodeEverywhere(pid);
@@ -1032,7 +1052,7 @@
 
   function handleBulkOutdent() {
     if (!$tree_data?.data || !canTreeOp || !canBulkOutdent) return;
-    const data = bulkOutdent(selectionSet, $tree_data.data);
+    const data = bulkOutdent(selectionSet, $tree_data.data, bulkParentPath);
     $tree_data = { ...$tree_data, data };
   }
 
@@ -1294,7 +1314,7 @@
   {#if stickyTrail.length > 0}
     <div class="StickyTrail" aria-hidden="true">
       <div class="StickyTrailContent">
-        {#each stickyTrail as trailRow, index (trailRow.id)}
+        {#each stickyTrail as trailRow, index (trailRow.path)}
           {#if index > 0}
             <span class="StickyTrailSeparator">/</span>
           {/if}
@@ -1330,8 +1350,8 @@
         bulkCanMove={canSiblingMove}
         bulkCanTreeOp={canTreeOp}
         bulkCanOutdent={canBulkOutdent}
-        inheritedDueDate={inheritedDueDateMap.get(row.id) ?? ""}
-        nodePath={nodePathMap.get(row.id) ?? ""}
+        inheritedDueDate={inheritedDueDateMap.get(row.path) ?? ""}
+        nodePath={nodePathMap.get(row.path) ?? ""}
         lineNumber={lineNumberMap.get(row.path) ?? 0}
         isTabStop={row.path === tabStopRowPath}
         isEchoRow={row.id === activeRowId && row.path !== $active_row_path}

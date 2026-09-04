@@ -3,6 +3,9 @@
   // for a multi-select drag it contains the top-level selected ancestors in DFS
   // order. Shared module state so dragOver/drop can see what's being dragged.
   let dragged_ids = [];
+  // 掴んだ行の経路。多親ノードは同じ id の行が複数あるので、「どの辺を掴んだか」
+  // は id では決まらない（単一行のドラッグでのみ意味を持つ）。
+  let dragged_path;
 </script>
 
 <script>
@@ -181,8 +184,10 @@
     const treeRoot = $tree_data?.data;
     if (treeRoot && $selected_ids.has(id) && $selected_ids.size > 1) {
       dragged_ids = getTopLevelSelection(treeRoot, $selected_ids);
+      dragged_path = undefined;
     } else {
       dragged_ids = [id];
+      dragged_path = path;
     }
 
     const name_tag = document.createElement("div");
@@ -240,12 +245,15 @@
 
     dispatch("reorder", {
       draggedIds: [...dragged_ids],
+      draggedPath: dragged_path,
       targetId: id,
+      targetPath: path,
       mode,
     });
 
     dragOverType = undefined;
     dragged_ids = [];
+    dragged_path = undefined;
   }
 
   function openContextMenu(e) {

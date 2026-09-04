@@ -531,16 +531,15 @@ export function isNodeEffectivelyArchived(
 
 // 各行に対し、ルートから現在ノードまでの名前パス ("root / a / b / current") を返す。
 // 行は flattenVisibleTree の DFS 順 (親が子より先) なので、親のパスを引いて連結するだけで O(N)。
+//
+// 多親ノードは親ごとに別の行なので、名前パスも行ごとに違う。したがってキーは
+// ノード id ではなく**経路**（`VisibleTreeRow.path`）。
 export function buildNodePathMap(rows: VisibleTreeRow[]): Map<string, string> {
   const result = new Map<string, string>();
   for (const row of rows) {
     const name = row.node.data["name"] ?? "";
-    if (row.parentId) {
-      const parentPath = result.get(row.parentId);
-      result.set(row.id, parentPath ? `${parentPath} / ${name}` : name);
-    } else {
-      result.set(row.id, name);
-    }
+    const parentPath = result.get(parentPathOf(row.path));
+    result.set(row.path, parentPath ? `${parentPath} / ${name}` : name);
   }
   return result;
 }
@@ -615,11 +614,14 @@ export function buildStickyTrail(
   visibleRows: VisibleTreeRow[],
   scrollTop: number,
   rowHeightPx: number,
-  // Optional precomputed id→row map. Callers that recompute the trail on every
+  // Optional precomputed 経路→row map. Callers that recompute the trail on every
   // scroll event (TreeTable) should pass a map memoized against `visibleRows`
   // so scrolling does not rebuild it for every frame. When omitted the map is
   // built locally, keeping the function self-contained for tests/other callers.
-  rowById?: Map<string, VisibleTreeRow>
+  //
+  // 多親ノードは複数の行に出るので、祖先を辿るキーは経路でなければならない。
+  // ノード id で辿ると、別の親の下の祖先列が混ざる。
+  rowByPath?: Map<string, VisibleTreeRow>
 ): VisibleTreeRow[] {
   if (!visibleRows?.length) return [];
   if (!rowHeightPx || rowHeightPx <= 0) return [];
@@ -631,31 +633,33 @@ export function buildStickyTrail(
   const topVisibleRow = visibleRows[topVisibleIndex];
   if (!topVisibleRow || topVisibleRow.depth <= 1) return [];
 
-  const byId = rowById ?? new Map(visibleRows.map((row) => [row.id, row]));
+  const byPath = rowByPath ?? new Map(visibleRows.map((row) => [row.path, row]));
   const trail: VisibleTreeRow[] = [];
-  let cursor: VisibleTreeRow | undefined = topVisibleRow.parentId
-    ? byId.get(topVisibleRow.parentId)
-    : undefined;
+  let cursor: VisibleTreeRow | undefined = byPath.get(parentPathOf(topVisibleRow.path));
   while (cursor) {
     trail.unshift(cursor);
-    cursor = cursor.parentId ? byId.get(cursor.parentId) : undefined;
+    cursor = byPath.get(parentPathOf(cursor.path));
   }
   return trail;
 }
 
+/**
+ * 期限を持たない行が、祖先から引き継ぐ期限。多親ノードは親ごとに祖先が違うので、
+ * 引き継ぐ期限も行ごとに違う。キーも辿りも**経路**で行う。
+ */
 export function buildInheritedDueDateMap(rows: VisibleTreeRow[]): Map<string, string> {
-  const rowMap = new Map(rows.map((r) => [r.id, r]));
+  const rowMap = new Map(rows.map((r) => [r.path, r]));
   const result = new Map<string, string>();
   for (const row of rows) {
     if (row.node.data["due date"]) continue;
-    let cur = row.parentId ? rowMap.get(row.parentId) : undefined;
+    let cur = rowMap.get(parentPathOf(row.path));
     while (cur) {
       const d = cur.node.data["due date"];
       if (d) {
-        result.set(row.id, d);
+        result.set(row.path, d);
         break;
       }
-      cur = cur.parentId ? rowMap.get(cur.parentId) : undefined;
+      cur = rowMap.get(parentPathOf(cur.path));
     }
   }
   return result;
@@ -703,13 +707,16 @@ export function addNode(
   node: TreeData,
   base: string,
   tree_data: TreeData,
-  action: "insert" | "insert_after" | "append"
+  action: "insert" | "insert_after" | "append",
+  // 落とし先の行の経路。多親ノードは同じ id の行が複数あるので、
+  // 「どの行の隣か／どの行の下か」は経路でしか決まらない。
+  basePath?: string
 ): TreeData {
   // insert or append
   switch (action) {
     case "insert":
     case "insert_after": {
-      const base_parent_tree = getParent(base, tree_data);
+      const base_parent_tree = resolveRowParent(base, tree_data, basePath);
       if (!base_parent_tree) {
         return tree_data;
       }
@@ -729,7 +736,7 @@ export function addNode(
       break;
     }
     case "append": {
-      const base_tree = getNode(base, tree_data);
+      const base_tree = getNodeByPath(tree_data, basePath) ?? getNode(base, tree_data);
       if (!base_tree) {
         return tree_data;
       }
@@ -740,8 +747,8 @@ export function addNode(
   return tree_data;
 }
 
-export function rmNode(target: string, tree_data: TreeData): TreeData {
-  const target_parent_tree = getParent(target, tree_data);
+export function rmNode(target: string, tree_data: TreeData, rowPath?: string): TreeData {
+  const target_parent_tree = resolveRowParent(target, tree_data, rowPath);
   if (!target_parent_tree) {
     return tree_data;
   }
@@ -765,14 +772,17 @@ export function reorderTree(
   target: string,
   base: string,
   tree_data: TreeData,
-  action: "insert" | "insert_after" | "append"
+  action: "insert" | "insert_after" | "append",
+  // 掴んだ行と落とした行の経路。多親ノードは「どの辺を掴んで、どの辺の隣に
+  // 置いたか」で結果が変わるので、経路が分かるなら必ず渡す。
+  paths: { targetPath?: string; basePath?: string } = {}
 ): TreeData {
-  const target_tree = getNode(target, tree_data);
+  const target_tree = getNodeByPath(tree_data, paths.targetPath) ?? getNode(target, tree_data);
   if (!target_tree) {
     return tree_data;
   }
-  tree_data = rmNode(target, tree_data);
-  tree_data = addNode(target_tree, base, tree_data, action);
+  tree_data = rmNode(target, tree_data, paths.targetPath);
+  tree_data = addNode(target_tree, base, tree_data, action, paths.basePath);
   return tree_data;
 }
 
@@ -1243,31 +1253,48 @@ export function bulkRemoveNodes(
   return visit(tree_data);
 }
 
-export function areAllSiblings(tree_data: TreeData | undefined, ids: Set<string>): boolean {
+/**
+ * 一括操作の基準となる親。選択はノード単位なので、多親ノードが混ざると
+ * 「どの親の下でまとめて動かすのか」が決まらない。いま操作している行の経路
+ * （`parentPath`）が分かるなら、その親を基準にする。
+ */
+function resolveBulkParent(
+  tree_data: TreeData,
+  ids: Set<string>,
+  parentPath?: string
+): TreeData | undefined {
+  const byPath = getNodeByPath(tree_data, parentPath);
+  if (byPath && [...ids].every((id) => byPath.children.some((child) => child.id === id))) {
+    return byPath;
+  }
+  const anyId = ids.values().next().value as string;
+  return getParent(anyId, tree_data);
+}
+
+export function areAllSiblings(
+  tree_data: TreeData | undefined,
+  ids: Set<string>,
+  parentPath?: string
+): boolean {
   if (!tree_data || ids.size === 0) {
     return false;
   }
-  let parentId: string | undefined;
+  const reference = resolveBulkParent(tree_data, ids, parentPath);
+  if (!reference) return false;
   for (const id of ids) {
     if (id === tree_data.id) return false;
-    const parent = getParent(id, tree_data);
-    if (!parent) return false;
-    if (parentId === undefined) {
-      parentId = parent.id;
-    } else if (parent.id !== parentId) {
-      return false;
-    }
+    if (!reference.children.some((child) => child.id === id)) return false;
   }
-  return parentId !== undefined;
+  return true;
 }
 
 export function isContiguousSiblingBlock(
   tree_data: TreeData | undefined,
-  ids: Set<string>
+  ids: Set<string>,
+  parentPath?: string
 ): boolean {
-  if (!areAllSiblings(tree_data, ids)) return false;
-  const anyId = ids.values().next().value as string;
-  const parent = getParent(anyId, tree_data!);
+  if (!areAllSiblings(tree_data, ids, parentPath)) return false;
+  const parent = resolveBulkParent(tree_data!, ids, parentPath);
   if (!parent) return false;
   const indices: number[] = [];
   parent.children.forEach((c, i) => {
@@ -1295,10 +1322,13 @@ export function getTopLevelSelection(tree_data: TreeData | undefined, ids: Set<s
   return result;
 }
 
-export function bulkMoveUp(target_ids: Set<string>, tree_data: TreeData): TreeData {
-  if (!isContiguousSiblingBlock(tree_data, target_ids)) return tree_data;
-  const anyId = target_ids.values().next().value as string;
-  const parent = getParent(anyId, tree_data);
+export function bulkMoveUp(
+  target_ids: Set<string>,
+  tree_data: TreeData,
+  parentPath?: string
+): TreeData {
+  if (!isContiguousSiblingBlock(tree_data, target_ids, parentPath)) return tree_data;
+  const parent = resolveBulkParent(tree_data, target_ids, parentPath);
   if (!parent) return tree_data;
   const indices: number[] = [];
   parent.children.forEach((c, i) => {
@@ -1312,10 +1342,13 @@ export function bulkMoveUp(target_ids: Set<string>, tree_data: TreeData): TreeDa
   return tree_data;
 }
 
-export function bulkMoveDown(target_ids: Set<string>, tree_data: TreeData): TreeData {
-  if (!isContiguousSiblingBlock(tree_data, target_ids)) return tree_data;
-  const anyId = target_ids.values().next().value as string;
-  const parent = getParent(anyId, tree_data);
+export function bulkMoveDown(
+  target_ids: Set<string>,
+  tree_data: TreeData,
+  parentPath?: string
+): TreeData {
+  if (!isContiguousSiblingBlock(tree_data, target_ids, parentPath)) return tree_data;
+  const parent = resolveBulkParent(tree_data, target_ids, parentPath);
   if (!parent) return tree_data;
   const indices: number[] = [];
   parent.children.forEach((c, i) => {
@@ -1335,12 +1368,15 @@ export interface BulkIndentResult {
   new_parent_ids: string[];
 }
 
-export function bulkIndent(target_ids: Set<string>, tree_data: TreeData): BulkIndentResult {
-  if (!areAllSiblings(tree_data, target_ids)) {
+export function bulkIndent(
+  target_ids: Set<string>,
+  tree_data: TreeData,
+  parentPath?: string
+): BulkIndentResult {
+  if (!areAllSiblings(tree_data, target_ids, parentPath)) {
     return { tree_data, new_parent_ids: [] };
   }
-  const anyId = target_ids.values().next().value as string;
-  const parent = getParent(anyId, tree_data);
+  const parent = resolveBulkParent(tree_data, target_ids, parentPath);
   if (!parent) return { tree_data, new_parent_ids: [] };
 
   const selectedInOrder = parent.children
@@ -1360,12 +1396,16 @@ export function bulkIndent(target_ids: Set<string>, tree_data: TreeData): BulkIn
   return { tree_data, new_parent_ids: newParentIds };
 }
 
-export function bulkOutdent(target_ids: Set<string>, tree_data: TreeData): TreeData {
-  if (!areAllSiblings(tree_data, target_ids)) return tree_data;
-  const anyId = target_ids.values().next().value as string;
-  const parent = getParent(anyId, tree_data);
+export function bulkOutdent(
+  target_ids: Set<string>,
+  tree_data: TreeData,
+  parentPath?: string
+): TreeData {
+  if (!areAllSiblings(tree_data, target_ids, parentPath)) return tree_data;
+  const parent = resolveBulkParent(tree_data, target_ids, parentPath);
   if (!parent) return tree_data;
-  const grandParent = getParent(parent.id, tree_data);
+  const grandParent =
+    getNodeByPath(tree_data, parentPathOf(parentPath ?? "")) ?? getParent(parent.id, tree_data);
   if (!grandParent) return tree_data;
 
   const selectedInOrder = parent.children
@@ -1387,13 +1427,15 @@ export function bulkAddNodes(
   nodes: TreeData[],
   base: string,
   tree_data: TreeData,
-  action: "insert" | "insert_after" | "append"
+  action: "insert" | "insert_after" | "append",
+  /** 落とし先の行の経路。多親ノードでは id だけでは行が決まらない。 */
+  basePath?: string
 ): TreeData {
   if (nodes.length === 0) return tree_data;
   switch (action) {
     case "insert":
     case "insert_after": {
-      const baseParent = getParent(base, tree_data);
+      const baseParent = resolveRowParent(base, tree_data, basePath);
       if (!baseParent) return tree_data;
       let index = -1;
       for (let i = 0; i < baseParent.children.length; i++) {
@@ -1407,7 +1449,7 @@ export function bulkAddNodes(
       break;
     }
     case "append": {
-      const baseNode = getNode(base, tree_data);
+      const baseNode = getNodeByPath(tree_data, basePath) ?? getNode(base, tree_data);
       if (!baseNode) return tree_data;
       baseNode.children.push(...nodes);
       break;

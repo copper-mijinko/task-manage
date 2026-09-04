@@ -75,7 +75,7 @@
     let maxTs = null;
     for (const row of rows) {
       const sd = parseDate(row.node.data["start date"]);
-      const dd = parseDate(row.node.data["due date"]) || parseDate(inheritedMap.get(row.id));
+      const dd = parseDate(row.node.data["due date"]) || parseDate(inheritedMap.get(row.path));
       for (const ts of [sd, dd]) {
         if (!ts) continue;
         if (minTs === null || ts < minTs) minTs = ts;
@@ -235,7 +235,7 @@
   function getRowDateState(row) {
     const startTs = parseDate(row.node.data["start date"]);
     const dueTs = parseDate(row.node.data["due date"]);
-    const inheritedDueTs = parseDate(inheritedMap.get(row.id));
+    const inheritedDueTs = parseDate(inheritedMap.get(row.path));
     const effectiveDueTs = dueTs || inheritedDueTs;
 
     return {
@@ -940,12 +940,14 @@
         <div class="TodayDayBody" style="left:{todayRem}rem; width:{remPerDay}rem;"></div>
         <div class="TodayLineFull" style="left:{todayRem}rem;"></div>
       {/if}
-      {#each rows as row (row.id)}
+      <!-- key は経路。多親ノードは親ごとに複数行に出るので id では重複する。 -->
+      {#each rows as row (row.path)}
         {@const bar = getBarStyle(row, dragState, remPerDay, todayRem, todayTs, timelineStart)}
         {@const preview = getCreatePreview(row, dragState, remPerDay, timelineStart)}
         <div
           class="GanttRow"
           data-row-id={row.id}
+          data-row-path={row.path}
           role="presentation"
           on:pointerdown={(event) => startCreateDrag(event, row)}
           on:dblclick={(event) => createRange(event, row, bar)}

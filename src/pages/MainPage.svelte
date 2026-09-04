@@ -45,6 +45,7 @@
     restoreNode,
     bulkArchiveNodes,
     bulkRestoreNodes,
+    parentPathOf,
     pathLeafId,
   } from "@features/tasks/utils/tree_control";
   import { getDefaultNode } from "@features/tasks/utils/tree_control";
@@ -150,9 +151,12 @@
   // Reactive bulk-capability flags for the toolbar buttons.
   $: selectionSize = $selected_ids.size;
   $: isMultiSelect = selectionSize > 1;
+  // 一括操作の基準の親は、ツリーでいま操作している行の親。
+  $: bulkParentPath = parentPathOf($active_row_path ?? "");
   $: canMultiSiblingMove =
-    isMultiSelect && isContiguousSiblingBlock($tree_data?.data, $selected_ids);
-  $: canMultiTreeOp = isMultiSelect && areAllSiblings($tree_data?.data, $selected_ids);
+    isMultiSelect && isContiguousSiblingBlock($tree_data?.data, $selected_ids, bulkParentPath);
+  $: canMultiTreeOp =
+    isMultiSelect && areAllSiblings($tree_data?.data, $selected_ids, bulkParentPath);
   $: canMultiOutdent = (() => {
     if (!canMultiTreeOp || !$tree_data?.data) return false;
     const anyId = $selected_ids.values().next().value;
@@ -168,7 +172,7 @@
     }
 
     const ids = isMultiSelect ? $selected_ids : new Set([$table_selected_id]);
-    if (!areAllSiblings($tree_data.data, ids)) return unavailable;
+    if (!areAllSiblings($tree_data.data, ids, bulkParentPath)) return unavailable;
 
     const anyId = ids.values().next().value;
     if (!anyId) return unavailable;
@@ -182,7 +186,8 @@
 
     const first = Math.min(...indices);
     const last = Math.max(...indices);
-    const contiguous = !isMultiSelect || isContiguousSiblingBlock($tree_data.data, ids);
+    const contiguous =
+      !isMultiSelect || isContiguousSiblingBlock($tree_data.data, ids, bulkParentPath);
     return {
       moveUp: contiguous && first > 0,
       moveDown: contiguous && last < parent.children.length - 1,
@@ -494,7 +499,7 @@
     if (!$tree_data?.data) return;
     if (isMultiSelect) {
       if (gate && !gate()) return;
-      bulk($selected_ids, $tree_data.data);
+      bulk($selected_ids, $tree_data.data, bulkParentPath);
       $tree_data = { ...$tree_data, data: $tree_data.data };
       return;
     }
@@ -523,7 +528,7 @@
     if (!selectionTreeCapabilities.indent) return;
     if (isMultiSelect) {
       if (!canMultiTreeOp || !$tree_data?.data) return;
-      const { new_parent_ids } = bulkIndent($selected_ids, $tree_data.data);
+      const { new_parent_ids } = bulkIndent($selected_ids, $tree_data.data, bulkParentPath);
       $tree_data = { ...$tree_data, data: $tree_data.data };
       for (const pid of new_parent_ids) {
         closed_row_paths.expandNodeEverywhere(pid);

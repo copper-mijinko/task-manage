@@ -457,6 +457,14 @@ export const selected_ids: Writable<Set<string>> = writable<Set<string>>(new Set
 // keep selected_ids as the operation target for compatibility, while this flag
 // controls whether the checkbox/header expose an active bulk selection.
 export const bulk_selection_active: Writable<boolean> = writable(false);
+/**
+ * Shift 選択の起点になっている**行**の経路。`selection_anchor_id` だけだと、
+ * 多親ノードでどの出現が起点なのかが決まらない。
+ */
+export const selection_anchor_path: Writable<string | undefined> = writable<string | undefined>(
+  undefined
+);
+
 export const selection_anchor_id: Writable<string | undefined> = writable<string | undefined>(
   undefined
 );
@@ -479,11 +487,13 @@ export function clearSelection() {
   table_selected_id.set(undefined);
 }
 
-export function selectOnly(id: string) {
+export function selectOnly(id: string, path?: string) {
   bulk_selection_active.set(false);
   const next = new Set<string>([id]);
   selected_ids.set(next);
   selection_anchor_id.set(id);
+  // 起点の行（辺）。多親ノードでどの出現から Shift 選択を始めたかを覚える。
+  selection_anchor_path.set(path);
   mirrorTableSelected(next, id);
 }
 
@@ -512,7 +522,19 @@ export function toggleSelection(id: string) {
   });
 }
 
-export function selectRange(targetId: string, visibleRowIds: string[]) {
+/**
+ * Shift 選択。範囲は「画面に並んでいる行」の上で決まる。
+ *
+ * 多親ノードは同じ id の行が複数あるので、id の配列から `indexOf` で端を
+ * 探すと別の出現が端になり、選ぶ範囲がずれる。行が分かる呼び出し
+ * （`rows` を渡す TreeTable）は経路で端を決める。
+ */
+export function selectRange(
+  targetId: string,
+  visibleRowIds: string[],
+  rows?: { id: string; path: string }[],
+  targetPath?: string
+) {
   const anchor = get(selection_anchor_id);
   if (!anchor || !visibleRowIds.includes(anchor) || !visibleRowIds.includes(targetId)) {
     // No valid anchor: fall back to single-select.
@@ -521,10 +543,29 @@ export function selectRange(targetId: string, visibleRowIds: string[]) {
     return;
   }
   bulk_selection_active.set(true);
-  const a = visibleRowIds.indexOf(anchor);
-  const b = visibleRowIds.indexOf(targetId);
+
+  let a: number;
+  let b: number;
+  const anchorPath = get(selection_anchor_path);
+  if (rows && targetPath) {
+    a = rows.findIndex((row) => row.path === anchorPath);
+    if (a < 0) a = rows.findIndex((row) => row.id === anchor);
+    b = rows.findIndex((row) => row.path === targetPath);
+    if (b < 0) b = rows.findIndex((row) => row.id === targetId);
+  } else {
+    a = visibleRowIds.indexOf(anchor);
+    b = visibleRowIds.indexOf(targetId);
+  }
+  if (a < 0 || b < 0) {
+    selectOnly(targetId);
+    return;
+  }
   const [lo, hi] = a <= b ? [a, b] : [b, a];
-  const next = new Set<string>(visibleRowIds.slice(lo, hi + 1));
+  const next = new Set<string>(
+    rows && targetPath
+      ? rows.slice(lo, hi + 1).map((row) => row.id)
+      : visibleRowIds.slice(lo, hi + 1)
+  );
   selected_ids.set(next);
   // anchor remains unchanged
   mirrorTableSelected(next, anchor);

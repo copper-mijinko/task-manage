@@ -223,6 +223,9 @@ Inbox 全体の永続化には既存の `ws:write-project(<inbox-projectDir>, it
 - DOM の `id` 属性は**最初の出現にだけ**付ける（`isPrimaryOccurrence`）。重複 id を作らず、既存の `getElementById` と E2E の `#<taskId>` セレクタはそのまま動く。全出現は `data-node-id` / `data-row-path` で引ける
 - 選択はノード id で行う。したがって**片方の行を選ぶと全出現が選択表示になる**。多親ノードが「同じもの」だと分かる手掛かりになるので、これは意図的。ただし**いま操作している行（辺）は別扱い**で、それ以外の出現は塗りを薄く・左のバーを破線にして弱める（`TreeTable` の `activeRowPath` / `EchoRow`）
 - 折り畳みも**行（辺）ごと**の状態なので、`closed_row_paths` は経路を持つ（永続化キーは `closed_paths_<プロジェクトID>`）。片方の親の下で畳んでも、もう片方の下は開いたまま
+- **行に紐づくものはすべて経路で引く**。名前パス（`buildNodePathMap`）、祖先から継承する期限（`buildInheritedDueDateMap`）、スクロール時のパンくず（`buildStickyTrail`）、ガントの行（`GanttPanel` の keyed each）。ノード id で引くと、別の親の下の値が混ざる（ガントは `each_key_duplicate` で描画が壊れる）
+- D&D は「掴んだ辺を外して、落とした行の隣に置く」。`reorderTree` / `addNode` / `rmNode` / `bulkAddNodes` は経路を受け取る
+- Shift 選択の範囲も行で決まる。起点は `selection_anchor_path`（id だけだとどの出現が起点か決まらない）
 - 移動・インデント・アウトデントは「どの**辺**を動かすか」の操作なので、**クリックした行の親**に効く（`moveNodeUp` などが取る `rowPath`）。ノード id から親を引くと、最初に見つかった親＝別の行が動いてしまう。ツールバーとショートカットも `active_row_path`（ツリーでいま操作している行）を見る
 - **同じノードの複数の出現は同一オブジェクトを共有する**。`parents` / `order` / `archived` はノードの属性であって辺の属性ではないので、片方の出現にだけ子が足される・並びが変わるのは誤り。共有できるのは経路に依らない部分木だけで、循環を打ち切った部分木は共有しない。ツリーを作り直す関数（`updateNodeDataById` / `bulkUpdateNodeData` / `bulkRemoveNodes`）は同じ入力に同じ出力を返して共有を保つ
 
