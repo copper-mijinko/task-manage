@@ -120,6 +120,12 @@ Electron アプリ全体を起動して確認する。
 | `electron/window-state.js` | `trackWindowState` 2 件 | リサイズ中の debounce と閉じる直前の flush、最大化前サイズの保持 |
 | `scripts/agent-ui-launch.mjs` | `electronLaunchArgs` 4 件 | root 実行時だけ `--no-sandbox` を付ける（重複させない・引数を破壊しない） |
 | `scripts/agent-ui-launch.mjs` | `hasDisplay` 1 件 | X11 / Wayland の display 検出 |
+| `src/features/workspace/utils/workspace_tree.ts` ほか | `tests/unit/multi_parent.test.ts` 18 件 | 多親の往復（親は全出現の和）、行＝辺、経路ごとの折り畳み、**親ごとの並び順**とその往復、順序が同値・未指定のときの id 昇順タイブレーク、出現どうしのオブジェクト共有 |
+| `src/features/tasks/utils/tree_control.ts` ほか | `tests/unit/orphans.test.ts` 36 件 | 孤児の付け直し（削除時・読み込み時）、循環を作らせない／作られても落ちない、循環で打ち切った辺を保存で消さない、移動・インデントが行の親に効く、行ごとの名前パス／継承期限／パンくず、Shift 選択の範囲、アーカイブ判定と最小復元、辺の重複を作らない |
+| `src/lib/utils/date_urgency.ts` | `tests/unit/date_urgency.test.ts` 13 件 | 期限の緊急度（超過・当日・間近）の境界と、完了・中止の扱い |
+| `src/lib/utils/theme.ts` | `tests/unit/theme_contrast.test.ts` 32 件 | ライト / ダーク両テーマの文字色・UI 色が WCAG AA を満たす |
+| `electron/workspace.js` / `src/features/memos/utils/memo_utils.ts` | `tests/unit/memo_kind.test.ts` 7 件 | メモの `kind`（作業メモ / ナレッジ）の正規化と往復 |
+| `src/features/knowledge/stores/knowledge.ts` | `tests/unit/knowledge.test.ts` 10 件 | ナレッジ一覧の抽出、アーカイブ由来の印、親タスク名の文脈 |
 
 ### 2.2 Component テスト
 
@@ -134,6 +140,7 @@ Electron アプリ全体を起動して確認する。
 [tests/component/TaskName.test.js](../tests/component/TaskName.test.js)
 [tests/component/App.test.js](../tests/component/App.test.js)
 [tests/component/Header.test.js](../tests/component/Header.test.js)
+[tests/component/ParentField.test.js](../tests/component/ParentField.test.js)
 
 | 対象                                               | テストケース                                                                    | 確認内容                                                                                                | テストファイル                                           |
 | -------------------------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
@@ -181,6 +188,9 @@ Electron アプリ全体を起動して確認する。
 | `src/App.svelte`                                   | `shows workspace conflict actions and keeps local changes`                      | コンフリクトバナーの「維持」ボタンで `wsResolveConflict(projectDir, "keep-local")` を呼ぶ               | [tests/component/App.test.js](../tests/component/App.test.js) |
 | `src/App.svelte`                                   | `resolves workspace conflict by reloading from disk`                            | コンフリクトバナーの「再読込」ボタンで `wsResolveConflict(projectDir, "reload")` を呼ぶ                 | [tests/component/App.test.js](../tests/component/App.test.js) |
 | `src/features/navigation/components/Header.svelte` | `save status indicator reflects queued / writing / error states`                | `saveStatus` の値変化に応じてラベル（`保存待ち` / `保存中...` / `保存失敗`）と `data-status` を更新する | [tests/component/Header.test.js](../tests/component/Header.test.js) |
+| `src/features/tasks/components/TreeTable.svelte`   | `多親ノードは全出現が選択色になり、操作中の行だけが強い表示になる`               | 選択はノード単位・現在行は経路単位。DOM の `id` は最初の出現にだけ付く                                   | [tests/component/TreeTable.test.js](../tests/component/TreeTable.test.js) |
+| `src/features/tasks/components/TreeTable.svelte`   | `同じノードでも、別の親の下の行は別々に折りたためる`                            | 折り畳みが行（辺）ごとであること                                                                        | [tests/component/TreeTable.test.js](../tests/component/TreeTable.test.js) |
+| `src/features/tasks/components/ParentField.svelte` | 9 件（チップ表示 / VS Code 風サジェスト / 唯一の親は外せない ほか）             | 親の付け外しと、既存ノードのサジェスト。孤児を作らせない                                                | [tests/component/ParentField.test.js](../tests/component/ParentField.test.js) |
 
 ### 2.3 E2E テスト
 
@@ -293,6 +303,6 @@ Electron アプリ全体を起動して確認する。
 
 | 種別         | 件数                              |
 | ------------ | --------------------------------- |
-| Test files   | unit 31 passed + component 24 passed (55) |
-| Tests        | unit 438 passed + component 209 passed / 7 skipped (647 / 7) |
-| svelte-check | 480 files / 0 errors / 0 warnings |
+| Test files   | unit 37 passed + component 25 passed (62) |
+| Tests        | unit 556 passed + component 228 passed / 7 skipped (784 / 7) |
+| svelte-check | 485 files / 0 errors / 0 warnings |
