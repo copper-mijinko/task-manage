@@ -122,15 +122,41 @@ export function projectDataToWorkspaceTasks(
   const result: WorkspaceTask[] = [];
   const today = new Date().toISOString().slice(0, 10);
 
+  /**
+   * 保存する親の集合を決める。
+   *
+   * ツリーは DAG の射影で、多親ノードは 1 箇所にしか現れない（同じ id の行が
+   * 2 つあると Svelte の keyed each が壊れるため、workspaceToProjectData が
+   * 意図的に 1 回だけ描いている）。そのため木の位置だけから親を作り直すと、
+   * **描かれなかった辺がファイルからも消える**。種別を切り替えただけ、名前を
+   * 直しただけ、といった構造と無関係な保存でも親が削られる。
+   *
+   * そこで「木が見せている親が既知の親に含まれているなら、構造は動いていない」
+   * と判断し、既知の親をそのまま残す。木の位置が既知に無い親に変わったときだけ、
+   * ユーザーが動かしたとみなして木の位置を採る。
+   *
+   * 後者はまだ不正確で、多親ノードを動かすと他の親も落ちる。それは行を辺として
+   * 扱う（同じノードを親ごとに描く）ようにして初めて曖昧さが消えるので、そこまでは
+   * この近似で「構造を触っていない保存が壊さない」ことだけを保証する。
+   */
+  function resolveParents(nodeId: string, treeParentIds: string[]): string[] {
+    const known = existingTasks[nodeId]?.parents;
+    if (!Array.isArray(known) || known.length <= 1) return treeParentIds;
+    if (treeParentIds.length === 0) return known.length === 0 ? treeParentIds : known;
+    const stillKnown = treeParentIds.every((id) => known.includes(id));
+    return stillKnown ? known : treeParentIds;
+  }
+
   function traverse(node: TreeData, parentIds: string[], siblingIndex: number) {
     const existing = existingTasks[node.id];
+    const resolvedParents = resolveParents(node.id, parentIds);
     const task: WorkspaceTask = {
       id: node.id,
       name: node.data.name,
       status: (node.data.status as WorkspaceTaskStatus) || "Open",
       startDate: node.data["start date"] || undefined,
       dueDate: node.data["due date"] || undefined,
-      parents: parentIds,
+      parents: resolvedParents,
       memos: (node.data.memo || []).map((m, index) => {
         const format = normalizeMemoFormat(m.format, "markdown");
         const existingMemo =
@@ -152,7 +178,7 @@ export function projectDataToWorkspaceTasks(
         ? node.data.attachments
         : (existing?.attachments ?? []),
       createdAt: existing?.createdAt || today,
-      order: parentIds.length === 0 ? existing?.order : siblingIndex,
+      order: resolvedParents.length === 0 ? existing?.order : siblingIndex,
     };
     if (node.archived) {
       task.archived = true;
