@@ -220,7 +220,16 @@ export function projectDataToWorkspaceTasks(
    */
   const emittedIndexById = new Map<string, number>();
 
-  function traverse(node: TreeData, parentIds: string[], siblingIndex: number) {
+  function traverse(
+    node: TreeData,
+    parentIds: string[],
+    siblingIndex: number,
+    // いま辿っている経路の祖先。編集の結果ツリーに循環ができても、
+    // ここで打ち切って保存が落ちないようにする（防御）。
+    ancestors: ReadonlySet<string> = new Set<string>()
+  ) {
+    if (ancestors.has(node.id)) return;
+    const pathAncestors = new Set(ancestors).add(node.id);
     const alreadyAt = emittedIndexById.get(node.id);
     if (alreadyAt !== undefined) {
       // 2 回目以降の出現：親だけ足して、中身は最初の出現のものを使う。
@@ -229,7 +238,7 @@ export function projectDataToWorkspaceTasks(
         if (!emitted.parents.includes(parentId)) emitted.parents.push(parentId);
       }
       for (const [index, child] of (node.children || []).entries()) {
-        traverse(child, [node.id], index);
+        traverse(child, [node.id], index, pathAncestors);
       }
       return;
     }
@@ -273,7 +282,7 @@ export function projectDataToWorkspaceTasks(
     emittedIndexById.set(node.id, result.length);
     result.push(task);
     for (const [index, child] of (node.children || []).entries()) {
-      traverse(child, [node.id], index);
+      traverse(child, [node.id], index, pathAncestors);
     }
   }
 
