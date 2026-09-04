@@ -32,6 +32,7 @@
     indentNode,
     outdentNode,
     bulkRemoveNodes,
+    reattachOrphans,
     bulkMoveUp,
     bulkMoveDown,
     bulkIndent,
@@ -84,8 +85,13 @@
         data = bulkArchiveNodes(data, new Set(archive_target_ids));
       }
       if (permanent_target_ids.length > 0) {
+        // 削除で最後の親を失うノードを拾うため、消す前にノードを掴んでおく。
+        const removedNodes = permanent_target_ids
+          .map((id) => getNode(id, data))
+          .filter((node) => node);
         const removed = bulkRemoveNodes(data, new Set(permanent_target_ids));
         if (removed) data = removed;
+        reattachOrphans(data, removedNodes);
       }
       $tree_data = { ...$tree_data, data };
       clearSelection();
@@ -98,7 +104,10 @@
     }
     if (!$table_selected_id) return;
     if (confirm_mode === "permanent") {
+      const removedNode = getNode($table_selected_id, $tree_data.data);
       $tree_data.data = rmNode($table_selected_id, $tree_data.data);
+      // 消したノードの子が他に親を持たないなら、ルート直下へ付け直す（孤児を作らない）。
+      if (removedNode) reattachOrphans($tree_data.data, [removedNode]);
       $tree_data = { ...$tree_data, data: $tree_data.data };
     } else {
       $tree_data.data = archiveNode($table_selected_id, $tree_data.data);
