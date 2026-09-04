@@ -177,7 +177,9 @@ export function comparableWorkspaceTask(task: WorkspaceTask) {
     status: task.status,
     startDate: task.startDate ?? null,
     dueDate: task.dueDate ?? null,
-    parents: task.parents ?? [],
+    // 並び順は辺の属性なので、親 id だけでなく order も差分に含める
+    // （これを落とすと「親ごとの並べ替え」がディスクに書かれない）。
+    parents: (task.parents ?? []).map((link) => ({ id: link.id, order: link.order ?? null })),
     memos: (task.memos ?? []).map((memo) => ({
       id: memo.id,
       title: memo.title,

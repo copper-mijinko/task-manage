@@ -49,7 +49,7 @@ function makeTasks(items = []) {
       item.id,
       {
         status: "Open",
-        parents: [rootId],
+        parents: [{ id: rootId }],
         memos: [],
         order,
         ...item,

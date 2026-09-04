@@ -684,16 +684,36 @@ function parseFrontmatter(content) {
   const data = {};
   let currentKey = null;
 
+  // 直前に読んだリスト要素。マップ要素（`- id: x` に続く `    order: 1`）を
+  // そこへ足していくために覚えておく。
+  let currentListItem = null;
+
   for (const line of yaml.split(/\r?\n/)) {
     const listMatch = line.match(/^ {2}- (.+)/);
     if (listMatch && currentKey) {
       if (!Array.isArray(data[currentKey])) data[currentKey] = [];
-      data[currentKey].push(listMatch[1].trim());
+      const entry = listMatch[1].trim();
+      // `- key: value` はマップ要素の 1 行目。スカラー要素と区別する。
+      const entryKv = entry.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
+      if (entryKv) {
+        currentListItem = { [entryKv[1]]: entryKv[2].trim() };
+        data[currentKey].push(currentListItem);
+      } else {
+        currentListItem = null;
+        data[currentKey].push(entry);
+      }
+      continue;
+    }
+    // マップ要素の 2 行目以降（`- ` より深いインデント）。
+    const nestedMatch = line.match(/^ {4}([A-Za-z0-9_-]+):\s*(.*)$/);
+    if (nestedMatch && currentListItem) {
+      currentListItem[nestedMatch[1]] = nestedMatch[2].trim();
       continue;
     }
     const kvMatch = line.match(/^([^:]+):\s*(.*)/);
     if (kvMatch) {
       currentKey = kvMatch[1].trim();
+      currentListItem = null;
       const value = kvMatch[2].trim();
       data[currentKey] = value || null;
     }
@@ -721,7 +741,17 @@ function stringifyFrontmatter(data, body = "") {
     if (value === undefined || value === null) continue;
     if (Array.isArray(value)) {
       lines.push(`${key}:`);
-      for (const item of value) lines.push(`  - ${item}`);
+      for (const item of value) {
+        if (item && typeof item === "object") {
+          // マップ要素。1 つ目のキーを `- key: value` に、残りを字下げして続ける。
+          const entries = Object.entries(item).filter(([, v]) => v !== undefined && v !== null);
+          if (entries.length === 0) continue;
+          lines.push(`  - ${entries[0][0]}: ${entries[0][1]}`);
+          for (const [k, v] of entries.slice(1)) lines.push(`    ${k}: ${v}`);
+        } else {
+          lines.push(`  - ${item}`);
+        }
+      }
     } else {
       lines.push(`${key}: ${value}`);
     }
@@ -815,8 +845,18 @@ function taskFrontmatterData(task) {
   const data = { id: task.id, name: task.name, status: task.status };
   if (task.startDate) data.start = task.startDate;
   if (task.dueDate) data.due = task.dueDate;
-  if (task.parents?.length > 0) data.parents = task.parents;
-  if (typeof task.order === "number") data.order = task.order;
+  if (task.parents?.length > 0) {
+    // 並び順は辺の属性なので、親 id と組で書く。順序が無い辺は短縮形（文字列）
+    // にして、手書きのファイルと見た目を揃える。
+    data.parents = task.parents.map((parent) =>
+      typeof parent.order === "number" ? { id: parent.id, order: parent.order } : parent.id
+    );
+  }
+  // タスク直下の `order` はルートタスク（＝プロジェクトの並び順）だけが持つ。
+  // 通常タスクの並び順は `parents[].order` にある。
+  if (typeof task.order === "number" && !(task.parents?.length > 0)) {
+    data.order = task.order;
+  }
   const tags = normalizeTaskTags(task.tags);
   if (tags.length > 0) data.tags = tags;
   data.created = task.createdAt || new Date().toISOString().slice(0, 10);
@@ -953,6 +993,44 @@ function parseOrderValue(value) {
   return value != null && Number.isFinite(Number(value)) ? Number(value) : undefined;
 }
 
+/**
+ * 親リンクの正規化。並び順は「辺」の属性なので、親 id と組で持つ。
+ *
+ * frontmatter の `parents:` は 3 つの形を受ける。
+ *   - `parents: [{ id, order }]` … 現行
+ *   - `parents: [id, id]`        … 旧形式・手書きの短縮形
+ *   - `parents: id`              … 単一のスカラー
+ * 旧形式にはタスク直下の `order` が 1 つあるだけなので、その値を全ての辺に
+ * 配る（旧来の「どの親の下でも同じ位置」という意味をそのまま保つ）。
+ *
+ * renderer 側の `src/lib/utils/parent_links.ts` と同じ仕様。片方だけ直さないこと。
+ */
+function normalizeParentLinks(raw, fallbackOrder) {
+  const list = Array.isArray(raw) ? raw : raw == null || raw === "" ? [] : [raw];
+  const result = [];
+  const seen = new Set();
+  for (const entry of list) {
+    let id;
+    let order;
+    if (typeof entry === "string") {
+      id = entry;
+      order = fallbackOrder;
+    } else if (entry && typeof entry === "object") {
+      id = typeof entry.id === "string" ? entry.id : undefined;
+      order = parseOrderValue(entry.order);
+    }
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    result.push(order === undefined ? { id } : { id, order });
+  }
+  return result;
+}
+
+/** 親 id だけが要る呼び出し向け。 */
+function parentIdsOf(parents) {
+  return (parents ?? []).map((parent) => parent.id);
+}
+
 function readRootTask(projectDir, options = {}) {
   const content = fs.readFileSync(path.join(projectDir, "_project.md"), "utf8");
   const { data } = parseFrontmatter(content);
@@ -980,7 +1058,7 @@ function readRootTask(projectDir, options = {}) {
 function readTaskDir(taskDir, options = {}) {
   const content = fs.readFileSync(path.join(taskDir, "_index.md"), "utf8");
   const { data } = parseFrontmatter(content);
-  const parents = Array.isArray(data.parents) ? data.parents : data.parents ? [data.parents] : [];
+  const parents = normalizeParentLinks(data.parents, parseOrderValue(data.order));
   const task = {
     id: data.id,
     name: data.name || "",
@@ -1198,7 +1276,7 @@ async function readRootTaskAsync(projectDir, options = {}) {
 async function readTaskDirAsync(taskDir, options = {}) {
   const content = await fs.promises.readFile(path.join(taskDir, "_index.md"), "utf8");
   const { data } = parseFrontmatter(content);
-  const parents = Array.isArray(data.parents) ? data.parents : data.parents ? [data.parents] : [];
+  const parents = normalizeParentLinks(data.parents, parseOrderValue(data.order));
   const [memos, attachments] = await Promise.all([
     readMemosAsync(taskDir, ["_index.md"], options),
     readAttachmentsAsync(taskDir),
@@ -1900,17 +1978,19 @@ async function setProjectOrderAsync(workspacePath, orderedProjects, options = {}
  * tasks: Map<id, { parents: string[] }>
  */
 function wouldCreateCycle(tasks, taskId, newParents) {
-  if (!newParents || newParents.length === 0) return false;
+  // 呼び出し側は親リンク（{id, order}）でも id の配列でも渡してくる。
+  const newParentIds = parentIdsOf(normalizeParentLinks(newParents));
+  if (newParentIds.length === 0) return false;
 
   // Self-cycle: taskId is listed as its own parent
-  if (newParents.includes(taskId)) return true;
+  if (newParentIds.includes(taskId)) return true;
 
   // Build children map from current parent links
   const children = new Map();
   for (const [id, task] of tasks) {
-    for (const parent of task.parents) {
-      if (!children.has(parent)) children.set(parent, []);
-      children.get(parent).push(id);
+    for (const parentId of parentIdsOf(task.parents)) {
+      if (!children.has(parentId)) children.set(parentId, []);
+      children.get(parentId).push(id);
     }
   }
 
@@ -1922,7 +2002,7 @@ function wouldCreateCycle(tasks, taskId, newParents) {
     if (visited.has(current)) continue;
     visited.add(current);
     for (const child of children.get(current) || []) {
-      if (newParents.includes(child)) return true;
+      if (newParentIds.includes(child)) return true;
       queue.push(child);
     }
   }
@@ -1936,9 +2016,9 @@ function wouldCreateCycle(tasks, taskId, newParents) {
 function bfsFromRoot(tasks, rootId) {
   const children = new Map();
   for (const [id, task] of tasks) {
-    for (const parent of task.parents) {
-      if (!children.has(parent)) children.set(parent, []);
-      children.get(parent).push(id);
+    for (const parentId of parentIdsOf(task.parents)) {
+      if (!children.has(parentId)) children.set(parentId, []);
+      children.get(parentId).push(id);
     }
   }
 
@@ -1995,11 +2075,13 @@ function exportProjectData(workspacePath, projectData, options = {}) {
       status: node.data.status || "Open",
       startDate: node.data["start date"] || undefined,
       dueDate: node.data["due date"] || undefined,
-      parents: [...parentIds],
+      // 並び順は辺の属性。エクスポート先でも親と組で持たせる。
+      parents: parentIds.map((id) => ({ id, order: siblingIndex })),
       memos,
       tags: normalizeTaskTags(node.data.tags),
       createdAt: today,
-      order: siblingIndex,
+      // ルート（親なし）だけがタスク直下の order を持つ。
+      order: parentIds.length === 0 ? siblingIndex : undefined,
     });
 
     for (const [index, child] of (node.children || []).entries()) {
@@ -2069,6 +2151,7 @@ async function deleteProjectAsync(projectDir) {
 module.exports = {
   slugify,
   normalizeMemoKind,
+  normalizeParentLinks,
   normalizeTaskTags,
   parseFrontmatter,
   stringifyFrontmatter,

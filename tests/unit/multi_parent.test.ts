@@ -23,7 +23,7 @@ const T = (id: string, name: string, parents: string[], over: Partial<WorkspaceT
     id,
     name,
     status: "Open",
-    parents,
+    parents: parents.map((parentId) => ({ id: parentId })),
     memos: [],
     createdAt: "2026-09-03",
     ...over,
@@ -44,7 +44,10 @@ describe("多親ノードの往復", () => {
     const back = projectDataToWorkspaceTasks(workspaceToProjectData(tasks, "root"), tasks);
 
     expect(back.filter((t) => t.id === "C")).toHaveLength(1);
-    expect([...(back.find((t) => t.id === "C")?.parents ?? [])].sort()).toEqual(["A", "B"]);
+    expect((back.find((t) => t.id === "C")?.parents ?? []).map((p) => p.id).sort()).toEqual([
+      "A",
+      "B",
+    ]);
   });
 
   it("構造を触らない保存で親が失われない", () => {
@@ -52,7 +55,7 @@ describe("多親ノードの往復", () => {
     const project = workspaceToProjectData(tasks, "root");
     const back = projectDataToWorkspaceTasks(project, tasks);
 
-    expect(back.find((t) => t.id === "C")?.parents).toEqual(["A", "B"]);
+    expect(back.find((t) => t.id === "C")?.parents.map((p) => p.id)).toEqual(["A", "B"]);
   });
 
   it("何度往復しても削られない", () => {
@@ -64,14 +67,14 @@ describe("多親ノードの往復", () => {
       ) as typeof tasks;
     }
 
-    expect(tasks.C.parents).toEqual(["A", "B"]);
+    expect(tasks.C.parents.map((p) => p.id)).toEqual(["A", "B"]);
   });
 
   it("単親ノードは今までどおり木の位置に従う", () => {
     const tasks = multiParentProject();
     const back = projectDataToWorkspaceTasks(workspaceToProjectData(tasks, "root"), tasks);
 
-    expect(back.find((t) => t.id === "A")?.parents).toEqual(["root"]);
+    expect(back.find((t) => t.id === "A")?.parents.map((p) => p.id)).toEqual(["root"]);
     expect(back.find((t) => t.id === "root")?.parents).toEqual([]);
   });
 
@@ -87,7 +90,10 @@ describe("多親ノードの往復", () => {
     project.data.children!.push(c);
 
     const back = projectDataToWorkspaceTasks(project, tasks);
-    expect([...(back.find((t) => t.id === "C")?.parents ?? [])].sort()).toEqual(["B", "root"]);
+    expect((back.find((t) => t.id === "C")?.parents ?? []).map((p) => p.id).sort()).toEqual([
+      "B",
+      "root",
+    ]);
   });
 
   // 行はノードではなく辺。多親ノードは親ごとに 1 行ずつ出る。
@@ -225,5 +231,87 @@ describe("多親ノードの出現はオブジェクトを共有する", () => {
     const rows = flattenVisibleTree(project.data, new Set(), false);
 
     expect(rows.map((r) => r.path)).toEqual(["root", "root/X", "root/X/Y"]);
+  });
+});
+
+/**
+ * 並び順は「辺」の属性。改修前はタスク直下に order が 1 つしか無かったので、
+ * 片方の親の下で並べ替えると、もう片方の下でも動いてしまっていた。
+ */
+describe("親ごとの並び順", () => {
+  it("同じノードが、親ごとに違う位置を持てる", () => {
+    // A の下: C, A2 / B の下: B1, C
+    const tasks = {
+      root: T("root", "root", []),
+      A: T("A", "A", ["root"], { order: 0 }),
+      B: T("B", "B", ["root"], { order: 1 }),
+      C: T("C", "C", [], {
+        parents: [
+          { id: "A", order: 0 },
+          { id: "B", order: 1 },
+        ],
+      }),
+      A2: T("A2", "A2", [], { parents: [{ id: "A", order: 1 }] }),
+      B1: T("B1", "B1", [], { parents: [{ id: "B", order: 0 }] }),
+    } as Record<string, WorkspaceTask>;
+
+    const rows = flattenVisibleTree(workspaceToProjectData(tasks, "root").data, new Set(), false);
+    expect(rows.map((r) => r.path)).toEqual([
+      "root",
+      "root/A",
+      "root/A/C",
+      "root/A/A2",
+      "root/B",
+      "root/B/B1",
+      "root/B/C",
+    ]);
+  });
+
+  it("往復しても、親ごとの並び順が保たれる", () => {
+    const tasks = {
+      root: T("root", "root", []),
+      A: T("A", "A", ["root"], { order: 0 }),
+      B: T("B", "B", ["root"], { order: 1 }),
+      C: T("C", "C", [], {
+        parents: [
+          { id: "A", order: 0 },
+          { id: "B", order: 1 },
+        ],
+      }),
+      A2: T("A2", "A2", [], { parents: [{ id: "A", order: 1 }] }),
+      B1: T("B1", "B1", [], { parents: [{ id: "B", order: 0 }] }),
+    } as Record<string, WorkspaceTask>;
+
+    const project = workspaceToProjectData(tasks, "root");
+    const back = projectDataToWorkspaceTasks(project, tasks);
+    const rec: Record<string, WorkspaceTask> = {};
+    for (const t of back) rec[t.id] = t;
+
+    expect(rec.C.parents).toEqual([
+      { id: "A", order: 0 },
+      { id: "B", order: 1 },
+    ]);
+    const rows = flattenVisibleTree(workspaceToProjectData(rec, "root").data, new Set(), false);
+    expect(rows.map((r) => r.path)).toEqual([
+      "root",
+      "root/A",
+      "root/A/C",
+      "root/A/A2",
+      "root/B",
+      "root/B/B1",
+      "root/B/C",
+    ]);
+  });
+
+  it("並び順が同じ・未指定でも、環境によらず同じ並びになる", () => {
+    const tasks = {
+      root: T("root", "root", []),
+      z: T("z", "z", ["root"]),
+      a: T("a", "a", ["root"]),
+      m: T("m", "m", ["root"]),
+    } as Record<string, WorkspaceTask>;
+    const rows = flattenVisibleTree(workspaceToProjectData(tasks, "root").data, new Set(), false);
+    // order が付いていない兄弟は id 昇順。読み取り順に依存しない。
+    expect(rows.map((r) => r.id)).toEqual(["root", "a", "m", "z"]);
   });
 });

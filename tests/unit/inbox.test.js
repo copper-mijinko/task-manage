@@ -70,11 +70,12 @@ describe("addInboxItem", () => {
     fs.rmSync(workspace, { recursive: true, force: true });
   });
 
-  it("appends an item with parents = [rootId]", async () => {
+  it("appends an item whose only parent link points at the inbox root", async () => {
     const { task, rootId } = await addInboxItem(workspace, { name: "first" });
     expect(task.name).toBe("first");
-    expect(task.parents).toEqual([rootId]);
-    expect(task.order).toBe(0);
+    // 並び順は辺の属性。Inbox はフラットなので親は 1 つ。
+    expect(task.parents).toEqual([{ id: rootId, order: 0 }]);
+    expect(task.order).toBeUndefined();
     expect(task.status).toBe("Open");
   });
 
@@ -82,9 +83,9 @@ describe("addInboxItem", () => {
     const a = await addInboxItem(workspace, { name: "a" });
     const b = await addInboxItem(workspace, { name: "b" });
     const c = await addInboxItem(workspace, { name: "c" });
-    expect(a.task.order).toBe(0);
-    expect(b.task.order).toBe(1);
-    expect(c.task.order).toBe(2);
+    expect(a.task.parents[0].order).toBe(0);
+    expect(b.task.parents[0].order).toBe(1);
+    expect(c.task.parents[0].order).toBe(2);
   });
 
   it("persists items so readInbox sees them", async () => {
@@ -131,7 +132,8 @@ describe("sendInboxItemsToProject", () => {
     // _index.md frontmatter has the new parent
     const indexContent = fs.readFileSync(path.join(movedPath, "_index.md"), "utf8");
     const { data } = parseFrontmatter(indexContent);
-    expect(data.parents).toEqual([projectRootId]);
+    // 生の frontmatter なので数値は文字列のまま（読み込み時に正規化される）。
+    expect(data.parents).toEqual([{ id: projectRootId, order: "0" }]);
   });
 
   it("preserves the moved task as a top-level child of the project root", async () => {
@@ -141,7 +143,7 @@ describe("sendInboxItemsToProject", () => {
     const { tasks } = readProject(projectDir);
     const movedTask = tasks.get(task.id);
     expect(movedTask).toBeTruthy();
-    expect(movedTask.parents).toEqual([projectRootId]);
+    expect(movedTask.parents).toEqual([{ id: projectRootId, order: 0 }]);
     expect(movedTask.name).toBe("child");
   });
 
@@ -185,7 +187,7 @@ describe("sendInboxItemsToProject", () => {
         id: parentTaskId,
         name: "candidate-parent",
         status: "Open",
-        parents: [projectRootId],
+        parents: [{ id: projectRootId }],
         memos: [],
         createdAt: today,
         order: 0,
@@ -203,7 +205,7 @@ describe("sendInboxItemsToProject", () => {
     const { tasks } = readProject(projectDir);
     const movedTask = tasks.get(task.id);
     expect(movedTask).toBeTruthy();
-    expect(movedTask.parents).toEqual([parentTaskId]);
+    expect(movedTask.parents).toEqual([{ id: parentTaskId, order: 0 }]);
   });
 
   it("rejects sending when targetParentId is not in the project", async () => {
@@ -230,7 +232,7 @@ describe("sendInboxItemsToProject", () => {
         id: parentId,
         name: "parent-with-kids",
         status: "Open",
-        parents: [projectRootId],
+        parents: [{ id: projectRootId }],
         memos: [],
         createdAt: today,
         order: 0,
@@ -243,10 +245,9 @@ describe("sendInboxItemsToProject", () => {
         id: "existing-1",
         name: "existing-1",
         status: "Open",
-        parents: [parentId],
+        parents: [{ id: parentId, order: 0 }],
         memos: [],
         createdAt: today,
-        order: 0,
       },
       targetState.taskDirs
     );
@@ -256,10 +257,9 @@ describe("sendInboxItemsToProject", () => {
         id: "existing-2",
         name: "existing-2",
         status: "Open",
-        parents: [parentId],
+        parents: [{ id: parentId, order: 1 }],
         memos: [],
         createdAt: today,
-        order: 1,
       },
       targetState.taskDirs
     );
@@ -278,9 +278,7 @@ describe("sendInboxItemsToProject", () => {
     const { tasks } = readProject(projectDir);
     const movedA = tasks.get(a.task.id);
     const movedB = tasks.get(b.task.id);
-    expect(movedA.parents).toEqual([parentId]);
-    expect(movedB.parents).toEqual([parentId]);
-    expect(movedA.order).toBe(2);
-    expect(movedB.order).toBe(3);
+    expect(movedA.parents).toEqual([{ id: parentId, order: 2 }]);
+    expect(movedB.parents).toEqual([{ id: parentId, order: 3 }]);
   });
 });

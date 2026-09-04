@@ -28,7 +28,7 @@ function taskWithMemoKind(kind: string | undefined): WorkspaceTask {
     id: "t1",
     name: "タスク",
     status: "Open",
-    parents: ["root"],
+    parents: [{ id: "root" }],
     createdAt: "2026-09-03",
     memos: [
       {

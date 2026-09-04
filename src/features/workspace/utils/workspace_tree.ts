@@ -1,5 +1,6 @@
 ﻿import { normalizeTagList } from "@lib/utils/tags";
-import type { WorkspaceTask, WorkspaceTaskStatus } from "@app-types/workspace";
+import type { WorkspaceParentLink, WorkspaceTask, WorkspaceTaskStatus } from "@app-types/workspace";
+import { normalizeParentLinks, orderUnderParent } from "@lib/utils/parent_links";
 import {
   normalizeMemoFormat,
   normalizeMemoKind,
@@ -21,9 +22,13 @@ const DEFAULT_HEADERS = [
  * DAG → 木の射影。多親ノードは親ごとに現れる（＝行は辺）。打ち切るのは循環だけ。
  */
 export function workspaceToProjectData(
-  tasks: Record<string, WorkspaceTask>,
+  rawTasks: Record<string, WorkspaceTask>,
   rootId: string
 ): ProjectData {
+  // `parents` は旧形式（id の配列）でも来る。ファイルを直接書いた場合や、
+  // 別ウィンドウから渡された古いキャッシュがそれにあたる。入口で 1 回だけ
+  // 揃える（すでに新形式なら元のオブジェクトをそのまま使う）。
+  const tasks = normalizeTasksParents(rawTasks);
   const resolvedRootId =
     tasks[rootId] !== undefined
       ? rootId
@@ -31,19 +36,19 @@ export function workspaceToProjectData(
   const childrenMap = new Map<string, string[]>();
   for (const [id, task] of Object.entries(tasks)) {
     for (const parent of task.parents) {
-      if (!childrenMap.has(parent)) childrenMap.set(parent, []);
-      childrenMap.get(parent)!.push(id);
+      if (!childrenMap.has(parent.id)) childrenMap.set(parent.id, []);
+      childrenMap.get(parent.id)!.push(id);
     }
   }
 
-  for (const children of childrenMap.values()) {
+  for (const [parentId, children] of childrenMap) {
     children.sort((a, b) => {
-      const aOrder = tasks[a]?.order;
-      const bOrder = tasks[b]?.order;
-      if (aOrder === undefined && bOrder === undefined) return 0;
-      if (aOrder === undefined) return 1;
-      if (bOrder === undefined) return -1;
-      return aOrder - bOrder;
+      // 並び順は辺の属性。**その親の下での** order で並べる。
+      const aOrder = orderUnderParent(tasks[a]?.parents, parentId);
+      const bOrder = orderUnderParent(tasks[b]?.parents, parentId);
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      // 同値・未指定どうしは id で決める。読み取り順に頼ると環境で並びが変わる。
+      return a < b ? -1 : a > b ? 1 : 0;
     });
   }
 
@@ -191,7 +196,7 @@ export function workspaceToProjectData(
   // まず孤児のかたまりの「てっぺん」だけを付け直す。子から先に拾うと、
   // 同じかたまりがルート直下と親の下の両方に出てしまう。
   for (const id of unreachable) {
-    if (tasks[id].parents.some((parentId) => unreachableSet.has(parentId))) continue;
+    if (tasks[id].parents.some((parent) => unreachableSet.has(parent.id))) continue;
     rescue(id);
   }
   // てっぺんが無いかたまり（ルートに繋がらない循環）はここで拾う。
@@ -222,7 +227,8 @@ export function projectDataToWorkspaceTasks(
 
   function traverse(
     node: TreeData,
-    parentIds: string[],
+    // その出現の親リンク（親 id ＋ その親の下での並び順）。ルートは空。
+    parentLinks: WorkspaceParentLink[],
     siblingIndex: number,
     // いま辿っている経路の祖先。編集の結果ツリーに循環ができても、
     // ここで打ち切って保存が落ちないようにする（防御）。
@@ -232,19 +238,22 @@ export function projectDataToWorkspaceTasks(
     const pathAncestors = new Set(ancestors).add(node.id);
     const alreadyAt = emittedIndexById.get(node.id);
     if (alreadyAt !== undefined) {
-      // 2 回目以降の出現：親だけ足して、中身は最初の出現のものを使う。
+      // 2 回目以降の出現：親リンクだけ足して、中身は最初の出現のものを使う。
+      // 並び順は辺ごとに違うので、その出現での位置をそのまま持たせる。
       const emitted = result[alreadyAt];
-      for (const parentId of parentIds) {
-        if (!emitted.parents.includes(parentId)) emitted.parents.push(parentId);
+      for (const link of parentLinks) {
+        if (!emitted.parents.some((parent) => parent.id === link.id)) {
+          emitted.parents.push(link);
+        }
       }
       for (const [index, child] of (node.children || []).entries()) {
-        traverse(child, [node.id], index, pathAncestors);
+        traverse(child, [{ id: node.id, order: index }], index, pathAncestors);
       }
       return;
     }
 
     const existing = existingTasks[node.id];
-    const resolvedParents = [...parentIds];
+    const resolvedParents = [...parentLinks];
     const task: WorkspaceTask = {
       id: node.id,
       name: node.data.name,
@@ -273,7 +282,9 @@ export function projectDataToWorkspaceTasks(
         ? node.data.attachments
         : (existing?.attachments ?? []),
       createdAt: existing?.createdAt || today,
-      order: resolvedParents.length === 0 ? existing?.order : siblingIndex,
+      // タスク直下の order はルート（＝プロジェクトの並び順）だけが持つ。
+      // 通常タスクの並び順は parents[].order にある。
+      order: resolvedParents.length === 0 ? existing?.order : undefined,
     };
     if (node.archived) {
       task.archived = true;
@@ -282,7 +293,7 @@ export function projectDataToWorkspaceTasks(
     emittedIndexById.set(node.id, result.length);
     result.push(task);
     for (const [index, child] of (node.children || []).entries()) {
-      traverse(child, [node.id], index, pathAncestors);
+      traverse(child, [{ id: node.id, order: index }], index, pathAncestors);
     }
   }
 
@@ -290,4 +301,27 @@ export function projectDataToWorkspaceTasks(
     traverse(projectData.data, [], 0);
   }
   return result;
+}
+
+/**
+ * `parents` を親リンクに揃える。旧形式が 1 件も無ければ、元の Record を
+ * そのまま返す（通常経路でコピーを作らない）。
+ */
+function normalizeTasksParents(
+  tasks: Record<string, WorkspaceTask>
+): Record<string, WorkspaceTask> {
+  let needsFix = false;
+  for (const task of Object.values(tasks)) {
+    if ((task.parents ?? []).some((parent) => typeof parent !== "object" || parent === null)) {
+      needsFix = true;
+      break;
+    }
+  }
+  if (!needsFix) return tasks;
+
+  const fixed: Record<string, WorkspaceTask> = {};
+  for (const [id, task] of Object.entries(tasks)) {
+    fixed[id] = { ...task, parents: normalizeParentLinks(task.parents, task.order) };
+  }
+  return fixed;
 }

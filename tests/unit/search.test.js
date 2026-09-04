@@ -106,7 +106,7 @@ describe("filter store", () => {
         id: "task-1",
         name: "Task",
         status: "Open",
-        parents: ["project-1"],
+        parents: [{ id: "project-1" }],
         memos: [
           {
             id: "memo-1",
