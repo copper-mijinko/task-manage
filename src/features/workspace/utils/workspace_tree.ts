@@ -180,12 +180,22 @@ export function workspaceToProjectData(
   };
   mark(root);
 
-  for (const id of Object.keys(tasks)) {
-    if (reachable.has(id)) continue;
+  const unreachable = Object.keys(tasks).filter((id) => !reachable.has(id));
+  const unreachableSet = new Set(unreachable);
+  const rescue = (id: string) => {
+    if (reachable.has(id)) return;
     const built = buildNode(id, new Set<string>([resolvedRootId]));
     root.children.push(built.node);
     mark(built.node);
+  };
+  // まず孤児のかたまりの「てっぺん」だけを付け直す。子から先に拾うと、
+  // 同じかたまりがルート直下と親の下の両方に出てしまう。
+  for (const id of unreachable) {
+    if (tasks[id].parents.some((parentId) => unreachableSet.has(parentId))) continue;
+    rescue(id);
   }
+  // てっぺんが無いかたまり（ルートに繋がらない循環）はここで拾う。
+  for (const id of unreachable) rescue(id);
 
   return { headers: DEFAULT_HEADERS, data: root };
 }

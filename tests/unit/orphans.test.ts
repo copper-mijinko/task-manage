@@ -356,3 +356,16 @@ describe("選択の集約は重複を返さない", () => {
     expect(getTopLevelSelection(tree, new Set(["A", "A1", "B"]))).toEqual(["A", "B"]);
   });
 });
+
+describe("孤児のかたまりは、てっぺんから 1 回だけ付け直す", () => {
+  it("親も孤児なら、子はルート直下に重複して出ない", () => {
+    const tasks = {
+      root: T("root", "プロジェクト", []),
+      X: T("X", "迷子の親", ["消えた親"]),
+      Y: T("Y", "迷子の子", ["X"]),
+    };
+    const rows = flattenVisibleTree(workspaceToProjectData(tasks, "root").data, new Set(), false);
+
+    expect(rows.map((r) => r.path)).toEqual(["root", "root/X", "root/X/Y"]);
+  });
+});

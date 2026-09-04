@@ -45,6 +45,7 @@
     restoreNode,
     bulkArchiveNodes,
     bulkRestoreNodes,
+    getNodeByPath,
     parentPathOf,
     pathLeafId,
   } from "@features/tasks/utils/tree_control";
@@ -153,6 +154,19 @@
   $: isMultiSelect = selectionSize > 1;
   // 一括操作の基準の親は、ツリーでいま操作している行の親。
   $: bulkParentPath = parentPathOf($active_row_path ?? "");
+  /**
+   * いま操作している行の親。多親ノードは同じ id の行が複数あるので、
+   * ボタンの活性判定も「最初に見つかった親」ではなく見ている行の側で見る
+   * （実際の移動・インデントは経路で動くので、ここがずれると見た目と
+   * 動作が食い違う）。
+   */
+  $: activeParentNode = getNodeByPath($tree_data?.data, bulkParentPath);
+  // `$:` で作る。ふつうの関数にすると、これを呼ぶ側の `$:` が
+  // `activeParentNode` を依存として拾わず、行を移っても活性判定が
+  // 更新されないままになる。
+  $: parentForRow = (id) =>
+    (activeParentNode?.children?.some((child) => child.id === id) ? activeParentNode : undefined) ??
+    ($tree_data?.data ? getParent(id, $tree_data.data) : undefined);
   $: canMultiSiblingMove =
     isMultiSelect && isContiguousSiblingBlock($tree_data?.data, $selected_ids, bulkParentPath);
   $: canMultiTreeOp =
@@ -161,7 +175,7 @@
     if (!canMultiTreeOp || !$tree_data?.data) return false;
     const anyId = $selected_ids.values().next().value;
     if (!anyId) return false;
-    const parent = getParent(anyId, $tree_data.data);
+    const parent = parentForRow(anyId);
     if (!parent) return false;
     return !!getParent(parent.id, $tree_data.data);
   })();
@@ -176,7 +190,7 @@
 
     const anyId = ids.values().next().value;
     if (!anyId) return unavailable;
-    const parent = getParent(anyId, $tree_data.data);
+    const parent = parentForRow(anyId);
     if (!parent) return unavailable;
 
     const indices = parent.children
@@ -370,14 +384,16 @@
         parentId = selectedId;
       } else {
         // insert_afterの場合は選択されているノードの親
-        const parentNode = getParent(selectedId, $tree_data.data);
+        const parentNode = parentForRow(selectedId);
         if (parentNode) {
           parentId = parentNode.id;
         }
       }
 
-      // ノードを追加
-      $tree_data.data = addNode(new_node, selectedId, $tree_data.data, addAction);
+      // ノードを追加。多親ノードは行ごとに親が違うので、いま見ている行の経路で足す。
+      const rowPath =
+        pathLeafId($active_row_path ?? "") === selectedId ? $active_row_path : undefined;
+      $tree_data.data = addNode(new_node, selectedId, $tree_data.data, addAction, rowPath);
 
       // 親ノードが折りたたまれている場合は展開する
       if (parentId) closed_row_paths.expandNodeEverywhere(parentId);
