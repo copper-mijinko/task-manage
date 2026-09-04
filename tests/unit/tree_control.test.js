@@ -958,18 +958,19 @@ describe("buildStickyTrail", () => {
     ]);
   });
 
-  test("a precomputed id→row map yields the same trail as the internal build", () => {
+  test("a precomputed path→row map yields the same trail as the internal build", () => {
     // TreeTable passes a rows-memoized map so scrolling does not rebuild it per
     // frame; the precomputed-map path must match the self-contained path.
+    // キーは経路（多親ノードは同じ id の行が複数あるため）。
     const rows = flattenVisibleTree(makeStickyTree());
-    const rowById = new Map(rows.map((row) => [row.id, row]));
+    const rowByPath = new Map(rows.map((row) => [row.path, row]));
     for (const scrollTop of [0, 1 * ROW_HEIGHT, 2 * ROW_HEIGHT, 5 * ROW_HEIGHT]) {
-      const withMap = buildStickyTrail(rows, scrollTop, ROW_HEIGHT, rowById);
+      const withMap = buildStickyTrail(rows, scrollTop, ROW_HEIGHT, rowByPath);
       const withoutMap = buildStickyTrail(rows, scrollTop, ROW_HEIGHT);
       expect(namesOf(withMap)).toEqual(namesOf(withoutMap));
     }
     // Spot-check an expected value so the equality above isn't vacuous.
-    expect(namesOf(buildStickyTrail(rows, 1 * ROW_HEIGHT, ROW_HEIGHT, rowById))).toEqual([
+    expect(namesOf(buildStickyTrail(rows, 1 * ROW_HEIGHT, ROW_HEIGHT, rowByPath))).toEqual([
       "Root",
       "A",
     ]);
