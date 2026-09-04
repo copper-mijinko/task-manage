@@ -138,7 +138,7 @@ describe("agenda_store.setStatus", () => {
     id: "task-a",
     name: "A",
     status: "Open",
-    parents: ["root"],
+    parents: [{ id: "root" }],
     memos: [],
     createdAt: "2026-01-01",
   };
