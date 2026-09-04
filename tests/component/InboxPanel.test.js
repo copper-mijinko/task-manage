@@ -42,7 +42,6 @@ function makeTasks(items = []) {
         name: "Inbox",
         status: "Open",
         parents: [],
-        memos: [],
       },
     ],
     ...items.map((item, order) => [
@@ -50,7 +49,6 @@ function makeTasks(items = []) {
       {
         status: "Open",
         parents: [{ id: rootId }],
-        memos: [],
         order,
         ...item,
       },

@@ -45,7 +45,6 @@ const T = (id: string, name: string, parents: string[]) =>
     name,
     status: "Open",
     parents,
-    memos: [],
     createdAt: "2026-09-04",
   }) as WorkspaceTask;
 
@@ -430,13 +429,12 @@ describe("循環を作らせない・作られても落ちない", () => {
 describe("循環で打ち切られた辺は保存で消えない", () => {
   const cyclicTasks = () =>
     ({
-      root: { id: "root", name: "root", status: "Open", parents: [], memos: [], createdAt: "x" },
+      root: { id: "root", name: "root", status: "Open", parents: [], createdAt: "x" },
       X: {
         id: "X",
         name: "X",
         status: "Open",
         parents: [{ id: "root" }, { id: "Y" }],
-        memos: [],
         createdAt: "x",
       },
       Y: {
@@ -444,7 +442,6 @@ describe("循環で打ち切られた辺は保存で消えない", () => {
         name: "Y",
         status: "Open",
         parents: [{ id: "X" }],
-        memos: [],
         createdAt: "x",
       },
     }) as never;

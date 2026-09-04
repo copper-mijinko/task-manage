@@ -60,7 +60,6 @@ function makeElectronAPI(overrides = {}) {
           name: "Actual Project",
           status: "Open",
           parents: [],
-          memos: [],
           createdAt: "2026-01-01",
         },
         "task-1": {
@@ -68,7 +67,6 @@ function makeElectronAPI(overrides = {}) {
           name: "Opened Task",
           status: "Open",
           parents: [{ id: "actual-root" }],
-          memos: [],
           createdAt: "2026-01-01",
         },
       },

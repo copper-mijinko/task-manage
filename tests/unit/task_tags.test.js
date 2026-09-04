@@ -77,7 +77,6 @@ describe("task tags persistence", () => {
         name: "Proj",
         status: "Open",
         parents: [],
-        memos: [],
         tags: ["frontend", "Frontend", "#design"],
         createdAt: "2026-04-24",
       },
@@ -103,7 +102,6 @@ describe("task tags persistence", () => {
         name: "Proj",
         status: "Open",
         parents: [],
-        memos: [],
         createdAt: "2026-04-24",
       },
       taskDirs()

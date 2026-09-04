@@ -188,7 +188,6 @@ describe("sendInboxItemsToProject", () => {
         name: "candidate-parent",
         status: "Open",
         parents: [{ id: projectRootId }],
-        memos: [],
         createdAt: today,
         order: 0,
       },
@@ -233,7 +232,6 @@ describe("sendInboxItemsToProject", () => {
         name: "parent-with-kids",
         status: "Open",
         parents: [{ id: projectRootId }],
-        memos: [],
         createdAt: today,
         order: 0,
       },
@@ -246,7 +244,6 @@ describe("sendInboxItemsToProject", () => {
         name: "existing-1",
         status: "Open",
         parents: [{ id: parentId, order: 0 }],
-        memos: [],
         createdAt: today,
       },
       targetState.taskDirs
@@ -258,7 +255,6 @@ describe("sendInboxItemsToProject", () => {
         name: "existing-2",
         status: "Open",
         parents: [{ id: parentId, order: 1 }],
-        memos: [],
         createdAt: today,
       },
       targetState.taskDirs

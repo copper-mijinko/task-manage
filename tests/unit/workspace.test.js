@@ -137,7 +137,7 @@ function makeTasks(spec) {
   // spec: { id: { parents: [{ id: ids }] } }
   const tasks = new Map();
   for (const [id, { parents }] of Object.entries(spec)) {
-    tasks.set(id, { id, parents, name: id, status: "Open", memos: [], createdAt: "" });
+    tasks.set(id, { id, parents, name: id, status: "Open", createdAt: "" });
   }
   return tasks;
 }
@@ -376,51 +376,47 @@ describe("file system operations", () => {
     expect(legacyMemoFiles.has("root-memo")).toBe(true);
   });
 
-  it("readProjectAsync matches readProject for a multi-task project with memos", async () => {
+  it("readProjectAsync matches readProject, 旧メモの取り込みも含めて", async () => {
     const { projectDir } = createProject(tmpDir, "Proj", "root-id");
     const taskDirs = new Map([["root-id", "_project"]]);
-    writeTask(
-      projectDir,
-      {
-        id: "root-id",
-        name: "Proj",
-        status: "Open",
-        parents: [],
-        memos: [{ id: "root-memo", title: "Root Notes", content: "# Root Notes\n\nbody" }],
-        createdAt: "2026-04-24",
-      },
-      taskDirs
+    for (const id of ["child-a", "child-b"]) {
+      writeTask(
+        projectDir,
+        {
+          id,
+          name: id,
+          status: "Open",
+          parents: [{ id: "root-id" }],
+          createdAt: "2026-04-24",
+        },
+        taskDirs
+      );
+    }
+    // 旧メモを両方の読み手が同じようにノードへ取り込むこと。
+    fs.writeFileSync(
+      path.join(projectDir, "root-memo.md"),
+      "---\nid: root-memo\ntitle: Root Notes\n---\n\nbody\n"
     );
-    writeTask(
-      projectDir,
-      {
-        id: "child-a",
-        name: "Child A",
-        status: "Open",
-        parents: [{ id: "root-id" }],
-        memos: [{ id: "memo-a", title: "A", content: "alpha" }],
-        createdAt: "2026-04-24",
-      },
-      taskDirs
-    );
-    writeTask(
-      projectDir,
-      {
-        id: "child-b",
-        name: "Child B",
-        status: "Open",
-        parents: [{ id: "root-id" }],
-        memos: [],
-        createdAt: "2026-04-24",
-      },
-      taskDirs
+    fs.writeFileSync(
+      path.join(projectDir, "child-a", "memo-a.md"),
+      "---\nid: memo-a\ntitle: A\n---\n\nalpha\n"
     );
 
     const sync = readProject(projectDir);
     const asyncResult = await readProjectAsync(projectDir);
 
+    expect([...sync.tasks.keys()].sort()).toEqual([
+      "child-a",
+      "child-b",
+      "memo-a",
+      "root-id",
+      "root-memo",
+    ]);
     expect([...asyncResult.taskDirs.entries()].sort()).toEqual([...sync.taskDirs.entries()].sort());
     expect([...asyncResult.tasks.keys()].sort()).toEqual([...sync.tasks.keys()].sort());
+    expect([...asyncResult.legacyMemoFiles.keys()].sort()).toEqual(
+      [...sync.legacyMemoFiles.keys()].sort()
+    );
     for (const [id, task] of sync.tasks) {
       expect(asyncResult.tasks.get(id)).toEqual(task);
     }
@@ -571,7 +567,6 @@ describe("file system operations", () => {
       status: "Open",
       // 並び順は辺の属性なので、親リンクに載せて往復させる。
       parents: [{ id: "root-id", order: 2 }],
-      memos: [],
       createdAt: "2026-04-24",
     };
     writeTask(projectDir, task, taskDirs);
@@ -616,7 +611,6 @@ describe("file system operations", () => {
       name: "No Order Task",
       status: "Open",
       parents: [{ id: "root-id" }],
-      memos: [],
       createdAt: "2026-04-24",
     };
     writeTask(projectDir, task, taskDirs);
@@ -784,7 +778,6 @@ describe("file system operations", () => {
       name: "To Delete",
       status: "Open",
       parents: [{ id: "root-id" }],
-      memos: [],
       createdAt: "2026-04-24",
     };
     writeTask(projectDir, task, taskDirs);
@@ -805,7 +798,6 @@ describe("file system operations", () => {
       name: "Assets",
       status: "Open",
       parents: [{ id: "root-id" }],
-      memos: [],
       createdAt: "2026-04-24",
     };
     writeTask(projectDir, task, taskDirs);
@@ -831,7 +823,6 @@ describe("file system operations", () => {
       name: "Preview",
       status: "Open",
       parents: [{ id: "root-id" }],
-      memos: [],
       createdAt: "2026-04-24",
     };
     writeTask(projectDir, task, taskDirs);
@@ -862,7 +853,6 @@ describe("file system operations", () => {
       name: "Attachments",
       status: "Open",
       parents: [{ id: "root-id" }],
-      memos: [],
       createdAt: "2026-04-24",
     };
     writeTask(projectDir, task, taskDirs);
@@ -906,7 +896,6 @@ describe("file system operations", () => {
       name: "Attachments",
       status: "Open",
       parents: [{ id: "root-id" }],
-      memos: [],
       createdAt: "2026-04-24",
     };
     writeTask(projectDir, task, taskDirs);
@@ -1041,7 +1030,6 @@ describe("file system operations", () => {
       name: "Unsafe",
       status: "Open",
       parents: [{ id: "root-id" }],
-      memos: [],
     };
 
     await expect(writeTaskAsync(projectDir, task, taskDirs)).rejects.toThrow(/Invalid task id/);
@@ -1100,7 +1088,6 @@ describe("file system operations", () => {
       name: "Assets",
       status: "Open",
       parents: [{ id: "root-id" }],
-      memos: [],
       createdAt: "2026-04-24",
     };
     writeTask(projectDir, task, taskDirs);
@@ -1125,7 +1112,6 @@ describe("file system operations", () => {
       name: "Delete",
       status: "Open",
       parents: [{ id: "root-id" }],
-      memos: [],
       createdAt: "2026-04-24",
     };
     writeTask(projectDir, task, taskDirs);
@@ -1147,7 +1133,6 @@ describe("file system operations", () => {
       name: "Child",
       status: "Open",
       parents: [{ id: "async-io-root" }],
-      memos: [],
       createdAt: "2026-04-24",
     };
     writeTask(projectDir, childTask, taskDirs);
@@ -1282,7 +1267,6 @@ describe("file system operations", () => {
       name: "Proj",
       status: "Open",
       parents: [],
-      memos: [],
       createdAt: "2026-04-24",
     };
     const stableTask = {
@@ -1310,7 +1294,6 @@ describe("file system operations", () => {
       name: "Remove",
       status: "Open",
       parents: [{ id: "root-id" }],
-      memos: [],
       createdAt: "2026-04-24",
       order: 2,
     };

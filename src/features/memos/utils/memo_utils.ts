@@ -638,10 +638,3 @@ export function memoContentForCompare(value: unknown): unknown {
 }
 
 // 将来 elasticlunr 等のインデックス型エンジンに差し替え可能な検索ポイント
-export function searchMemoEntries(memos: Array<{ content: unknown }>, keywords: string[]): boolean {
-  return memos.some((entry) =>
-    keywords.some((keyword) =>
-      memoContentForSearch(entry.content).toLowerCase().includes(keyword.toLowerCase())
-    )
-  );
-}

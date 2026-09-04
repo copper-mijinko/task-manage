@@ -1142,7 +1142,6 @@ function promoteLegacyMemos(tasks, taskDirs, memosByTaskId) {
         bodyLoaded: memo.bodyLoaded,
         tags: memo.tags ?? [],
         attachments: [],
-        memos: [],
         createdAt: parent.createdAt || "",
       });
       // 画像は親ディレクトリの `assets/` にある。移行するまではそちらを見る。
@@ -2036,7 +2035,6 @@ function createProject(workspacePath, name, id, order) {
     name,
     status: "Open",
     parents: [],
-    memos: [],
     createdAt: today,
     order,
   });
@@ -2056,7 +2054,6 @@ async function createProjectAsync(workspacePath, name, id, order, options = {}) 
       name,
       status: "Open",
       parents: [],
-      memos: [],
       createdAt: today,
       order,
     },
