@@ -1,6 +1,7 @@
 ﻿<script>
   import {
     getNode,
+    isChild,
     isNodeEffectivelyArchived,
     updateNodeDataById,
   } from "@features/tasks/utils/tree_control";
@@ -28,9 +29,13 @@
   import TaskAttachments from "@features/tasks/components/TaskAttachments.svelte";
   import DateInput from "@lib/primitives/DateInput.svelte";
   import TagField from "@lib/primitives/TagField.svelte";
+  import ParentField from "@features/tasks/components/ParentField.svelte";
   import { normalizeTagList } from "@lib/utils/tags";
   import * as platform from "@lib/ipc/platform";
-  import { projectDataToWorkspaceTasks } from "@features/workspace/utils/workspace_tree";
+  import {
+    projectDataToWorkspaceTasks,
+    workspaceToProjectData,
+  } from "@features/workspace/utils/workspace_tree";
   import {
     convertMemoContent,
     isQuillDelta,
@@ -430,6 +435,74 @@
       editContext
     );
   };
+
+  /**
+   * 親の付け外し。
+   *
+   * `parents` はツリーの形ではなくノードの属性なので、workspace_tasks_cache
+   * （＝ワークスペース側の正本）を直接書き換え、そこからツリーを組み直す。
+   * ツリー側で親を表現しようとすると、多親を単親に潰すことになる。
+   */
+  $: isProjectRoot = Boolean(node && $tree_data?.data && node.id === $tree_data.data.id);
+  $: currentParentIds = normalizeParentIds($workspace_tasks_cache[node?.id]?.parents);
+
+  function normalizeParentIds(value) {
+    return Array.isArray(value) ? value.filter((id) => typeof id === "string" && id) : [];
+  }
+
+  /** id → 名前。チップと候補の表示に使う。 */
+  $: nodeNameById = Object.fromEntries(
+    Object.values($workspace_tasks_cache ?? {}).map((task) => [task.id, task.name])
+  );
+
+  /**
+   * 親の候補。自分自身と**子孫**を除く（循環を編集時に防ぐ）。
+   * 既に親になっているものは ParentField 側で外れる。
+   */
+  $: parentCandidates =
+    node && $tree_data?.data
+      ? Object.values($workspace_tasks_cache ?? {})
+          .filter((task) => task.id !== node.id)
+          .filter((task) => !isChild(task.id, node.id, $tree_data.data))
+          .map((task) => ({
+            id: task.id,
+            name: task.name,
+            path: nodePathById[task.id] ?? "",
+          }))
+      : [];
+
+  /** 候補に出す補助情報（ルートからの経路）。同名ノードの見分けに要る。 */
+  $: nodePathById = buildNodePathLabels($tree_data?.data);
+
+  function buildNodePathLabels(root) {
+    const labels = {};
+    if (!root) return labels;
+    const walk = (treeNode, trail) => {
+      if (labels[treeNode.id] === undefined) labels[treeNode.id] = trail.join(" / ");
+      const nextTrail = [...trail, treeNode.data?.name ?? ""];
+      for (const child of treeNode.children ?? []) walk(child, nextTrail);
+    };
+    walk(root, []);
+    return labels;
+  }
+
+  function saveParents(nextParentIds) {
+    if (!node || !isWorkspaceProject || !workspaceProjectDir) return;
+    const normalized = normalizeParentIds(nextParentIds);
+    // 孤児は作らない。空になる操作は受け付けない。
+    if (normalized.length === 0) return;
+
+    const cached = $workspace_tasks_cache[node.id];
+    if (!cached) return;
+
+    const nextTask = { ...cached, parents: normalized };
+    const nextTasks = { ...$workspace_tasks_cache, [node.id]: nextTask };
+    workspace_tasks_cache.set(nextTasks);
+
+    const rootId = $tree_data?.data?.id;
+    if (!rootId) return;
+    tree_data.set(workspaceToProjectData(nextTasks, rootId));
+  }
 
   const changeTaskField = (key, value, debounceChange = false) => {
     if (!node) {
@@ -918,6 +991,19 @@
                 >{memo.length}</output
               >
             </div>
+
+            {#if isWorkspaceProject && node && !isProjectRoot}
+              <div class="detail-field detail-field-wide">
+                <span class="detail-label" id="lbl-task-parents">親</span>
+                <ParentField
+                  parentIds={currentParentIds}
+                  candidates={parentCandidates}
+                  nameById={nodeNameById}
+                  disabled={isArchived}
+                  on:change={(event) => saveParents(event.detail.parentIds)}
+                />
+              </div>
+            {/if}
 
             <div class="detail-field detail-field-wide">
               <span class="detail-label" id="lbl-task-tags">タグ</span>
