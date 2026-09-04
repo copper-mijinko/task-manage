@@ -82,7 +82,7 @@ src/
 │   └── TaskDetailPage.svelte    # W-002 タスク詳細ウィンドウ本体
 │
 ├── stores/                      # 横断ストア（複数 feature が読み書き）
-│   ├── ui.ts                    # 選択ID・折りたたみ・パネル開閉
+│   ├── ui.ts                    # 選択ID・折りたたみ（経路ごと）・現在行の経路・パネル開閉
 │   ├── theme.ts                 # テーマ
 │   ├── preferences.ts           # ユーザ設定（date_time_format 等）。meta.json に永続化
 │   ├── panel_coordinator.ts     # ポップオーバー調停
@@ -213,7 +213,7 @@ import LocalComponent from "./LocalComponent.svelte";
 | `agenda_store`                                                                           | `@features/agenda/stores/agenda`                 | Workspace 横断の予定（全プロジェクトの未完了タスクを期限でグルーピング） |
 | `filter` / `pageSearchQuery`                                                             | `@features/search/stores/search`                 | フィルター条件 / 画面内検索クエリ                       |
 | `pageSearchMatchCount` / `pageSearchCurrentIndex`                                        | `@features/search/utils/page_search_highlighter` | 画面内検索の件数と現在位置（readable store）            |
-| `selected_id` / `closed_row_paths` / `sidebarCollapsed` / `copied_task` / `saveStatus` / `show_archived` 等 | `@stores/ui`                                     | UI状態（`show_archived` はアーカイブ済みタスクの表示切替・プロジェクト毎に永続化） |
+| `selected_id` / `closed_row_paths` / `active_row_path` / `sidebarCollapsed` / `copied_task` / `saveStatus` / `show_archived` 等 | `@stores/ui`                                     | UI状態。`closed_row_paths` は**経路ごと**の折り畳み（`rekey` で移動に追随、`pruneMissing` で無効な経路を掃除）。`active_row_path` はいま操作している行（辺）。`show_archived` はアーカイブ済みタスクの表示切替・プロジェクト毎に永続化 |
 | `theme`                                                                                  | `@stores/theme`                                  | テーマ                                                  |
 | `date_time_format`                                                                       | `@stores/preferences`                            | 入力ショートカット（`Ctrl+;` / `Ctrl+:`）の挿入フォーマット |
 | `panelCoordinator`                                                                       | `@stores/panel_coordinator`                      | ポップオーバー調停                                      |
@@ -280,6 +280,8 @@ import LocalComponent from "./LocalComponent.svelte";
 | 設定モーダル                                                       | `src/features/settings/components/SettingsModal.svelte`、トリガは `Header.svelte` の ⚙ ボタン                                                    |
 | 入力ショートカット（日付・時刻）                                   | `src/lib/utils/datetime_shortcuts.ts`（`registerDateTimeShortcuts`）、`App.svelte` の `onMount` で登録                                            |
 | ページ遷移履歴（戻る・進む）                                       | `src/stores/navigation_history.ts`（`navigation_history` / `canGoBack` / `canGoForward`）+ `Header.svelte` の戻る／進むボタン + `App.svelte` のショートカット (Alt+←/Alt+→) と XButton 受け |
+| 多親（行＝辺）                                                     | `src/features/workspace/utils/workspace_tree.ts`（親ごとの展開・出現どうしのオブジェクト共有・孤児の受け皿・循環で打ち切った辺の保持）+ `tree_control.ts` の経路 API（`getNodeByPath` / `parentPathOf` / `pathLeafId` / `pathIncludesNode` / `collectTreePaths` / `reattachOrphans`）+ `@stores/ui` の `closed_row_paths`（経路ごとの折り畳み）と `active_row_path`（いま操作している行）+ `TreeTable.svelte` / `TreeTableRow.svelte`（`data-row-path` / `EchoRow`）+ `src/lib/utils/parent_links.ts`（親リンクの正規化。main 側 `electron/workspace.js` の `normalizeParentLinks` と同じ仕様） |
+| 親の付け外し                                                       | `src/features/tasks/components/ParentField.svelte` + `TaskDetail.svelte` の親フィールド（候補から自分自身と子孫を除いて循環を防ぐ / 唯一の親は外せない） |
 | アーカイブ（論理削除）                                             | `tree_control.ts` の `archiveNode` / `restoreNode` / `bulkArchiveNodes` / `bulkRestoreNodes` / `stripArchivedNodes` + `@stores/ui` の `show_archived` + ツールバー（`MainPage.svelte`）の削除/復元/トグル + `TreeTableRow.svelte` の archived 行スタイル + `TaskDetail.svelte` の archived バナー + `electron/workspace.js` の frontmatter `archived` / `archived_at` |
 
 > `src/lib/primitives/Drawer.svelte` は現在は未使用（旧 Drawer 形式の左ナビ用）。互換のためファイルは残置するが、本アプリの画面構成では使用しない。
