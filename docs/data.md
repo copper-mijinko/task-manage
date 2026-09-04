@@ -249,7 +249,7 @@ created: 2026-08-24
 - 同じ id の行が複数あるため、**行の同一性は経路**（`親id/子id/…`）で決まる。`VisibleTreeRow.path` がそれで、Svelte の keyed each の key・行番号・キーボード移動・フォーカス復帰はすべて経路で引く。id を key にすると `each_key_duplicate` で描画が壊れる
 - DOM の `id` 属性は**最初の出現にだけ**付ける（`isPrimaryOccurrence`）。重複 id を作らず、既存の `getElementById` と E2E の `#<taskId>` セレクタはそのまま動く。全出現は `data-node-id` / `data-row-path` で引ける
 - 選択はノード id で行う。したがって**片方の行を選ぶと全出現が選択表示になる**。多親ノードが「同じもの」だと分かる手掛かりになるので、これは意図的。ただし**いま操作している行（辺）は別扱い**で、それ以外の出現は塗りを薄く・左のバーを破線にして弱める（`TreeTable` の `activeRowPath` / `EchoRow`）
-- 折り畳みも**行（辺）ごと**の状態なので、`closed_row_paths` は経路を持つ（永続化キーは `closed_paths_<プロジェクトID>`）。片方の親の下で畳んでも、もう片方の下は開いたまま
+- 折り畳みも**行（辺）ごと**の状態なので、`closed_row_paths` は経路を持つ（永続化キーは `closed_paths_<プロジェクトID>`）。片方の親の下で畳んでも、もう片方の下は開いたまま。インデント／アウトデントで経路が変わるときは `rekey` で状態を移し、ツリーが変わるたびに `pruneMissing` で存在しない経路を捨てる（畳んだノードを動かすと開いてしまう／古い経路が溜まる、という両方を防ぐ）
 - **行に紐づくものはすべて経路で引く**。名前パス（`buildNodePathMap`）、祖先から継承する期限（`buildInheritedDueDateMap`）、スクロール時のパンくず（`buildStickyTrail`）、ガントの行（`GanttPanel` の keyed each）。ノード id で引くと、別の親の下の値が混ざる（ガントは `each_key_duplicate` で描画が壊れる）
 - D&D は「掴んだ辺を外して、落とした行の隣に置く」。`reorderTree` / `addNode` / `rmNode` / `bulkAddNodes` は経路を受け取る
 - 「アーカイブされた扱いか」は、**ルートから archived を通らずに辿り着けるか**で決める（`isNodeEffectivelyArchived`）。片方の親がアーカイブでも、もう片方から生きて辿れるならそのノードは生きている。復元（`restoreNode`）はクリックした行の祖先だけを解除する
@@ -263,6 +263,8 @@ created: 2026-08-24
 
 - **削除時**（`reattachOrphans`）。削除は「辺を 1 本切る」操作でしかない。切った先が唯一の親だった子は、その場でルート直下に付け直す。他にも親があるノードは動かさない。まとめて消したノード同士も拾わない
 - **読み込み時**（`workspaceToProjectData`）。存在しない親を指している、親をたどると自分に戻る、といったタスクはアプリの外（エディタ・CLI・同期）で生まれうる。読み込み時に 1 パスで検出してルート直下に付け直す。次の保存で `parents` も直る
+- 循環がファイル側にある場合、木に描けない辺が出る。これは `TreeData.cutParentIds` に載せて保存で書き戻す（木からは導けないので、ここでしか復元できない）。アプリ内では循環を作れない（`canIndentNode` / `canDropTarget` が止める）ので、これは外で作られたデータの受け皿
+- 辺は集合なので、すでに親であるノードの下へ動かしても二重に足さない（`addNode` / `bulkAddNodes`）。二重になると行の経路が衝突して描画が壊れる
 - 回帰テストは `tests/unit/orphans.test.ts`
 - `projectDataToWorkspaceTasks` は同じノードを複数回訪れるので、**ノードごとに 1 件だけ出し、親は全出現の和**を採る。木が全ての辺を見せるようになったため、木の位置から親を正確に導ける。片方の出現だけを動かせばその辺だけが変わり、他の親は残る
 - 回帰テストは `tests/unit/multi_parent.test.ts`

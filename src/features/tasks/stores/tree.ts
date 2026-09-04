@@ -318,6 +318,10 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
         }
         pendingSkipSnapshot = false;
 
+        // 移動でノードの経路が変わると、折り畳み状態の経路が宙に浮く。
+        // 溜め込まないよう、ツリーが変わるたびに存在しない経路を捨てる。
+        closed_row_paths.pruneMissing(current.data);
+
         const removedIds = findRemovedNodeIds(previousData, current);
         if (removedIds.length > 0) {
           // 消えたノードを通る経路の折り畳み状態を捨てる（永続化も store 側）。

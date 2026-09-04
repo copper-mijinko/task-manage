@@ -59,6 +59,15 @@ export interface TreeData {
   archived?: boolean;
   /** archived を立てた時刻（ISO 8601）。表示ソート用。 */
   archivedAt?: string;
+  /**
+   * 循環のせいで木に描けなかった親の id。
+   *
+   * 木は DAG の射影なので、循環がある場合だけ「データにはあるが描かれない辺」
+   * が生まれる。保存は木を辿って親を導くため、これを持っておかないとその辺が
+   * ファイルから消える。表示には使わない（`workspaceToProjectData` が付け、
+   * `projectDataToWorkspaceTasks` が書き戻す）。
+   */
+  cutParentIds?: string[];
 }
 
 export interface ProjectHeader {
@@ -445,6 +454,8 @@ export function flattenVisibleTree(
     siblingCount: number,
     insideArchived: boolean,
     parentPath: string,
+    /** 直前の兄弟の id。インデント可否の判定に使う。 */
+    previousSiblingId: string | undefined,
     // いま辿っている経路の祖先。編集の結果ツリーに循環ができても、
     // ここで打ち切って画面が落ちないようにする（防御。作らせない方は
     // canIndentNode / canDropTarget 側で止める）。
@@ -458,6 +469,11 @@ export function flattenVisibleTree(
     }
     const hasChildren = !!(node.children && node.children.length > 0);
     const path = parentPath ? `${parentPath}/${node.id}` : node.id;
+    // 子を持たないノードは誰の祖先にもならないので、その場合は調べない。
+    const previousSiblingIsDescendant =
+      hasChildren && siblingIndex > 0 && previousSiblingId
+        ? subtreeContains(node, previousSiblingId)
+        : false;
     // 開閉は**辺ごと**に持つ。多親ノードは親ごとに別の行なので、片方の親の下で
     // 畳んでも、もう片方の親の下では開いたままでなければならない。
     const expanded = !closedPaths.has(path);
@@ -478,7 +494,9 @@ export function flattenVisibleTree(
       effectivelyArchived,
       canMoveUp: siblingIndex > 0,
       canMoveDown: siblingIndex < siblingCount - 1,
-      canIndent: siblingIndex > 0,
+      // 直前の兄弟が自分の子孫なら、そこへ入れると循環する（多親でのみ起こる）。
+      // ボタンを押せてしまうと、押しても何も起きない行ができる。
+      canIndent: siblingIndex > 0 && !previousSiblingIsDescendant,
       canOutdent: depth > 1,
     });
 
@@ -490,13 +508,38 @@ export function flattenVisibleTree(
     const childCount = node.children.length;
     node.children.forEach((child, index) => {
       if (pathAncestors.has(child.id)) return;
-      visit(child, depth + 1, node.id, index, childCount, effectivelyArchived, path, pathAncestors);
+      visit(
+        child,
+        depth + 1,
+        node.id,
+        index,
+        childCount,
+        effectivelyArchived,
+        path,
+        node.children[index - 1]?.id,
+        pathAncestors
+      );
     });
   };
 
-  visit(tree_data, 0, undefined, 0, 1, false, "", new Set<string>());
+  visit(tree_data, 0, undefined, 0, 1, false, "", undefined, new Set<string>());
 
   return rows;
+}
+
+/** その部分木に指定 id のノードが居るか。見つかり次第打ち切る。 */
+function subtreeContains(node: TreeData, targetId: string): boolean {
+  const visited = new Set<string>();
+  const walk = (current: TreeData): boolean => {
+    if (visited.has(current.id)) return false;
+    visited.add(current.id);
+    for (const child of current.children ?? []) {
+      if (child.id === targetId) return true;
+      if (walk(child)) return true;
+    }
+    return false;
+  };
+  return walk(node);
 }
 
 type TreePathEntry = {
@@ -760,12 +803,20 @@ export function addNode(
       if (index === undefined) {
         return tree_data;
       }
+      // 辺は集合。すでに同じ親の子なら二重に足さない（多親ノードを、すでに
+      // 親であるノードの下へ動かしたときに起こる。行の経路が衝突して壊れる）。
+      if (base_parent_tree.children.some((child) => child.id === node.id)) {
+        return tree_data;
+      }
       base_parent_tree.children.splice(index, 0, node);
       break;
     }
     case "append": {
       const base_tree = getNodeByPath(tree_data, basePath) ?? getNode(base, tree_data);
       if (!base_tree) {
+        return tree_data;
+      }
+      if (base_tree.children.some((child) => child.id === node.id)) {
         return tree_data;
       }
       base_tree.children.push(node);
@@ -1148,15 +1199,32 @@ export function restoreNode(target: string, tree_data: TreeData, rowPath?: strin
   return tree_data;
 }
 
+/**
+ * 復元のために解除すべき祖先。多親ノードは経路が複数あるので、**解除する数が
+ * 最小の経路**を選ぶ（最初に見つかった経路を使うと、見てもいない別の親の側が
+ * 巻き添えで解除される）。
+ */
 function getRestoreNodeIds(target: string, tree_data: TreeData): Set<string> {
-  const path = findPathToNode(target, tree_data);
-  const ids = new Set<string>();
-  for (const entry of path ?? []) {
-    if (entry.parent && entry.node.archived) {
-      ids.add(entry.node.id);
+  let best: Set<string> | undefined;
+
+  const walk = (node: TreeData, archivedOnPath: string[], ancestors: ReadonlySet<string>) => {
+    if (ancestors.has(node.id)) return;
+    const isRoot = node.id === tree_data.id;
+    const nextArchived = !isRoot && node.archived ? [...archivedOnPath, node.id] : archivedOnPath;
+    if (node.id === target) {
+      if (!best || nextArchived.length < best.size) best = new Set(nextArchived);
+      return;
     }
-  }
-  return ids;
+    const nextAncestors = new Set(ancestors).add(node.id);
+    for (const child of node.children ?? []) {
+      // 既に「解除ゼロ」の経路が見つかっていれば、それ以上は探さない。
+      if (best && best.size === 0) return;
+      walk(child, nextArchived, nextAncestors);
+    }
+  };
+  walk(tree_data, [], new Set<string>());
+
+  return best ?? new Set<string>();
 }
 
 /** archived フラグを無視して、対象ノードをツリーから物理削除する。 */
@@ -1525,13 +1593,19 @@ export function bulkAddNodes(
         }
       }
       if (index < 0) return tree_data;
-      baseParent.children.splice(index, 0, ...nodes);
+      // 辺は集合。すでに同じ親の子になっているものは足さない。
+      const insertable = nodes.filter(
+        (node) => !baseParent.children.some((child) => child.id === node.id)
+      );
+      baseParent.children.splice(index, 0, ...insertable);
       break;
     }
     case "append": {
       const baseNode = getNodeByPath(tree_data, basePath) ?? getNode(base, tree_data);
       if (!baseNode) return tree_data;
-      baseNode.children.push(...nodes);
+      baseNode.children.push(
+        ...nodes.filter((node) => !baseNode.children.some((child) => child.id === node.id))
+      );
       break;
     }
   }
