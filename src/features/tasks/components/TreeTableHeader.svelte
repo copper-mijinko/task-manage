@@ -43,7 +43,28 @@
     }
   }
 
-  const STATUS_OPTIONS = ["Open", "Pending", "In Progress", "Completed", "Canceled"];
+  // 「なし」（空文字）は他の状態と同格の選択肢。ステータスを持たないノードは
+  // 統一後ふつうに存在するので、絞り込めないと数の多いほうが探せなくなる。
+  const NO_STATUS = "";
+  const STATUS_LABELS = {
+    [NO_STATUS]: "なし",
+    Open: "未着手",
+    Pending: "保留",
+    "In Progress": "進行中",
+    Completed: "完了",
+    Canceled: "キャンセル",
+  };
+  const STATUS_OPTIONS = [NO_STATUS, "Open", "Pending", "In Progress", "Completed", "Canceled"];
+
+  /**
+   * 選択済みステータスの取り出し。
+   *
+   * `filter(Boolean)` を使わないこと。「なし」は空文字なので落ちてしまい、
+   * 選んでもフィルタが効いていないように見える。落としたいのは null/undefined
+   * だけで、空文字は正当な値。
+   */
+  const selectedStatuses = (currentFilter) =>
+    (currentFilter?.status ?? []).filter((value) => value != null);
   const EMPTY_FILTER_LABEL = "条件なし";
   const FILTER_ICON_PATH =
     "M3 7C3 6.44772 3.44772 6 4 6H20C20.5523 6 21 6.44772 21 7C21 7.55228 20.5523 8 20 8H4C3.44772 8 3 7.55228 3 7ZM6 12C6 11.4477 6.44772 11 7 11H17C17.5523 11 18 11.4477 18 12C18 12.5523 17.5523 13 17 13H7C6.44772 13 6 12.5523 6 12ZM9 17C9 16.4477 9.44772 16 10 16H14C14.5523 16 15 16.4477 15 17C15 17.5523 14.5523 18 14 18H10C9.44772 18 9 17.5523 9 17Z";
@@ -76,7 +97,7 @@
   $: startDateFilter = $filter["start date"] ?? ["", ""];
   $: dueDateFilter = $filter["due date"] ?? ["", ""];
   $: nameFilterValue = $filter?.name?.[0] ?? "";
-  $: statusSelected = $filter?.status?.filter(Boolean) ?? [];
+  $: statusSelected = selectedStatuses($filter);
   $: filterSummaries = Object.fromEntries(
     (headers ?? []).map((header) => [header.name, getFilterSummary(header.name, $filter)])
   );
@@ -132,7 +153,7 @@
       return Boolean(currentFilter?.name?.[0]);
     }
     if (headerName === "status") {
-      return (currentFilter?.status?.filter(Boolean).length ?? 0) > 0;
+      return selectedStatuses(currentFilter).length > 0;
     }
     return (currentFilter?.[headerName]?.filter(Boolean).length ?? 0) > 0;
   }
@@ -155,8 +176,8 @@
       return getDateFilterSummary(headerName, currentFilter);
     }
     if (headerName === "status") {
-      const statusValues = currentFilter?.status?.filter(Boolean) ?? [];
-      if (statusValues.length === 1) return statusValues[0];
+      const statusValues = selectedStatuses(currentFilter);
+      if (statusValues.length === 1) return STATUS_LABELS[statusValues[0]] ?? statusValues[0];
       if (statusValues.length > 1) return `${statusValues.length} selected.`;
       return EMPTY_FILTER_LABEL;
     }

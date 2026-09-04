@@ -24,7 +24,8 @@ export type AgendaBucket = "overdue" | "today" | "soon" | "later" | "someday";
 export interface AgendaItem {
   taskId: string;
   name: string;
-  status: WorkspaceTaskStatus;
+  /** ステータス。無しのノードは `undefined`（[data.md](../../../../docs/data.md) § 4）。 */
+  status?: WorkspaceTaskStatus;
   dueDate?: string;
   startDate?: string;
   tags: string[];
@@ -46,7 +47,9 @@ export interface AgendaState {
   loadedAt: number | null;
 }
 
-const DONE_STATUSES = new Set<WorkspaceTaskStatus>(["Completed", "Canceled"]);
+// ステータス無しは「終わっていない」側。追跡していないだけで、片付いたわけ
+// ではないので、期限があるなら予定に出す。
+const DONE_STATUSES = new Set<WorkspaceTaskStatus | undefined>(["Completed", "Canceled"]);
 /** 「まもなく」に入れる日数（今日を 0 として 7 日先まで）。 */
 const SOON_DAYS = 7;
 

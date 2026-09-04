@@ -11,6 +11,8 @@
   import { agenda_store, BUCKET_LABELS, BUCKET_ORDER } from "@features/agenda/stores/agenda";
 
   const STATUS_LABELS = {
+    // ステータス無しのノード。予定に出るのは期限があるからで、進み具合は無い。
+    "": "なし",
     Open: "未着手",
     Pending: "保留",
     "In Progress": "進行中",
@@ -178,8 +180,8 @@
                     <button type="button" class="Item" on:click={() => openItem(item)}>
                       <span
                         class="StatusDot"
-                        style={`--dot-color: ${STATUS_COLORS[item.status] ?? "var(--theme-color-Sub-main)"}`}
-                        title={STATUS_LABELS[item.status] ?? item.status}
+                        style={`--dot-color: ${STATUS_COLORS[item.status ?? ""] ?? "var(--theme-color-Sub-main)"}`}
+                        title={STATUS_LABELS[item.status ?? ""] ?? item.status}
                       ></span>
                       <span class="ItemMain">
                         <span class="ItemName">{item.name}</span>
@@ -188,7 +190,8 @@
                           {#if item.parentPath}
                             <span class="ParentPath">/ {item.parentPath}</span>
                           {/if}
-                          <span class="StatusText">{STATUS_LABELS[item.status] ?? item.status}</span
+                          <span class="StatusText"
+                            >{STATUS_LABELS[item.status ?? ""] ?? item.status}</span
                           >
                         </span>
                       </span>

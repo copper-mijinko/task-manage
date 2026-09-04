@@ -36,7 +36,11 @@ export interface WorkspaceParentLink {
 export interface WorkspaceTask {
   id: string;
   name: string;
-  status: WorkspaceTaskStatus;
+  /**
+   * ステータス。**省略可**。省略は「ステータスを持たないノード」を意味し、
+   * `Open` へのフォールバックではない。ファイルでは `status:` キーごと書かない。
+   */
+  status?: WorkspaceTaskStatus;
   startDate?: string; // YYYY-MM-DD
   dueDate?: string; // YYYY-MM-DD
   /** Empty array means this is the root task (project itself). */

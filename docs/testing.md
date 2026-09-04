@@ -121,6 +121,7 @@ Electron アプリ全体を起動して確認する。
 | `scripts/agent-ui-launch.mjs` | `electronLaunchArgs` 4 件 | root 実行時だけ `--no-sandbox` を付ける（重複させない・引数を破壊しない） |
 | `scripts/agent-ui-launch.mjs` | `hasDisplay` 1 件 | X11 / Wayland の display 検出 |
 | `src/features/workspace/utils/workspace_tree.ts` ほか | `tests/unit/multi_parent.test.ts` 18 件 | 多親の往復（親は全出現の和）、行＝辺、経路ごとの折り畳み、**親ごとの並び順**とその往復、順序が同値・未指定のときの id 昇順タイブレーク、出現どうしのオブジェクト共有 |
+| `electron/workspace.js` / `src/features/tasks/utils/tree_control.ts` ほか | `tests/unit/no_status.test.ts` 10 件 | ステータス「無し」を潰さないこと。ファイル ⇄ ワークスペース ⇄ ツリーの往復、`status:` キーを書かない書き出し、完全一致での絞り込み、並べ替えでの位置 |
 | `src/features/tasks/utils/tree_control.ts` ほか | `tests/unit/orphans.test.ts` 36 件 | 孤児の付け直し（削除時・読み込み時）、循環を作らせない／作られても落ちない、循環で打ち切った辺を保存で消さない、移動・インデントが行の親に効く、行ごとの名前パス／継承期限／パンくず、Shift 選択の範囲、アーカイブ判定と最小復元、辺の重複を作らない |
 | `src/lib/utils/date_urgency.ts` | `tests/unit/date_urgency.test.ts` 13 件 | 期限の緊急度（超過・当日・間近）の境界と、完了・中止の扱い |
 | `src/lib/utils/theme.ts` | `tests/unit/theme_contrast.test.ts` 32 件 | ライト / ダーク両テーマの文字色・UI 色が WCAG AA を満たす |

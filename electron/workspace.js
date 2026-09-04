@@ -829,7 +829,10 @@ async function writeFileIfChanged(filePath, data, options, onWritten) {
 }
 
 function taskFrontmatterData(task) {
-  const data = { id: task.id, name: task.name, status: task.status };
+  const data = { id: task.id, name: task.name };
+  // ステータス無しは `status:` キーごと書かない。空文字を書くと、次に読んだとき
+  // 「値がある」と「無い」を区別できなくなる。
+  if (task.status) data.status = task.status;
   if (task.startDate) data.start = task.startDate;
   if (task.dueDate) data.due = task.dueDate;
   if (task.parents?.length > 0) {
@@ -1022,7 +1025,7 @@ function readRootTask(projectDir, options = {}) {
   const task = {
     id: data.id,
     name: data.name || "",
-    status: data.status || "Open",
+    status: data.status || undefined,
     startDate: data.start || undefined,
     dueDate: data.due || undefined,
     parents: [],
@@ -1047,7 +1050,7 @@ function readTaskDir(taskDir, options = {}) {
   const task = {
     id: data.id,
     name: data.name || "",
-    status: data.status || "Open",
+    status: data.status || undefined,
     startDate: data.start || undefined,
     dueDate: data.due || undefined,
     parents,
@@ -1231,7 +1234,7 @@ function buildTaskFromFrontmatter(data, extra) {
   const task = {
     id: data.id,
     name: data.name || "",
-    status: data.status || "Open",
+    status: data.status || undefined,
     startDate: data.start || undefined,
     dueDate: data.due || undefined,
     createdAt: data.created || "",
@@ -2052,7 +2055,7 @@ function exportProjectData(workspacePath, projectData, options = {}) {
     tasks.push({
       id: exportedTaskId,
       name: node.data.name || "",
-      status: node.data.status || "Open",
+      status: node.data.status || undefined,
       startDate: node.data["start date"] || undefined,
       dueDate: node.data["due date"] || undefined,
       // 並び順は辺の属性。エクスポート先でも親と組で持たせる。

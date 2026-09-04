@@ -1,15 +1,20 @@
 <script>
   import { createEventDispatcher, onDestroy, tick } from "svelte";
 
-  export let status = "Open";
+  export let status = "";
   export let style = "";
   export let disabled = false;
   export let ariaLabel = "ステータス";
 
   const dispatch = createEventDispatcher();
 
-  const STATUSES = ["Open", "Pending", "In Progress", "Completed", "Canceled"];
+  // 「無し」は既定値ではなく状態のひとつ。メモから育ったノードは進み具合を
+  // 持たないので、そこに「未着手」を出すと未完了タスクの山に埋もれる。
+  // 選ぶだけで追跡が始まるよう、専用の操作は作らずここに並べる。
+  const NO_STATUS = "";
+  const STATUSES = [NO_STATUS, "Open", "Pending", "In Progress", "Completed", "Canceled"];
   const STATUS_LABELS = {
+    [NO_STATUS]: "なし",
     Open: "未着手",
     Pending: "保留",
     "In Progress": "進行中",
@@ -18,6 +23,7 @@
   };
 
   const color_map = {
+    [NO_STATUS]: "transparent",
     Open: "var(--theme-color-Primary-main)",
     "In Progress": "var(--theme-color-Info-main)",
     Pending: "var(--theme-color-Warning-main)",
@@ -196,6 +202,15 @@
     background: var(--dot-color);
     flex-shrink: 0;
     box-sizing: border-box;
+  }
+  /* ステータス無しは「淡いダッシュ」にして、件数バッジの 0 件表示と流儀を
+     揃える。丸を出すと色の無い状態がひとつ増えたようにしか見えない。 */
+  .s-chip[data-status=""] .s-dot,
+  .s-dot-static[data-status=""] {
+    display: none;
+  }
+  .s-chip[data-status=""] .s-label {
+    color: color-mix(in srgb, var(--theme-color-Sub-main) 55%, transparent);
   }
   .s-chip[data-status="Open"] .s-dot {
     background: color-mix(in srgb, var(--dot-color) 30%, transparent);
