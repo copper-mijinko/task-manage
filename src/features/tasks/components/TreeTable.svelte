@@ -215,9 +215,14 @@
     if (!canTreeOp || !$tree_data?.data) return false;
     const anyId = selectionSet.values().next().value;
     if (!anyId) return false;
-    const parent = getParent(anyId, $tree_data.data);
+    // 基準の親も、いま操作している行の側で見る。
+    const parent =
+      getNodeByPath($tree_data.data, bulkParentPath) ?? getParent(anyId, $tree_data.data);
     if (!parent) return false;
-    return !!getParent(parent.id, $tree_data.data);
+    return !!(
+      getNodeByPath($tree_data.data, parentPathOf(bulkParentPath ?? "")) ??
+      getParent(parent.id, $tree_data.data)
+    );
   })();
   $: selectableCount = visibleSelectableIds.length;
   $: selectedCount = $bulk_selection_active ? selectionSize : 0;
@@ -880,25 +885,29 @@
     }, 0);
   }
 
-  function handleAddRelative(targetId, action) {
+  function handleAddRelative(targetId, action, targetPath) {
     if (!targetId || !$tree_data?.data) {
       return;
     }
 
     const newNode = getDefaultNode();
     const addAction = targetId === $tree_data.data.id ? "append" : action;
+    // 多親ノードは行ごとに親が違うので、隣に足すときの親は行の経路から引く。
+    const rowPath = rowFor(targetId, targetPath)?.path;
     let parentId;
 
     if (addAction === "append") {
       parentId = targetId;
     } else {
-      const parentNode = getParent(targetId, $tree_data.data);
+      const parentNode =
+        getNodeByPath($tree_data.data, parentPathOf(rowPath ?? "")) ??
+        getParent(targetId, $tree_data.data);
       if (parentNode) {
         parentId = parentNode.id;
       }
     }
 
-    const data = addNode(newNode, targetId, $tree_data.data, addAction);
+    const data = addNode(newNode, targetId, $tree_data.data, addAction, rowPath);
     $tree_data = { ...$tree_data, data };
 
     if (parentId) closed_row_paths.expandNodeEverywhere(parentId);
@@ -907,11 +916,11 @@
   }
 
   function handleAddBelow(event) {
-    handleAddRelative(event.detail.id, "insert_after");
+    handleAddRelative(event.detail.id, "insert_after", event.detail.path);
   }
 
   function handleAddChild(event) {
-    handleAddRelative(event.detail.id, "append");
+    handleAddRelative(event.detail.id, "append", event.detail.path);
   }
 
   function handleCopyTask(event) {

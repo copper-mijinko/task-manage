@@ -381,10 +381,10 @@
             commitData("name", e.detail.value);
           }}
           on:addBelow={() => {
-            dispatch("addBelow", { id });
+            dispatch("addBelow", { id, path });
           }}
           on:addChild={() => {
-            dispatch("addChild", { id });
+            dispatch("addChild", { id, path });
           }}
           on:toggleExpand={() => {
             dispatch("toggle", { id, path });
