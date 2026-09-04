@@ -73,6 +73,18 @@ export interface ProjectData {
 
 export interface VisibleTreeRow {
   id: string;
+  /**
+   * ルートからの経路（`親id/子id/…`）。多親ノードは親ごとに複数行として現れる
+   * ので、行の同一性はノード id ではなく**辺**＝経路で決まる。Svelte の keyed
+   * each の key はこれを使う（id を使うと each_key_duplicate で描画が壊れる）。
+   */
+  path: string;
+  /**
+   * この行がそのノードの最初の出現か。DOM の `id` 属性は最初の出現にだけ付ける
+   * （重複 id を作らないため）。既存の `getElementById` と E2E セレクタはこれで
+   * 従来どおり動く。
+   */
+  isPrimaryOccurrence: boolean;
   depth: number;
   parentId?: string;
   siblingIndex: number;
@@ -409,6 +421,7 @@ export function flattenVisibleTree(
   }
 
   const rows: VisibleTreeRow[] = [];
+  const seenNodeIds = new Set<string>();
 
   const visit = (
     node: TreeData,
@@ -416,7 +429,8 @@ export function flattenVisibleTree(
     parentId: string | undefined,
     siblingIndex: number,
     siblingCount: number,
-    insideArchived: boolean
+    insideArchived: boolean,
+    parentPath: string
   ) => {
     const isArchived = !!node.archived;
     const effectivelyArchived = insideArchived || isArchived;
@@ -426,9 +440,14 @@ export function flattenVisibleTree(
     }
     const hasChildren = !!(node.children && node.children.length > 0);
     const expanded = !closedIds.has(node.id);
+    const path = parentPath ? `${parentPath}/${node.id}` : node.id;
+    const isPrimaryOccurrence = !seenNodeIds.has(node.id);
+    seenNodeIds.add(node.id);
 
     rows.push({
       id: node.id,
+      path,
+      isPrimaryOccurrence,
       depth,
       parentId,
       siblingIndex,
@@ -449,11 +468,11 @@ export function flattenVisibleTree(
 
     const childCount = node.children.length;
     node.children.forEach((child, index) => {
-      visit(child, depth + 1, node.id, index, childCount, effectivelyArchived);
+      visit(child, depth + 1, node.id, index, childCount, effectivelyArchived, path);
     });
   };
 
-  visit(tree_data, 0, undefined, 0, 1, false);
+  visit(tree_data, 0, undefined, 0, 1, false, "");
 
   return rows;
 }
@@ -512,19 +531,24 @@ export function buildNodePathMap(rows: VisibleTreeRow[]): Map<string, string> {
 
 // ツリー全体を DFS して各ノードに 1 始まりの通し番号を割り当てる。
 // flattenVisibleTree と違い折り畳み状態を無視するので、ノードを開閉しても番号は動かない。
+/**
+ * 行番号は**経路**で引く。多親ノードは親ごとに複数行に出るので、ノード id で
+ * 引くと同じ番号が 2 行に出て、番号が飛ぶ（行＝辺なので、番号も辺に振る）。
+ */
 export function buildLineNumberMap(tree: TreeData | null | undefined): Map<string, number> {
   const result = new Map<string, number>();
   if (!tree) return result;
 
   let counter = 0;
-  const visit = (node: TreeData) => {
+  const visit = (node: TreeData, parentPath: string) => {
+    const path = parentPath ? `${parentPath}/${node.id}` : node.id;
     counter += 1;
-    result.set(node.id, counter);
+    result.set(path, counter);
     for (const child of node.children ?? []) {
-      visit(child);
+      visit(child, path);
     }
   };
-  visit(tree);
+  visit(tree, "");
   return result;
 }
 

@@ -48,19 +48,33 @@ export function workspaceToProjectData(
     });
   }
 
-  const visited = new Set<string>();
+  /**
+   * 展開の安全弁。多親が重なると出現数は経路数ぶん増えるので、病的な構造で
+   * 固まらないよう総数で頭打ちにする。通常のデータでは到達しない。
+   */
+  const MAX_TREE_NODES = 20000;
+  let emitted = 0;
 
-  function buildNode(id: string): TreeData {
-    visited.add(id);
+  /**
+   * 多親ノードは**親ごとに**展開する。木は DAG の射影なので、同じノードが
+   * 複数の経路に現れるのが正しい。
+   *
+   * 打ち切るのは循環だけ。判定は「グローバルに一度出したか」ではなく
+   * 「いま辿っている経路の祖先に含まれるか」で行う。前者だと多親が潰れて
+   * 全域木になり、辺が消える（保存にも波及していた）。
+   *
+   * 同じ id のノードが複数現れるため、行の key はノード id ではなく
+   * ルートからの経路にする必要がある（flattenVisibleTree の `path`）。
+   */
+  function buildNode(id: string, ancestors: ReadonlySet<string>): TreeData {
+    emitted += 1;
     const task = tasks[id];
-    // visited は「子を組み立てる直前」に見る。先に配列へ絞り込んでしまうと、
-    // 別の親の下でそのタスクが展開された後でもこちらのリストに残り続け、
-    // 同じ id のノードが 2 箇所に現れて Svelte の keyed each が壊れる
-    // （each_key_duplicate → ツリーが描画できず「読み込み中...」のまま）。
+    const pathAncestors = new Set(ancestors).add(id);
     const children: TreeData[] = [];
     for (const cid of childrenMap.get(id) ?? []) {
-      if (visited.has(cid)) continue;
-      children.push(buildNode(cid));
+      if (pathAncestors.has(cid)) continue;
+      if (emitted >= MAX_TREE_NODES) break;
+      children.push(buildNode(cid, pathAncestors));
     }
     const node: TreeData = {
       id,
@@ -108,7 +122,7 @@ export function workspaceToProjectData(
     };
   }
 
-  return { headers: DEFAULT_HEADERS, data: buildNode(resolvedRootId) };
+  return { headers: DEFAULT_HEADERS, data: buildNode(resolvedRootId, new Set<string>()) };
 }
 
 /**
@@ -123,33 +137,30 @@ export function projectDataToWorkspaceTasks(
   const today = new Date().toISOString().slice(0, 10);
 
   /**
-   * 保存する親の集合を決める。
+   * 多親ノードは親ごとに複数の行として現れるため、traverse は同じノードを
+   * 複数回訪れる。ノードごとに 1 件だけ出し、親は**全出現の和**を採る。
    *
-   * ツリーは DAG の射影で、多親ノードは 1 箇所にしか現れない（同じ id の行が
-   * 2 つあると Svelte の keyed each が壊れるため、workspaceToProjectData が
-   * 意図的に 1 回だけ描いている）。そのため木の位置だけから親を作り直すと、
-   * **描かれなかった辺がファイルからも消える**。種別を切り替えただけ、名前を
-   * 直しただけ、といった構造と無関係な保存でも親が削られる。
-   *
-   * そこで「木が見せている親が既知の親に含まれているなら、構造は動いていない」
-   * と判断し、既知の親をそのまま残す。木の位置が既知に無い親に変わったときだけ、
-   * ユーザーが動かしたとみなして木の位置を採る。
-   *
-   * 後者はまだ不正確で、多親ノードを動かすと他の親も落ちる。それは行を辺として
-   * 扱う（同じノードを親ごとに描く）ようにして初めて曖昧さが消えるので、そこまでは
-   * この近似で「構造を触っていない保存が壊さない」ことだけを保証する。
+   * 木が全ての辺を見せるようになったので、木の位置から親を正確に導ける。
+   * 片方の出現だけを動かせば、その辺だけが変わり、他の親は残る（行＝辺）。
    */
-  function resolveParents(nodeId: string, treeParentIds: string[]): string[] {
-    const known = existingTasks[nodeId]?.parents;
-    if (!Array.isArray(known) || known.length <= 1) return treeParentIds;
-    if (treeParentIds.length === 0) return known.length === 0 ? treeParentIds : known;
-    const stillKnown = treeParentIds.every((id) => known.includes(id));
-    return stillKnown ? known : treeParentIds;
-  }
+  const emittedIndexById = new Map<string, number>();
 
   function traverse(node: TreeData, parentIds: string[], siblingIndex: number) {
+    const alreadyAt = emittedIndexById.get(node.id);
+    if (alreadyAt !== undefined) {
+      // 2 回目以降の出現：親だけ足して、中身は最初の出現のものを使う。
+      const emitted = result[alreadyAt];
+      for (const parentId of parentIds) {
+        if (!emitted.parents.includes(parentId)) emitted.parents.push(parentId);
+      }
+      for (const [index, child] of (node.children || []).entries()) {
+        traverse(child, [node.id], index);
+      }
+      return;
+    }
+
     const existing = existingTasks[node.id];
-    const resolvedParents = resolveParents(node.id, parentIds);
+    const resolvedParents = [...parentIds];
     const task: WorkspaceTask = {
       id: node.id,
       name: node.data.name,
@@ -184,6 +195,7 @@ export function projectDataToWorkspaceTasks(
       task.archived = true;
       task.archivedAt = node.archivedAt ?? existing?.archivedAt;
     }
+    emittedIndexById.set(node.id, result.length);
     result.push(task);
     for (const [index, child] of (node.children || []).entries()) {
       traverse(child, [node.id], index);
