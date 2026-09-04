@@ -309,5 +309,5 @@ Electron アプリ全体を起動して確認する。
 | 種別         | 件数                              |
 | ------------ | --------------------------------- |
 | Test files   | unit 37 passed + component 25 passed (62) |
-| Tests        | unit 556 passed + component 228 passed / 7 skipped (784 / 7) |
+| Tests        | unit 560 passed + component 231 passed / 7 skipped (791 / 7) |
 | svelte-check | 485 files / 0 errors / 0 warnings |
