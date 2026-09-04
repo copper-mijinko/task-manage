@@ -285,7 +285,8 @@ describe("tree_control", () => {
   });
 
   test("flattenVisibleTree omits descendants of collapsed nodes", () => {
-    const rows = flattenVisibleTree(createTree(), new Set(["task-2"]));
+    // 折り畳みは経路（ルートからの `親id/子id`）で指定する。
+    const rows = flattenVisibleTree(createTree(), new Set(["project-1/task-2"]));
 
     expect(rows.map((row) => row.id)).toEqual(["project-1", "task-1", "task-2"]);
     expect(rows.find((row) => row.id === "task-2")).toMatchObject({
@@ -886,7 +887,7 @@ describe("buildStickyTrail", () => {
   });
 
   test("respects collapsed nodes: skips hidden descendants entirely", () => {
-    const rows = flattenVisibleTree(makeStickyTree(), new Set(["A"]));
+    const rows = flattenVisibleTree(makeStickyTree(), new Set(["Root/A"]));
     // With A collapsed, A's children (A1, A2, A3) are not in the rows.
     // Flattened: Root, A, B, B1, B2, C
     // scrollTop=2*rowHeight covers B; topmost-visible = B1; ancestors = [Root, B].
@@ -894,7 +895,7 @@ describe("buildStickyTrail", () => {
   });
 
   test("respects collapsed nodes: covered=collapsed node has no descendants to leak", () => {
-    const rows = flattenVisibleTree(makeStickyTree(), new Set(["A"]));
+    const rows = flattenVisibleTree(makeStickyTree(), new Set(["Root/A"]));
     // Flattened: Root, A, B, B1, B2, C
     // scrollTop=1*rowHeight covers A; topmost-visible = B (depth 1 → trail hidden).
     expect(buildStickyTrail(rows, 1 * ROW_HEIGHT, ROW_HEIGHT)).toEqual([]);

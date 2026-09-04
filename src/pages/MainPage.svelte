@@ -16,7 +16,7 @@
   import {
     table_selected_id,
     tree_data,
-    closed_node_ids,
+    closed_row_paths,
     ganttVisible,
     selected_type,
     ui_density,
@@ -364,9 +364,7 @@
       $tree_data.data = addNode(new_node, selectedId, $tree_data.data, addAction);
 
       // 親ノードが折りたたまれている場合は展開する
-      if (parentId && $closed_node_ids.has(parentId)) {
-        closed_node_ids.delete(parentId);
-      }
+      if (parentId) closed_row_paths.expandNodeEverywhere(parentId);
 
       // 新しいノードを選択状態にしてDOMの更新を待つ
       selectOnly(new_node.id);
@@ -514,7 +512,7 @@
       const { new_parent_ids } = bulkIndent($selected_ids, $tree_data.data);
       $tree_data = { ...$tree_data, data: $tree_data.data };
       for (const pid of new_parent_ids) {
-        if ($closed_node_ids.has(pid)) closed_node_ids.delete(pid);
+        closed_row_paths.expandNodeEverywhere(pid);
       }
       return;
     }
@@ -529,8 +527,8 @@
       gate: () => canMultiTreeOp && canMultiOutdent,
     });
   };
-  const handleExpandAll = () => closed_node_ids.expandAll();
-  const handleCollapseAll = () => closed_node_ids.collapseAll();
+  const handleExpandAll = () => closed_row_paths.expandAll();
+  const handleCollapseAll = () => closed_row_paths.collapseAll();
 
   // Overflow ("kebab") menu — collapses the secondary action groups into
   // a single trigger. Only enabled in compact (flat) mode; comfortable

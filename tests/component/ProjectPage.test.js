@@ -25,7 +25,7 @@ vi.mock("@features/gantt/components/GanttPanel.svelte", async () => {
 
 import ProjectPage from "@pages/MainPage.svelte";
 import {
-  closed_node_ids,
+  closed_row_paths,
   ganttVisible,
   selected_id,
   table_selected_id,
@@ -79,7 +79,7 @@ describe("ProjectPage", () => {
     selected_id.set("project-1");
     clearSelection();
     table_selected_id.set("task-1");
-    closed_node_ids.set(new Set());
+    closed_row_paths.set(new Set());
     ganttVisible.set(false);
     ui_density.set("comfortable");
   });
@@ -161,7 +161,7 @@ describe("ProjectPage", () => {
   });
 
   test("adds a child task and expands the parent when it was collapsed", async () => {
-    closed_node_ids.set(new Set(["task-1"]));
+    closed_row_paths.set(new Set(["task-1"]));
 
     const { container } = render(ProjectPage);
     const buttons = container.querySelectorAll(".TbGroup button");
@@ -172,7 +172,7 @@ describe("ProjectPage", () => {
 
     expect(get(tree_data).data.children[0].children).toHaveLength(1);
     expect(get(tree_data).data.children[0].children[0].data.name).toBe("new_task");
-    expect(get(closed_node_ids).has("task-1")).toBe(false);
+    expect(get(closed_row_paths).has("task-1")).toBe(false);
     expect(get(table_selected_id)).toBe(get(tree_data).data.children[0].children[0].id);
   });
 

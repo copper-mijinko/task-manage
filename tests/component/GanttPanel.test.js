@@ -4,7 +4,7 @@ import { tick } from "svelte";
 
 import GanttPanel from "@features/gantt/components/GanttPanel.svelte";
 import {
-  closed_node_ids,
+  closed_row_paths,
   filtered_data,
   ganttScale,
   ganttScrollTop,
@@ -90,7 +90,7 @@ describe("GanttPanel", () => {
 
     tree_data.set(projectData);
     filtered_data.set(projectData.data);
-    closed_node_ids.set(new Set());
+    closed_row_paths.set(new Set());
     ganttScale.set("day");
     ganttScrollTop.set(0);
     theme.set("light");

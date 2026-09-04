@@ -14,7 +14,7 @@ import {
   selected_type,
   selected_id,
   table_selected_id,
-  closed_node_ids,
+  closed_row_paths,
   pendingTaskDetailSelection,
   clearPendingTaskDetailSelection,
   saveStatus,
@@ -318,21 +318,8 @@ function createTreeData(initialValue: ProjectData | undefined): TreeDataStore {
 
         const removedIds = findRemovedNodeIds(previousData, current);
         if (removedIds.length > 0) {
-          const projectId = context.selectedId;
-          if (projectId) {
-            closed_node_ids.update((currentState) => {
-              const newState = new Set(currentState);
-              removedIds.forEach((id) => {
-                newState.delete(id);
-              });
-
-              const metaKey = `closed_nodes_${projectId}`;
-              const idsArray = Array.from(newState);
-              platform.setMetaData(metaKey, idsArray);
-
-              return newState;
-            });
-          }
+          // 消えたノードを通る経路の折り畳み状態を捨てる（永続化も store 側）。
+          closed_row_paths.pruneNodes(removedIds);
 
           // Prune multi-selection when nodes disappear (delete, undo of add, etc.).
           const removedSet = new Set(removedIds);

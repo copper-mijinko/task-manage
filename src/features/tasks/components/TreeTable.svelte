@@ -8,7 +8,7 @@
     tree_data,
     selected_type,
     filtered_data,
-    closed_node_ids,
+    closed_row_paths,
     table_selected_id,
     theme,
     column_settings,
@@ -91,7 +91,7 @@
   ];
 
   $: rows = $filtered_data
-    ? flattenVisibleTree($filtered_data, $closed_node_ids, $show_archived)
+    ? flattenVisibleTree($filtered_data, $closed_row_paths, $show_archived)
     : [];
   /**
    * Tab の停留点にする 1 行。選択行があればそれ、無ければ先頭行。全行を
@@ -665,7 +665,7 @@
       case "ArrowRight":
         // 閉じていれば開く。開いていれば最初の子へ入る。
         if (row.hasChildren && !row.expanded) {
-          closed_node_ids.delete(id);
+          closed_row_paths.delete(row.path);
         } else if (row.hasChildren && index < rows.length - 1) {
           moveToRow(rows[index + 1].id, rows[index + 1].path);
         }
@@ -673,7 +673,7 @@
       case "ArrowLeft":
         // 開いていれば閉じる。閉じている / 子が無ければ親へ戻る。
         if (row.hasChildren && row.expanded) {
-          closed_node_ids.add(id);
+          closed_row_paths.add(row.path);
         } else if (row.parentId) {
           const parentPath = row.path.slice(0, row.path.lastIndexOf("/"));
           moveToRow(row.parentId, parentPath);
@@ -684,11 +684,13 @@
   }
 
   function handleToggleRow(event) {
-    const { id } = event.detail;
-    if ($closed_node_ids.has(id)) {
-      closed_node_ids.delete(id);
+    // 開閉は経路ごと。同じノードでも、別の親の下の行は畳んだままにする。
+    const { path } = event.detail;
+    if (!path) return;
+    if ($closed_row_paths.has(path)) {
+      closed_row_paths.delete(path);
     } else {
-      closed_node_ids.add(id);
+      closed_row_paths.add(path);
     }
   }
 
@@ -739,8 +741,9 @@
       $tree_data = { ...$tree_data, data };
     }
 
-    if (mode === "append" && $closed_node_ids.has(targetId)) {
-      closed_node_ids.delete(targetId);
+    if (mode === "append") {
+      // 落とし先が畳まれていると結果が見えないので、その行を開く。
+      closed_row_paths.expandNodeEverywhere(targetId);
     }
   }
 
@@ -796,9 +799,7 @@
     const data = indentNode(id, $tree_data.data);
     $tree_data = { ...$tree_data, data };
 
-    if ($closed_node_ids.has(newParentId)) {
-      closed_node_ids.delete(newParentId);
-    }
+    closed_row_paths.expandNodeEverywhere(newParentId);
   }
 
   function handleOutdentTask(event) {
@@ -850,9 +851,7 @@
     const data = addNode(newNode, targetId, $tree_data.data, addAction);
     $tree_data = { ...$tree_data, data };
 
-    if (parentId && $closed_node_ids.has(parentId)) {
-      closed_node_ids.delete(parentId);
-    }
+    if (parentId) closed_row_paths.expandNodeEverywhere(parentId);
 
     focusNewNode(newNode.id);
   }
@@ -916,7 +915,7 @@
       $copied_task = $copied_tasks[0] ?? null;
       const data = bulkAddNodes(cloned, id, $tree_data.data, "append");
       $tree_data = { ...$tree_data, data };
-      if ($closed_node_ids.has(id)) closed_node_ids.delete(id);
+      closed_row_paths.expandNodeEverywhere(id);
       if (cloned[0]) focusNewNode(cloned[0].id);
       return;
     }
@@ -927,7 +926,7 @@
     $copied_tasks = [$copied_task];
     const data = addNode(cloned, id, $tree_data.data, "append");
     $tree_data = { ...$tree_data, data };
-    if ($closed_node_ids.has(id)) closed_node_ids.delete(id);
+    closed_row_paths.expandNodeEverywhere(id);
     focusNewNode(cloned.id);
   }
 
@@ -993,7 +992,7 @@
     const { tree_data: data, new_parent_ids } = bulkIndent(selectionSet, $tree_data.data);
     $tree_data = { ...$tree_data, data };
     for (const pid of new_parent_ids) {
-      if ($closed_node_ids.has(pid)) closed_node_ids.delete(pid);
+      closed_row_paths.expandNodeEverywhere(pid);
     }
   }
 

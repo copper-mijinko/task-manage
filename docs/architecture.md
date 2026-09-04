@@ -213,7 +213,7 @@ import LocalComponent from "./LocalComponent.svelte";
 | `agenda_store`                                                                           | `@features/agenda/stores/agenda`                 | Workspace 横断の予定（全プロジェクトの未完了タスクを期限でグルーピング） |
 | `filter` / `pageSearchQuery`                                                             | `@features/search/stores/search`                 | フィルター条件 / 画面内検索クエリ                       |
 | `pageSearchMatchCount` / `pageSearchCurrentIndex`                                        | `@features/search/utils/page_search_highlighter` | 画面内検索の件数と現在位置（readable store）            |
-| `selected_id` / `closed_node_ids` / `sidebarCollapsed` / `copied_task` / `saveStatus` / `show_archived` 等 | `@stores/ui`                                     | UI状態（`show_archived` はアーカイブ済みタスクの表示切替・プロジェクト毎に永続化） |
+| `selected_id` / `closed_row_paths` / `sidebarCollapsed` / `copied_task` / `saveStatus` / `show_archived` 等 | `@stores/ui`                                     | UI状態（`show_archived` はアーカイブ済みタスクの表示切替・プロジェクト毎に永続化） |
 | `theme`                                                                                  | `@stores/theme`                                  | テーマ                                                  |
 | `date_time_format`                                                                       | `@stores/preferences`                            | 入力ショートカット（`Ctrl+;` / `Ctrl+:`）の挿入フォーマット |
 | `panelCoordinator`                                                                       | `@stores/panel_coordinator`                      | ポップオーバー調停                                      |

@@ -7,7 +7,7 @@ import {
   selected_type,
   selected_id,
   table_selected_id,
-  closed_node_ids,
+  closed_row_paths,
   pendingTaskDetailSelection,
   clearPendingTaskDetailSelection,
 } from "@stores/ui";
@@ -44,7 +44,7 @@ function createProjectIds(initialValue: ProjectListItem[] | undefined): ProjectI
             selected_id.set(undefined);
             table_selected_id.set(undefined);
             filtered_data.set(undefined);
-            closed_node_ids.set(new Set());
+            closed_row_paths.set(new Set());
           }
         });
       }
@@ -61,7 +61,7 @@ function createProjectIds(initialValue: ProjectListItem[] | undefined): ProjectI
         if (!current || current.length === 0) {
           selected_type.set(undefined);
           table_selected_id.set(undefined);
-          closed_node_ids.update(() => new Set());
+          closed_row_paths.update(() => new Set());
         }
       });
 
@@ -89,8 +89,9 @@ function createProjectIds(initialValue: ProjectListItem[] | undefined): ProjectI
         set(result);
       });
 
-      const metaKey = `closed_nodes_${projectId}`;
-      platform.deleteMetaData(metaKey);
+      // 開閉状態の永続化キー。旧キー（ノード id 版）も一緒に片付ける。
+      platform.deleteMetaData(`closed_paths_${projectId}`);
+      platform.deleteMetaData(`closed_nodes_${projectId}`);
 
       if (projectId === get(selected_id)) {
         selected_type.set(undefined);
