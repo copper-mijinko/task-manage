@@ -382,16 +382,16 @@
             dispatch("toggle", { id, path });
           }}
           on:moveUp={() => {
-            dispatch("moveUp", { id });
+            dispatch("moveUp", { id, path });
           }}
           on:moveDown={() => {
-            dispatch("moveDown", { id });
+            dispatch("moveDown", { id, path });
           }}
           on:indentTask={() => {
-            dispatch("indentTask", { id });
+            dispatch("indentTask", { id, path });
           }}
           on:outdentTask={() => {
-            dispatch("outdentTask", { id });
+            dispatch("outdentTask", { id, path });
           }}
           on:deleteTask={() => {
             dispatch("deleteTask", { id });

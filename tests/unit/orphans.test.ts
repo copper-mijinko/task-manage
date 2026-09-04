@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import { workspaceToProjectData } from "../../src/features/workspace/utils/workspace_tree";
 import {
   bulkRemoveNodes,
+  canOutdentNode,
+  indentNode,
+  moveNodeUp,
+  outdentNode,
   flattenVisibleTree,
   getNode,
   reattachOrphans,
@@ -136,5 +140,53 @@ describe("作り直しでも多親ノードの共有を壊さない", () => {
     const next = bulkRemoveNodes(root, new Set(["E"]))!;
     expect(next.children[0].children[0]).toBe(next.children[1].children[0]);
     expect(next.children[0].children[0].children.map((c) => c.id)).toEqual(["D"]);
+  });
+});
+
+/**
+ * 移動・インデントは「どの辺を動かすか」の操作。多親ノードは同じ id の行が
+ * 複数あるので、最初に見つかった親を使うとクリックした行と違う行が動く。
+ */
+describe("移動はクリックした行の親に効く", () => {
+  const twoParents = () => {
+    const shared = N("C");
+    return N("root", [N("A", [N("A1"), shared]), N("B", [shared, N("B1")])]);
+  };
+
+  it("moveNodeUp は経路で指定した親の中だけを並べ替える", () => {
+    const tree = twoParents();
+    moveNodeUp("C", tree, "root/B/C");
+    // B の中では C が先頭なので動かない。A の中も動かない。
+    expect(tree.children[0].children.map((c) => c.id)).toEqual(["A1", "C"]);
+
+    moveNodeUp("C", tree, "root/A/C");
+    expect(tree.children[0].children.map((c) => c.id)).toEqual(["C", "A1"]);
+    expect(tree.children[1].children.map((c) => c.id)).toEqual(["C", "B1"]);
+  });
+
+  it("indentNode は経路で指定した親の中の直前の兄弟に入る", () => {
+    const tree = twoParents();
+    indentNode("C", tree, "root/A/C");
+
+    expect(tree.children[0].children.map((c) => c.id)).toEqual(["A1"]);
+    expect(tree.children[0].children[0].children.map((c) => c.id)).toEqual(["C"]);
+    // B の下の C はそのまま（辺は別物）。
+    expect(tree.children[1].children.map((c) => c.id)).toEqual(["C", "B1"]);
+  });
+
+  it("outdentNode は経路で指定した親から 1 段上げる", () => {
+    const tree = N("root", [N("A", [N("A1", [N("X")])]), N("B", [N("X")])]);
+    expect(canOutdentNode("X", tree, "root/A/A1/X")).toBe(true);
+    outdentNode("X", tree, "root/A/A1/X");
+
+    expect(tree.children[0].children.map((c) => c.id)).toEqual(["A1", "X"]);
+    expect(tree.children[0].children[0].children).toEqual([]);
+    expect(tree.children[1].children.map((c) => c.id)).toEqual(["X"]);
+  });
+
+  it("経路を渡さなければ従来どおり最初の親で動く", () => {
+    const tree = twoParents();
+    moveNodeUp("C", tree);
+    expect(tree.children[0].children.map((c) => c.id)).toEqual(["C", "A1"]);
   });
 });

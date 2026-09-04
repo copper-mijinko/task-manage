@@ -17,6 +17,7 @@
     table_selected_id,
     tree_data,
     closed_row_paths,
+    active_row_path,
     ganttVisible,
     selected_type,
     ui_density,
@@ -44,6 +45,7 @@
     restoreNode,
     bulkArchiveNodes,
     bulkRestoreNodes,
+    pathLeafId,
   } from "@features/tasks/utils/tree_control";
   import { getDefaultNode } from "@features/tasks/utils/tree_control";
   import { undoHistory, redoHistory } from "@features/tasks/stores/tree";
@@ -479,7 +481,10 @@
   function withSelectedNode(updater) {
     if (!$table_selected_id || !$tree_data?.data) return;
     const target = $table_selected_id;
-    updater(target, $tree_data.data);
+    // 多親ノードは同じ id の行が複数ある。ツールバーとショートカットも、
+    // ツリーでいま操作している行（辺）に対して動かす。
+    const rowPath = pathLeafId($active_row_path ?? "") === target ? $active_row_path : undefined;
+    updater(target, $tree_data.data, rowPath);
     $tree_data = { ...$tree_data, data: $tree_data.data };
   }
   // Bulk dispatcher for the move/indent/outdent toolbar buttons.

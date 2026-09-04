@@ -370,6 +370,18 @@ export let table_selected_id: Writable<string | undefined> = writable<string | u
 );
 // eslint-disable-next-line prefer-const
 export let closed_row_paths: ClosedRowPathsStore = createClosedRowPaths(new Set<string>());
+
+/**
+ * いま操作している行（辺）の経路。多親ノードは親ごとに複数の行として現れる
+ * ので、「選択されているノード」だけでは、移動・インデント・折り畳みが
+ * どの行に対する操作なのかが決まらない。
+ *
+ * 実体は TreeTable が行の一覧から決めて書き込む。ツールバーやショートカット
+ * （MainPage）も同じ行に対して操作できるよう、store に置いている。
+ */
+export const active_row_path: Writable<string | undefined> = writable<string | undefined>(
+  undefined
+);
 // eslint-disable-next-line prefer-const
 export let selected_id: SelectedIdStore = createSelectedID(undefined);
 
