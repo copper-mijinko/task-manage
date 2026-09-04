@@ -71,8 +71,6 @@ export interface ClosedRowPathsStore extends Writable<Set<string>> {
   /** そのノードを、現れるすべての経路で開く。子孫の折り畳みは保つ。 */
   expandNodeEverywhere: (nodeId: string) => void;
   /** 消えたノードの残骸を捨てる。そのノードを通る経路をすべて外す。 */
-  cleanupNodeMetadata: (nodeId: string) => void;
-  /** 同上をまとめて。ツリー差分で消えたノード群の後始末に使う。 */
   pruneNodes: (nodeIds: Iterable<string>) => void;
   expandAll: () => void;
   collapseAll: () => void;
@@ -315,8 +313,10 @@ function createClosedRowPaths(initialValue: Set<string>): ClosedRowPathsStore {
       const removed = new Set(nodeIds);
       if (removed.size === 0) return;
       mutate((newState) => {
+        // 消えたノードを通る経路（その行と、そこから下の子孫の行）をまとめて外す。
+        // 他の親から辿れる子孫の行は生きているので残る。
         for (const path of [...newState]) {
-          if (path.split("/").some((id) => removed.has(id))) newState.delete(path);
+          if ([...removed].some((id) => pathIncludesNode(path, id))) newState.delete(path);
         }
       });
     },
@@ -348,16 +348,6 @@ function createClosedRowPaths(initialValue: Set<string>): ClosedRowPathsStore {
       projectExpandedStates.set(projectId, newState);
       saveState(projectId, newState);
       set(newState);
-    },
-    cleanupNodeMetadata: (nodeId: string) => {
-      if (!nodeId) return;
-      mutate((newState) => {
-        // そのノードを通る経路（自分の行と、そこから下の子孫の行）をまとめて外す。
-        // 他の親から辿る子孫の行は生きているので残す。
-        for (const path of [...newState]) {
-          if (pathIncludesNode(path, nodeId)) newState.delete(path);
-        }
-      });
     },
   };
 }
@@ -484,6 +474,7 @@ export function clearSelection() {
   bulk_selection_active.set(false);
   selected_ids.set(new Set<string>());
   selection_anchor_id.set(undefined);
+  selection_anchor_path.set(undefined);
   table_selected_id.set(undefined);
 }
 
@@ -546,9 +537,12 @@ export function selectRange(
 
   let a: number;
   let b: number;
+  // 起点の経路は、`selection_anchor_id` を動かす他の入口（Ctrl+クリック、
+  // 選択のクリア、ツリー更新時の刈り込み）では更新されないので、古くなり得る。
+  // 起点 id と一致する行を指しているときだけ信じる。
   const anchorPath = get(selection_anchor_path);
   if (rows && targetPath) {
-    a = rows.findIndex((row) => row.path === anchorPath);
+    a = rows.findIndex((row) => row.path === anchorPath && row.id === anchor);
     if (a < 0) a = rows.findIndex((row) => row.id === anchor);
     b = rows.findIndex((row) => row.path === targetPath);
     if (b < 0) b = rows.findIndex((row) => row.id === targetId);

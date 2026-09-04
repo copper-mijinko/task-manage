@@ -1353,14 +1353,29 @@ export function isContiguousSiblingBlock(
   return true;
 }
 
+/**
+ * 選択のうち「他の選択ノードの子孫ではないもの」を返す。
+ *
+ * 多親ノードは複数の経路に現れるので、同じ id を 2 回返してはいけない。
+ * 返り値は D&D で `getNode` してから挿入に使われるため、重複すると同じ
+ * ノードが兄弟として 2 回入り、行の経路が衝突して描画が壊れる。
+ * 共有された部分木を何度も降りないよう、訪問済みも覚える。
+ */
 export function getTopLevelSelection(tree_data: TreeData | undefined, ids: Set<string>): string[] {
   if (!tree_data || ids.size === 0) return [];
   const result: string[] = [];
+  const picked = new Set<string>();
+  const visited = new Set<string>();
   function visit(node: TreeData) {
     if (ids.has(node.id)) {
-      result.push(node.id);
+      if (!picked.has(node.id)) {
+        picked.add(node.id);
+        result.push(node.id);
+      }
       return; // descendants of a top-level selected node are skipped
     }
+    if (visited.has(node.id)) return;
+    visited.add(node.id);
     for (const child of node.children) visit(child);
   }
   visit(tree_data);

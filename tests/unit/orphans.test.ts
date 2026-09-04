@@ -7,6 +7,7 @@ import {
   buildStickyTrail,
   bulkMoveUp,
   bulkRemoveNodes,
+  getTopLevelSelection,
   isNodeEffectivelyArchived,
   reorderTree,
   restoreNode,
@@ -338,5 +339,20 @@ describe("アーカイブ判定と復元", () => {
     expect(tree.children[0].archived).toBe(true); // A はそのまま
     expect(tree.children[1].archived).toBeUndefined(); // B は解除
     expect(shared.archived).toBeUndefined();
+  });
+});
+
+describe("選択の集約は重複を返さない", () => {
+  it("多親ノードは、複数の経路に現れても 1 回だけ返る", () => {
+    const shared = N("C");
+    const tree = N("root", [N("A", [shared]), N("B", [shared])]);
+
+    // 重複すると D&D が同じノードを 2 回挿入し、行の経路が衝突して描画が壊れる。
+    expect(getTopLevelSelection(tree, new Set(["C"]))).toEqual(["C"]);
+  });
+
+  it("選択ノードの子孫は従来どおり畳まれる", () => {
+    const tree = N("root", [N("A", [N("A1"), N("A2")]), N("B")]);
+    expect(getTopLevelSelection(tree, new Set(["A", "A1", "B"]))).toEqual(["A", "B"]);
   });
 });
