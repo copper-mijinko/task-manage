@@ -89,7 +89,6 @@
     { name: "status", default_ratio: 3 },
     { name: "start date", default_ratio: 3 },
     { name: "due date", default_ratio: 3 },
-    { name: "memo", default_ratio: 1.5 },
     { name: "attachments", default_ratio: 1.5 },
     { name: "tags", default_ratio: 3 },
   ];

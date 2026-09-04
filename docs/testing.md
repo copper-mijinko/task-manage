@@ -124,8 +124,6 @@ Electron アプリ全体を起動して確認する。
 | `src/features/tasks/utils/tree_control.ts` ほか | `tests/unit/orphans.test.ts` 36 件 | 孤児の付け直し（削除時・読み込み時）、循環を作らせない／作られても落ちない、循環で打ち切った辺を保存で消さない、移動・インデントが行の親に効く、行ごとの名前パス／継承期限／パンくず、Shift 選択の範囲、アーカイブ判定と最小復元、辺の重複を作らない |
 | `src/lib/utils/date_urgency.ts` | `tests/unit/date_urgency.test.ts` 13 件 | 期限の緊急度（超過・当日・間近）の境界と、完了・中止の扱い |
 | `src/lib/utils/theme.ts` | `tests/unit/theme_contrast.test.ts` 32 件 | ライト / ダーク両テーマの文字色・UI 色が WCAG AA を満たす |
-| `electron/workspace.js` / `src/features/memos/utils/memo_utils.ts` | `tests/unit/memo_kind.test.ts` 7 件 | メモの `kind`（作業メモ / ナレッジ）の正規化と往復 |
-| `src/features/knowledge/stores/knowledge.ts` | `tests/unit/knowledge.test.ts` 10 件 | ナレッジ一覧の抽出、アーカイブ由来の印、親タスク名の文脈 |
 
 ### 2.2 Component テスト
 

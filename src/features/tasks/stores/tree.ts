@@ -188,7 +188,6 @@ export function comparableWorkspaceTask(task: WorkspaceTask) {
       format: memo.format ?? "markdown",
       // kind を落とすと「種別だけ変えた」編集が差分なしと判定され、
       // ディスクに書かれないまま画面とキャッシュだけが変わる。
-      kind: memo.kind ?? "working",
       order: memo.order ?? null,
     })),
     attachments: (task.attachments ?? []).map((attachment) => ({

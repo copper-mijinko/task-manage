@@ -26,7 +26,6 @@ marked.use({
 });
 
 export type MemoFormat = "markdown" | "quill";
-export type MemoKind = "working" | "knowledge";
 
 export interface QuillDelta {
   ops: Array<{ insert?: unknown; attributes?: Record<string, unknown> }>;
@@ -38,25 +37,6 @@ type QuillOp = { insert: string | { image: string }; attributes?: QuillAttrs };
 export function normalizeMemoFormat(value: unknown, fallback: MemoFormat = "markdown"): MemoFormat {
   return value === "quill" || value === "markdown" ? value : fallback;
 }
-
-/**
- * メモの種別。記録を「寿命の長さと再利用性」で分ける。
- *
- * - `working`   作業メモ。そのタスクの作業中だけ意味を持つ短命な記録
- * - `knowledge` ナレッジ。タスクより長生きし、別の文脈でも再利用される記録
- *
- * 書く時点ではどちらになるか分からないことが多いので、既定は `working` で、
- * あとから「昇華」（working → knowledge）する明示操作で変える。
- * `kind:` を持たない既存のメモはすべて `working` として読む。
- */
-export function normalizeMemoKind(value: unknown, fallback: MemoKind = "working"): MemoKind {
-  return value === "knowledge" || value === "working" ? value : fallback;
-}
-
-export const MEMO_KIND_LABELS: Record<MemoKind, string> = {
-  working: "作業メモ",
-  knowledge: "ナレッジ",
-};
 
 export function isQuillDelta(value: unknown): value is QuillDelta {
   return (

@@ -37,8 +37,6 @@
   let ProjectPageComponent = null;
   let InboxPanelComponent = null;
   let AgendaPanelComponent = null;
-  let KnowledgePanelComponent = null;
-  let knowledgePanelLoading = null;
   let QuickCaptureComponent = null;
   let TaskDetailWindowComponent = null;
   let projectPageLoading = null;
@@ -95,16 +93,6 @@
     return agendaPanelLoading;
   }
 
-  function loadKnowledgePanel() {
-    if (KnowledgePanelComponent || knowledgePanelLoading) return knowledgePanelLoading;
-    knowledgePanelLoading = import("@features/knowledge/components/KnowledgePanel.svelte").then(
-      (module) => {
-        KnowledgePanelComponent = module.default;
-      }
-    );
-    return knowledgePanelLoading;
-  }
-
   function loadQuickCapture() {
     if (QuickCaptureComponent || quickCaptureLoading) return quickCaptureLoading;
     quickCaptureLoading = import("@features/inbox/components/QuickCapture.svelte").then(
@@ -137,9 +125,6 @@
   }
   $: if (!isTaskDetailWindow && $selected_type === "Agenda") {
     void loadAgendaPanel();
-  }
-  $: if (!isTaskDetailWindow && $selected_type === "Knowledge") {
-    void loadKnowledgePanel();
   }
   $: if (!isTaskDetailWindow && $showQuickCapture) {
     void loadQuickCapture();
@@ -557,12 +542,6 @@
         {:else if $selected_type == "Agenda"}
           {#if AgendaPanelComponent}
             <AgendaPanelComponent />
-          {:else}
-            <Loading variant="h1" />
-          {/if}
-        {:else if $selected_type == "Knowledge"}
-          {#if KnowledgePanelComponent}
-            <KnowledgePanelComponent />
           {:else}
             <Loading variant="h1" />
           {/if}

@@ -16,7 +16,6 @@
   import { workspace_store } from "@features/workspace/stores/workspace";
   import { inbox_count, INBOX_SELECTED_ID } from "@features/inbox/stores/inbox";
   import { AGENDA_SELECTED_ID } from "@features/agenda/stores/agenda";
-  import { KNOWLEDGE_SELECTED_ID } from "@features/knowledge/stores/knowledge";
   import { pageSearchQuery } from "@features/search/stores/search";
   import * as platform from "@lib/ipc/platform";
   import {
@@ -123,12 +122,6 @@
     if (!$workspace_store.activeWorkspacePath) return;
     $selected_type = "Agenda";
     $selected_id = AGENDA_SELECTED_ID;
-  }
-
-  function openKnowledgeView() {
-    if (!$workspace_store.activeWorkspacePath) return;
-    $selected_type = "Knowledge";
-    $selected_id = KNOWLEDGE_SELECTED_ID;
   }
 
   const isElectronRuntime = typeof window !== "undefined" && Boolean(window.electronAPI);
@@ -333,31 +326,6 @@
         stroke="currentColor"
         stroke-width="1.8"
         stroke-linecap="round"
-        fill="none"
-      />
-    </svg>
-  </button>
-
-  <button
-    type="button"
-    class="InboxBtn"
-    class:Active={$selected_type === "Knowledge"}
-    class:Disabled={!$workspace_store.activeWorkspacePath}
-    disabled={!$workspace_store.activeWorkspacePath}
-    data-testid="open-knowledge"
-    on:click={openKnowledgeView}
-    aria-label="ナレッジを開く"
-    aria-pressed={$selected_type === "Knowledge"}
-    title={$workspace_store.activeWorkspacePath
-      ? "ナレッジを開く（全プロジェクトの昇華済みメモ）"
-      : "Workspaceを設定するとナレッジが使えます"}
-  >
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        d="M12 3.5l2.4 5.3 5.6.6-4.2 3.9 1.2 5.7L12 16.1 6.9 19l1.2-5.7L4 9.4l5.6-.6z"
-        stroke="currentColor"
-        stroke-width="1.6"
-        stroke-linejoin="round"
         fill="none"
       />
     </svg>
