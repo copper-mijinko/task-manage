@@ -45,21 +45,31 @@ function treeHasUnloadedMemo(node: TreeData | undefined): boolean {
 
 function mergeProjectMemos(
   node: TreeData,
-  memosByTaskId: Record<string, WorkspaceMemo[]>
+  memosByTaskId: Record<string, WorkspaceMemo[]>,
+  // 多親ノードの複数の出現は同じオブジェクトを共有している（workspace_tree の
+  // 射影を参照）。作り直すときに出現ごとに別オブジェクトを作ると共有が壊れ、
+  // 以後の編集が片方の出現にしか効かなくなる。同じ入力には同じ出力を返す。
+  rebuilt: Map<TreeData, { node: TreeData; changed: boolean }> = new Map()
 ): { node: TreeData; changed: boolean } {
+  const already = rebuilt.get(node);
+  if (already) return already;
+
   let changed = false;
   const ownMemos = memosByTaskId[node.id];
   const data = ownMemos ? { ...node.data, memo: ownMemos } : node.data;
   if (ownMemos) changed = true;
 
   const children = (node.children ?? []).map((child) => {
-    const merged = mergeProjectMemos(child, memosByTaskId);
+    const merged = mergeProjectMemos(child, memosByTaskId, rebuilt);
     if (merged.changed) changed = true;
     return merged.node;
   });
 
-  if (!changed) return { node, changed: false };
-  return { node: { ...node, data, children }, changed: true };
+  const result = changed
+    ? { node: { ...node, data, children }, changed: true }
+    : { node, changed: false };
+  rebuilt.set(node, result);
+  return result;
 }
 
 async function hydrateWorkspaceMemosForSearch(current: FilterState, currentTreeData: ProjectData) {
