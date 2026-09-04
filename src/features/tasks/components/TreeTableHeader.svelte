@@ -15,6 +15,7 @@
   import DateRangePanel from "@features/search/components/DateRangePanel.svelte";
   import NameFilterPanel from "@features/search/components/NameFilterPanel.svelte";
   import StatusFilterPanel from "@features/search/components/StatusFilterPanel.svelte";
+  import NumberRangePanel from "@features/search/components/NumberRangePanel.svelte";
 
   import { createEventDispatcher } from "svelte";
   const headerSelectionDispatch = createEventDispatcher();
@@ -65,6 +66,9 @@
    */
   const selectedStatuses = (currentFilter) =>
     (currentFilter?.status ?? []).filter((value) => value != null);
+
+  let openCountPanel = null;
+  let countPanelAnchorRect = null;
   const EMPTY_FILTER_LABEL = "条件なし";
   const FILTER_ICON_PATH =
     "M3 7C3 6.44772 3.44772 6 4 6H20C20.5523 6 21 6.44772 21 7C21 7.55228 20.5523 8 20 8H4C3.44772 8 3 7.55228 3 7ZM6 12C6 11.4477 6.44772 11 7 11H17C17.5523 11 18 11.4477 18 12C18 12.5523 17.5523 13 17 13H7C6.44772 13 6 12.5523 6 12ZM9 17C9 16.4477 9.44772 16 10 16H14C14.5523 16 15 16.4477 15 17C15 17.5523 14.5523 18 14 18H10C9.44772 18 9 17.5523 9 17Z";
@@ -113,6 +117,20 @@
 
   function isDateColumn(headerName) {
     return headerName === "start date" || headerName === "due date";
+  }
+
+  /**
+   * 件数を出す列。件数バッジを出す列は件数で絞り込めるべきなので、
+   * 列 id を直書きせずここで一括して決める。
+   *
+   * 以前は「メモ数」だけがこのパネルに繋がっていて、隣の「添付数」は同じ
+   * 件数列なのに絞り込めなかった。判定を列 id 直書きにすると、その非対称が
+   * また生まれる。
+   */
+  const COUNT_COLUMN_LABELS = { attachments: "添付数" };
+
+  function isCountColumn(headerName) {
+    return headerName in COUNT_COLUMN_LABELS;
   }
 
   function openPanel(e) {
@@ -175,6 +193,13 @@
     if (isDateColumn(headerName)) {
       return getDateFilterSummary(headerName, currentFilter);
     }
+    if (isCountColumn(headerName)) {
+      const [min = "", max = ""] = currentFilter?.[headerName] ?? [];
+      if (min && max) return `${min}〜${max}件`;
+      if (min) return `${min}件以上`;
+      if (max) return `${max}件以下`;
+      return EMPTY_FILTER_LABEL;
+    }
     if (headerName === "status") {
       const statusValues = selectedStatuses(currentFilter);
       if (statusValues.length === 1) return STATUS_LABELS[statusValues[0]] ?? statusValues[0];
@@ -187,10 +212,37 @@
     return EMPTY_FILTER_LABEL;
   }
 
+  function toggleCountPanel(e, headerName) {
+    e.stopPropagation();
+    showPanel = false;
+    openNamePanel = false;
+    openDatePanel = null;
+    if (openCountPanel === headerName) {
+      openCountPanel = null;
+    } else {
+      countPanelAnchorRect = e.currentTarget.getBoundingClientRect();
+      openCountPanel = headerName;
+    }
+  }
+
+  function handleCountFilterChange(headerName, detail) {
+    const { min, max } = detail;
+    filter.update((f) => {
+      const next = { ...f };
+      if (!min && !max) {
+        delete next[headerName];
+      } else {
+        next[headerName] = [min, max];
+      }
+      return next;
+    });
+  }
+
   function toggleDatePanel(e, headerName) {
     e.stopPropagation();
     showPanel = false;
     openNamePanel = false;
+    openCountPanel = null;
     if (openDatePanel === headerName) {
       openDatePanel = null;
     } else {
@@ -249,6 +301,9 @@
   function clearColumnFilter(headerName) {
     if (openDatePanel === headerName) {
       openDatePanel = null;
+    }
+    if (openCountPanel === headerName) {
+      openCountPanel = null;
     }
     if (headerName === "name") {
       openNamePanel = false;
@@ -499,6 +554,47 @@
               </IconButton>
             {/if}
           </div>
+        {:else if isCountColumn(header.name)}
+          <div class="HeaderFilterGroup">
+            <button
+              class="HeaderFilterControl"
+              class:active={filterActive[header.name]}
+              on:click|stopPropagation={(e) => toggleCountPanel(e, header.name)}
+              aria-label={`${COUNT_COLUMN_LABELS[header.name]}フィルター`}
+              aria-expanded={openCountPanel === header.name}
+              title={`${COUNT_COLUMN_LABELS[header.name]}フィルター`}
+              use:ripple
+            >
+              <span class="FilterIcon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path d={FILTER_ICON_PATH} />
+                </svg>
+              </span>
+              {#if filterActive[header.name]}
+                <span class="FilterSelection">{filterSummaries[header.name]}</span>
+              {/if}
+            </button>
+            {#if filterActive[header.name]}
+              <IconButton
+                style={"margin: 0rem; padding: var(--sp1); margin-left: auto; width: 1.5rem; height: 1.5rem; flex-shrink: 0;"}
+                ariaLabel={`${COUNT_COLUMN_LABELS[header.name]}フィルターをクリア`}
+                on:click={(e) => {
+                  clearColumnFilter(header.name);
+                  e.stopPropagation();
+                }}
+                activeColor={"transparent"}
+                normalColor={"transparent"}
+              >
+                <svg viewBox="4 4 16 16" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                  <path
+                    d={FILTER_CLEAR_ICON_PATH}
+                    fill="currentColor"
+                    transform="translate(6.629 6.8)"
+                  />
+                </svg>
+              </IconButton>
+            {/if}
+          </div>
         {:else if isDateColumn(header.name)}
           <div class="HeaderFilterGroup">
             <button
@@ -713,6 +809,17 @@
     anchorRect={namePanelAnchorRect}
     on:change={(e) => handleNameFilterChange(e.detail)}
     on:close={() => (openNamePanel = false)}
+  />
+{/if}
+
+{#if openCountPanel}
+  <NumberRangePanel
+    column={COUNT_COLUMN_LABELS[openCountPanel]}
+    min={$filter[openCountPanel]?.[0] ?? ""}
+    max={$filter[openCountPanel]?.[1] ?? ""}
+    anchorRect={countPanelAnchorRect}
+    on:change={(e) => handleCountFilterChange(openCountPanel, e.detail)}
+    on:close={() => (openCountPanel = null)}
   />
 {/if}
 
