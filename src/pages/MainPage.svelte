@@ -45,6 +45,7 @@
     restoreNode,
     bulkArchiveNodes,
     bulkRestoreNodes,
+    canIndentNode,
     getNodeByPath,
     parentPathOf,
     pathLeafId,
@@ -167,6 +168,10 @@
   $: parentForRow = (id) =>
     (activeParentNode?.children?.some((child) => child.id === id) ? activeParentNode : undefined) ??
     ($tree_data?.data ? getParent(id, $tree_data.data) : undefined);
+  /** 祖父。アウトデント可否に使う。ここも見ている行の側から辿る。 */
+  $: grandParentForRow = (parentId) =>
+    getNodeByPath($tree_data?.data, parentPathOf(bulkParentPath)) ??
+    ($tree_data?.data ? getParent(parentId, $tree_data.data) : undefined);
   $: canMultiSiblingMove =
     isMultiSelect && isContiguousSiblingBlock($tree_data?.data, $selected_ids, bulkParentPath);
   $: canMultiTreeOp =
@@ -177,7 +182,7 @@
     if (!anyId) return false;
     const parent = parentForRow(anyId);
     if (!parent) return false;
-    return !!getParent(parent.id, $tree_data.data);
+    return !!grandParentForRow(parent.id);
   })();
   $: selectionTreeCapabilities = (() => {
     const unavailable = { moveUp: false, moveDown: false, indent: false, outdent: false };
@@ -205,8 +210,9 @@
     return {
       moveUp: contiguous && first > 0,
       moveDown: contiguous && last < parent.children.length - 1,
-      indent: first > 0,
-      outdent: !!getParent(parent.id, $tree_data.data),
+      // 直前の兄弟が自分の子孫なら循環するので、そこへは入れられない。
+      indent: first > 0 && canIndentNode(anyId, $tree_data.data, `${bulkParentPath}/${anyId}`),
+      outdent: !!grandParentForRow(parent.id),
     };
   })();
 
