@@ -46,12 +46,11 @@ function node(id: string, status: string, children: TreeData[] = []): TreeData {
 describe("ステータス無し: ツリー ⇄ ワークスペースの往復", () => {
   it("status を持たないタスクは、ツリーでも「無し」のまま（Open にしない）", () => {
     const tasks: Record<string, WorkspaceTask> = {
-      root: { id: "root", name: "P", parents: [], memos: [], createdAt: "2026-09-04" },
+      root: { id: "root", name: "P", parents: [], createdAt: "2026-09-04" },
       n1: {
         id: "n1",
         name: "ただの記録",
         parents: [{ id: "root", order: 0 }],
-        memos: [],
         createdAt: "2026-09-04",
       },
       n2: {
@@ -59,7 +58,6 @@ describe("ステータス無し: ツリー ⇄ ワークスペースの往復", 
         name: "追跡するタスク",
         status: "In Progress",
         parents: [{ id: "root", order: 1 }],
-        memos: [],
         createdAt: "2026-09-04",
       },
     };
@@ -86,12 +84,11 @@ describe("ステータス無し: ツリー ⇄ ワークスペースの往復", 
 
   it("ワークスペース → ツリー → ワークスペース で「無し」が保たれる", () => {
     const tasks: Record<string, WorkspaceTask> = {
-      root: { id: "root", name: "P", parents: [], memos: [], createdAt: "2026-09-04" },
+      root: { id: "root", name: "P", parents: [], createdAt: "2026-09-04" },
       n1: {
         id: "n1",
         name: "記録",
         parents: [{ id: "root", order: 0 }],
-        memos: [],
         createdAt: "2026-09-04",
       },
     };
@@ -121,7 +118,6 @@ describe("ステータス無し: ファイル形式", () => {
         id: "n1",
         name: "記録",
         parents: [{ id: "root-id", order: 0 }],
-        memos: [],
         createdAt: "2026-09-04",
       },
       new Map()
@@ -147,7 +143,6 @@ describe("ステータス無し: ファイル形式", () => {
         id: "n1",
         name: "記録",
         parents: [{ id: "root-id", order: 0 }],
-        memos: [],
         createdAt: "2026-09-04",
       },
       new Map()
@@ -167,7 +162,6 @@ describe("ステータス無し: ファイル形式", () => {
         name: "タスク",
         status: "Completed",
         parents: [{ id: "root-id", order: 0 }],
-        memos: [],
         createdAt: "2026-09-04",
       },
       new Map()

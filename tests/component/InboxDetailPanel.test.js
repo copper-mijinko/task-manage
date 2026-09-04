@@ -10,8 +10,8 @@ vi.mock("@lib/primitives/DateInput.svelte", async () => {
   const mod = await import("../mocks/PassThroughStub.svelte");
   return { default: mod.default };
 });
-vi.mock("@features/memos/components/MemoTab.svelte", async () => {
-  const mod = await import("../mocks/PassThroughStub.svelte");
+vi.mock("@features/memos/components/Memo.svelte", async () => {
+  const mod = await import("../mocks/MemoStub.svelte");
   return { default: mod.default };
 });
 
@@ -23,7 +23,6 @@ const item = {
   name: "Inbox item",
   status: "Open",
   parents: [{ id: "inbox-root" }],
-  memos: [],
 };
 
 afterEach(() => {

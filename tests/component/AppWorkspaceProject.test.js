@@ -121,7 +121,6 @@ describe("App - workspace project rendering", () => {
           name: "Beta",
           status: "Open",
           parents: [],
-          memos: [],
           createdAt: "2026-01-01",
         },
       },

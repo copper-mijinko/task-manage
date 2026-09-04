@@ -139,7 +139,6 @@ describe("経路ごとの折り畳み", () => {
 
   it("片方の親の下で畳んでも、もう片方の下では開いたまま", () => {
     const tasks = multiParentProject();
-    tasks.C.memos = [];
     // C に子を付けて、開閉の差が行数に出るようにする。
     const withChild = { ...tasks, D: T("D", "詳細", ["C"]) };
     const project = workspaceToProjectData(withChild, "root");

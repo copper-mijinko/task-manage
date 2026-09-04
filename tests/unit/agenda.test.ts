@@ -15,7 +15,6 @@ function task(overrides: Partial<WorkspaceTask> & { id: string }): WorkspaceTask
     name: overrides.id,
     status: "Open",
     parents: [{ id: "root" }],
-    memos: [],
     createdAt: "2026-01-01",
     ...overrides,
   } as WorkspaceTask;
