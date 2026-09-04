@@ -7,7 +7,9 @@ import {
   buildStickyTrail,
   bulkMoveUp,
   bulkRemoveNodes,
+  isNodeEffectivelyArchived,
   reorderTree,
+  restoreNode,
   canOutdentNode,
   indentNode,
   moveNodeUp,
@@ -292,5 +294,49 @@ describe("Shift 選択の範囲も行で決まる", () => {
     selectOnly("C", "root/A/C");
     selectRange("B2", ids, rows, "root/B/B2");
     expect(get(selected_ids)).toEqual(new Set(["C", "A2", "B", "B2"]));
+  });
+});
+
+/**
+ * アーカイブと復元もノードの属性だが、「辿れるかどうか」は経路で決まる。
+ */
+describe("アーカイブ判定と復元", () => {
+  const A = (id: string, archived: boolean, children: TreeData[] = []): TreeData => {
+    const node = N(id, children);
+    if (archived) {
+      node.archived = true;
+      node.archivedAt = "2026-09-04T00:00:00.000Z";
+    }
+    return node;
+  };
+
+  it("片方の親がアーカイブでも、もう片方から生きて辿れるなら生きている", () => {
+    const shared = N("C");
+    const tree = N("root", [A("A", true, [shared]), A("B", false, [shared])]);
+
+    expect(isNodeEffectivelyArchived("C", tree)).toBe(false);
+    expect(isNodeEffectivelyArchived("A", tree)).toBe(true);
+  });
+
+  it("すべての親がアーカイブなら、アーカイブされた扱い", () => {
+    const shared = N("C");
+    const tree = N("root", [A("A", true, [shared]), A("B", true, [shared])]);
+
+    expect(isNodeEffectivelyArchived("C", tree)).toBe(true);
+  });
+
+  it("ツリーに無いノードは判定しない", () => {
+    expect(isNodeEffectivelyArchived("nope", N("root", []))).toBe(false);
+  });
+
+  it("復元は、指定した行の祖先だけを解除する", () => {
+    const shared = A("C", true);
+    const tree = N("root", [A("A", true, [shared]), A("B", true, [shared])]);
+
+    restoreNode("C", tree, "root/B/C");
+
+    expect(tree.children[0].archived).toBe(true); // A はそのまま
+    expect(tree.children[1].archived).toBeUndefined(); // B は解除
+    expect(shared.archived).toBeUndefined();
   });
 });
