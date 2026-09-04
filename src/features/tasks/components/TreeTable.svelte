@@ -98,7 +98,7 @@
    * tabindex="0" にすると、テーブルを通り過ぎるだけで行数ぶん Tab を押す
    * ことになる（矢印キーで移動できるようになったので停留点は 1 つで足りる）。
    */
-  $: tabStopRowId = rows.find((row) => $selected_ids.has(row.id))?.id ?? rows[0]?.id ?? null;
+  $: tabStopRowPath = rows.find((row) => $selected_ids.has(row.id))?.path ?? rows[0]?.path ?? null;
   $: inheritedDueDateMap = buildInheritedDueDateMap(rows);
   $: nodePathMap = buildNodePathMap(rows);
   $: lineNumberMap = buildLineNumberMap($filtered_data);
@@ -615,17 +615,17 @@
    * 増えるほど現実的でなくなる。移動に必要な「表示中の行の並び」と親子関係は
    * ここ（rows）にしかないので、判定もここに置く。
    */
-  function focusRowById(id) {
-    if (!id) return;
-    // 行の DOM id はノード id そのもの（TreeTableRow の `{id}`）。
-    const target = document.getElementById(id);
+  /** 経路で行を引く。多親ノードは複数行に出るので、ノード id では足りない。 */
+  function focusRowByPath(path) {
+    if (!path) return;
+    const target = table_root?.querySelector(`[role="row"][data-row-path="${CSS.escape(path)}"]`);
     if (!target) return;
     target.focus();
     target.scrollIntoView({ block: "nearest" });
   }
 
   /** 行へ移動する。選択もクリックと同じように動かし、詳細ペインを追従させる。 */
-  function moveToRow(id, { shiftKey = false } = {}) {
+  function moveToRow(id, path, { shiftKey = false } = {}) {
     if (!id) return;
     if (shiftKey && $selection_anchor_id) {
       selectRange(
@@ -637,34 +637,37 @@
     }
     navigation_history.pushSelection();
     // 選択の反映で行が描き直されるため、DOM が落ち着いてから focus する。
-    tick().then(() => focusRowById(id));
+    tick().then(() => focusRowByPath(path));
   }
 
   function handleRowNavigate(event) {
-    const { id, key, shiftKey } = event.detail;
-    const index = rows.findIndex((row) => row.id === id);
+    const { id, path, key, shiftKey } = event.detail;
+    // 多親ノードは複数行に出るため、位置は経路で決める。
+    const index = rows.findIndex((row) => row.path === path);
     if (index < 0) return;
     const row = rows[index];
 
     switch (key) {
       case "ArrowDown":
-        if (index < rows.length - 1) moveToRow(rows[index + 1].id, { shiftKey });
+        if (index < rows.length - 1)
+          moveToRow(rows[index + 1].id, rows[index + 1].path, { shiftKey });
         return;
       case "ArrowUp":
-        if (index > 0) moveToRow(rows[index - 1].id, { shiftKey });
+        if (index > 0) moveToRow(rows[index - 1].id, rows[index - 1].path, { shiftKey });
         return;
       case "Home":
-        if (rows.length > 0) moveToRow(rows[0].id, { shiftKey });
+        if (rows.length > 0) moveToRow(rows[0].id, rows[0].path, { shiftKey });
         return;
       case "End":
-        if (rows.length > 0) moveToRow(rows[rows.length - 1].id, { shiftKey });
+        if (rows.length > 0)
+          moveToRow(rows[rows.length - 1].id, rows[rows.length - 1].path, { shiftKey });
         return;
       case "ArrowRight":
         // 閉じていれば開く。開いていれば最初の子へ入る。
         if (row.hasChildren && !row.expanded) {
           closed_node_ids.delete(id);
         } else if (row.hasChildren && index < rows.length - 1) {
-          moveToRow(rows[index + 1].id);
+          moveToRow(rows[index + 1].id, rows[index + 1].path);
         }
         return;
       case "ArrowLeft":
@@ -672,7 +675,8 @@
         if (row.hasChildren && row.expanded) {
           closed_node_ids.add(id);
         } else if (row.parentId) {
-          moveToRow(row.parentId);
+          const parentPath = row.path.slice(0, row.path.lastIndexOf("/"));
+          moveToRow(row.parentId, parentPath);
         }
         return;
       default:
@@ -1264,9 +1268,11 @@
     </div>
   {/if}
   {#if rows.length > 0}
-    {#each rows as row (row.id)}
+    <!-- key は経路。多親ノードは親ごとに複数行に出るので id では重複する。 -->
+    {#each rows as row (row.path)}
       <TreeTableRow
         {row}
+        isPrimaryOccurrence={row.isPrimaryOccurrence}
         headers={visibleHeaders}
         selected={$selected_ids.has(row.id)}
         bulkSelectionActive={$bulk_selection_active}
@@ -1285,8 +1291,8 @@
         bulkCanOutdent={canBulkOutdent}
         inheritedDueDate={inheritedDueDateMap.get(row.id) ?? ""}
         nodePath={nodePathMap.get(row.id) ?? ""}
-        lineNumber={lineNumberMap.get(row.id) ?? 0}
-        isTabStop={row.id === tabStopRowId}
+        lineNumber={lineNumberMap.get(row.path) ?? 0}
+        isTabStop={row.path === tabStopRowPath}
         on:select={handleSelectRow}
         on:navigate={handleRowNavigate}
         on:toggleCheckbox={handleToggleCheckbox}

@@ -28,6 +28,7 @@
 
 <div
   id={row.id}
+  data-row-path={row.path}
   role="row"
   class="TableRow"
   data-testid={"row-" + row.id}
@@ -42,7 +43,7 @@
   tabindex={isTabStop ? 0 : -1}
   on:keydown={(e) => {
     if (!NAVIGATION_KEYS.has(e.key) || e.ctrlKey || e.metaKey || e.altKey) return;
-    dispatch("navigate", { id: row.id, key: e.key, shiftKey: e.shiftKey });
+    dispatch("navigate", { id: row.id, path: row.path, key: e.key, shiftKey: e.shiftKey });
   }}
 >
   <div class="CheckboxCell" style="width: 28px;">

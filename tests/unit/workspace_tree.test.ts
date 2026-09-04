@@ -180,7 +180,7 @@ describe("workspace tree conversion", () => {
     expect(projectData.data.children.map((child) => child.id)).toEqual(["task-1"]);
   });
 
-  it("emits a task listed under two parents exactly once", () => {
+  it("emits a task listed under two parents once per parent", () => {
     // parents は複数持てるため、同じ task が 2 つの親の children に現れうる。
     // ツリーは keyed each で描画されるので、同じ id を 2 箇所へ出すと
     // each_key_duplicate で描画が落ちて画面が「読み込み中...」のまま止まる。
@@ -224,8 +224,51 @@ describe("workspace tree conversion", () => {
     };
     walk(projectData.data as never);
 
-    expect(ids.filter((id) => id === "shared")).toHaveLength(1);
-    expect(new Set(ids).size).toBe(ids.length);
+    // 木は DAG の射影。多親ノードは親ごとに現れるのが正しい。
+    // （以前はグローバルな visited で 1 回に潰していて、辺が保存からも消えていた）
+    expect(ids.filter((id) => id === "shared")).toHaveLength(2);
+  });
+
+  it("stops at a cycle instead of recursing forever", () => {
+    const projectData = workspaceToProjectData(
+      {
+        root: {
+          id: "root",
+          name: "P",
+          status: "Open",
+          parents: [],
+          memos: [],
+          createdAt: "2026-01-01",
+        },
+        a: {
+          id: "a",
+          name: "A",
+          status: "Open",
+          parents: ["root", "b"],
+          memos: [],
+          createdAt: "2026-01-01",
+        },
+        b: {
+          id: "b",
+          name: "B",
+          status: "Open",
+          parents: ["a"],
+          memos: [],
+          createdAt: "2026-01-01",
+        },
+      } as never,
+      "root"
+    );
+
+    const ids: string[] = [];
+    const walk = (node: { id: string; children: { id: string }[] }) => {
+      ids.push(node.id);
+      for (const child of node.children) walk(child as never);
+    };
+    walk(projectData.data as never);
+
+    // root → a → b → (a は祖先なので打ち切り)
+    expect(ids).toEqual(["root", "a", "b"]);
   });
 
   it("round-trips task tags between the tree and workspace tasks", () => {

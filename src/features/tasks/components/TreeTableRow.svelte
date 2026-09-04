@@ -29,6 +29,12 @@
    * テーブルを通り過ぎるだけで行数ぶん Tab を押すことになる。
    */
   export let isTabStop = false;
+  /**
+   * このノードの最初の出現か。多親ノードは親ごとに複数行に出るので、DOM の
+   * `id` 属性は最初の行にだけ付ける（重複 id を作らないため）。他の行は
+   * `data-node-id` で引ける。
+   */
+  export let isPrimaryOccurrence = true;
   export let isDark = false;
   export let canDrop = () => false;
   export let canMoveUp = false;
@@ -48,6 +54,7 @@
   let taskName;
 
   $: id = row.id;
+  $: path = row.path;
   $: node = row.node;
   $: depth = row.depth;
   $: data = node.data;
@@ -142,7 +149,7 @@
     // 修飾キー付きは既存のショートカット（Ctrl+↑ の移動など）に譲る。
     if (!NAVIGATION_KEYS.has(e.key) || e.ctrlKey || e.metaKey || e.altKey) return;
     e.preventDefault();
-    dispatch("navigate", { id, key: e.key, shiftKey: e.shiftKey });
+    dispatch("navigate", { id, path, key: e.key, shiftKey: e.shiftKey });
   }
 
   function commitData(key, value) {
@@ -248,7 +255,9 @@
 </script>
 
 <div
-  {id}
+  id={isPrimaryOccurrence ? id : undefined}
+  data-node-id={id}
+  data-row-path={path}
   role="row"
   class:TableRow={true}
   class:Selected={selected}
