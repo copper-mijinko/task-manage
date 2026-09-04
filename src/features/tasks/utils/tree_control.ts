@@ -444,7 +444,11 @@ export function flattenVisibleTree(
     siblingIndex: number,
     siblingCount: number,
     insideArchived: boolean,
-    parentPath: string
+    parentPath: string,
+    // いま辿っている経路の祖先。編集の結果ツリーに循環ができても、
+    // ここで打ち切って画面が落ちないようにする（防御。作らせない方は
+    // canIndentNode / canDropTarget 側で止める）。
+    ancestors: ReadonlySet<string>
   ) => {
     const isArchived = !!node.archived;
     const effectivelyArchived = insideArchived || isArchived;
@@ -482,13 +486,15 @@ export function flattenVisibleTree(
       return;
     }
 
+    const pathAncestors = new Set(ancestors).add(node.id);
     const childCount = node.children.length;
     node.children.forEach((child, index) => {
-      visit(child, depth + 1, node.id, index, childCount, effectivelyArchived, path);
+      if (pathAncestors.has(child.id)) return;
+      visit(child, depth + 1, node.id, index, childCount, effectivelyArchived, path, pathAncestors);
     });
   };
 
-  visit(tree_data, 0, undefined, 0, 1, false, "");
+  visit(tree_data, 0, undefined, 0, 1, false, "", new Set<string>());
 
   return rows;
 }
@@ -574,15 +580,18 @@ export function buildLineNumberMap(tree: TreeData | null | undefined): Map<strin
   if (!tree) return result;
 
   let counter = 0;
-  const visit = (node: TreeData, parentPath: string) => {
+  const visit = (node: TreeData, parentPath: string, ancestors: ReadonlySet<string>) => {
     const path = parentPath ? `${parentPath}/${node.id}` : node.id;
     counter += 1;
     result.set(path, counter);
+    const pathAncestors = new Set(ancestors).add(node.id);
     for (const child of node.children ?? []) {
-      visit(child, path);
+      // 循環は打ち切る（flattenVisibleTree と同じ規則にして行がずれないように）。
+      if (pathAncestors.has(child.id)) continue;
+      visit(child, path, pathAncestors);
     }
   };
-  visit(tree, "");
+  visit(tree, "", new Set<string>());
   return result;
 }
 
@@ -866,7 +875,11 @@ export function canMoveNodeDown(target: string, tree_data: TreeData, rowPath?: s
 
 export function canIndentNode(target: string, tree_data: TreeData, rowPath?: string): boolean {
   const context = getSiblingContext(target, tree_data, rowPath);
-  return !!context && context.index > 0;
+  if (!context || context.index === 0) return false;
+  // 直前の兄弟が自分の子孫なら、その下に入ると自分の祖先になってしまう
+  // （＝循環）。D&D は同じ判定で止めている。
+  const newParent = context.parent.children[context.index - 1];
+  return !!newParent && !isChild(newParent.id, target, tree_data);
 }
 
 export function canOutdentNode(target: string, tree_data: TreeData, rowPath?: string): boolean {
@@ -915,8 +928,13 @@ export function indentNode(target: string, tree_data: TreeData, rowPath?: string
   }
 
   const { parent, index } = context;
-  const [node] = parent.children.splice(index, 1);
   const newParent = parent.children[index - 1];
+  // 循環を作らない。多親では「直前の兄弟が自分の子孫」が起こりうる。
+  if (!newParent || isChild(newParent.id, target, tree_data)) {
+    return tree_data;
+  }
+
+  const [node] = parent.children.splice(index, 1);
   newParent.children.push(node);
 
   return tree_data;
@@ -1449,6 +1467,8 @@ export function bulkIndent(
     const currentIndex = parent.children.findIndex((child) => child.id === c.id);
     if (currentIndex <= 0) continue;
     const predecessor = parent.children[currentIndex - 1];
+    // 循環を作らない（単体のインデントと同じ規則）。
+    if (isChild(predecessor.id, c.id, tree_data)) continue;
     parent.children.splice(currentIndex, 1);
     predecessor.children.push(c);
     if (!newParentIds.includes(predecessor.id)) newParentIds.push(predecessor.id);

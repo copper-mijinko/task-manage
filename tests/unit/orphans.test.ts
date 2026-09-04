@@ -1,7 +1,13 @@
 import { get } from "svelte/store";
 import { describe, expect, it } from "vitest";
-import { workspaceToProjectData } from "../../src/features/workspace/utils/workspace_tree";
 import {
+  projectDataToWorkspaceTasks,
+  workspaceToProjectData,
+} from "../../src/features/workspace/utils/workspace_tree";
+import {
+  buildLineNumberMap,
+  bulkIndent,
+  canIndentNode,
   buildInheritedDueDateMap,
   buildNodePathMap,
   buildStickyTrail,
@@ -367,5 +373,49 @@ describe("孤児のかたまりは、てっぺんから 1 回だけ付け直す"
     const rows = flattenVisibleTree(workspaceToProjectData(tasks, "root").data, new Set(), false);
 
     expect(rows.map((r) => r.path)).toEqual(["root", "root/X", "root/X/Y"]);
+  });
+});
+
+/**
+ * 多親では「直前の兄弟が自分の子孫」が起こりうる。そこへインデントすると
+ * 自分が自分の祖先になり、ツリーが循環する（共有オブジェクトなので、
+ * メモリ上も本当に輪になる）。作らせない／作られても落ちない、の両方。
+ */
+describe("循環を作らせない・作られても落ちない", () => {
+  const cyclic = () => {
+    const shared = N("C");
+    // root の子は C と B、B の子も C（＝ C は多親）。B の直前の兄弟が C。
+    return N("root", [shared, N("B", [shared])]);
+  };
+
+  it("直前の兄弟が自分の子孫なら、インデントできない", () => {
+    const tree = cyclic();
+    expect(canIndentNode("B", tree, "root/B")).toBe(false);
+
+    indentNode("B", tree, "root/B");
+    expect(tree.children.map((c) => c.id)).toEqual(["C", "B"]);
+    expect(tree.children[0].children).toEqual([]);
+  });
+
+  it("一括インデントも同じ規則で止まる", () => {
+    const tree = cyclic();
+    bulkIndent(new Set(["B"]), tree, "root");
+    expect(tree.children.map((c) => c.id)).toEqual(["C", "B"]);
+  });
+
+  it("それでも循環が入り込んだら、表示と保存は打ち切って落ちない", () => {
+    const tree = cyclic();
+    // 検証のため、ガードを通さずに直接輪を作る。
+    const c = tree.children[0];
+    const b = tree.children[1];
+    tree.children = [c];
+    c.children.push(b);
+
+    const rows = flattenVisibleTree(tree, new Set(), false);
+    expect(rows.map((r) => r.path)).toEqual(["root", "root/C", "root/C/B"]);
+    expect(buildLineNumberMap(tree).size).toBe(3);
+
+    const back = projectDataToWorkspaceTasks({ headers: [], data: tree }, {});
+    expect(back.map((t) => t.id).sort()).toEqual(["B", "C", "root"]);
   });
 });
