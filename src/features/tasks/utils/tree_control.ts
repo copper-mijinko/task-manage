@@ -372,20 +372,31 @@ export function getNode(base: string, tree_data: TreeData | undefined): TreeData
 export function updateNodeDataById(
   tree_data: TreeData | undefined,
   targetId: string,
-  patch: Partial<TreeData["data"]>
+  patch: Partial<TreeData["data"]>,
+  // 多親ノードの複数の出現は同じオブジェクトを共有している（workspace_tree の
+  // 射影を参照）。作り直すときに出現ごとに別オブジェクトを作ると共有が壊れ、
+  // 以後の編集が片方の出現にしか効かなくなる。同じ入力には同じ出力を返す。
+  rebuilt: Map<TreeData, TreeData> = new Map()
 ): TreeData | undefined {
   if (!tree_data) {
     return tree_data;
   }
 
+  const already = rebuilt.get(tree_data);
+  if (already) {
+    return already;
+  }
+
   if (tree_data.id === targetId) {
-    return {
+    const next = {
       ...tree_data,
       data: {
         ...tree_data.data,
         ...patch,
       },
     };
+    rebuilt.set(tree_data, next);
+    return next;
   }
 
   if (!tree_data.children || tree_data.children.length === 0) {
@@ -394,7 +405,7 @@ export function updateNodeDataById(
 
   let hasChanged = false;
   const updatedChildren = tree_data.children.map((child) => {
-    const nextChild = updateNodeDataById(child, targetId, patch) ?? child;
+    const nextChild = updateNodeDataById(child, targetId, patch, rebuilt) ?? child;
     if (nextChild !== child) {
       hasChanged = true;
     }
@@ -405,10 +416,12 @@ export function updateNodeDataById(
     return tree_data;
   }
 
-  return {
+  const next = {
     ...tree_data,
     children: updatedChildren,
   };
+  rebuilt.set(tree_data, next);
+  return next;
 }
 
 export function flattenVisibleTree(
@@ -939,13 +952,21 @@ export function bulkUpdateNodeData(
     return true;
   }
 
+  // 多親ノードの出現はオブジェクトを共有しているので、作り直しても
+  // 同じ入力には同じ出力を返す（共有を壊さない）。
+  const rebuilt = new Map<TreeData, TreeData>();
+
   function visit(node: TreeData): TreeData {
+    const already = rebuilt.get(node);
+    if (already) return already;
+
     let nextNode = node;
     if (ids.has(node.id) && !isNoopFor(node)) {
       nextNode = { ...node, data: { ...node.data, ...patch } };
     }
 
     if (!nextNode.children || nextNode.children.length === 0) {
+      if (nextNode !== node) rebuilt.set(node, nextNode);
       return nextNode;
     }
 
@@ -959,10 +980,9 @@ export function bulkUpdateNodeData(
     if (!childChanged && nextNode === node) {
       return node;
     }
-    if (!childChanged) {
-      return nextNode;
-    }
-    return { ...nextNode, children: updatedChildren };
+    const result = childChanged ? { ...nextNode, children: updatedChildren } : nextNode;
+    rebuilt.set(node, result);
+    return result;
   }
 
   return visit(tree_data);
@@ -1033,6 +1053,51 @@ function getRestoreNodeIds(target: string, tree_data: TreeData): Set<string> {
 /** archived フラグを無視して、対象ノードをツリーから物理削除する。 */
 export function permanentlyDeleteNode(target: string, tree_data: TreeData): TreeData {
   return rmNode(target, tree_data);
+}
+
+/**
+ * 削除で最後の親を失ったノードをルート直下に付け直す。
+ *
+ * ノードは親を複数持てるので、削除は「辺を 1 本切る」操作でしかない。
+ * 切った先がそのノードの唯一の親だった場合、中身はそのままなのにルートから
+ * 辿れなくなる（＝孤児）。保存はツリーを辿って書き出すため、孤児はファイルごと
+ * 消える。孤児を作らない（どのノードも必ず 1 つ以上の親を持つ）ために、
+ * 孤児が生まれる瞬間＝削除の直後に拾ってルート直下へ付け直す。
+ *
+ * 消したノード自身は拾わない。まとめて消したノード同士も拾わない
+ * （どちらも「消す」と言われたもの）。
+ *
+ * @param tree 削除後のツリー（ルート）
+ * @param removed 削除したノード。削除**前**に `getNode` などで掴んでおく
+ * @returns 付け直したノードの id
+ */
+export function reattachOrphans(tree: TreeData, removed: TreeData[]): string[] {
+  if (!tree || removed.length === 0) return [];
+
+  const reachable = new Set<string>();
+  const mark = (node: TreeData) => {
+    if (reachable.has(node.id)) return;
+    reachable.add(node.id);
+    for (const child of node.children ?? []) mark(child);
+  };
+  mark(tree);
+
+  const removedIds = new Set(removed.map((node) => node.id));
+  const reattached: string[] = [];
+
+  for (const node of removed) {
+    // まだ他の親から辿れるなら、切れたのは辺 1 本だけ。子も当然辿れる。
+    if (reachable.has(node.id)) continue;
+    for (const child of node.children ?? []) {
+      if (reachable.has(child.id) || removedIds.has(child.id)) continue;
+      tree.children.push(child);
+      reattached.push(child.id);
+      // 付け直した時点で、その子孫もルートから辿れるようになる。
+      mark(child);
+    }
+  }
+
+  return reattached;
 }
 
 /** 複数まとめて archive する。ルートは含まれていても無視。 */
@@ -1115,7 +1180,14 @@ export function bulkRemoveNodes(
     return tree_data;
   }
 
+  // 多親ノードの出現はオブジェクトを共有しているので、作り直しても
+  // 同じ入力には同じ出力を返す（共有を壊さない）。
+  const rebuilt = new Map<TreeData, TreeData>();
+
   function visit(node: TreeData): TreeData {
+    const already = rebuilt.get(node);
+    if (already) return already;
+
     if (!node.children || node.children.length === 0) {
       return node;
     }
@@ -1127,7 +1199,9 @@ export function bulkRemoveNodes(
     if (sameRefs) {
       return node;
     }
-    return { ...node, children: visited };
+    const result = { ...node, children: visited };
+    rebuilt.set(node, result);
+    return result;
   }
 
   return visit(tree_data);

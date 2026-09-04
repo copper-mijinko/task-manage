@@ -160,7 +160,34 @@ export function workspaceToProjectData(
     };
   }
 
-  return { headers: DEFAULT_HEADERS, data: buildNode(resolvedRootId, new Set<string>()).node };
+  const root = buildNode(resolvedRootId, new Set<string>()).node;
+
+  /*
+   * ルートから辿れないタスクをルート直下に付け直す。
+   *
+   * 親が存在しない id を指している、親をたどると自分に戻る、といった形で
+   * ルートに繋がらないタスクは、木に現れない＝保存時に書き出されないので、
+   * ファイルごと消える。アプリの外（エディタ・CLI・同期）で壊れることは
+   * あるので、読み込み時に必ず拾う。孤児を作らない設計の受け皿。
+   *
+   * 走査はタスク数に比例する 1 パスで、共有のおかげで部分木は作り直さない。
+   */
+  const reachable = new Set<string>();
+  const mark = (node: TreeData) => {
+    if (reachable.has(node.id)) return;
+    reachable.add(node.id);
+    for (const child of node.children) mark(child);
+  };
+  mark(root);
+
+  for (const id of Object.keys(tasks)) {
+    if (reachable.has(id)) continue;
+    const built = buildNode(id, new Set<string>([resolvedRootId]));
+    root.children.push(built.node);
+    mark(built.node);
+  }
+
+  return { headers: DEFAULT_HEADERS, data: root };
 }
 
 /**

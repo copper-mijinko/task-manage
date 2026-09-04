@@ -37,6 +37,7 @@
     cloneWithNewIds,
     bulkUpdateNodeData,
     bulkRemoveNodes,
+    reattachOrphans,
     bulkMoveUp,
     bulkMoveDown,
     bulkIndent,
@@ -1178,8 +1179,13 @@
         data = bulkArchiveNodes(data, new Set(bulkArchiveTargetIds));
       }
       if (bulkPermanentTargetIds.length > 0) {
+        // 削除で最後の親を失うノードを拾うため、消す前にノードを掴んでおく。
+        const removedNodes = bulkPermanentTargetIds
+          .map((id) => getNode(id, data))
+          .filter((node) => node);
         const removed = bulkRemoveNodes(data, new Set(bulkPermanentTargetIds));
         if (removed) data = removed;
+        reattachOrphans(data, removedNodes);
       }
       $tree_data = { ...$tree_data, data };
       clearSelection();
@@ -1194,7 +1200,10 @@
       return;
     }
     if (deleteMode === "permanent") {
+      const removedNode = getNode(deleteTargetId, $tree_data.data);
       const data = rmNode(deleteTargetId, $tree_data.data);
+      // 消したノードの子が他に親を持たないなら、ルート直下へ付け直す（孤児を作らない）。
+      if (removedNode) reattachOrphans(data, [removedNode]);
       $tree_data = { ...$tree_data, data };
     } else {
       const data = archiveNode(deleteTargetId, $tree_data.data);
