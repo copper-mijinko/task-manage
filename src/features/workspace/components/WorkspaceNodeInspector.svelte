@@ -1,6 +1,7 @@
 <script>
   import { createEventDispatcher } from "svelte";
   import NodeMemoEditor from "./WorkspaceNodeMemoEditor.svelte";
+  import TagField from "@lib/primitives/TagField.svelte";
   import * as platform from "@lib/ipc/platform";
   export let graph;
   export let nodeId = "";
@@ -15,6 +16,9 @@
   $: children = Object.values(graph?.nodes || {}).filter((n) =>
     (n.parents || []).some((p) => p.id === nodeId)
   );
+  $: tagSuggestions = [
+    ...new Set(Object.values(graph?.nodes || {}).flatMap((item) => item.tags || [])),
+  ].sort();
   function run(command, origin = view) {
     dispatch("execute", { command, origin, workspacePath });
   }
@@ -120,18 +124,12 @@
         /></label
       >
     </div>
-    <label
-      >タグ<input
-        value={(node.tags || []).join(", ")}
-        on:change={(e) =>
-          patch({
-            tags: e.currentTarget.value
-              .split(",")
-              .map((x) => x.trim())
-              .filter(Boolean),
-          })}
-      /></label
-    >
+    <TagField
+      tags={node.tags || []}
+      suggestions={tagSuggestions}
+      ariaLabel="ノードのタグ"
+      on:change={(event) => patch({ tags: event.detail.tags })}
+    />
     <fieldset>
       <legend>配置</legend><label
         >操作元の親<select bind:value={sourceParentId}
