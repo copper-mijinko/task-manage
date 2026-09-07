@@ -21,6 +21,8 @@ describe("StatusSelect", () => {
     await tick();
 
     expect(screen.getByRole("listbox")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "未定義" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "ステータスなし" })).toBeInTheDocument();
     // All status options are visible.
     expect(screen.getByRole("option", { name: /未着手/ })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: /進行中/ })).toBeInTheDocument();

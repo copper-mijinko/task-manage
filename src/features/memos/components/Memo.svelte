@@ -11,6 +11,9 @@
   export let taskId: string | null = null;
   export let isWorkspaceProject = false;
   export let format: MemoFormat | undefined = undefined;
+  export let saveImage: ((file: File) => Promise<string | null>) | undefined = undefined;
+  export let resolveAsset: ((relativePath: string) => Promise<string | null>) | undefined =
+    undefined;
 
   function saveUnknown(nextContent: unknown) {
     saveMemo(nextContent);
@@ -59,6 +62,8 @@
         {openMemoLink}
         {workspaceProjectDir}
         {taskId}
+        {saveImage}
+        {resolveAsset}
       />
     {/if}
   {:else if QuillMemo}
