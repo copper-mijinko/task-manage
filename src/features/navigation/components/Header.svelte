@@ -114,13 +114,13 @@
 
   function openInboxView() {
     if (!$workspace_store.activeWorkspacePath) return;
-    $selected_type = "Inbox";
+    $selected_type = "WorkspaceProject";
     $selected_id = INBOX_SELECTED_ID;
   }
 
   function openAgendaView() {
     if (!$workspace_store.activeWorkspacePath) return;
-    $selected_type = "Agenda";
+    $selected_type = "WorkspaceProject";
     $selected_id = AGENDA_SELECTED_ID;
   }
 

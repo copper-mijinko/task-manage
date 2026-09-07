@@ -12,7 +12,16 @@
   // 持たないので、そこに「未着手」を出すと未完了タスクの山に埋もれる。
   // 選ぶだけで追跡が始まるよう、専用の操作は作らずここに並べる。
   const NO_STATUS = "";
-  const STATUSES = [NO_STATUS, "Open", "Pending", "In Progress", "Completed", "Canceled"];
+  const UNDEFINED_STATUS = "Undefined";
+  const STATUSES = [
+    NO_STATUS,
+    UNDEFINED_STATUS,
+    "Open",
+    "Pending",
+    "In Progress",
+    "Completed",
+    "Canceled",
+  ];
   const STATUS_LABELS = {
     [NO_STATUS]: "なし",
     Open: "未着手",
@@ -22,8 +31,12 @@
     Canceled: "キャンセル",
   };
 
+  STATUS_LABELS[NO_STATUS] = "ステータスなし";
+  STATUS_LABELS[UNDEFINED_STATUS] = "未定義";
+
   const color_map = {
     [NO_STATUS]: "transparent",
+    [UNDEFINED_STATUS]: "var(--theme-color-Info-main)",
     Open: "var(--theme-color-Primary-main)",
     "In Progress": "var(--theme-color-Info-main)",
     Pending: "var(--theme-color-Warning-main)",

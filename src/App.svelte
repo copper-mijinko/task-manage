@@ -35,11 +35,13 @@
   let flushingOnShutdown = false;
   let unregisterDateTimeShortcuts = null;
   let ProjectPageComponent = null;
+  let NodeWorkspacePageComponent = null;
   let InboxPanelComponent = null;
   let AgendaPanelComponent = null;
   let QuickCaptureComponent = null;
   let TaskDetailWindowComponent = null;
   let projectPageLoading = null;
+  let nodeWorkspacePageLoading = null;
   let inboxPanelLoading = null;
   let agendaPanelLoading = null;
   let quickCaptureLoading = null;
@@ -75,6 +77,15 @@
       ProjectPageComponent = module.default;
     });
     return projectPageLoading;
+  }
+
+  function loadNodeWorkspacePage() {
+    if (NodeWorkspacePageComponent || nodeWorkspacePageLoading) return nodeWorkspacePageLoading;
+    nodeWorkspacePageLoading =
+      import("@features/workspace/components/NodeWorkspacePage.svelte").then((module) => {
+        NodeWorkspacePageComponent = module.default;
+      });
+    return nodeWorkspacePageLoading;
   }
 
   function loadInboxPanel() {
@@ -119,6 +130,9 @@
     ($selected_type === "Projects" || $selected_type === "WorkspaceProject")
   ) {
     void loadProjectPage();
+  }
+  $: if (!isTaskDetailWindow && $selected_type === "WorkspaceProject") {
+    void loadNodeWorkspacePage();
   }
   $: if (!isTaskDetailWindow && $selected_type === "Inbox") {
     void loadInboxPanel();
@@ -525,9 +539,15 @@
             >
           </section>
         {/if}
-        {#if ($selected_type == "Projects" || $selected_type == "WorkspaceProject") && $projectLoading}
+        {#if $selected_type == "WorkspaceProject"}
+          {#if NodeWorkspacePageComponent}
+            <NodeWorkspacePageComponent />
+          {:else}
+            <Loading variant="h1" />
+          {/if}
+        {:else if $selected_type == "Projects" && $projectLoading}
           <Loading variant="h1" />
-        {:else if $selected_type == "Projects" || $selected_type == "WorkspaceProject"}
+        {:else if $selected_type == "Projects"}
           {#if ProjectPageComponent}
             <ProjectPageComponent />
           {:else}

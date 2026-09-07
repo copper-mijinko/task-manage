@@ -11,6 +11,10 @@ vi.mock("@pages/MainPage.svelte", async () => {
   const mod = await import("../mocks/TreeTableStub.svelte");
   return { default: mod.default };
 });
+vi.mock("@features/workspace/components/NodeWorkspacePage.svelte", async () => {
+  const mod = await import("../mocks/NodeWorkspaceStub.svelte");
+  return { default: mod.default };
+});
 vi.mock("@features/search/components/PageSearchBox.svelte", async () => {
   const mod = await import("../mocks/PassThroughStub.svelte");
   return { default: mod.default };
@@ -54,7 +58,7 @@ describe("App - workspace project rendering", () => {
     delete window.electronAPI;
   });
 
-  test("renders the project page for a workspace project selection", async () => {
+  test("routes a workspace project selection to the unified node workspace", async () => {
     Object.defineProperty(window, "electronAPI", {
       configurable: true,
       value: makeElectronAPI(),
@@ -69,11 +73,12 @@ describe("App - workspace project rendering", () => {
     await tick();
 
     await waitFor(() => {
-      expect(screen.getByTestId("tree-table-stub")).toBeInTheDocument();
+      expect(screen.getByTestId("node-workspace-stub")).toBeInTheDocument();
+      expect(screen.queryByTestId("tree-table-stub")).toBeNull();
     });
   });
 
-  test("resets the project page while a workspace project switch is loading", async () => {
+  test("keeps the unified node workspace mounted while legacy project metadata loads", async () => {
     let resolveReadProject;
     const readProject = new Promise((resolve) => {
       resolveReadProject = resolve;
@@ -112,6 +117,7 @@ describe("App - workspace project rendering", () => {
 
     expect(get(projectLoading)).toBe(true);
     expect(screen.getByText("読み込み中...")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("node-workspace-stub")).toBeInTheDocument());
     expect(screen.queryByTestId("tree-table-stub")).toBeNull();
 
     resolveReadProject({
@@ -131,7 +137,7 @@ describe("App - workspace project rendering", () => {
 
     expect(get(projectLoading)).toBe(false);
     await waitFor(() => {
-      expect(screen.getByTestId("tree-table-stub")).toBeInTheDocument();
+      expect(screen.getByTestId("node-workspace-stub")).toBeInTheDocument();
     });
     expect(get(tree_data).data.data.name).toBe("Beta");
     expect(api.wsReadProject).toHaveBeenCalledWith("C:/workspace/beta");

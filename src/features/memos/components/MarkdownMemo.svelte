@@ -97,6 +97,9 @@
   export let openMemoLink: ((title: string) => void) | undefined = undefined;
   export let workspaceProjectDir: string | null = null;
   export let taskId: string | null = null;
+  export let saveImage: ((file: File) => Promise<string | null>) | undefined = undefined;
+  export let resolveAsset: ((relativePath: string) => Promise<string | null>) | undefined =
+    undefined;
 
   let container: HTMLElement;
   let view: EditorView | null = null;
@@ -266,7 +269,9 @@
 
   function canSavePastedImages(): boolean {
     return Boolean(
-      (workspaceProjectDir && taskId && platform.isPlatformAvailable()) || !workspaceProjectDir
+      saveImage ||
+      (workspaceProjectDir && taskId && platform.isPlatformAvailable()) ||
+      !workspaceProjectDir
     );
   }
 
@@ -280,6 +285,7 @@
   }
 
   async function persistPastedImage(file: File): Promise<string | null> {
+    if (saveImage) return saveImage(file);
     if (!workspaceProjectDir || !taskId) {
       return readFileAsDataUrl(file);
     }
@@ -1000,7 +1006,7 @@
   }
 
   async function resolveImageSources(html: string): Promise<string> {
-    if (!workspaceProjectDir || !taskId || !platform.isPlatformAvailable()) {
+    if (!resolveAsset && (!workspaceProjectDir || !taskId || !platform.isPlatformAvailable())) {
       return html;
     }
 
@@ -1015,10 +1021,11 @@
           return;
         }
 
-        const result = await platform.wsResolveMemoAsset(workspaceProjectDir, taskId, src);
-
-        if (result.success && result.url) {
-          image.setAttribute("src", result.url);
+        const resolved = resolveAsset
+          ? await resolveAsset(src)
+          : ((await platform.wsResolveMemoAsset(workspaceProjectDir!, taskId!, src)).url ?? null);
+        if (resolved) {
+          image.setAttribute("src", resolved);
         } else {
           image.setAttribute("data-missing-image", "true");
         }
