@@ -24,6 +24,65 @@ function createProjectData() {
 }
 
 describe("filter store", () => {
+  test("search hydration preserves a body edited while the request is in flight", async () => {
+    filter.init();
+    let resolveBodies;
+    window.electronAPI = {
+      wsReadProjectBodies: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            resolveBodies = resolve;
+          })
+      ),
+    };
+    workspace_store.set({
+      workspaces: [],
+      activeWorkspacePath: "C:/workspace",
+      activeProjectDir: "C:/workspace/project",
+      projects: [],
+    });
+    selected_type.set("WorkspaceProject");
+    selected_id.set("project-1");
+    const project = createProjectData();
+    project.data.children = ["edited", "unloaded"].map((id) => ({
+      id,
+      data: { name: id, body: "", format: "markdown", bodyLoaded: false },
+      children: [],
+    }));
+    tree_data.setFromSource(project);
+    workspace_tasks_cache.set(
+      Object.fromEntries(
+        project.data.children.map((node) => [node.id, { id: node.id, ...node.data }])
+      )
+    );
+    filter.set({ full_text: ["body"], search_memo: ["1"] });
+    await waitFor(() => expect(resolveBodies).toBeTypeOf("function"));
+    const latest = get(tree_data);
+    tree_data.setFromSource({
+      ...latest,
+      data: {
+        ...latest.data,
+        children: latest.data.children.map((node) =>
+          node.id === "edited"
+            ? { ...node, data: { ...node.data, body: "NEW body", bodyLoaded: true } }
+            : node
+        ),
+      },
+    });
+    workspace_tasks_cache.update((cache) => ({
+      ...cache,
+      edited: { ...cache.edited, body: "NEW body", bodyLoaded: true },
+    }));
+    resolveBodies({
+      bodiesByTaskId: {
+        edited: { body: "OLD body", format: "markdown" },
+        unloaded: { body: "Loaded body", format: "markdown" },
+      },
+    });
+    await waitFor(() => expect(get(tree_data).data.children[1].data.bodyLoaded).toBe(true));
+    expect(get(tree_data).data.children[0].data.body).toBe("NEW body");
+    expect(get(workspace_tasks_cache).edited.body).toBe("NEW body");
+  });
   afterEach(() => {
     filter.set({});
     filtered_data.set(undefined);

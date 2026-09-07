@@ -695,7 +695,8 @@ function parseFrontmatter(content) {
       if (!Array.isArray(data[currentKey])) data[currentKey] = [];
       const entry = listMatch[1].trim();
       // `- key: value` はマップ要素の 1 行目。スカラー要素と区別する。
-      const entryKv = entry.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
+      // Only parent links contain maps. Tags (including "owner: team") are strings.
+      const entryKv = currentKey === "parents" && entry.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
       if (entryKv) {
         currentListItem = { [entryKv[1]]: entryKv[2].trim() };
         data[currentKey].push(currentListItem);
@@ -926,7 +927,7 @@ function readMemos(taskDir, reservedFiles = ["_index.md"], options = {}) {
     const filePath = path.join(taskDir, file);
     const raw = includeMemoContent ? fs.readFileSync(filePath, "utf8") : readFilePrefix(filePath);
     const { data, body } = parseFrontmatter(raw);
-    const id = data.id || crypto.randomUUID();
+    const id = legacyMemoId(data.id, taskDir, file);
     const headingMatch = body.match(/^#\s+(.+)/m);
     const fileTitle = file.replace(/\.md$/, "");
     let title = data.title;
@@ -1109,6 +1110,18 @@ function readTaskDir(taskDir, options = {}) {
 /** 旧メモをタスクの子として並べるときの順序の基点。実タスクの後ろに置く。 */
 const LEGACY_MEMO_ORDER_BASE = 1_000_000;
 
+function legacyMemoId(id, taskDir, fileName) {
+  try {
+    return assertSafePathSegment(id, "memo id");
+  } catch {
+    // Summary reads, hydration and saves must identify the same file each time.
+    return `legacy-${crypto
+      .createHash("sha256")
+      .update(JSON.stringify([taskDir, fileName]))
+      .digest("hex")}`;
+  }
+}
+
 function promoteLegacyMemos(tasks, taskDirs, memosByTaskId) {
   const legacyMemoFiles = new Map();
 
@@ -1122,12 +1135,7 @@ function promoteLegacyMemos(tasks, taskDirs, memosByTaskId) {
       // 旧メモの id はこれからディレクトリ名になる。ファイルを手で書いた場合に
       // 危険な id が入っていることがあり、そのまま通すと保存のたびに例外が出て
       // **プロジェクト全体が保存できなくなる**。中身は捨てずに id だけ振り直す。
-      let id = memo.id;
-      try {
-        assertSafePathSegment(id, "memo id");
-      } catch {
-        id = crypto.randomUUID();
-      }
+      const id = memo.id;
       if (tasks.has(id)) continue;
 
       tasks.set(id, {
@@ -1217,16 +1225,15 @@ function readProject(projectDir, options = {}) {
 function nodeFilePathFor(projectDir, taskDirs, taskId) {
   const dirName = taskDirs.get(taskId);
   if (!dirName) throw new Error("Task directory was not found");
-  if (dirName === "_project") return path.join(projectDir, "_project.md");
-
-  const taskDir = path.join(projectDir, dirName);
-  const indexPath = path.join(taskDir, "_index.md");
-  try {
-    if (parseFrontmatter(readFilePrefix(indexPath)).data.id === taskId) return indexPath;
-  } catch {
-    // 読めなければ旧メモ側を試す。
-  }
-  return path.join(taskDir, `${taskId}.md`);
+  const taskDir = getTaskTargetDir(projectDir, taskDirs, taskId);
+  const indexFile = dirName === "_project" ? "_project.md" : "_index.md";
+  const indexPath = path.join(taskDir, indexFile);
+  if (parseFrontmatter(readFilePrefix(indexPath)).data.id === taskId) return indexPath;
+  const memo = readMemos(taskDir, [indexFile], { includeMemoContent: false }).find(
+    (entry) => entry.id === taskId
+  );
+  if (!memo) throw new Error("Task body file was not found");
+  return path.join(taskDir, memo.fileName);
 }
 
 function readTaskBodyUnmeasured(projectDir, taskId, taskDirs) {
@@ -1248,17 +1255,26 @@ function readTaskBody(projectDir, taskId, taskDirs) {
 async function nodeFilePathForAsync(projectDir, taskDirs, taskId) {
   const dirName = taskDirs.get(taskId);
   if (!dirName) throw new Error("Task directory was not found");
-  if (dirName === "_project") return path.join(projectDir, "_project.md");
+  const taskDir = getTaskTargetDir(projectDir, taskDirs, taskId);
+  const indexFile = dirName === "_project" ? "_project.md" : "_index.md";
+  const indexPath = path.join(taskDir, indexFile);
+  const raw = await readFilePrefixAsync(indexPath);
+  if (parseFrontmatter(raw).data.id === taskId) return indexPath;
+  const memos = await readMemosAsync(taskDir, [indexFile], { includeMemoContent: false });
+  const memo = memos.find((entry) => entry.id === taskId);
+  if (!memo) throw new Error("Task body file was not found");
+  return path.join(taskDir, memo.fileName);
+}
 
-  const taskDir = path.join(projectDir, dirName);
-  const indexPath = path.join(taskDir, "_index.md");
-  try {
-    const raw = await readFilePrefixAsync(indexPath);
-    if (parseFrontmatter(raw).data.id === taskId) return indexPath;
-  } catch {
-    // 読めなければ旧メモ側を試す。
-  }
-  return path.join(taskDir, `${taskId}.md`);
+async function loadNodeBodiesAsync(projectDir, tasks, taskDirs) {
+  return Promise.all(
+    tasks.map(async (task) => {
+      if (!task || task.bodyLoaded !== false || !taskDirs.has(task.id)) return task;
+      // A failed read of an existing node must abort the save, never write an empty body.
+      const { body, format } = await readTaskBodyAsync(projectDir, task.id, taskDirs);
+      return { ...task, body, format, bodyLoaded: true };
+    })
+  );
 }
 
 async function readTaskBodyAsync(projectDir, taskId, taskDirs) {
@@ -1327,9 +1343,9 @@ async function readFilePrefixAsync(filePath, maxBytes = 16 * 1024) {
   }
 }
 
-function buildMemoEntry(file, fileIndex, raw, includeMemoContent) {
+function buildMemoEntry(file, fileIndex, raw, includeMemoContent, taskDir) {
   const { data, body } = parseFrontmatter(raw);
-  const id = data.id || crypto.randomUUID();
+  const id = legacyMemoId(data.id, taskDir, file);
   const headingMatch = body.match(/^#\s+(.+)/m);
   const fileTitle = file.replace(/\.md$/, "");
   let title = data.title;
@@ -1384,7 +1400,7 @@ async function readMemosAsync(taskDir, reservedFiles = ["_index.md"], options = 
       const raw = includeMemoContent
         ? await fs.promises.readFile(filePath, "utf8")
         : await readFilePrefixAsync(filePath);
-      return buildMemoEntry(file, fileIndex, raw, includeMemoContent);
+      return buildMemoEntry(file, fileIndex, raw, includeMemoContent, taskDir);
     })
   );
   return sortMemoEntries(memos);
@@ -1679,6 +1695,23 @@ function writeTask(projectDir, task, taskDirs) {
  */
 async function writeTaskAsync(projectDir, task, taskDirs, onWritten, migration) {
   assertSafePathSegment(task.id, "task id");
+  [task] = await loadNodeBodiesAsync(projectDir, [task], taskDirs);
+  const standalone = !migration;
+  if (standalone) {
+    let legacyMemoFiles = new Map();
+    if (taskDirs.has(task.id)) {
+      // Single-task IPC saves have no migration context. Resolve the actual file
+      // before deciding whether taskDirs points at this node or its old parent.
+      const filePath = await nodeFilePathForAsync(projectDir, taskDirs, task.id);
+      if (!["_index.md", "_project.md"].includes(path.basename(filePath))) {
+        legacyMemoFiles.set(task.id, {
+          dirName: taskDirs.get(task.id),
+          fileName: path.basename(filePath),
+        });
+      }
+    }
+    migration = { legacyMemoFiles, migrated: [] };
+  }
   if (!task.parents || task.parents.length === 0) {
     await writeRootTaskAsync(projectDir, task, onWritten);
     if (!taskDirs.has(task.id)) taskDirs.set(task.id, "_project");
@@ -1693,16 +1726,15 @@ async function writeTaskAsync(projectDir, task, taskDirs, onWritten, migration) 
   let dirName = legacy ? undefined : taskDirs.get(task.id);
   if (!dirName) {
     dirName = task.id;
-    taskDirs.set(task.id, dirName);
   }
   const taskDir = path.join(projectDir, dirName);
   await fs.promises.mkdir(taskDir, { recursive: true });
 
   if (legacy) {
     // 先に画像を運んでから本体を書く。消すのは全部書けたあと（第 2 パス）。
-    await copyReferencedAssetsAsync(path.join(projectDir, legacy.dirName), taskDir, task.body);
-    migration.legacyMemoFiles.delete(task.id);
-    migration.migrated.push(legacy);
+    const sourceDir =
+      legacy.dirName === "_project" ? projectDir : path.join(projectDir, legacy.dirName);
+    await copyReferencedAssetsAsync(sourceDir, taskDir, task.body);
   }
 
   await writeFileIfChanged(
@@ -1711,6 +1743,12 @@ async function writeTaskAsync(projectDir, task, taskDirs, onWritten, migration) 
     undefined,
     onWritten
   );
+  taskDirs.set(task.id, dirName);
+  if (legacy) {
+    migration.legacyMemoFiles.delete(task.id);
+    migration.migrated.push(legacy);
+  }
+  if (standalone) await removeMigratedLegacyMemos(projectDir, migration.migrated);
 }
 
 /**
@@ -1722,7 +1760,9 @@ async function writeTaskAsync(projectDir, task, taskDirs, onWritten, migration) 
  */
 async function removeMigratedLegacyMemos(projectDir, migrated) {
   for (const legacy of migrated) {
-    const filePath = path.join(projectDir, legacy.dirName, legacy.fileName);
+    const sourceDir =
+      legacy.dirName === "_project" ? projectDir : path.join(projectDir, legacy.dirName);
+    const filePath = path.join(sourceDir, legacy.fileName);
     try {
       await retryFileOperation(() => fs.promises.rm(filePath, { force: true }));
     } catch {
@@ -1917,7 +1957,9 @@ async function deleteTaskDirAsync(projectDir, taskDirs, taskId, legacyMemoFiles)
   // 消すと親とその子が丸ごと消えるので、消すのはその 1 ファイルだけにする。
   const legacy = legacyMemoFiles?.get(taskId);
   if (legacy) {
-    const filePath = path.join(projectDir, legacy.dirName, legacy.fileName);
+    const sourceDir =
+      legacy.dirName === "_project" ? projectDir : path.join(projectDir, legacy.dirName);
+    const filePath = path.join(sourceDir, legacy.fileName);
     await retryFileOperation(() => fs.promises.rm(filePath, { force: true }));
     legacyMemoFiles.delete(taskId);
     taskDirs.delete(taskId);
@@ -1925,20 +1967,20 @@ async function deleteTaskDirAsync(projectDir, taskDirs, taskId, legacyMemoFiles)
   }
 
   const dirName = taskDirs.get(taskId);
-  if (!dirName || dirName === "_project") return;
-  const taskDir = path.join(projectDir, dirName);
-
-  // 呼び出し側が `legacyMemoFiles` を持っていないこともある（IPC の単発削除は
-  // キャッシュ経由で、そこには載っていない）。そのときのために、ディレクトリが
-  // 本当にこのノードのものかを `_index.md` の id で確かめてから消す。
-  // 違っていれば旧メモなので、その 1 ファイルだけを消す。
-  if (!(await ownsTaskDirAsync(taskDir, taskId))) {
-    const filePath = path.join(taskDir, `${taskId}.md`);
+  if (!dirName) return;
+  const taskDir = getTaskTargetDir(projectDir, taskDirs, taskId);
+  if (dirName === "_project" || !(await ownsTaskDirAsync(taskDir, taskId))) {
+    const filePath = await nodeFilePathForAsync(projectDir, taskDirs, taskId);
+    if (path.basename(filePath) === "_project.md") return;
     await retryFileOperation(() => fs.promises.rm(filePath, { force: true }));
     taskDirs.delete(taskId);
     return;
   }
 
+  // 呼び出し側が `legacyMemoFiles` を持っていないこともある（IPC の単発削除は
+  // キャッシュ経由で、そこには載っていない）。そのときのために、ディレクトリが
+  // 本当にこのノードのものかを `_index.md` の id で確かめてから消す。
+  // 違っていれば旧メモなので、その 1 ファイルだけを消す。
   await retryFileOperation(() => fs.promises.rm(taskDir, { recursive: true, force: true }));
   taskDirs.delete(taskId);
 }
@@ -1948,9 +1990,9 @@ async function ownsTaskDirAsync(taskDir, taskId) {
   try {
     const raw = await readFilePrefixAsync(path.join(taskDir, "_index.md"));
     return parseFrontmatter(raw).data.id === taskId;
-  } catch {
-    // 読めないディレクトリは、従来どおりディレクトリとして扱う。
-    return true;
+  } catch (error) {
+    if (error.code === "ENOENT") return false;
+    throw error;
   }
 }
 
@@ -1961,21 +2003,23 @@ async function writeProjectAsyncUnmeasured(projectDir, tasks, options = {}) {
   });
   const nextTaskIds = new Set(tasks.map((task) => task.id));
   const migration = { legacyMemoFiles, migrated: [] };
+  const tasksToWrite = await loadNodeBodiesAsync(projectDir, tasks, taskDirs);
 
+  for (const task of tasksToWrite) {
+    await writeTaskAsync(projectDir, task, taskDirs, onWritten, migration);
+  }
+
+  await removeMigratedLegacyMemos(projectDir, migration.migrated);
+
+  // Surviving legacy nodes may still need bodies/assets from a deleted parent.
   for (const id of [...taskDirs.keys()]) {
     if (!nextTaskIds.has(id)) {
       await deleteTaskDirAsync(projectDir, taskDirs, id, legacyMemoFiles);
     }
   }
 
-  for (const task of tasks) {
-    await writeTaskAsync(projectDir, task, taskDirs, onWritten, migration);
-  }
-
-  await removeMigratedLegacyMemos(projectDir, migration.migrated);
-
   return {
-    tasks: new Map(tasks.map((task) => [task.id, task])),
+    tasks: new Map(tasksToWrite.map((task) => [task.id, task])),
     taskDirs,
   };
 }
@@ -1997,17 +2041,20 @@ async function writeProjectPatchAsyncUnmeasured(projectDir, patch, options = {})
     ? [...new Set(patch.deletedTaskIds.filter((id) => typeof id === "string" && id.length > 0))]
     : [];
 
-  for (const id of deletedTaskIds) {
-    await deleteTaskDirAsync(projectDir, taskDirs, id, legacyMemoFiles);
-    tasks.delete(id);
-  }
+  const tasksToWrite = await loadNodeBodiesAsync(projectDir, nextTasks, taskDirs);
 
-  for (const task of nextTasks) {
+  for (const task of tasksToWrite) {
     await writeTaskAsync(projectDir, task, taskDirs, onWritten, migration);
     tasks.set(task.id, task);
   }
 
   await removeMigratedLegacyMemos(projectDir, migration.migrated);
+
+  for (const id of deletedTaskIds) {
+    if (nextTasks.some((task) => task.id === id)) continue;
+    await deleteTaskDirAsync(projectDir, taskDirs, id, legacyMemoFiles);
+    tasks.delete(id);
+  }
 
   return {
     tasks,
@@ -2433,6 +2480,7 @@ module.exports = {
   slugify,
   normalizeParentLinks,
   normalizeTaskTags,
+  legacyMemoId,
   parseFrontmatter,
   stringifyFrontmatter,
   atomicWriteFile,
@@ -2444,6 +2492,7 @@ module.exports = {
   readTaskMemosAsync,
   readTaskBody,
   readTaskBodyAsync,
+  loadNodeBodiesAsync,
   readProjectBodiesAsync,
   writeTask,
   writeTaskAsync,

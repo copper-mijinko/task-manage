@@ -53,7 +53,7 @@ function mergeProjectBodies(
   if (already) return already;
 
   let changed = false;
-  const own = bodiesByTaskId[node.id];
+  const own = node.data.bodyLoaded === false ? bodiesByTaskId[node.id] : undefined;
   const data = own
     ? { ...node.data, body: own.body, format: own.format, bodyLoaded: true }
     : node.data;
@@ -105,7 +105,7 @@ async function hydrateWorkspaceBodiesForSearch(current: FilterState, currentTree
       let changed = false;
       const next = { ...cache };
       for (const [taskId, entry] of Object.entries(result.bodiesByTaskId)) {
-        if (!next[taskId]) continue;
+        if (!next[taskId] || next[taskId].bodyLoaded !== false) continue;
         changed = true;
         next[taskId] = {
           ...next[taskId],

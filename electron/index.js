@@ -7,6 +7,7 @@ const { fileURLToPath } = require("url");
 const { LowSync, JSONFileSync } = require("@commonify/lowdb");
 const log = require("electron-log/main");
 const workspace = require("./workspace");
+const workspaceGraph = require("./workspace-graph");
 const inbox = require("./inbox");
 const { WorkspaceReconciler } = require("./workspace-reconciler");
 const { WorkspaceWriteQueue } = require("./workspace-write-queue");
@@ -342,13 +343,55 @@ app.on("ready", () => {
     devOrigins: process.env.VITE_DEV === "true" ? ["http://localhost:5173"] : [],
   });
 
+  const legacyMutationChannels = new Set([
+    "ws:set-project-order",
+    "ws:write-task",
+    "ws:save-memo-image",
+    "ws:save-task-attachment",
+    "ws:delete-task-attachment",
+    "ws:delete-task",
+    "ws:write-project",
+    "ws:write-project-patch",
+    "ws:create-project",
+    "ws:delete-project",
+    "ws:resolve-conflict",
+    "ws:ensure-inbox",
+    "ws:read-inbox",
+    "ws:add-inbox-item",
+    "ws:send-inbox-items",
+    "ws:export-legacy-projects",
+    "ws:migrate-projects",
+  ]);
+  const inFlightLegacyMutations = new Map();
+
+  function trackLegacyMutation(channel, args, promise) {
+    if (!legacyMutationChannels.has(channel)) return promise;
+    const payload = args[0] || {};
+    const workspacePath =
+      payload.workspacePath ||
+      (typeof payload.projectDir === "string" ? path.dirname(payload.projectDir) : null);
+    if (!workspacePath) return promise;
+    const key = path.resolve(workspacePath).toLowerCase();
+    const tracked = Promise.resolve(promise);
+    const active = inFlightLegacyMutations.get(key) || new Set();
+    active.add(tracked);
+    inFlightLegacyMutations.set(key, active);
+    tracked
+      .finally(() => {
+        active.delete(tracked);
+        if (!active.size) inFlightLegacyMutations.delete(key);
+      })
+      .catch(() => {});
+    return tracked;
+  }
+
   function trustedHandle(channel, handler) {
     ipcMain.handle(channel, (event, ...args) => {
       if (!isTrustedIpcSender(event)) {
         log.warn(`Rejected IPC from an untrusted sender: ${channel}`);
         throw new Error("Untrusted IPC sender");
       }
-      return handler(event, ...args);
+      return trackLegacyMutation(channel, args, handler(event, ...args));
     });
   }
 
@@ -605,18 +648,7 @@ app.on("ready", () => {
    * なるので、書き出しの直前にここで埋める。
    */
   async function withLoadedNodeBodies(projectDir, tasks, taskDirs) {
-    return Promise.all(
-      tasks.map(async (task) => {
-        if (!task || task.bodyLoaded !== false) return task;
-        try {
-          const { body, format } = await workspace.readTaskBodyAsync(projectDir, task.id, taskDirs);
-          return { ...task, body, format: task.format ?? format, bodyLoaded: true };
-        } catch {
-          // 新規ノードなど、まだディスクに無いものはそのまま書く。
-          return task;
-        }
-      })
-    );
+    return workspace.loadNodeBodiesAsync(projectDir, tasks, taskDirs);
   }
 
   function cancelDeferredWorkspaceWatcher() {
@@ -1413,6 +1445,45 @@ app.on("ready", () => {
   ////////////// Workspace IPC //////////////
   // projectDir 竊・{ tasks: Map, taskDirs: Map } 縺ｮ繧､繝ｳ繝｡繝｢繝ｪ繧ｭ繝｣繝・す繝･
 
+  const graphActivatingWorkspaces = new Set();
+  const graphInitializationPromises = new Map();
+  const graphWorkspaceKey = (workspacePath) => {
+    const resolved = path.resolve(workspacePath);
+    return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+  };
+  function assertLegacyWorkspaceWritable(workspacePath) {
+    if (
+      graphActivatingWorkspaces.has(graphWorkspaceKey(workspacePath)) ||
+      workspaceGraph.isGraphActive(workspacePath)
+    ) {
+      throw new Error(
+        "This workspace uses the node graph. Use graph editing commands instead of legacy project writes."
+      );
+    }
+  }
+  function assertLegacyProjectWritable(projectDir) {
+    assertLegacyWorkspaceWritable(path.dirname(projectDir));
+  }
+  function ensureWorkspaceGraphInitialized(workspacePath) {
+    const key = graphWorkspaceKey(workspacePath);
+    const existing = graphInitializationPromises.get(key);
+    if (existing) return existing;
+    const initializing = (async () => {
+      graphActivatingWorkspaces.add(key);
+      try {
+        const inFlight = [...(inFlightLegacyMutations.get(key) || [])];
+        if (inFlight.length) await Promise.allSettled(inFlight);
+        if (workspaceWriteQueue.hasPending()) await workspaceWriteQueue.flush();
+        return await workspaceGraph.readWorkspaceGraph(workspacePath);
+      } finally {
+        graphActivatingWorkspaces.delete(key);
+        graphInitializationPromises.delete(key);
+      }
+    })();
+    graphInitializationPromises.set(key, initializing);
+    return initializing;
+  }
+
   trustedHandle("ws:get-workspaces", async () => {
     return {
       workspaces: db_meta.data.workspaces || [],
@@ -1512,6 +1583,7 @@ app.on("ready", () => {
   trustedHandle("ws:set-project-order", async (event, { workspacePath, projects }) => {
     try {
       await workspaceAuthorizer.assertKnownWorkspace(workspacePath);
+      assertLegacyWorkspaceWritable(workspacePath);
       const result = await workspace.setProjectOrderAsync(workspacePath, projects, {
         onWritten: recordWrite,
       });
@@ -1566,7 +1638,7 @@ app.on("ready", () => {
       const bodiesByTaskId = await workspace.readProjectBodiesAsync(projectDir);
       for (const [taskId, entry] of Object.entries(bodiesByTaskId)) {
         const task = cached.tasks.get(taskId);
-        if (task) {
+        if (task?.bodyLoaded === false) {
           task.body = entry.body;
           task.format = entry.format;
           task.bodyLoaded = true;
@@ -1582,6 +1654,7 @@ app.on("ready", () => {
   trustedHandle("ws:write-task", async (event, { projectDir, task }) => {
     try {
       await workspaceAuthorizer.assertKnownProject(projectDir);
+      assertLegacyProjectWritable(projectDir);
       const cached = await ensureWorkspaceCacheAsync(projectDir);
       const { tasks, taskDirs } = cached;
       const [taskToWrite] = await withLoadedNodeBodies(projectDir, [task], taskDirs);
@@ -1610,6 +1683,7 @@ app.on("ready", () => {
     async (event, { projectDir, taskId, bytes, mimeType = "image/png" }) => {
       try {
         await workspaceAuthorizer.assertKnownProject(projectDir);
+        assertLegacyProjectWritable(projectDir);
         const cached = await ensureWorkspaceCacheAsync(projectDir);
 
         const result = await workspace.saveMemoImageAsync(
@@ -1652,6 +1726,7 @@ app.on("ready", () => {
     async (event, { projectDir, taskId, fileName, bytes }) => {
       try {
         await workspaceAuthorizer.assertKnownProject(projectDir);
+        assertLegacyProjectWritable(projectDir);
         const cached = await ensureWorkspaceCacheAsync(projectDir);
         const attachment = await workspace.saveTaskAttachmentAsync(
           projectDir,
@@ -1680,6 +1755,7 @@ app.on("ready", () => {
     async (event, { projectDir, taskId, attachmentPath }) => {
       try {
         await workspaceAuthorizer.assertKnownProject(projectDir);
+        assertLegacyProjectWritable(projectDir);
         const cached = await ensureWorkspaceCacheAsync(projectDir);
         const attachments = await workspace.deleteTaskAttachmentAsync(
           projectDir,
@@ -1761,6 +1837,7 @@ app.on("ready", () => {
   trustedHandle("ws:delete-task", async (event, { projectDir, taskId }) => {
     try {
       await workspaceAuthorizer.assertKnownProject(projectDir);
+      assertLegacyProjectWritable(projectDir);
       const cached = await ensureWorkspaceCacheAsync(projectDir);
       const { tasks, taskDirs } = cached;
 
@@ -1784,6 +1861,7 @@ app.on("ready", () => {
   trustedOn("ws:broadcast-project-snapshot", async (event, { projectDir, tasks, options }) => {
     try {
       await workspaceAuthorizer.assertKnownProject(projectDir);
+      assertLegacyProjectWritable(projectDir);
 
       const cached = await primeWorkspaceProjectSnapshot(projectDir, tasks);
       if (!cached) return;
@@ -1807,6 +1885,7 @@ app.on("ready", () => {
   trustedHandle("ws:write-project", async (event, { projectDir, tasks, options }) => {
     try {
       await workspaceAuthorizer.assertKnownProject(projectDir);
+      assertLegacyProjectWritable(projectDir);
       await primeWorkspaceProjectSnapshot(projectDir, tasks);
       return workspaceWriteQueue.enqueue(projectDir, tasks, options || {});
     } catch (err) {
@@ -1818,6 +1897,7 @@ app.on("ready", () => {
   trustedHandle("ws:write-project-patch", async (event, { projectDir, patch, options }) => {
     try {
       await workspaceAuthorizer.assertKnownProject(projectDir);
+      assertLegacyProjectWritable(projectDir);
       await primeWorkspaceProjectPatch(projectDir, patch);
       return workspaceWriteQueue.enqueuePatch(projectDir, patch, options || {});
     } catch (err) {
@@ -1894,6 +1974,7 @@ app.on("ready", () => {
   trustedHandle("ws:create-project", async (event, { workspacePath, name, id, order }) => {
     try {
       await workspaceAuthorizer.assertKnownWorkspace(workspacePath);
+      assertLegacyWorkspaceWritable(workspacePath);
       const result = await workspace.createProjectAsync(workspacePath, name, id, order, {
         onWritten: recordWrite,
       });
@@ -1907,6 +1988,7 @@ app.on("ready", () => {
   trustedHandle("ws:delete-project", async (event, { projectDir }) => {
     try {
       await workspaceAuthorizer.assertKnownProject(projectDir);
+      assertLegacyProjectWritable(projectDir);
       const result = await workspace.deleteProjectAsync(projectDir);
       workspaceAuthorizer.forgetProject(projectDir);
       wsCache.delete(projectDir);
@@ -1922,9 +2004,85 @@ app.on("ready", () => {
   });
 
   ////////////// Inbox IPC //////////////
+  function broadcastWorkspaceGraph(workspacePath, graph) {
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed())
+        win.webContents.send("workspace-graph-updated", { workspacePath, graph });
+    });
+  }
+
+  trustedHandle("ws:read-graph", async (_event, { workspacePath }) => {
+    await workspaceAuthorizer.assertKnownWorkspace(workspacePath);
+    return ensureWorkspaceGraphInitialized(workspacePath);
+  });
+
+  trustedHandle(
+    "ws:execute-graph-command",
+    async (_event, { workspacePath, command, origin, expectedRevision }) => {
+      await workspaceAuthorizer.assertKnownWorkspace(workspacePath);
+      await ensureWorkspaceGraphInitialized(workspacePath);
+      const result = await workspaceGraph.executeWorkspaceGraphCommand(
+        workspacePath,
+        command,
+        origin,
+        expectedRevision
+      );
+      broadcastWorkspaceGraph(workspacePath, result.graph);
+      return result;
+    }
+  );
+
+  trustedHandle("ws:undo-graph", async (_event, { workspacePath, expectedRevision }) => {
+    await workspaceAuthorizer.assertKnownWorkspace(workspacePath);
+    await ensureWorkspaceGraphInitialized(workspacePath);
+    const result = await workspaceGraph.undoWorkspaceGraph(workspacePath, expectedRevision);
+    if (result.changed) broadcastWorkspaceGraph(workspacePath, result.graph);
+    return result;
+  });
+
+  trustedHandle("ws:redo-graph", async (_event, { workspacePath, expectedRevision }) => {
+    await workspaceAuthorizer.assertKnownWorkspace(workspacePath);
+    await ensureWorkspaceGraphInitialized(workspacePath);
+    const result = await workspaceGraph.redoWorkspaceGraph(workspacePath, expectedRevision);
+    if (result.changed) broadcastWorkspaceGraph(workspacePath, result.graph);
+    return result;
+  });
+  trustedHandle(
+    "ws:save-graph-asset",
+    async (_event, { workspacePath, nodeId, fileName, bytes }) => {
+      await workspaceAuthorizer.assertKnownWorkspace(workspacePath);
+      await ensureWorkspaceGraphInitialized(workspacePath);
+      return workspaceGraph.saveNodeAsset(workspacePath, nodeId, fileName, bytes);
+    }
+  );
+  trustedHandle(
+    "ws:resolve-graph-asset",
+    async (_event, { workspacePath, nodeId, relativePath }) => {
+      await workspaceAuthorizer.assertKnownWorkspace(workspacePath);
+      await ensureWorkspaceGraphInitialized(workspacePath);
+      const resolved = await workspaceGraph.resolveNodeAsset(workspacePath, nodeId, relativePath);
+      const extension = path.extname(resolved).toLowerCase();
+      const mimeTypes = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".gif": "image/gif",
+        ".webp": "image/webp",
+        ".bmp": "image/bmp",
+        ".svg": "image/svg+xml",
+      };
+      const mimeType = mimeTypes[extension];
+      if (!mimeType) throw new Error("Only image assets can be resolved for renderer display");
+      const bytes = await fs.promises.readFile(resolved);
+      return { url: `data:${mimeType};base64,${bytes.toString("base64")}` };
+    }
+  );
+
+  ////////////// Inbox IPC //////////////
   trustedHandle("ws:ensure-inbox", async (event, { workspacePath }) => {
     try {
       await workspaceAuthorizer.assertKnownWorkspace(workspacePath);
+      assertLegacyWorkspaceWritable(workspacePath);
       const result = await inbox.ensureInbox(workspacePath, { onWritten: recordWrite });
       return { success: true, projectDir: result.projectDir, rootId: result.rootId };
     } catch (err) {
@@ -1936,6 +2094,7 @@ app.on("ready", () => {
   trustedHandle("ws:read-inbox", async (event, { workspacePath }) => {
     try {
       await workspaceAuthorizer.assertKnownWorkspace(workspacePath);
+      assertLegacyWorkspaceWritable(workspacePath);
       const { projectDir, rootId, tasks, taskDirs } = await inbox.readInbox(workspacePath, {
         onWritten: recordWrite,
       });
@@ -1955,6 +2114,7 @@ app.on("ready", () => {
   trustedHandle("ws:add-inbox-item", async (event, { workspacePath, item }) => {
     try {
       await workspaceAuthorizer.assertKnownWorkspace(workspacePath);
+      assertLegacyWorkspaceWritable(workspacePath);
       const { task, projectDir, rootId, tasks, taskDirs } = await inbox.addInboxItem(
         workspacePath,
         item || {},
@@ -1980,6 +2140,7 @@ app.on("ready", () => {
       try {
         await workspaceAuthorizer.assertKnownWorkspace(workspacePath);
         await workspaceAuthorizer.assertKnownProject(targetProjectDir);
+        assertLegacyWorkspaceWritable(workspacePath);
         if (!Array.isArray(taskIds) || taskIds.length === 0) {
           return { success: false, error: "No items to send" };
         }
@@ -2057,11 +2218,13 @@ app.on("ready", () => {
 
   trustedHandle("ws:export-legacy-projects", async (event, { workspacePath, options }) => {
     await workspaceAuthorizer.assertKnownWorkspace(workspacePath);
+    assertLegacyWorkspaceWritable(workspacePath);
     return exportLegacyProjects(workspacePath, options);
   });
 
   trustedHandle("ws:migrate-projects", async (event, { workspacePath, options }) => {
     await workspaceAuthorizer.assertKnownWorkspace(workspacePath);
+    assertLegacyWorkspaceWritable(workspacePath);
     return exportLegacyProjects(workspacePath, options);
   });
 
