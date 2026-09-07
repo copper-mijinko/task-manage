@@ -94,3 +94,17 @@ test("lays out a newly created node when persisted positions are partial", async
     /^translate\([\d.]+,[\d.]+\)$/
   );
 });
+test("inspector adds and removes canonical tags as chips", async () => {
+  render(InspectorEventHost, { graph });
+  const input = screen.getByRole("textbox", { name: "ノードのタグ" });
+  await fireEvent.input(input, { target: { value: "ux" } });
+  await fireEvent.keyDown(input, { key: "Enter" });
+  expect(screen.getByRole("button", { name: "タグ ux を外す" })).toBeInTheDocument();
+  expect(JSON.parse(screen.getByTestId("execute-detail").textContent).command.changes.tags).toEqual(
+    ["ux"]
+  );
+  await fireEvent.click(screen.getByRole("button", { name: "タグ ux を外す" }));
+  expect(JSON.parse(screen.getByTestId("execute-detail").textContent).command.changes.tags).toEqual(
+    []
+  );
+});
