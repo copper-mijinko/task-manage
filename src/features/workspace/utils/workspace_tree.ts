@@ -119,7 +119,7 @@ export function workspaceToProjectData(
       id,
       data: {
         name: task.name,
-        status: task.status ?? NO_STATUS,
+        status: task.status === "Undefined" ? NO_STATUS : (task.status ?? NO_STATUS),
         body: task.body,
         format: normalizeMemoFormat(task.format, "markdown"),
         bodyLoaded: task.bodyLoaded,

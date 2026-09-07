@@ -22,6 +22,12 @@ import type {
   WorkspaceProjectPatch,
   WorkspaceTask,
 } from "@app-types/workspace";
+import type {
+  GraphCommandOrigin,
+  WorkspaceGraph,
+  WorkspaceGraphCommand,
+  WorkspaceGraphCommandResult,
+} from "@app-types/workspace_graph";
 import type { ProjectData } from "@features/tasks/utils/tree_control";
 import { promoteLegacyMemosToNodes } from "@features/tasks/utils/tree_control";
 import type { MemoFormat } from "@features/memos/utils/memo_utils";
@@ -501,6 +507,68 @@ export function wsMigrateProjects(
     api()?.wsMigrateProjects?.(workspacePath, options) ??
     Promise.resolve({ success: false, migrated: [], errors: [] })
   );
+}
+
+export function wsReadGraph(workspacePath: string): Promise<WorkspaceGraph> {
+  const fn = api()?.wsReadGraph;
+  if (!fn) return Promise.reject(new Error("Workspace graph API unavailable"));
+  return fn(workspacePath);
+}
+
+export function wsExecuteGraphCommand(
+  workspacePath: string,
+  command: WorkspaceGraphCommand,
+  origin: GraphCommandOrigin,
+  expectedRevision: number
+): Promise<WorkspaceGraphCommandResult> {
+  const fn = api()?.wsExecuteGraphCommand;
+  if (!fn) return Promise.reject(new Error("Workspace graph API unavailable"));
+  return fn(workspacePath, command, origin, expectedRevision);
+}
+
+export function wsUndoGraph(
+  workspacePath: string,
+  expectedRevision: number
+): Promise<{ graph: WorkspaceGraph; changed: boolean }> {
+  const fn = api()?.wsUndoGraph;
+  if (!fn) return Promise.reject(new Error("Workspace graph API unavailable"));
+  return fn(workspacePath, expectedRevision);
+}
+
+export function wsRedoGraph(
+  workspacePath: string,
+  expectedRevision: number
+): Promise<{ graph: WorkspaceGraph; changed: boolean }> {
+  const fn = api()?.wsRedoGraph;
+  if (!fn) return Promise.reject(new Error("Workspace graph API unavailable"));
+  return fn(workspacePath, expectedRevision);
+}
+
+export function onWorkspaceGraphUpdated(
+  callback: (event: { workspacePath: string; graph: WorkspaceGraph }) => void
+): void {
+  api()?.onWorkspaceGraphUpdated?.(callback);
+}
+
+export function wsSaveGraphAsset(
+  workspacePath: string,
+  nodeId: string,
+  fileName: string,
+  bytes: Uint8Array
+): Promise<{ relativePath: string }> {
+  const fn = api()?.wsSaveGraphAsset;
+  if (!fn) return Promise.reject(new Error("Workspace graph asset API unavailable"));
+  return fn(workspacePath, nodeId, fileName, bytes);
+}
+
+export function wsResolveGraphAsset(
+  workspacePath: string,
+  nodeId: string,
+  relativePath: string
+): Promise<{ url: string }> {
+  const fn = api()?.wsResolveGraphAsset;
+  if (!fn) return Promise.reject(new Error("Workspace graph asset API unavailable"));
+  return fn(workspacePath, nodeId, relativePath);
 }
 
 // ---------------------------------------------------------------------------

@@ -171,6 +171,25 @@ const electronAPI = {
     ipcRenderer.invoke("ws:export-legacy-projects", { workspacePath, options }),
   wsMigrateProjects: (workspacePath, options) =>
     ipcRenderer.invoke("ws:migrate-projects", { workspacePath, options }),
+  wsReadGraph: (workspacePath) => ipcRenderer.invoke("ws:read-graph", { workspacePath }),
+  wsExecuteGraphCommand: (workspacePath, command, origin, expectedRevision) =>
+    ipcRenderer.invoke("ws:execute-graph-command", {
+      workspacePath,
+      command,
+      origin,
+      expectedRevision,
+    }),
+  wsUndoGraph: (workspacePath, expectedRevision) =>
+    ipcRenderer.invoke("ws:undo-graph", { workspacePath, expectedRevision }),
+  wsRedoGraph: (workspacePath, expectedRevision) =>
+    ipcRenderer.invoke("ws:redo-graph", { workspacePath, expectedRevision }),
+  onWorkspaceGraphUpdated: (callback) => {
+    ipcRenderer.on("workspace-graph-updated", (_event, payload) => callback(payload));
+  },
+  wsSaveGraphAsset: (workspacePath, nodeId, fileName, bytes) =>
+    ipcRenderer.invoke("ws:save-graph-asset", { workspacePath, nodeId, fileName, bytes }),
+  wsResolveGraphAsset: (workspacePath, nodeId, relativePath) =>
+    ipcRenderer.invoke("ws:resolve-graph-asset", { workspacePath, nodeId, relativePath }),
 
   // Inbox
   wsEnsureInbox: (workspacePath) => ipcRenderer.invoke("ws:ensure-inbox", { workspacePath }),
