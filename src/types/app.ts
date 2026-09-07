@@ -9,6 +9,12 @@ import type {
   WorkspaceProjectListItem,
   WorkspaceTask,
 } from "./workspace";
+import type {
+  GraphCommandOrigin,
+  WorkspaceGraph,
+  WorkspaceGraphCommand,
+  WorkspaceGraphCommandResult,
+} from "./workspace_graph";
 
 export type ThemeName = "dark" | "light";
 export type SelectedType = "Projects" | "WorkspaceProject" | "Inbox" | "Agenda" | undefined;
@@ -253,6 +259,35 @@ export interface ElectronAPI {
     migrated: { name: string; count: number }[];
     errors: { name: string; error: string }[];
   }>;
+  wsReadGraph: (workspacePath: string) => Promise<WorkspaceGraph>;
+  wsExecuteGraphCommand: (
+    workspacePath: string,
+    command: WorkspaceGraphCommand,
+    origin: GraphCommandOrigin,
+    expectedRevision: number
+  ) => Promise<WorkspaceGraphCommandResult>;
+  wsUndoGraph: (
+    workspacePath: string,
+    expectedRevision: number
+  ) => Promise<{ graph: WorkspaceGraph; changed: boolean }>;
+  wsRedoGraph: (
+    workspacePath: string,
+    expectedRevision: number
+  ) => Promise<{ graph: WorkspaceGraph; changed: boolean }>;
+  onWorkspaceGraphUpdated: (
+    callback: (event: { workspacePath: string; graph: WorkspaceGraph }) => void
+  ) => void;
+  wsSaveGraphAsset: (
+    workspacePath: string,
+    nodeId: string,
+    fileName: string,
+    bytes: Uint8Array
+  ) => Promise<{ relativePath: string }>;
+  wsResolveGraphAsset: (
+    workspacePath: string,
+    nodeId: string,
+    relativePath: string
+  ) => Promise<{ url: string }>;
 
   // Inbox API
   wsEnsureInbox: (workspacePath: string) => Promise<{

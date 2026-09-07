@@ -1,6 +1,12 @@
 import type { MemoFormat } from "@features/memos/utils/memo_utils";
 
-export type WorkspaceTaskStatus = "Open" | "Pending" | "In Progress" | "Completed" | "Canceled";
+export type WorkspaceTaskStatus =
+  | "Undefined"
+  | "Open"
+  | "Pending"
+  | "In Progress"
+  | "Completed"
+  | "Canceled";
 
 /** ノード本文の遅延読み込みで返るもの。 */
 export interface NodeBody {
