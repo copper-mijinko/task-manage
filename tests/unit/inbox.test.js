@@ -176,6 +176,27 @@ describe("sendInboxItemsToProject", () => {
     expect(fs.existsSync(path.join(movedPath, "memo-1.md"))).toBe(true);
   });
 
+  it("sending a legacy memo moves only that node, not its inbox parent", async () => {
+    const { projectDir: inboxDir } = await ensureInbox(workspace);
+    const { task } = await addInboxItem(workspace, { name: "keep parent" });
+    const taskDir = path.join(inboxDir, task.id);
+    fs.writeFileSync(
+      path.join(taskDir, "memo-only.md"),
+      "---\nid: memo-only\ntitle: Send me\n---\n\nMEMO CONTENT\n"
+    );
+    const result = await sendInboxItemsToProject(
+      workspace,
+      projectDir,
+      ["memo-only"],
+      projectRootId
+    );
+    expect(result.errors).toEqual([]);
+    expect(result.moved).toEqual(["memo-only"]);
+    expect(readProject(inboxDir).tasks.get(task.id).name).toBe("keep parent");
+    expect(readProject(inboxDir).tasks.has("memo-only")).toBe(false);
+    expect(readProject(projectDir).tasks.get("memo-only").body).toBe("MEMO CONTENT");
+  });
+
   it("nests the moved task under targetParentId when supplied", async () => {
     // Add an intermediate task to the target project as a candidate parent.
     const targetState = readProject(projectDir);

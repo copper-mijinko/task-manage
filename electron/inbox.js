@@ -61,7 +61,7 @@ async function ensureInbox(workspacePath, options = {}) {
  */
 async function readInbox(workspacePath, options = {}) {
   const { projectDir, rootId } = await ensureInbox(workspacePath, options);
-  const { tasks, taskDirs } = workspace.readProject(projectDir);
+  const { tasks, taskDirs, legacyMemoFiles } = workspace.readProject(projectDir);
   // Defensive: clamp any non-root inbox tasks to parents = [rootId].
   // (User-edited frontmatter or merge artefacts could otherwise leak through.)
   for (const task of tasks.values()) {
@@ -70,7 +70,7 @@ async function readInbox(workspacePath, options = {}) {
       task.parents = [{ id: rootId, order: task.parents[0]?.order }];
     }
   }
-  return { projectDir, rootId, tasks, taskDirs };
+  return { projectDir, rootId, tasks, taskDirs, legacyMemoFiles };
 }
 
 function nextSiblingOrder(tasks, parentId) {
@@ -189,6 +189,12 @@ async function sendInboxItemsToProject(
       const inboxTask = inboxTasks.get(taskId);
       if (!inboxTask) {
         throw new Error("Inbox task not found");
+      }
+      if (inboxState.legacyMemoFiles?.has(taskId)) {
+        // A promoted memo still shares its parent's directory. Give it its own
+        // directory before moving it, so sending a memo cannot move its parent.
+        await workspace.writeTaskAsync(inboxDir, inboxTask, inboxTaskDirs, onWritten);
+        inboxState.legacyMemoFiles.delete(taskId);
       }
       const sourceDirName = inboxTaskDirs.get(taskId);
       if (!sourceDirName || sourceDirName === "_project") {
