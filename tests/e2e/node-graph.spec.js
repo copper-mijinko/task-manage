@@ -78,6 +78,16 @@ async function selectNode(app, name) {
   await graphNode(app.window, name).click();
   await expect(app.window.locator("aside.inspector h2")).toHaveText(name);
 }
+async function selectTreeNode(app, name) {
+  await tabs(app.window).nth(1).click();
+  const tree = app.window.getByRole("tree", { name: "\u30c4\u30ea\u30fc" });
+  const root = tree.getByRole("button", { name: "Workspace", exact: true }).locator("..");
+  if ((await root.getAttribute("aria-expanded")) === "false") {
+    await root.locator("button.twisty").click();
+  }
+  await tree.getByRole("button", { name, exact: true }).click();
+  await expect(app.window.locator("aside.inspector h2")).toHaveText(name);
+}
 async function close(app) {
   let timer;
   try {
@@ -105,7 +115,7 @@ test("persists explicit Undefined status through a genuine Electron restart", as
   let app = await launch(context);
   try {
     expect(readGraph(context.workspacePath).nodes.draft).not.toHaveProperty("status");
-    await selectNode(app, "Draft");
+    await selectTreeNode(app, "Draft");
     await app.window.locator("aside.inspector select").first().selectOption("Undefined");
     await expect.poll(() => readGraph(context.workspacePath).nodes.draft.status).toBe("Undefined");
     await tabs(app.window).nth(3).click();
@@ -116,7 +126,7 @@ test("persists explicit Undefined status through a genuine Electron restart", as
 
     await close(app);
     app = await launch(context);
-    await selectNode(app, "Draft");
+    await selectTreeNode(app, "Draft");
     await expect(app.window.locator("aside.inspector select").first()).toHaveValue("Undefined");
     expect(readGraph(context.workspacePath).nodes.draft.status).toBe("Undefined");
   } finally {
