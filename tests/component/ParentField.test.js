@@ -96,7 +96,7 @@ describe("ParentField", () => {
     expect(changes).toEqual([["p1", "p2"]]);
   });
 
-  test("一致が無いときは理由を出す", async () => {
+  test("一致が無いときは候補がないことを伝える", async () => {
     render(ParentField, { props: createProps() });
 
     await fireEvent.input(screen.getByLabelText("親ノードを追加"), {
@@ -104,6 +104,6 @@ describe("ParentField", () => {
     });
     await tick();
 
-    expect(screen.getByText(/自分自身と子孫は候補に出ません/)).toBeInTheDocument();
+    expect(screen.getByText("一致する親候補がありません")).toBeInTheDocument();
   });
 });
