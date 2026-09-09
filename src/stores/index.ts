@@ -123,6 +123,12 @@ export async function autoSelectInitialProject(): Promise<void> {
     return;
   }
 
+  if (get(workspace_store).activeWorkspacePath) {
+    selected_type.set("WorkspaceProject");
+    selected_id.set(undefined);
+    return;
+  }
+
   const inAppProjects = get(project_ids) ?? [];
   if (inAppProjects.length > 0) {
     selected_type.set("Projects");

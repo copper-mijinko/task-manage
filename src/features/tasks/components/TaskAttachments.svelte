@@ -1,4 +1,8 @@
 <script>
+  import { getContext } from "svelte";
+  import { TREEGRID_APPLICATION } from "@features/workspace/application/treegrid";
+  const application = getContext(TREEGRID_APPLICATION);
+
   import IconButton from "@lib/primitives/IconButton.svelte";
   import * as platform from "@lib/ipc/platform";
   import TaskMenu from "./TaskMenu.svelte";
@@ -20,7 +24,9 @@
   };
 
   $: attachmentList = Array.isArray(attachments) ? attachments : [];
-  $: canUseAttachments = Boolean(isWorkspaceProject && workspaceProjectDir && taskId);
+  $: canUseAttachments = Boolean(
+    application ? taskId : isWorkspaceProject && workspaceProjectDir && taskId
+  );
   $: attachmentMenuItems = [
     { title: "開く", action: "open" },
     { title: "プログラムから開く", action: "openWith" },
@@ -63,6 +69,25 @@
   }
 
   async function saveFiles(files) {
+    if (application) {
+      const id = taskId;
+      const existing = [...attachments];
+      isBusy = true;
+      errorMessage = "";
+      try {
+        const added = [];
+        for (const file of Array.from(files || [])) {
+          const relativePath = await application.saveAsset(id, file);
+          added.push({ id: crypto.randomUUID(), name: file.name, relativePath, size: file.size });
+        }
+        await application.update(id, { attachments: [...existing, ...added] });
+      } catch (e) {
+        errorMessage = e.message;
+      } finally {
+        isBusy = false;
+      }
+      return;
+    }
     const fileList = Array.from(files ?? []).filter((file) => file?.arrayBuffer);
     if (!canUseAttachments || fileList.length === 0) return;
 
@@ -133,6 +158,15 @@
   }
 
   async function openAttachment(attachment) {
+    if (application) {
+      try {
+        closeAttachmentMenu();
+        await application.openAsset(taskId, attachmentPath(attachment));
+      } catch (e) {
+        errorMessage = e.message;
+      }
+      return;
+    }
     if (!canUseAttachments || isBusy) return;
     closeAttachmentMenu();
     errorMessage = "";
@@ -147,6 +181,15 @@
   }
 
   async function openAttachmentWith(attachment) {
+    if (application) {
+      try {
+        closeAttachmentMenu();
+        await application.openAsset(taskId, attachmentPath(attachment), true);
+      } catch (e) {
+        errorMessage = e.message;
+      }
+      return;
+    }
     if (!canUseAttachments || isBusy) return;
     closeAttachmentMenu();
     errorMessage = "";
@@ -197,6 +240,13 @@
   }
 
   async function deleteAttachment(attachment) {
+    if (application) {
+      if (window.confirm(`「${attachment.name}」を添付一覧から削除しますか？`))
+        await application.update(taskId, {
+          attachments: attachments.filter((item) => item.id !== attachment.id),
+        });
+      return;
+    }
     if (!canUseAttachments || isBusy) return;
     closeAttachmentMenu();
     const confirmed = window.confirm?.(`"${attachment.name}" を削除しますか？`);

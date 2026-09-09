@@ -55,6 +55,8 @@ export interface TreeNodeData {
 }
 
 export interface TreeData {
+  /** Terminal occurrence of a graph cycle. */
+  cycleReference?: boolean;
   id: string;
   data: TreeNodeData;
   children: TreeData[];
@@ -568,7 +570,7 @@ export function flattenVisibleTree(
     const pathAncestors = new Set(ancestors).add(node.id);
     const childCount = node.children.length;
     node.children.forEach((child, index) => {
-      if (pathAncestors.has(child.id)) return;
+      if (pathAncestors.has(child.id) && !child.cycleReference) return;
       visit(
         child,
         depth + 1,
@@ -691,7 +693,7 @@ export function buildLineNumberMap(tree: TreeData | null | undefined): Map<strin
     const pathAncestors = new Set(ancestors).add(node.id);
     for (const child of node.children ?? []) {
       // 循環は打ち切る（flattenVisibleTree と同じ規則にして行がずれないように）。
-      if (pathAncestors.has(child.id)) continue;
+      if (pathAncestors.has(child.id) && !child.cycleReference) continue;
       visit(child, path, pathAncestors);
     }
   };

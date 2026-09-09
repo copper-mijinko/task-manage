@@ -1,5 +1,9 @@
 ﻿<script>
-  import { tick, createEventDispatcher } from "svelte";
+  import { getContext, tick, createEventDispatcher } from "svelte";
+  import { writable } from "svelte/store";
+  import { TREEGRID_APPLICATION } from "@features/workspace/application/treegrid";
+  const application = getContext(TREEGRID_APPLICATION);
+  const applicationClipboard = application?.copied ?? writable([]);
   import { ripple, tooltip } from "@lib/actions";
   import TaskMenu from "@features/tasks/components/TaskMenu.svelte";
   import { pageSearchQuery } from "@features/search/stores/search";
@@ -102,7 +106,11 @@
       {
         title: "子タスクとして貼り付け",
         action: "pasteTask",
-        disabled: archived || ($copied_task === null && $copied_tasks.length === 0),
+        disabled:
+          archived ||
+          (application
+            ? $applicationClipboard.length === 0
+            : $copied_task === null && $copied_tasks.length === 0),
         icon: {
           viewBox: "0 0 24 24",
           path: "M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2",

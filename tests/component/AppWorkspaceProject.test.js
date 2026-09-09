@@ -11,7 +11,7 @@ vi.mock("@pages/MainPage.svelte", async () => {
   const mod = await import("../mocks/TreeTableStub.svelte");
   return { default: mod.default };
 });
-vi.mock("@features/workspace/components/NodeWorkspacePage.svelte", async () => {
+vi.mock("@features/workspace/components/WorkspaceTreeGridPage.svelte", async () => {
   const mod = await import("../mocks/NodeWorkspaceStub.svelte");
   return { default: mod.default };
 });

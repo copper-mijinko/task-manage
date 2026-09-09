@@ -85,7 +85,7 @@ function assertEdgeAllowed(graph, childId, parentId, origin, ignoreParentId) {
   ) {
     throw new Error("Duplicate edges are not allowed");
   }
-  if (origin !== "graph" && pathExists(graph, childId, parentId)) {
+  if (origin === "finder" && pathExists(graph, childId, parentId)) {
     throw new Error("This view cannot create a cycle");
   }
 }
@@ -99,6 +99,26 @@ function cleanCloneNode(node, id) {
 }
 
 function executeGraphCommand(input, command, origin = "graph") {
+  if (command?.type === "batch") {
+    if (
+      !Array.isArray(command.commands) ||
+      !command.commands.length ||
+      command.commands.length > 10000 ||
+      command.commands.some((c) => c?.type === "batch")
+    )
+      throw new Error("Invalid command batch");
+    let graph = input;
+    const selectedNodeIds = [],
+      copiedFrom = {};
+    for (const operation of command.commands) {
+      const result = executeGraphCommand(graph, operation, origin);
+      graph = result.graph;
+      selectedNodeIds.push(...result.selectedNodeIds);
+      Object.assign(copiedFrom, result.copiedFrom);
+    }
+    graph.revision = (input.revision || 0) + 1;
+    return { graph, selectedNodeIds: [...new Set(selectedNodeIds)], copiedFrom };
+  }
   if (!new Set(["graph", "tree", "finder"]).has(origin)) throw new Error("Invalid command origin");
   const graph = clone(input);
   const selectedNodeIds = [];
@@ -221,7 +241,7 @@ function executeGraphCommand(input, command, origin = "graph") {
     if (command.nodeId === graph.rootId) throw new Error("The workspace root cannot be copied");
     if (!["node", "share-children", "subgraph"].includes(command.mode))
       throw new Error("Unknown copy mode");
-    if (command.mode === "subgraph" && origin !== "graph") {
+    if (command.mode === "subgraph" && origin === "finder") {
       const reachable = new Set();
       const children = childrenIndex(graph);
       const queue = [command.nodeId];

@@ -21,6 +21,7 @@
   import { onMount, onDestroy, tick } from "svelte";
   import * as platform from "@lib/ipc/platform";
   import { workspaceToProjectData } from "@features/workspace/utils/workspace_tree";
+  import { workspaceApplication } from "@features/workspace/application/workspace";
   import Header from "@features/navigation/components/Header.svelte";
   import MenuList from "@features/navigation/components/MenuList.svelte";
   import { showQuickCapture, showWorkspaceSetup } from "@stores/ui";
@@ -82,7 +83,7 @@
   function loadNodeWorkspacePage() {
     if (NodeWorkspacePageComponent || nodeWorkspacePageLoading) return nodeWorkspacePageLoading;
     nodeWorkspacePageLoading =
-      import("@features/workspace/components/NodeWorkspacePage.svelte").then((module) => {
+      import("@features/workspace/components/WorkspaceTreeGridPage.svelte").then((module) => {
         NodeWorkspacePageComponent = module.default;
       });
     return nodeWorkspacePageLoading;
@@ -274,7 +275,9 @@
     if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key === "z") {
       event.preventDefault();
       event.stopPropagation();
-      undoHistory();
+      if ($selected_type === "WorkspaceProject")
+        void workspaceApplication.undo().catch((error) => (saveErrorMessage = error.message));
+      else undoHistory();
       return;
     }
 
@@ -286,7 +289,9 @@
     ) {
       event.preventDefault();
       event.stopPropagation();
-      redoHistory();
+      if ($selected_type === "WorkspaceProject")
+        void workspaceApplication.redo().catch((error) => (saveErrorMessage = error.message));
+      else redoHistory();
       return;
     }
 
@@ -541,7 +546,7 @@
         {/if}
         {#if $selected_type == "WorkspaceProject"}
           {#if NodeWorkspacePageComponent}
-            <NodeWorkspacePageComponent />
+            {#key $workspace_store.activeWorkspacePath}<NodeWorkspacePageComponent />{/key}
           {:else}
             <Loading variant="h1" />
           {/if}

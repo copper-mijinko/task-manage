@@ -1,7 +1,11 @@
 ﻿<script>
+  import { getContext } from "svelte";
+  import { TREEGRID_APPLICATION } from "@features/workspace/application/treegrid";
+  const application = getContext(TREEGRID_APPLICATION);
+  const closed_row_paths = application?.closed ?? legacy_closed_row_paths;
   import { filter } from "@stores";
   import { column_settings } from "@features/tasks/stores/column_settings";
-  import { closed_row_paths } from "@stores/ui";
+  import { closed_row_paths as legacy_closed_row_paths } from "@stores/ui";
   import { sort_state, SORTABLE_COLUMNS } from "@features/tasks/stores/sort";
   import { activePanelId, newPanelId } from "@stores/panel_coordinator";
 
@@ -49,13 +53,22 @@
   const NO_STATUS = "";
   const STATUS_LABELS = {
     [NO_STATUS]: "なし",
+    Undefined: "未定義",
     Open: "未着手",
     Pending: "保留",
     "In Progress": "進行中",
     Completed: "完了",
     Canceled: "キャンセル",
   };
-  const STATUS_OPTIONS = [NO_STATUS, "Open", "Pending", "In Progress", "Completed", "Canceled"];
+  const STATUS_OPTIONS = [
+    NO_STATUS,
+    "Undefined",
+    "Open",
+    "Pending",
+    "In Progress",
+    "Completed",
+    "Canceled",
+  ];
 
   /**
    * 選択済みステータスの取り出し。
@@ -855,6 +868,7 @@
     z-index: 9999;
   }
   .TableHeader {
+    flex-shrink: 0;
     position: relative;
     height: 3rem;
     box-sizing: border-box;

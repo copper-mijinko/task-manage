@@ -190,6 +190,13 @@ const electronAPI = {
     ipcRenderer.invoke("ws:save-graph-asset", { workspacePath, nodeId, fileName, bytes }),
   wsResolveGraphAsset: (workspacePath, nodeId, relativePath) =>
     ipcRenderer.invoke("ws:resolve-graph-asset", { workspacePath, nodeId, relativePath }),
+  wsOpenGraphAsset: (workspacePath, nodeId, relativePath, chooseProgram) =>
+    ipcRenderer.invoke("ws:open-graph-asset", {
+      workspacePath,
+      nodeId,
+      relativePath,
+      chooseProgram,
+    }),
 
   // Inbox
   wsEnsureInbox: (workspacePath) => ipcRenderer.invoke("ws:ensure-inbox", { workspacePath }),

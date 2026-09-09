@@ -1,4 +1,10 @@
 ﻿<script>
+  import { getContext } from "svelte";
+  import { TREEGRID_APPLICATION } from "@features/workspace/application/treegrid";
+  const application = getContext(TREEGRID_APPLICATION);
+  const closed_row_paths = application?.closed ?? legacy_closed_row_paths;
+  const tree_data = application?.tree ?? legacy_tree_data;
+
   import Pane from "@lib/layouts/Pane.svelte";
   import SplitPanes from "@lib/layouts/SplitPanes.svelte";
   import TreeTable from "@features/tasks/components/TreeTable.svelte";
@@ -15,8 +21,8 @@
   import { tick } from "svelte";
   import {
     table_selected_id,
-    tree_data,
-    closed_row_paths,
+    tree_data as legacy_tree_data,
+    closed_row_paths as legacy_closed_row_paths,
     active_row_path,
     ganttVisible,
     selected_type,
@@ -87,6 +93,24 @@
   let bulk_confirm_count = 0;
 
   const callback_confirm = () => {
+    if (application) {
+      const archives = is_bulk_confirm
+        ? archive_target_ids
+        : confirm_mode === "archive"
+          ? [$table_selected_id]
+          : [];
+      const removes = is_bulk_confirm
+        ? permanent_target_ids
+        : confirm_mode === "permanent"
+          ? [$table_selected_id]
+          : [];
+      void application.dispatch([
+        ...archives.map((nodeId) => ({ type: "update-node", nodeId, changes: { archived: true } })),
+        ...removes.map((nodeId) => ({ type: "delete-node", nodeId })),
+      ]);
+      clearSelection();
+      return;
+    }
     if (!$tree_data?.data) return;
     if (is_bulk_confirm) {
       let data = $tree_data.data;
@@ -338,6 +362,32 @@
   }
 
   function applyBulkMemoFormat() {
+    if (application) {
+      bulkMemoPhase = "running";
+      const commands = bulkMemoItems.map((item) => {
+        const node = getNode(item.id, $tree_data.data);
+        return {
+          type: "update-node",
+          nodeId: item.id,
+          changes: {
+            body: convertMemoContent(
+              node.data.body,
+              node.data.format || defaultMemoFormat,
+              bulkMemoTargetFormat
+            ),
+            format: bulkMemoTargetFormat,
+          },
+        };
+      });
+      void application.dispatch(commands).then((result) => {
+        bulkMemoPhase = "done";
+        bulkMemoItems = bulkMemoItems.map((item) => ({
+          ...item,
+          status: result ? "success" : "error",
+        }));
+      });
+      return;
+    }
     if (!$tree_data?.data) return;
     bulkMemoPhase = "running";
     const results = bulkMemoItems.map((item) => ({ ...item, status: "pending", error: "" }));
@@ -363,6 +413,10 @@
 
   // Add
   export async function handleAdd(e, action) {
+    if (application) {
+      e.stopPropagation();
+      return application.add($table_selected_id, action, $active_row_path);
+    }
     e.stopPropagation();
 
     if (!$tree_data?.data) {
@@ -461,6 +515,10 @@
 
   // Restore — archived 行を元に戻す。確認ダイアログは挟まない（取り消し可能なため）。
   export function handleRestore(e) {
+    if (application) {
+      e.stopPropagation();
+      return application.archive(undefined, false);
+    }
     e.stopPropagation();
     if (!$tree_data?.data) return;
     if (isMultiSelect) {
@@ -526,6 +584,10 @@
     withSelectedNode(single);
   }
   const handleMoveUp = (e) => {
+    if (application) {
+      e?.stopPropagation();
+      return application.move("up");
+    }
     e?.stopPropagation?.();
     if (!selectionTreeCapabilities.moveUp) return;
     runBulkOrSingle({
@@ -535,6 +597,10 @@
     });
   };
   const handleMoveDown = (e) => {
+    if (application) {
+      e?.stopPropagation();
+      return application.move("down");
+    }
     e?.stopPropagation?.();
     if (!selectionTreeCapabilities.moveDown) return;
     runBulkOrSingle({
@@ -544,6 +610,10 @@
     });
   };
   const handleIndent = (e) => {
+    if (application) {
+      e?.stopPropagation();
+      return application.move("indent");
+    }
     e?.stopPropagation?.();
     if (!selectionTreeCapabilities.indent) return;
     if (isMultiSelect) {
@@ -558,6 +628,10 @@
     withSelectedNode(indentNode);
   };
   const handleOutdent = (e) => {
+    if (application) {
+      e?.stopPropagation();
+      return application.move("outdent");
+    }
     e?.stopPropagation?.();
     if (!selectionTreeCapabilities.outdent) return;
     runBulkOrSingle({
@@ -691,10 +765,12 @@
         handleOutdent();
         break;
       case "undo":
-        undoHistory();
+        if (application) void application.history("undo");
+        else undoHistory();
         break;
       case "redo":
-        redoHistory();
+        if (application) void application.history("redo");
+        else redoHistory();
         break;
       case "expandAll":
         handleExpandAll();
@@ -1007,7 +1083,7 @@
                   variant="text"
                   normalColor={"var(--theme-color-Sub-main)"}
                   activeColor={"var(--theme-color-Primary-main)"}
-                  on:click={undoHistory}
+                  on:click={() => (application ? application.history("undo") : undoHistory())}
                 >
                   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path
@@ -1025,7 +1101,7 @@
                   variant="text"
                   normalColor={"var(--theme-color-Sub-main)"}
                   activeColor={"var(--theme-color-Primary-main)"}
-                  on:click={redoHistory}
+                  on:click={() => (application ? application.history("redo") : redoHistory())}
                 >
                   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path

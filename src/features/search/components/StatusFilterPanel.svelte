@@ -26,6 +26,7 @@
   const STATUS_LABEL: Record<string, string> = {
     // 「なし」は空文字。ラベルが無いと選択肢が空欄で並ぶ。
     "": "なし",
+    Undefined: "未定義",
     Open: "未着手",
     Pending: "保留",
     "In Progress": "進行中",

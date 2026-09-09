@@ -4,6 +4,11 @@
 </script>
 
 <script>
+  import {
+    workspaceApplication,
+    workspaceNavigation,
+  } from "@features/workspace/application/workspace";
+  $: workspaceProjects = $workspaceNavigation?.scopes ?? $workspace_store.projects;
   import { onMount, afterUpdate, onDestroy } from "svelte";
   import { slide } from "svelte/transition";
   import IconButton from "@lib/primitives/IconButton.svelte";
@@ -23,7 +28,7 @@
   import { getDefaultProject } from "@features/tasks/utils/tree_control";
 
   function selectWorkspaceProject(proj) {
-    workspace_store.setActiveProject(proj.projectDir);
+    if (proj.projectDir) workspace_store.setActiveProject(proj.projectDir);
     $selected_type = "WorkspaceProject";
     $selected_id = proj.rootId;
     $sidebarCollapsed = true;
@@ -32,13 +37,16 @@
   async function addWorkspaceProject(e) {
     e.stopPropagation();
     workspaceProjectsExpanded = true;
-    const project = getDefaultProject();
-    const result = await workspace_store.createProject(project.data.data.name, project.data.id);
-    if (result.success && result.projectDir) {
-      workspace_store.setActiveProject(result.projectDir);
+    try {
+      const result = await workspaceApplication.createScope(
+        $workspace_store.activeWorkspacePath,
+        "新しいプロジェクト"
+      );
       $selected_type = "WorkspaceProject";
-      $selected_id = project.data.id;
+      $selected_id = result.selectedNodeIds[0];
       $sidebarCollapsed = true;
+    } catch (e) {
+      project_add_error = e.message;
     }
   }
 
@@ -55,10 +63,9 @@
   const callback_workspace_delete = async () => {
     if (!workspace_delete_target) return;
     const target = workspace_delete_target;
-    await workspace_store.deleteProject(target.projectDir);
+    await workspaceApplication.removeScope($workspace_store.activeWorkspacePath, target.rootId);
     if ($selected_type === "WorkspaceProject" && $selected_id === target.rootId) {
-      $selected_type = undefined;
-      $selected_id = undefined;
+      $selected_id = $workspaceNavigation?.rootId;
     }
     workspace_delete_target = null;
   };
@@ -158,9 +165,7 @@
   }
 
   function getProjectsForSection(section) {
-    return section === "WorkspaceProject"
-      ? ($workspace_store.projects ?? [])
-      : ($project_ids ?? []);
+    return section === "WorkspaceProject" ? (workspaceProjects ?? []) : ($project_ids ?? []);
   }
 
   function getProjectId(project, section) {
@@ -169,7 +174,9 @@
 
   function saveProjectOrder(section, projects) {
     if (section === "WorkspaceProject") {
-      workspace_store.setProjectOrder(projects);
+      void workspaceApplication
+        .reorderScopes($workspace_store.activeWorkspacePath, projects)
+        .catch((e) => (project_add_error = e.message));
       return;
     }
     project_ids.update(() => projects);
@@ -348,6 +355,17 @@
     </svg>
     <span class="TextOverFlow">Workspace</span>
   </div>
+  {#if $workspace_store.activeWorkspacePath}
+    <button
+      class="WorkspaceManageBtn"
+      on:click={async () => {
+        await workspaceApplication.load($workspace_store.activeWorkspacePath);
+        $selected_type = "WorkspaceProject";
+        $selected_id = $workspaceNavigation.rootId;
+        $sidebarCollapsed = true;
+      }}>Workspace Root</button
+    >
+  {/if}
   <div class="WorkspaceInfo">
     {#if $workspace_store.activeWorkspacePath}
       <span class="WorkspaceName TextOverFlow">
@@ -460,7 +478,7 @@
           />
         </svg>
         <span class="SubsectionLabel TextOverFlow">Workspace</span>
-        <span class="SubsectionCount">{$workspace_store.projects.length}</span>
+        <span class="SubsectionCount">{workspaceProjects.length}</span>
       </button>
       <div class="AddButtonContainer">
         {#if $workspace_store.activeWorkspacePath}
@@ -486,8 +504,8 @@
     </div>
     {#if workspaceProjectsExpanded}
       <div id="workspace-project-list" class="Contents ProjectContents">
-        {#if $workspace_store.projects.length > 0}
-          {#each $workspace_store.projects as proj (proj.rootId)}
+        {#if workspaceProjects.length > 0}
+          {#each workspaceProjects as proj (proj.rootId)}
             <div
               class="MenuRow"
               class:Selected={proj.rootId === $selected_id && $selected_type === "WorkspaceProject"}
@@ -759,7 +777,7 @@
   show={show_workspace_delete}
   toggle={toggle_workspace_delete}
   header="Workspaceプロジェクトの削除"
-  content={`「${workspace_delete_target?.name ?? ""}」を削除しますか？\n保存フォルダーもディスクから削除されます。`}
+  content={`「${workspace_delete_target?.name ?? ""}」のノードと接続を削除します。子ノードは残り、必要ならWorkspace Rootに接続されます。元に戻す操作で復元できます。`}
   callback={callback_workspace_delete}
 />
 

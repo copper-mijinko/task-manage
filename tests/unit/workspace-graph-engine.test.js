@@ -51,10 +51,10 @@ describe("workspace graph commands", () => {
     expect(next.nodes.child.parents.map((p) => p.id)).toEqual(["b"]);
   });
 
-  it("allows graph cycles but rejects them from tree and finder", () => {
+  it("allows cycles from the canonical TreeGrid, while retaining the legacy Finder restriction", () => {
     const input = graph([node("root"), node("a", ["root"]), node("b", ["a"])]);
     expect(() =>
-      executeGraphCommand(input, { type: "link", childId: "a", parentId: "b" }, "tree")
+      executeGraphCommand(input, { type: "link", childId: "a", parentId: "b" }, "finder")
     ).toThrow(/cycle/);
     const result = executeGraphCommand(
       input,
@@ -182,7 +182,7 @@ describe("workspace graph commands", () => {
     expect(rootClone.parents.some((p) => p.id === diamondClone.id)).toBe(true);
   });
 
-  it("rejects cyclic subgraph and share-children copies outside graph view", () => {
+  it("rejects cyclic copies only in the legacy Finder view", () => {
     const cyclic = graph([node("root"), node("a", ["root", "b"]), node("b", ["a"])]);
     expect(() =>
       executeGraphCommand(
@@ -201,7 +201,7 @@ describe("workspace graph commands", () => {
       executeGraphCommand(
         shareCycle,
         { type: "copy", nodeId: "source", targetParentId: "target", mode: "share-children" },
-        "tree"
+        "finder"
       )
     ).toThrow(/cycle/);
   });

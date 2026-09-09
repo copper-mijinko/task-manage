@@ -321,7 +321,7 @@
       return;
     }
     let previousRootSize = split_pane_root.getBoundingClientRect()[primaryDimension];
-    const observer = new ResizeObserver((entries) => {
+    const observer = new ResizeObserver(() => {
       // Primary-size setting. Collapsed panes must keep their configured size
       // — only non-mini panes share the remaining space proportionally,
       // otherwise the placeholder Card would visibly shrink/grow with the
@@ -342,7 +342,7 @@
             : pane.getBoundingClientRect()[primaryDimension]),
         0
       );
-      const new_root_size = entries[0].contentRect[primaryDimension];
+      const new_root_size = split_pane_root.getBoundingClientRect()[primaryDimension];
       // ResizeObserver always delivers an initial notification. When a
       // persisted ratio has just been applied, reading pane rectangles from
       // that first callback can still return the pre-layout sizes and undo the
@@ -380,6 +380,8 @@
     });
     resize_observer = observer;
     resize_observer.observe(split_pane_root);
+    // Restored slot sizes can settle after the root notification.
+    panes.forEach((pane) => resize_observer.observe(pane));
   };
 
   const setResizersEvents = (resizers, panes) => {

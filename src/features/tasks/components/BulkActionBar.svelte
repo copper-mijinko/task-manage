@@ -8,7 +8,7 @@
 
   const dispatch = createEventDispatcher();
 
-  const STATUSES = ["Open", "Pending", "In Progress", "Completed", "Canceled"];
+  const STATUSES = ["", "Undefined", "Open", "Pending", "In Progress", "Completed", "Canceled"];
   const STATUS_COLOR = {
     Open: "var(--theme-color-Primary-main)",
     "In Progress": "var(--theme-color-Info-main)",
@@ -214,7 +214,9 @@
           on:click={() => pickStatus(opt)}
         >
           <span class="StatusDot" style="background: {STATUS_COLOR[opt]}"></span>
-          <span class="StatusLabel">{opt}</span>
+          <span class="StatusLabel"
+            >{opt === "" ? "ステータスなし" : opt === "Undefined" ? "未定義" : opt}</span
+          >
         </button>
       </li>
     {/each}

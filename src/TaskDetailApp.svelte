@@ -18,6 +18,7 @@
   import { workspaceToProjectData } from "@features/workspace/utils/workspace_tree";
   import { registerDateTimeShortcuts } from "@lib/utils/datetime_shortcuts";
   import TaskDetailPage from "@pages/TaskDetailPage.svelte";
+  import WorkspaceTaskDetail from "@features/workspace/components/WorkspaceTaskDetail.svelte";
 
   const search = new URLSearchParams(window.location.search);
   let projectId = search.get("projectId") || "";
@@ -26,6 +27,8 @@
   const selectedType =
     search.get("selectedType") === "WorkspaceProject" ? "WorkspaceProject" : "Projects";
   const projectDir = search.get("projectDir") || "";
+  const workspacePath = search.get("workspacePath") || "";
+  const occurrencePath = search.get("occurrencePath") || "";
   const performanceRunId = search.get("performanceRunId") || undefined;
 
   let ready = false;
@@ -35,7 +38,7 @@
   let flushingOnShutdown = false;
   let unregisterDateTimeShortcuts = null;
 
-  init_detail_store();
+  if (!workspacePath) init_detail_store();
 
   async function initialiseDetail() {
     try {
@@ -169,6 +172,13 @@
   }
 
   onMount(async () => {
+    if (workspacePath) {
+      const currentTheme = await platform.getCurrentTheme().catch(() => undefined);
+      if (currentTheme) theme.set(currentTheme);
+      platform.onThemeChanged((nextTheme) => theme.set(nextTheme));
+      unregisterDateTimeShortcuts = registerDateTimeShortcuts();
+      return;
+    }
     await initialiseDetail();
     void reportInteractiveAfterPaint();
     const currentTheme = await platform.getCurrentTheme().catch(() => undefined);
@@ -249,12 +259,16 @@
   {/if}
 
   <main>
-    <TaskDetailPage
-      initialTaskName={taskName}
-      initialTaskId={taskId}
-      initialProjectId={projectId}
-      {ready}
-    />
+    {#if workspacePath}
+      <WorkspaceTaskDetail {workspacePath} {taskId} {taskName} {projectId} {occurrencePath} />
+    {:else}
+      <TaskDetailPage
+        initialTaskName={taskName}
+        initialTaskId={taskId}
+        initialProjectId={projectId}
+        {ready}
+      />
+    {/if}
   </main>
 </div>
 

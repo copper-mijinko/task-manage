@@ -371,6 +371,9 @@ app.on("ready", () => {
       payload.workspacePath ||
       (typeof payload.projectDir === "string" ? path.dirname(payload.projectDir) : null);
     if (!workspacePath) return promise;
+    // Reading the canonical Inbox no longer creates a legacy directory. Do not
+    // make graph initialization wait on the very read that requested it.
+    if (channel === "ws:read-inbox" && workspaceGraph.isGraphActive(workspacePath)) return promise;
     const key = path.resolve(workspacePath).toLowerCase();
     const tracked = Promise.resolve(promise);
     const active = inFlightLegacyMutations.get(key) || new Set();
@@ -1234,11 +1237,13 @@ app.on("ready", () => {
         selectedType:
           detailData?.selectedType === "WorkspaceProject" ? "WorkspaceProject" : "Projects",
         projectDir: detailData?.projectDir ? String(detailData.projectDir) : "",
+        workspacePath: detailData?.workspacePath ? String(detailData.workspacePath) : "",
+        occurrencePath: detailData?.occurrencePath ? String(detailData.occurrencePath) : "",
       };
 
       const windowKey = [
         safeDetailData.selectedType,
-        safeDetailData.projectDir || safeDetailData.projectId,
+        safeDetailData.workspacePath || safeDetailData.projectDir || safeDetailData.projectId,
         safeDetailData.taskId,
       ].join(":");
       const existing = taskDetailWindows.get(windowKey);
@@ -1308,6 +1313,8 @@ app.on("ready", () => {
             taskName: safeDetailData.taskName,
             selectedType: safeDetailData.selectedType,
             projectDir: safeDetailData.projectDir,
+            workspacePath: safeDetailData.workspacePath,
+            occurrencePath: safeDetailData.occurrencePath,
             performanceRunId,
           },
         });
@@ -1360,7 +1367,10 @@ app.on("ready", () => {
       );
     }
     try {
-      if (detailData?.selectedType === "WorkspaceProject") {
+      if (detailData?.workspacePath) {
+        const graph = await workspaceApplication.read(detailData.workspacePath);
+        if (!graph.nodes[detailData.taskId]) throw new Error("Task does not exist in workspace");
+      } else if (detailData?.selectedType === "WorkspaceProject") {
         await workspaceAuthorizer.assertKnownProject(detailData.projectDir);
       }
       createTaskDetailWindow(detailData, {
@@ -2011,56 +2021,46 @@ app.on("ready", () => {
     });
   }
 
-  trustedHandle("ws:read-graph", async (_event, { workspacePath }) => {
-    await workspaceAuthorizer.assertKnownWorkspace(workspacePath);
-    return ensureWorkspaceGraphInitialized(workspacePath);
+  const workspaceApplication = require("./workspace-application").createWorkspaceApplication({
+    openAsset: async (resolvedPath, chooseProgram) => {
+      if (chooseProgram) return openPathWithProgramPicker(resolvedPath);
+      const error = await shell.openPath(resolvedPath);
+      if (error) throw new Error(error);
+    },
+    authorize: (path) => workspaceAuthorizer.assertKnownWorkspace(path),
+    initialize: ensureWorkspaceGraphInitialized,
+    repository: workspaceGraph,
+    publish: broadcastWorkspaceGraph,
   });
-
-  trustedHandle(
-    "ws:execute-graph-command",
-    async (_event, { workspacePath, command, origin, expectedRevision }) => {
-      await workspaceAuthorizer.assertKnownWorkspace(workspacePath);
-      await ensureWorkspaceGraphInitialized(workspacePath);
-      const result = await workspaceGraph.executeWorkspaceGraphCommand(
-        workspacePath,
-        command,
-        origin,
-        expectedRevision
-      );
-      broadcastWorkspaceGraph(workspacePath, result.graph);
-      return result;
-    }
+  trustedHandle("ws:read-graph", (_event, { workspacePath }) =>
+    workspaceApplication.read(workspacePath)
   );
-
-  trustedHandle("ws:undo-graph", async (_event, { workspacePath, expectedRevision }) => {
-    await workspaceAuthorizer.assertKnownWorkspace(workspacePath);
-    await ensureWorkspaceGraphInitialized(workspacePath);
-    const result = await workspaceGraph.undoWorkspaceGraph(workspacePath, expectedRevision);
-    if (result.changed) broadcastWorkspaceGraph(workspacePath, result.graph);
-    return result;
-  });
-
-  trustedHandle("ws:redo-graph", async (_event, { workspacePath, expectedRevision }) => {
-    await workspaceAuthorizer.assertKnownWorkspace(workspacePath);
-    await ensureWorkspaceGraphInitialized(workspacePath);
-    const result = await workspaceGraph.redoWorkspaceGraph(workspacePath, expectedRevision);
-    if (result.changed) broadcastWorkspaceGraph(workspacePath, result.graph);
-    return result;
-  });
+  trustedHandle("ws:execute-graph-command", (_event, request) =>
+    workspaceApplication.execute(request)
+  );
+  trustedHandle("ws:open-graph-asset", (_event, request) =>
+    workspaceApplication.openAsset(request)
+  );
+  trustedHandle("ws:undo-graph", (_event, request) =>
+    workspaceApplication.history({ ...request, direction: "undo" })
+  );
+  trustedHandle("ws:redo-graph", (_event, request) =>
+    workspaceApplication.history({ ...request, direction: "redo" })
+  );
   trustedHandle(
     "ws:save-graph-asset",
     async (_event, { workspacePath, nodeId, fileName, bytes }) => {
-      await workspaceAuthorizer.assertKnownWorkspace(workspacePath);
-      await ensureWorkspaceGraphInitialized(workspacePath);
-      return workspaceGraph.saveNodeAsset(workspacePath, nodeId, fileName, bytes);
+      return workspaceApplication.saveAsset({ workspacePath, nodeId, fileName, bytes });
     }
   );
   trustedHandle(
     "ws:resolve-graph-asset",
     async (_event, { workspacePath, nodeId, relativePath }) => {
-      await workspaceAuthorizer.assertKnownWorkspace(workspacePath);
-      await ensureWorkspaceGraphInitialized(workspacePath);
-      const resolved = await workspaceGraph.resolveNodeAsset(workspacePath, nodeId, relativePath);
+      const resolved = await workspaceApplication.resolveAsset({
+        workspacePath,
+        nodeId,
+        relativePath,
+      });
       const extension = path.extname(resolved).toLowerCase();
       const mimeTypes = {
         ".png": "image/png",
@@ -2094,6 +2094,13 @@ app.on("ready", () => {
   trustedHandle("ws:read-inbox", async (event, { workspacePath }) => {
     try {
       await workspaceAuthorizer.assertKnownWorkspace(workspacePath);
+      if (workspaceGraph.isGraphActive(workspacePath)) {
+        return {
+          success: true,
+          projectDir: null,
+          ...(await workspaceApplication.readInbox(workspacePath)),
+        };
+      }
       assertLegacyWorkspaceWritable(workspacePath);
       const { projectDir, rootId, tasks, taskDirs } = await inbox.readInbox(workspacePath, {
         onWritten: recordWrite,

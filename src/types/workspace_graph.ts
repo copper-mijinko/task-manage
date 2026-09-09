@@ -29,6 +29,7 @@ export interface WorkspaceGraph {
 
 export type GraphCommandOrigin = "graph" | "tree" | "finder";
 export type WorkspaceGraphCommand =
+  | { type: "batch"; commands: WorkspaceGraphCommand[] }
   | {
       type: "create-node";
       parentId: string;
