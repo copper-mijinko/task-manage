@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { viewportPopover } from "@lib/actions/viewport_popover";
   import { createEventDispatcher, onMount, onDestroy } from "svelte";
   import { activePanelId, newPanelId } from "@stores/panel_coordinator";
   import { globalDismiss } from "@lib/actions";
@@ -6,6 +7,9 @@
   export let selected: string[] = [];
   export let options: string[] = [];
   export let anchorRect: DOMRect | null = null;
+  export let title = "ステータスフィルター";
+  export let labels: Record<string, string> | null = null;
+  export let showDots = true;
 
   const dispatch = createEventDispatcher<{
     change: { selected: string[] };
@@ -79,15 +83,17 @@
   bind:this={panelElement}
   style={panelStyle}
   use:portal
+  use:viewportPopover={anchorRect}
   use:globalDismiss={() => dispatch("close")}
 >
-  <div class="PanelHeader">ステータスフィルター</div>
+  <div class="PanelHeader">{title}</div>
   <div class="PanelBody">
     {#each options as opt}
       <label class="OptionRow">
         <input type="checkbox" checked={selected.includes(opt)} on:change={() => toggle(opt)} />
-        <span class="StatusDot" style="--dot: {STATUS_DOT_COLOR[opt] ?? '#888'};"></span>
-        <span class="OptionLabel">{STATUS_LABEL[opt] ?? opt}</span>
+        {#if showDots}<span class="StatusDot" style="--dot: {STATUS_DOT_COLOR[opt] ?? '#888'};"
+          ></span>{/if}
+        <span class="OptionLabel">{(labels ?? STATUS_LABEL)[opt] ?? opt}</span>
       </label>
     {/each}
   </div>

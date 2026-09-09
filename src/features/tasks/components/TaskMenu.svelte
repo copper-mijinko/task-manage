@@ -1,4 +1,5 @@
 ﻿<script>
+  import { viewportPopover } from "@lib/actions/viewport_popover";
   import { createEventDispatcher, onDestroy } from "svelte";
 
   export let menuItems = [];
@@ -108,6 +109,7 @@
     id="task-menu"
     class={menuSideClass}
     use:portal
+    use:viewportPopover
     style:top={`${position.y}px`}
     style:left={position.position === "right" ? `${position.x}px` : undefined}
     style:right={position.position === "left" ? `calc(100vw - ${position.x}px)` : undefined}

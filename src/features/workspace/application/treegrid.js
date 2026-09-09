@@ -205,6 +205,7 @@ export function createTreeGridApplication(workspacePath) {
     tree,
     filtered,
     records,
+    isProtected: (id) => id === graphNow()?.rootId || id === graphNow()?.inboxId,
     update,
     updateMany,
     add,
@@ -258,7 +259,9 @@ export function createTreeGridApplication(workspacePath) {
       ]);
     },
     reorder: ({ draggedIds, draggedPath, targetId, targetPath, mode }) => {
-      const fromParentId = context(draggedIds[0], draggedPath).parentId;
+      const sourceId = draggedPath?.split("/").at(-1);
+      if (!draggedIds.includes(sourceId)) return;
+      const fromParentId = context(sourceId, draggedPath).parentId;
       const toParentId = mode === "append" ? targetId : context(targetId, targetPath).parentId;
       if (!fromParentId || !toParentId || draggedIds.includes(targetId)) return;
       if (!draggedIds.every((id) => siblings(fromParentId).some((node) => node.id === id))) {
@@ -271,7 +274,7 @@ export function createTreeGridApplication(workspacePath) {
       const index =
         mode === "append"
           ? ordered.length
-          : ordered.indexOf(targetId) + (mode === "insert_before" ? 0 : 1);
+          : ordered.indexOf(targetId) + (mode === "insert" || mode === "insert_before" ? 0 : 1);
       ordered.splice(index, 0, ...draggedIds);
       return dispatchMove(
         ordered.map((childId, order) => ({

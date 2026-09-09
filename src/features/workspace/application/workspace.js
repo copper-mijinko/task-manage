@@ -9,11 +9,13 @@ export const workspaceNavigation = derived(
     if (!graph) return null;
     return {
       rootId: graph.rootId,
+      inboxId: graph.inboxId,
       names: Object.fromEntries(Object.values(graph.nodes).map((n) => [n.id, n.name])),
       scopes: Object.values(graph.nodes)
         .filter((n) => !n.archived && n.parents.some((p) => p.id === graph.rootId))
         .map((n) => ({
           rootId: n.id,
+          protected: n.id === graph.inboxId,
           name: n.name,
           order: n.parents.find((p) => p.id === graph.rootId).order,
         }))

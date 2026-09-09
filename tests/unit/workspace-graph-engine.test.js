@@ -22,6 +22,29 @@ function graph(nodes) {
 }
 
 describe("workspace graph commands", () => {
+  it("protects the Inbox identity after renaming while allowing item deletion", () => {
+    const input = graph([
+      node("root"),
+      { ...node("inbox", ["root"]), name: "Inbox" },
+      node("item", ["inbox"]),
+    ]);
+    const renamed = executeGraphCommand(input, {
+      type: "update-node",
+      nodeId: "inbox",
+      changes: { name: "Capture" },
+    }).graph;
+    expect(renamed.inboxId).toBe("inbox");
+    for (const command of [
+      { type: "delete-node", nodeId: "inbox" },
+      { type: "update-node", nodeId: "inbox", changes: { archived: true } },
+      { type: "detach", childId: "inbox", parentId: "root" },
+    ])
+      expect(() => executeGraphCommand(renamed, command)).toThrow(/Inbox/);
+    expect(
+      executeGraphCommand(renamed, { type: "delete-node", nodeId: "item" }).graph.nodes.inbox
+    ).toBeDefined();
+    expect(renamed.nodes.item).toBeDefined();
+  });
   it("repairs a disconnected cyclic component after detaching its root entry", () => {
     const input = graph([
       node("root"),

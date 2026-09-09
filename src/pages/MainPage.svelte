@@ -547,7 +547,9 @@
     return isNodeEffectivelyArchived($table_selected_id, $tree_data.data);
   })();
   $: anchorIsRoot = Boolean(
-    $tree_data?.data && $table_selected_id === $tree_data.data.id && !isMultiSelect
+    !isMultiSelect &&
+    (application?.isProtected($table_selected_id) ||
+      ($tree_data?.data && $table_selected_id === $tree_data.data.id))
   );
   // 選択中のどこかに archived が含まれているか（restore ボタン表示の判定に使う）
   $: selectionHasArchived = (() => {

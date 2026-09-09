@@ -470,33 +470,37 @@
 </script>
 
 <div class:Container={true}>
-  {#if saveErrorMessage}
-    <div class="save-error-banner" role="alert">
-      <span>{saveErrorMessage}</span>
-      <button
-        on:click={() => {
-          saveErrorMessage = null;
-          $saveStatus = "idle";
-        }}>×</button
-      >
-    </div>
-  {/if}
-  {#if workspaceConflict}
-    <div class="workspace-conflict-banner" role="alert">
-      <span>{workspaceConflict.message}</span>
-      <div class="workspace-conflict-actions">
-        <button type="button" on:click={() => resolveWorkspaceConflict("keep-local")}>
-          維持
-        </button>
-        <button type="button" on:click={() => resolveWorkspaceConflict("reload")}> 再読込 </button>
+  <div class="notification-stack">
+    {#if saveErrorMessage}
+      <div class="save-error-banner" role="alert">
+        <span>{saveErrorMessage}</span>
+        <button
+          on:click={() => {
+            saveErrorMessage = null;
+            $saveStatus = "idle";
+          }}>×</button
+        >
       </div>
-    </div>
-  {:else if workspaceNoticeMessage}
-    <div class="workspace-notice-banner" role="status">
-      <span>{workspaceNoticeMessage}</span>
-      <button type="button" on:click={() => (workspaceNoticeMessage = null)}>×</button>
-    </div>
-  {/if}
+    {/if}
+    {#if workspaceConflict}
+      <div class="workspace-conflict-banner" role="alert">
+        <span>{workspaceConflict.message}</span>
+        <div class="workspace-conflict-actions">
+          <button type="button" on:click={() => resolveWorkspaceConflict("keep-local")}>
+            維持
+          </button>
+          <button type="button" on:click={() => resolveWorkspaceConflict("reload")}>
+            再読込
+          </button>
+        </div>
+      </div>
+    {:else if workspaceNoticeMessage}
+      <div class="workspace-notice-banner" role="status">
+        <span>{workspaceNoticeMessage}</span>
+        <button type="button" on:click={() => (workspaceNoticeMessage = null)}>×</button>
+      </div>
+    {/if}
+  </div>
   {#if !isTaskDetailWindow}
     <div class="Header">
       <Header />
@@ -627,6 +631,24 @@
 {/if}
 
 <style>
+  .notification-stack {
+    position: fixed;
+    top: 3rem;
+    right: 1rem;
+    width: min(32rem, calc(100vw - 2rem));
+    max-height: calc(100vh - 4rem);
+    overflow-y: auto;
+    z-index: 10000;
+    display: grid;
+    gap: var(--sp2);
+    pointer-events: none;
+  }
+  .notification-stack > :global(div) {
+    pointer-events: auto;
+    border-radius: var(--shape-sm);
+    box-shadow: var(--elevation-3);
+    overflow-wrap: anywhere;
+  }
   :global(html) {
     font-size: 75%;
     overflow: hidden;

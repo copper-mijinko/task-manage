@@ -1,4 +1,5 @@
 ﻿<script>
+  import { viewportPopover } from "@lib/actions/viewport_popover";
   import { createEventDispatcher } from "svelte";
   import IconButton from "@lib/primitives/IconButton.svelte";
   import { ripple } from "@lib/actions";
@@ -139,7 +140,13 @@
     </button>
   </div>
   {#if expanded}
-    <div bind:this={listElement} class="listContainer" style={listStyle} use:portal>
+    <div
+      bind:this={listElement}
+      class="listContainer"
+      style={listStyle}
+      use:portal
+      use:viewportPopover={anchorRect}
+    >
       {#each list as elm, i}
         <label class="elmContainer" for={`multi-select-${i}`}>
           <input

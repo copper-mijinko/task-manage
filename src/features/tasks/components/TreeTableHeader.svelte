@@ -4,6 +4,11 @@
   const application = getContext(TREEGRID_APPLICATION);
   const closed_row_paths = application?.closed ?? legacy_closed_row_paths;
   import { filter } from "@stores";
+  import { tag_index } from "@features/memos/stores/tags";
+  import { viewportPopover } from "@lib/actions/viewport_popover";
+  let openTagPanel = false;
+  let tagAnchorRect = null;
+  $: tagOptions = [...new Set(["", ...$tag_index.keys(), ...($filter.tags ?? [])])];
   import { column_settings } from "@features/tasks/stores/column_settings";
   import { closed_row_paths as legacy_closed_row_paths } from "@stores/ui";
   import { sort_state, SORTABLE_COLUMNS } from "@features/tasks/stores/sort";
@@ -183,6 +188,7 @@
     if (headerName === "name") {
       return Boolean(currentFilter?.name?.[0]);
     }
+    if (headerName === "tags") return (currentFilter?.tags?.length ?? 0) > 0;
     if (headerName === "status") {
       return selectedStatuses(currentFilter).length > 0;
     }
@@ -198,6 +204,11 @@
   }
 
   function getFilterSummary(headerName, currentFilter = $filter) {
+    if (headerName === "tags")
+      return (
+        (currentFilter?.tags ?? []).map((tag) => tag || "タグなし").join(" / ") ||
+        EMPTY_FILTER_LABEL
+      );
     if (headerName === "name") {
       const nameQuery = currentFilter?.name?.[0] ?? "";
       if (nameQuery) return nameQuery;
@@ -526,6 +537,29 @@
               </IconButton>
             {/if}
           </div>
+        {:else if header.name == "tags"}
+          <div class="HeaderFilterGroup">
+            <button
+              class="HeaderFilterControl"
+              class:active={filterActive.tags}
+              aria-label="タグフィルター"
+              aria-expanded={openTagPanel}
+              on:click|stopPropagation={(event) => {
+                tagAnchorRect = event.currentTarget.getBoundingClientRect();
+                openTagPanel = !openTagPanel;
+              }}
+            >
+              <span class="FilterIcon" aria-hidden="true"
+                ><svg viewBox="0 0 24 24"><path d={FILTER_ICON_PATH} /></svg></span
+              >
+              {#if filterActive.tags}<span class="FilterSelection">{filterSummaries.tags}</span
+                >{/if}
+            </button>
+            {#if filterActive.tags}<button
+                aria-label="タグフィルターをクリア"
+                on:click|stopPropagation={() => clearColumnFilter("tags")}>×</button
+              >{/if}
+          </div>
         {:else if header.name == "name"}
           <div class="HeaderFilterGroup">
             <button
@@ -730,6 +764,7 @@
     role="dialog"
     aria-label="カラム表示設定"
     use:portal
+    use:viewportPopover
     use:globalDismiss={() => (showPanel = false)}
   >
     <div class="PanelTitle">カラム表示設定</div>
@@ -833,6 +868,19 @@
     anchorRect={countPanelAnchorRect}
     on:change={(e) => handleCountFilterChange(openCountPanel, e.detail)}
     on:close={() => (openCountPanel = null)}
+  />
+{/if}
+
+{#if openTagPanel}
+  <StatusFilterPanel
+    title="タグフィルター（いずれかに一致）"
+    labels={{ "": "タグなし" }}
+    showDots={false}
+    selected={$filter.tags ?? []}
+    options={tagOptions}
+    anchorRect={tagAnchorRect}
+    on:change={(event) => filter.update((value) => ({ ...value, tags: event.detail.selected }))}
+    on:close={() => (openTagPanel = false)}
   />
 {/if}
 

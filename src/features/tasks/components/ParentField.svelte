@@ -1,4 +1,6 @@
 <script>
+  import { viewportPopover } from "@lib/actions/viewport_popover";
+  import { globalDismiss } from "@lib/actions";
   import { createEventDispatcher } from "svelte";
 
   /**
@@ -26,6 +28,7 @@
   const dispatch = createEventDispatcher();
 
   let input = "";
+  let open = false;
   let inputElement;
   let activeIndex = 0;
 
@@ -72,6 +75,7 @@
   function addParent(id) {
     if (disabled || !id || current.includes(id)) return;
     input = "";
+    open = false;
     activeIndex = 0;
     dispatch("change", { parentIds: [...current, id] });
   }
@@ -89,15 +93,16 @@
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
       activeIndex = Math.max(activeIndex - 1, 0);
-    } else if (event.key === "Enter") {
+    } else if (event.key === "Enter" && open) {
       const picked = visibleCandidates[activeIndex];
       if (picked) {
         event.preventDefault();
         addParent(picked.id);
       }
-    } else if (event.key === "Escape" && input) {
+    } else if (event.key === "Escape") {
       event.preventDefault();
       input = "";
+      open = false;
     } else if (event.key === "Backspace" && input === "" && current.length > 1) {
       removeParent(current[current.length - 1]);
     }
@@ -133,12 +138,21 @@
       spellcheck="false"
       placeholder={current.length === 0 ? "親を選択…" : "親を追加…"}
       aria-label="親ノードを追加"
+      on:focus={() => (open = true)}
+      on:click={() => (open = true)}
+      on:input={() => (open = true)}
       on:keydown={handleKeydown}
     />
   </div>
 
-  {#if input && visibleCandidates.length > 0}
-    <ul class="Suggestions" role="listbox" aria-label="親の候補">
+  {#if open && !disabled && visibleCandidates.length > 0}
+    <ul
+      use:viewportPopover={() => inputElement.closest(".Chips").getBoundingClientRect()}
+      use:globalDismiss={() => (open = false)}
+      class="Suggestions"
+      role="listbox"
+      aria-label="親の候補"
+    >
       {#each visibleCandidates as candidate, index (candidate.id)}
         <li>
           <button
@@ -158,7 +172,7 @@
         </li>
       {/each}
     </ul>
-  {:else if input && visibleCandidates.length === 0}
+  {:else if open && input && visibleCandidates.length === 0}
     <div class="NoMatch">一致する親候補がありません</div>
   {/if}
 </div>
@@ -175,8 +189,9 @@
     align-items: center;
     flex-wrap: wrap;
     gap: var(--sp1);
-    min-height: 1.6rem;
-    padding: 2px var(--sp1);
+    min-height: var(--detail-control-height, 1.75rem);
+    box-sizing: border-box;
+    padding: 1px var(--sp1);
     border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 28%, transparent);
     border-radius: var(--shape-xs);
     background-color: var(--theme-color-Main-light);
@@ -231,7 +246,9 @@
     background: transparent;
     color: var(--theme-color-Sub-main);
     font-size: var(--font-label-md);
-    padding: 2px 0;
+    height: 1.25rem;
+    line-height: 1.25rem;
+    padding: 0;
   }
 
   .Suggestions {

@@ -45,6 +45,83 @@ const node = (id, parents = [], extra = {}) => ({
   createdAt: "2026-01-01",
   ...extra,
 });
+
+test("drop before, after and onto the root persists the requested occurrence", async () => {
+  const context = fixture();
+  const file = path.join(context.workspacePath, ".task-manage", "graph-v1.json");
+  const document = JSON.parse(fs.readFileSync(file, "utf8"));
+  ["shared", "review", "implementation"].forEach((id, order) => {
+    document.graph.nodes[id].parents.find((p) => p.id === "alpha").order = order;
+  });
+  fs.writeFileSync(file, JSON.stringify(document));
+  const app = await launch(context);
+  try {
+    const page = app.window;
+    const order = () =>
+      Object.values(graphOf(app).nodes)
+        .filter((n) => n.parents.some((p) => p.id === "alpha"))
+        .sort(
+          (a, b) =>
+            a.parents.find((p) => p.id === "alpha").order -
+            b.parents.find((p) => p.id === "alpha").order
+        )
+        .map((n) => n.id);
+    await row(page, "root/alpha/implementation").dragTo(row(page, "root/alpha/review"), {
+      sourcePosition: { x: 100, y: 12 },
+      targetPosition: { x: 100, y: 2 },
+    });
+    await expect.poll(order).toEqual(["shared", "implementation", "review"]);
+    await row(page, "root/alpha/implementation").dragTo(row(page, "root/alpha/review"), {
+      sourcePosition: { x: 100, y: 12 },
+      targetPosition: { x: 100, y: 28 },
+    });
+    await expect.poll(order).toEqual(["shared", "review", "implementation"]);
+    await row(page, "root/alpha/implementation").dragTo(row(page, "root"), {
+      sourcePosition: { x: 100, y: 12 },
+      targetPosition: { x: 100, y: 15 },
+    });
+    await expect
+      .poll(() => graphOf(app).nodes.implementation.parents.map((p) => p.id))
+      .toEqual(["root"]);
+  } finally {
+    await cleanup(app);
+  }
+});
+
+test("Inbox is protected and notifications do not shift the tree", async () => {
+  const context = fixture();
+  const file = path.join(context.workspacePath, ".task-manage", "graph-v1.json");
+  const document = JSON.parse(fs.readFileSync(file, "utf8"));
+  document.graph.inboxId = "inbox";
+  document.graph.nodes.inbox = node("inbox", ["root"], { name: "Inbox" });
+  fs.writeFileSync(file, JSON.stringify(document));
+  const app = await launch(context);
+  try {
+    const page = app.window;
+    await select(page, "root/inbox");
+    await expect(
+      page.getByRole("button", { name: "プロジェクトルートはアーカイブできません" })
+    ).toBeDisabled();
+    const before = await page.getByRole("treegrid").boundingBox();
+    await app.electronApp.evaluate(({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows()[0].webContents.send("save-error", "Verification: save failed");
+    });
+    await expect(page.getByRole("alert")).toContainText("Verification: save failed");
+    expect(await page.getByRole("treegrid").boundingBox()).toEqual(before);
+    await app.electronApp.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0].setSize(800, 520)
+    );
+    await page.getByRole("button", { name: "ステータスフィルター", exact: true }).click();
+    const panel = await page.locator(".StatusFilterPanel").boundingBox();
+    const viewport = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+    expect(panel.x).toBeGreaterThanOrEqual(0);
+    expect(panel.y).toBeGreaterThanOrEqual(0);
+    expect(panel.x + panel.width).toBeLessThanOrEqual(viewport.width);
+    expect(panel.y + panel.height).toBeLessThanOrEqual(viewport.height);
+  } finally {
+    await cleanup(app);
+  }
+});
 function fixture() {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "tm-treegrid-"));
   const workspacePath = path.join(tempDir, "workspace");
@@ -129,7 +206,8 @@ test("TreeGrid scope, search, filter, columns and terminal cycles", async () => 
     page = app.window;
   try {
     await expect(page.locator(".cycle-reference")).toHaveCount(2);
-    await page.getByRole("combobox", { name: "Project scope" }).selectOption("alpha");
+    await page.getByRole("button", { name: "サイドバーを表示", exact: true }).click();
+    await page.getByRole("button", { name: "alpha", exact: true }).click();
     await expect(row(page, "alpha/shared")).toBeVisible();
     await expect(row(page, "root/beta")).toHaveCount(0);
     await page.getByRole("textbox", { name: "タスク一覧を絞り込み" }).fill("review");
@@ -260,9 +338,9 @@ test("move and detach use the displayed parent; cyclic copy stays in TreeGrid", 
     page = app.window;
   try {
     await select(page, "root/beta/shared");
-    await page.getByText("配置とコピー", { exact: true }).click();
+    await page.getByRole("button", { name: "配置…", exact: true }).click();
     await page.getByRole("combobox", { name: "配置先の親" }).selectOption("review");
-    await page.getByRole("button", { name: "この配置を移動", exact: true }).click();
+    await page.getByRole("button", { name: "移動", exact: true }).click();
     await expect
       .poll(() =>
         graphOf(app)
@@ -273,7 +351,9 @@ test("move and detach use the displayed parent; cyclic copy stays in TreeGrid", 
     await expect(row(page, "root/alpha/review/shared")).toHaveAttribute("tabindex", "0");
     // The next edge command must address the occurrence that was just moved,
     // without asking the user to find and select it again.
-    await page.getByRole("button", { name: "この配置を外す", exact: true }).click();
+    await page.getByRole("button", { name: "配置…", exact: true }).click();
+    await page.getByRole("dialog").getByRole("combobox").first().selectOption("detach");
+    await page.getByRole("button", { name: "配置を外す", exact: true }).click();
     await expect
       .poll(() =>
         graphOf(app)
@@ -285,7 +365,9 @@ test("move and detach use the displayed parent; cyclic copy stays in TreeGrid", 
     await page.getByRole("button", { name: "元に戻す", exact: true }).click();
     await expect(row(page, "root/beta/shared")).toBeVisible();
     await select(page, "root/beta/shared");
-    await page.getByRole("button", { name: "この配置を外す", exact: true }).click();
+    await page.getByRole("button", { name: "配置…", exact: true }).click();
+    await page.getByRole("dialog").getByRole("combobox").first().selectOption("detach");
+    await page.getByRole("button", { name: "配置を外す", exact: true }).click();
     await expect
       .poll(() =>
         graphOf(app)
@@ -294,9 +376,10 @@ test("move and detach use the displayed parent; cyclic copy stays in TreeGrid", 
       )
       .toEqual(["alpha", "cycle"]);
     await select(page, "root/alpha/shared");
+    await page.getByRole("button", { name: "コピー…", exact: true }).click();
     await page.getByRole("combobox", { name: "配置先の親" }).selectOption("beta");
     await page.getByRole("combobox", { name: "コピー範囲" }).selectOption("subgraph");
-    await page.getByRole("button", { name: "指定した親へコピー", exact: true }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "コピー", exact: true }).click();
     await expect.poll(() => Object.keys(graphOf(app).nodes).length).toBe(9);
     await expect(page.getByRole("treegrid")).toBeVisible();
     await expect(page.locator(".cycle-reference")).toHaveCount(2);

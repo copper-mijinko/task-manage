@@ -226,9 +226,10 @@ export function filterTree(
       });
       nameFilterMatch = keyMatch; // Record if name filter matched
     } else if (key === "tags") {
-      const tag = keywords[0].toLowerCase();
-      // メモがノードになったので、タグの持ち主はノードだけになった。
-      keyMatch = ((tree.data.tags as string[]) ?? []).some((t) => t.toLowerCase() === tag);
+      const tags = ((tree.data.tags as string[]) ?? []).map((tag) => tag.toLowerCase());
+      keyMatch = keywords.some((tag) =>
+        tag === "" ? tags.length === 0 : tags.includes(tag.toLowerCase())
+      );
     } else if (key === "start date" || key === "due date") {
       const from = keywords[0] ?? "";
       const to = keywords[1] ?? "";

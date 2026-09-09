@@ -1,4 +1,5 @@
 ﻿<script lang="ts">
+  import { viewportPopover } from "@lib/actions/viewport_popover";
   import { createEventDispatcher, onMount, onDestroy } from "svelte";
   import { activePanelId, newPanelId } from "@stores/panel_coordinator";
   import { globalDismiss } from "@lib/actions";
@@ -63,6 +64,7 @@
   on:click|stopPropagation
   on:keydown={handleKeydown}
   use:portal
+  use:viewportPopover={anchorRect}
   use:globalDismiss={() => dispatch("close")}
 >
   <div class="PanelTitle">{column} フィルター</div>

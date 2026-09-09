@@ -22,6 +22,7 @@ export interface WorkspaceGraph {
   schemaVersion: 1;
   workspaceId: string;
   rootId: string;
+  inboxId?: string;
   revision: number;
   nodes: Record<string, WorkspaceGraphNode>;
   positions?: Record<string, { x: number; y: number }>;
