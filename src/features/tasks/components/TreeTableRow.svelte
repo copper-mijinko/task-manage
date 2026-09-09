@@ -9,9 +9,14 @@
 </script>
 
 <script>
+  import { getContext } from "svelte";
+  import { TREEGRID_APPLICATION } from "@features/workspace/application/treegrid";
+  const application = getContext(TREEGRID_APPLICATION);
+  const tree_data = application?.tree ?? legacy_tree_data;
+
   import { createEventDispatcher } from "svelte";
   import { selected_ids } from "@stores/ui";
-  import { tree_data } from "@features/tasks/stores/tree";
+  import { tree_data as legacy_tree_data } from "@features/tasks/stores/tree";
   import { getNode, getTopLevelSelection } from "@features/tasks/utils/tree_control";
   import { ripple } from "@lib/actions";
   import TaskName from "@features/tasks/components/TaskName.svelte";
@@ -363,6 +368,12 @@
             </svg>
           </div>
         {/if}
+        {#if node.cycleReference}<span
+            class="cycle-reference"
+            role="img"
+            aria-label="循環参照：この行は展開しません"
+            title="循環参照：この行は展開しません">↩</span
+          >{/if}
         <TaskName
           bind:this={taskName}
           text={data[header.name]}
@@ -730,6 +741,7 @@
     display: inline-block;
   }
   .TableData {
+    flex-shrink: 0;
     display: flex;
     position: relative;
     box-sizing: border-box;
@@ -863,6 +875,11 @@
     display: flex;
     justify-content: center;
     align-items: center;
+  }
+  .TableData .cycle-reference {
+    flex: 0 0 1.2rem;
+    white-space: nowrap;
+    line-height: 1;
   }
   /* Indent line — stretched to fill the full row height (including cell padding
      and the row's bottom border) so adjacent rows show one continuous vertical line */

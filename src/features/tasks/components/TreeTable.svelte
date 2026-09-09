@@ -1,14 +1,21 @@
 ﻿<script>
+  import { getContext } from "svelte";
+  import { TREEGRID_APPLICATION } from "@features/workspace/application/treegrid";
+  const application = getContext(TREEGRID_APPLICATION);
+  const closed_row_paths = application?.closed ?? legacy_closed_row_paths;
+  const tree_data = application?.tree ?? legacy_tree_data;
+  const filtered_data = application?.filtered ?? legacy_filtered_data;
+
   import { onDestroy, onMount, tick } from "svelte";
   import TreeTableHeader from "@features/tasks/components/TreeTableHeader.svelte";
   import TreeTableRow from "@features/tasks/components/TreeTableRow.svelte";
   import BulkActionBar from "@features/tasks/components/BulkActionBar.svelte";
   import Dialog from "@lib/primitives/Dialog.svelte";
   import {
-    tree_data,
+    tree_data as legacy_tree_data,
     selected_type,
-    filtered_data,
-    closed_row_paths,
+    filtered_data as legacy_filtered_data,
+    closed_row_paths as legacy_closed_row_paths,
     active_row_path,
     table_selected_id,
     theme,
@@ -17,6 +24,7 @@
   } from "@stores";
   import { workspace_store } from "@features/workspace/stores/workspace";
   import { DEFAULT_COLUMN_SETTINGS } from "@features/tasks/stores/column_settings";
+  import { readColumnWidths, saveColumnWidths } from "@features/tasks/stores/column_layout";
   import {
     flattenVisibleTree,
     buildInheritedDueDateMap,
@@ -377,8 +385,11 @@
         0,
         tableRows[0].getBoundingClientRect().width - leadingColumnWidth
       );
+      const savedWidths = readColumnWidths();
       const default_data_widths = currentHeaders.map(
-        (header) => (default_root_width * header.default_ratio) / default_ratio_sum
+        (header) =>
+          savedWidths[header.name] ??
+          (default_root_width * header.default_ratio) / default_ratio_sum
       );
       domHeaders.forEach((header, index) => {
         header.style.width = `calc(${default_data_widths[index]}px)`;
@@ -554,6 +565,14 @@
       // When user releases the mouse, remove the existing event listeners
       const mouseUpHandler = function (e) {
         document.body.style.cursor = "";
+        saveColumnWidths(
+          Object.fromEntries(
+            headers.map((header, index) => [
+              visibleHeaders[index].name,
+              header.getBoundingClientRect().width,
+            ])
+          )
+        );
 
         // Remove HandlingResizer class
         resizer.classList.remove("HandlingResizer");
@@ -732,6 +751,7 @@
   }
 
   function handleCommit(event) {
+    if (application) return application.update(event.detail.id, event.detail.patch);
     const { id, patch } = event.detail;
     const data = updateNodeDataById($tree_data.data, id, patch);
     if (data !== $tree_data.data) {
@@ -740,6 +760,7 @@
   }
 
   function canDropTarget(draggedId, targetId) {
+    if (application) return draggedId !== targetId;
     if (!draggedId || !targetId || !$tree_data?.data) {
       return false;
     }
@@ -753,6 +774,7 @@
   }
 
   function handleReorder(event) {
+    if (application) return application.reorder(event.detail);
     const { draggedIds, draggedPath, targetId, targetPath, mode } = event.detail;
     if (!draggedIds || draggedIds.length === 0) return;
     if (!$tree_data?.data) return;
@@ -812,6 +834,12 @@
   }
 
   function handleMoveUp(event) {
+    if (application)
+      return application.move(
+        "up",
+        isInMultiSelection(event.detail.id) ? [...selectionSet] : [event.detail.id],
+        rowFor(event.detail.id, event.detail.path)?.path
+      );
     const { id, path } = event.detail;
     if (isInMultiSelection(id)) {
       handleBulkMoveUp();
@@ -827,6 +855,12 @@
   }
 
   function handleMoveDown(event) {
+    if (application)
+      return application.move(
+        "down",
+        isInMultiSelection(event.detail.id) ? [...selectionSet] : [event.detail.id],
+        rowFor(event.detail.id, event.detail.path)?.path
+      );
     const { id, path } = event.detail;
     if (isInMultiSelection(id)) {
       handleBulkMoveDown();
@@ -842,6 +876,12 @@
   }
 
   function handleIndentTask(event) {
+    if (application)
+      return application.move(
+        "indent",
+        isInMultiSelection(event.detail.id) ? [...selectionSet] : [event.detail.id],
+        rowFor(event.detail.id, event.detail.path)?.path
+      );
     const { id, path } = event.detail;
     if (isInMultiSelection(id)) {
       handleBulkIndent();
@@ -866,6 +906,12 @@
   }
 
   function handleOutdentTask(event) {
+    if (application)
+      return application.move(
+        "outdent",
+        isInMultiSelection(event.detail.id) ? [...selectionSet] : [event.detail.id],
+        rowFor(event.detail.id, event.detail.path)?.path
+      );
     const { id, path } = event.detail;
     if (isInMultiSelection(id)) {
       handleBulkOutdent();
@@ -903,6 +949,7 @@
   }
 
   function handleAddRelative(targetId, action, targetPath) {
+    if (application) return application.add(targetId, action, rowFor(targetId, targetPath)?.path);
     if (!targetId || !$tree_data?.data) {
       return;
     }
@@ -943,6 +990,10 @@
   }
 
   function handleCopyTask(event) {
+    if (application)
+      return application.copy(
+        isInMultiSelection(event.detail.id) ? [...selectionSet] : [event.detail.id]
+      );
     const { id } = event.detail;
     if (!id || !$tree_data?.data) return;
     if (isInMultiSelection(id)) {
@@ -984,6 +1035,7 @@
   // (context-menu "paste as child", Ctrl+V, and bulk paste all call this
   // function), so fixing it here covers all of them.
   function handlePasteTask(event) {
+    if (application) return application.paste(event.detail.id);
     const { id, path } = event.detail;
     if (!id || !$tree_data?.data) return;
     // 貼り付け先はクリックした行。多親ノードは行ごとに位置が違う。
@@ -1030,6 +1082,7 @@
   // --- Bulk operation handlers ---------------------------------------------
 
   function handleBulkStatus(event) {
+    if (application) return application.updateMany({ status: event.detail.value });
     if (!$tree_data?.data || selectionSize === 0) return;
     const { value } = event.detail;
     const data = bulkUpdateNodeData($tree_data.data, selectionSet, { status: value });
@@ -1039,6 +1092,7 @@
   }
 
   function handleBulkSetDate(event) {
+    if (application) return application.updateMany({ [event.detail.key]: event.detail.value });
     if (!$tree_data?.data || selectionSize === 0) return;
     const { key, value } = event.detail;
     const data = bulkUpdateNodeData($tree_data.data, selectionSet, { [key]: value });
@@ -1048,6 +1102,7 @@
   }
 
   function handleBulkClearDate(event) {
+    if (application) return application.updateMany({ [event.detail.key]: undefined });
     if (!$tree_data?.data || selectionSize === 0) return;
     const { key } = event.detail;
     const data = bulkUpdateNodeData($tree_data.data, selectionSet, { [key]: undefined });
@@ -1057,18 +1112,21 @@
   }
 
   function handleBulkMoveUp() {
+    if (application) return application.move("up");
     if (!$tree_data?.data || !canSiblingMove) return;
     const data = bulkMoveUp(selectionSet, $tree_data.data, bulkParentPath);
     $tree_data = { ...$tree_data, data };
   }
 
   function handleBulkMoveDown() {
+    if (application) return application.move("down");
     if (!$tree_data?.data || !canSiblingMove) return;
     const data = bulkMoveDown(selectionSet, $tree_data.data, bulkParentPath);
     $tree_data = { ...$tree_data, data };
   }
 
   function handleBulkIndent() {
+    if (application) return application.move("indent");
     if (!$tree_data?.data || !canTreeOp) return;
     const { tree_data: data, new_parent_ids } = bulkIndent(
       selectionSet,
@@ -1082,12 +1140,14 @@
   }
 
   function handleBulkOutdent() {
+    if (application) return application.move("outdent");
     if (!$tree_data?.data || !canTreeOp || !canBulkOutdent) return;
     const data = bulkOutdent(selectionSet, $tree_data.data, bulkParentPath);
     $tree_data = { ...$tree_data, data };
   }
 
   function handleBulkDuplicate() {
+    if (application) return application.copy();
     if (!$tree_data?.data || selectionSize === 0) return;
     const topLevelIds = getTopLevelSelection($tree_data.data, selectionSet);
     const topNodes = topLevelIds.map((id) => getNode(id, $tree_data.data)).filter((n) => n);
@@ -1154,6 +1214,7 @@
     if (!$table_selected_id) return;
     if ((e.ctrlKey || e.metaKey) && (e.key === "c" || e.key === "C")) {
       e.preventDefault();
+      if (application) return application.copy();
       if (selectionSize > 1 && $tree_data?.data) {
         const topLevelIds = getTopLevelSelection($tree_data.data, selectionSet);
         const topNodes = topLevelIds.map((id) => getNode(id, $tree_data.data)).filter((n) => n);
@@ -1212,6 +1273,11 @@
   }
 
   function requestRestore(event) {
+    if (application)
+      return application.archive(
+        isInMultiSelection(event.detail.id) ? [...selectionSet] : [event.detail.id],
+        false
+      );
     const { id, path } = event.detail;
     if (isInMultiSelection(id)) {
       if (!$tree_data?.data || selectionSize === 0) return;
@@ -1242,6 +1308,24 @@
   }
 
   function confirmDelete() {
+    if (application) {
+      const archives = bulkDeleteIsBulk
+        ? bulkArchiveTargetIds
+        : deleteMode === "archive"
+          ? [deleteTargetId]
+          : [];
+      const removes = bulkDeleteIsBulk
+        ? bulkPermanentTargetIds
+        : deleteMode === "permanent"
+          ? [deleteTargetId]
+          : [];
+      void application.dispatch([
+        ...archives.map((nodeId) => ({ type: "update-node", nodeId, changes: { archived: true } })),
+        ...removes.map((nodeId) => ({ type: "delete-node", nodeId })),
+      ]);
+      clearSelection();
+      return;
+    }
     if (bulkDeleteIsBulk) {
       if (!$tree_data?.data) return;
       let data = $tree_data.data;
@@ -1378,7 +1462,8 @@
         canMoveDown={row.canMoveDown}
         canIndent={row.canIndent}
         canOutdent={row.canOutdent}
-        canOpenTaskFolder={$selected_type === "WorkspaceProject" &&
+        canOpenTaskFolder={!application &&
+          $selected_type === "WorkspaceProject" &&
           Boolean($workspace_store.activeProjectDir)}
         bulkCanMove={canSiblingMove}
         bulkCanTreeOp={canTreeOp}

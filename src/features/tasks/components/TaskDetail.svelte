@@ -1,4 +1,13 @@
 ﻿<script>
+  import { getContext } from "svelte";
+  import { TREEGRID_APPLICATION } from "@features/workspace/application/treegrid";
+  const application = getContext(TREEGRID_APPLICATION);
+  import { active_row_path } from "@stores/ui";
+  let relationTarget = "";
+  let copyMode = "node";
+  const tree_data = application?.tree ?? legacy_tree_data;
+  const workspace_tasks_cache = application?.records ?? legacy_workspace_tasks_cache;
+
   import {
     getNode,
     isChild,
@@ -7,13 +16,13 @@
   } from "@features/tasks/utils/tree_control";
   import { uuidV4 } from "@lib/utils/uuid";
   import {
-    tree_data,
+    tree_data as legacy_tree_data,
     table_selected_id,
     cancelPendingOperations,
     selected_type,
     selected_id,
     workspace_store,
-    workspace_tasks_cache,
+    workspace_tasks_cache as legacy_workspace_tasks_cache,
     tag_index,
     theme,
     ui_density,
@@ -170,6 +179,10 @@
   }
 
   const changeData = (node, key, value, editContext = getEditContext()) => {
+    if (application) {
+      if (node && contextMatches(editContext)) return application.update(node.id, { [key]: value });
+      return;
+    }
     if (!contextMatches(editContext)) {
       return;
     }
@@ -280,6 +293,19 @@
 
   /** 本文の形式を切り替える。中身も合わせて変換する。 */
   const applyBodyFormat = (nextFormat) => {
+    if (application) {
+      const current = getLiveNode();
+      if (!current) return false;
+      void application.update(current.id, {
+        body: convertMemoContent(
+          current.data.body,
+          current.data.format || defaultMemoFormat,
+          nextFormat
+        ),
+        format: nextFormat,
+      });
+      return true;
+    }
     const editContext = getEditContext();
     const liveNode = getLiveNode(editContext);
     if (!liveNode) return false;
@@ -305,11 +331,15 @@
   /**
    * 親の付け外し。
    *
-   * `parents` はツリーの形ではなくノードの属性なので、workspace_tasks_cache
-   * （＝ワークスペース側の正本）を直接書き換え、そこからツリーを組み直す。
-   * ツリー側で親を表現しようとすると、多親を単親に潰すことになる。
+   * Graphではfacadeからlink/detachをdispatchする。互換モデルを保存し直さない。
+   * 従来プロジェクトの経路だけは既存キャッシュとツリーの変換を使う。
    */
-  $: isProjectRoot = Boolean(node && $tree_data?.data && node.id === $tree_data.data.id);
+  $: isProjectRoot = Boolean(
+    node &&
+    (application
+      ? !$workspace_tasks_cache[node.id]?.parents.length
+      : node.id === $tree_data?.data?.id)
+  );
   $: currentParentIds = parentIdsOf($workspace_tasks_cache[node?.id]?.parents);
 
   /** 追加する親の下での並び順。その親の既存の子の末尾に置く。 */
@@ -331,14 +361,14 @@
   );
 
   /**
-   * 親の候補。自分自身と**子孫**を除く（循環を編集時に防ぐ）。
+   * 親の候補。Graphでは自分自身だけを除外し、子孫へのlinkも許可する。
    * 既に親になっているものは ParentField 側で外れる。
    */
   $: parentCandidates =
     node && $tree_data?.data
       ? Object.values($workspace_tasks_cache ?? {})
           .filter((task) => task.id !== node.id)
-          .filter((task) => !isChild(task.id, node.id, $tree_data.data))
+          .filter((task) => application || !isChild(task.id, node.id, $tree_data.data))
           .map((task) => ({
             id: task.id,
             name: task.name,
@@ -370,6 +400,7 @@
   }
 
   function saveParents(nextParentIds) {
+    if (application) return application.parents(node.id, nextParentIds);
     if (!node || !isWorkspaceProject || !workspaceProjectDir) return;
     const normalized = (Array.isArray(nextParentIds) ? nextParentIds : []).filter(
       (id) => typeof id === "string" && id
@@ -400,7 +431,7 @@
     }
 
     const editContext = getEditContext();
-    node.data[key] = value;
+    if (!application) node.data[key] = value;
     if (debounceChange) {
       changeDataDebounce(node, key, value, editContext);
     } else {
@@ -676,6 +707,10 @@
   }
 
   function openTaskDetailInWindow() {
+    if (application && node) {
+      application.openDetail(node.id, name);
+      return;
+    }
     if (!node || !$selected_id || !$table_selected_id) return;
 
     if (isWorkspaceProject && workspaceProjectDir && $tree_data?.data) {
@@ -833,7 +868,7 @@
               <span class="detail-label">ステータス</span>
               <div class="detail-control">
                 <StatusSelect
-                  status={node.data.status ?? "Open"}
+                  status={node.data.status ?? ""}
                   ariaLabel="ステータス"
                   style="height: 100%; font-size: var(--font-body-md);"
                   on:change={(event) => changeTaskField("status", event.detail.value)}
@@ -885,6 +920,48 @@
                   disabled={isArchived}
                   on:change={(event) => saveParents(event.detail.parentIds)}
                 />
+                {#if application}
+                  <details class="graph-actions">
+                    <summary>配置とコピー</summary>
+                    <p>
+                      操作中の親 <span
+                        >{nodeNameById[($active_row_path || "").split("/").at(-2)] || "なし"}</span
+                      >
+                    </p>
+                    <label
+                      >対象の親
+                      <select aria-label="配置先の親" bind:value={relationTarget}>
+                        <option value="">親を選択</option>
+                        {#each parentCandidates as candidate}<option value={candidate.id}
+                            >{candidate.name}</option
+                          >{/each}
+                      </select>
+                    </label>
+                    <button
+                      disabled={!relationTarget || !($active_row_path || "").includes("/")}
+                      on:click={() => application.moveTo(node.id, $active_row_path, relationTarget)}
+                      >この配置を移動</button
+                    >
+                    <button
+                      disabled={!($active_row_path || "").includes("/")}
+                      on:click={() => application.detach(node.id, $active_row_path)}
+                      >この配置を外す</button
+                    >
+                    <label
+                      >コピー範囲
+                      <select aria-label="コピー範囲" bind:value={copyMode}>
+                        <option value="node">このノードのみ</option>
+                        <option value="share-children">直接の子を共有</option>
+                        <option value="subgraph">子孫もコピー</option>
+                      </select>
+                    </label>
+                    <button
+                      disabled={!relationTarget}
+                      on:click={() => application.copyTo(node.id, relationTarget, copyMode)}
+                      >指定した親へコピー</button
+                    >
+                  </details>
+                {/if}
               </div>
             {/if}
 
@@ -958,6 +1035,10 @@
           </div>
           <div class="body-editor">
             <Memo
+              saveImage={application ? (file) => application.saveAsset(node.id, file) : undefined}
+              resolveAsset={application
+                ? (path) => application.resolveAsset(node.id, path)
+                : undefined}
               saveMemo={saveBody}
               content={nodeBody}
               readOnly={isArchived || bodyLoading}
@@ -997,6 +1078,42 @@
 {/if}
 
 <style>
+  .graph-actions {
+    margin-top: var(--sp2);
+  }
+  .graph-actions summary {
+    cursor: pointer;
+  }
+  .graph-actions p {
+    margin: var(--sp1) 0;
+  }
+  .graph-actions label {
+    display: flex;
+    align-items: center;
+    gap: var(--sp1);
+    margin: var(--sp1) 0;
+  }
+  .graph-actions select {
+    min-width: 0;
+    max-width: 100%;
+    flex: 1;
+  }
+  .graph-actions select,
+  .graph-actions button {
+    background: var(--theme-color-Main-light);
+    color: var(--theme-color-Sub-light);
+    border: 1px solid var(--theme-color-Sub-dark);
+    border-radius: var(--shape-xs);
+    padding: var(--sp1);
+  }
+  .graph-actions button {
+    margin: var(--sp1) var(--sp1) var(--sp1) 0;
+    cursor: pointer;
+  }
+  .graph-actions button:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
   .empty-state {
     display: flex;
     flex-direction: column;

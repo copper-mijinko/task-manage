@@ -1,6 +1,8 @@
 ﻿<script>
   import { getNode } from "@features/tasks/utils/tree_control";
-  import { selected_id, tree_data } from "@stores";
+  import { selected_id, tree_data as legacyTree } from "@stores";
+  import { getContext } from "svelte";
+  const tree_data = getContext("task-manage:treegrid-application")?.tree ?? legacyTree;
   import Loading from "@lib/primitives/Loading.svelte";
   import TaskDetail from "@features/tasks/components/TaskDetail.svelte";
 

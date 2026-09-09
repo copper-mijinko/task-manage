@@ -1,12 +1,19 @@
 ﻿<script>
+  import { getContext } from "svelte";
+  import { TREEGRID_APPLICATION } from "@features/workspace/application/treegrid";
+  const application = getContext(TREEGRID_APPLICATION);
+  const closed_row_paths = application?.closed ?? legacy_closed_row_paths;
+  const tree_data = application?.tree ?? legacy_tree_data;
+  const filtered_data = application?.filtered ?? legacy_filtered_data;
+
   import { onDestroy, onMount } from "svelte";
   import {
-    filtered_data,
-    closed_row_paths,
+    filtered_data as legacy_filtered_data,
+    closed_row_paths as legacy_closed_row_paths,
     ganttScrollTop,
     ganttScale,
     theme,
-    tree_data,
+    tree_data as legacy_tree_data,
   } from "@stores";
   import {
     flattenVisibleTree,
@@ -459,6 +466,7 @@
   }
 
   function commitTaskDates(id, patch) {
+    if (application) return application.update(id, patch);
     if (!$tree_data?.data) {
       return;
     }

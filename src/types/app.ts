@@ -38,6 +38,8 @@ export interface PendingTaskDetailSelection {
 }
 
 export interface TaskDetailWindowData extends PendingTaskDetailSelection {
+  workspacePath?: string;
+  occurrencePath?: string;
   taskName: string;
   requestedAtEpochMs?: number;
 }
@@ -288,6 +290,12 @@ export interface ElectronAPI {
     nodeId: string,
     relativePath: string
   ) => Promise<{ url: string }>;
+  wsOpenGraphAsset: (
+    workspacePath: string,
+    nodeId: string,
+    relativePath: string,
+    chooseProgram?: boolean
+  ) => Promise<void>;
 
   // Inbox API
   wsEnsureInbox: (workspacePath: string) => Promise<{

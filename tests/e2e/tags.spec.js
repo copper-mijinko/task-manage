@@ -10,7 +10,11 @@ const WS_TASK_ID = "ws-task-tagged";
 const WS_MEMO_ID = "ws-memo-tagged";
 
 const graphNode = (window, name) =>
-  window.getByRole("img", { name: "Workspace graph" }).getByRole("button", { name });
+  window
+    .getByRole("treegrid")
+    .getByRole("row")
+    .filter({ has: window.getByRole("textbox", { name: `${name}のタスク名`, exact: true }) })
+    .first();
 
 /** Build workspace fixture files directly without importing the CommonJS workspace.js */
 function buildWorkspaceTempDir() {

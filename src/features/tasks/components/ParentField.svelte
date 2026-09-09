@@ -8,14 +8,14 @@
    * 多親は例外ではなく通常なので、2 つ目以降を足すことが第一級の操作になる。
    * ただし最初はチップ 1 個から始まるので、多親を意識せずに使える。
    *
-   * 候補から子孫を外すことで、循環は**編集時に**防ぐ。表示側の打ち切りは保険。
+   * 候補の制約は呼び出し側が決める。Workspace Graphでは子孫も候補になり、
+   * 循環はTreeGridのterminal referenceで表示する。
    */
 
   /** 現在の親（ノード id の配列）。 */
   export let parentIds = [];
   /**
-   * 候補。`{ id, name, path }` の配列。呼び出し側が自分自身と子孫を
-   * 除いたものを渡す（循環防止）。
+   * 候補。`{ id, name, path }` の配列。呼び出し側が操作契約に従って渡す。
    */
   export let candidates = [];
   /** id → 表示名。チップのラベルに使う。 */
@@ -159,7 +159,7 @@
       {/each}
     </ul>
   {:else if input && visibleCandidates.length === 0}
-    <div class="NoMatch">一致するノードがありません（自分自身と子孫は候補に出ません）</div>
+    <div class="NoMatch">一致する親候補がありません</div>
   {/if}
 </div>
 

@@ -571,6 +571,17 @@ export function wsResolveGraphAsset(
   return fn(workspacePath, nodeId, relativePath);
 }
 
+export function wsOpenGraphAsset(
+  workspacePath: string,
+  nodeId: string,
+  relativePath: string,
+  chooseProgram = false
+): Promise<void> {
+  const fn = api()?.wsOpenGraphAsset;
+  if (!fn) return Promise.reject(new Error("Workspace graph asset API unavailable"));
+  return fn(workspacePath, nodeId, relativePath, chooseProgram);
+}
+
 // ---------------------------------------------------------------------------
 // Inbox operations
 // ---------------------------------------------------------------------------
