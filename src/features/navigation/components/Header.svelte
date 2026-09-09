@@ -1,4 +1,5 @@
 <script>
+  import { workspaceNavigation } from "@features/workspace/application/workspace";
   import { onMount } from "svelte";
   import IconButton from "@lib/primitives/IconButton.svelte";
   import ToggleSwitch from "@lib/primitives/ToggleSwitch.svelte";
@@ -298,38 +299,40 @@
     {/if}
   </label>
 
-  <button
-    type="button"
-    class="InboxBtn"
-    class:Active={$selected_type === "Agenda"}
-    class:Disabled={!$workspace_store.activeWorkspacePath}
-    disabled={!$workspace_store.activeWorkspacePath}
-    data-testid="open-agenda"
-    on:click={openAgendaView}
-    aria-label="予定を開く"
-    aria-pressed={$selected_type === "Agenda"}
-    title={$workspace_store.activeWorkspacePath
-      ? "予定を開く（全プロジェクトの期限）"
-      : "Workspaceを設定すると予定が使えます"}
-  >
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        d="M4 5.5h16v15H4zM8 3v4M16 3v4M4 10h16"
-        stroke="currentColor"
-        stroke-width="1.6"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        fill="none"
-      />
-      <path
-        d="M8 14h3"
-        stroke="currentColor"
-        stroke-width="1.8"
-        stroke-linecap="round"
-        fill="none"
-      />
-    </svg>
-  </button>
+  {#if !$workspaceNavigation}
+    <button
+      type="button"
+      class="InboxBtn"
+      class:Active={$selected_type === "Agenda"}
+      class:Disabled={!$workspace_store.activeWorkspacePath}
+      disabled={!$workspace_store.activeWorkspacePath}
+      data-testid="open-agenda"
+      on:click={openAgendaView}
+      aria-label="予定を開く"
+      aria-pressed={$selected_type === "Agenda"}
+      title={$workspace_store.activeWorkspacePath
+        ? "予定を開く（全プロジェクトの期限）"
+        : "Workspaceを設定すると予定が使えます"}
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path
+          d="M4 5.5h16v15H4zM8 3v4M16 3v4M4 10h16"
+          stroke="currentColor"
+          stroke-width="1.6"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          fill="none"
+        />
+        <path
+          d="M8 14h3"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          fill="none"
+        />
+      </svg>
+    </button>
+  {/if}
 
   <button
     type="button"

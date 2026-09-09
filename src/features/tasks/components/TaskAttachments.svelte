@@ -438,7 +438,7 @@
   }
   .attachment-list {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+    grid-template-columns: minmax(0, 1fr);
     /* Keep rows packed at the top when the list is given more height than
        its content (fixed-split mode stretches it to fill the pane). */
     align-content: start;

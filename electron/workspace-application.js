@@ -11,7 +11,9 @@ function createWorkspaceApplication({ authorize, initialize, repository, publish
     read: prepare,
     async readInbox(workspacePath) {
       const graph = await prepare(workspacePath);
-      const root = Object.values(graph.nodes).find((node) => node.name.toLowerCase() === "inbox");
+      const root =
+        graph.nodes[graph.inboxId] ??
+        Object.values(graph.nodes).find((node) => node.name.toLowerCase() === "inbox");
       const tasks = root
         ? Object.values(graph.nodes).filter(
             (node) => node.id === root.id || node.parents.some((parent) => parent.id === root.id)

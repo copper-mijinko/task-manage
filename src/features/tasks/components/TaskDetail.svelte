@@ -2,9 +2,38 @@
   import { getContext } from "svelte";
   import { TREEGRID_APPLICATION } from "@features/workspace/application/treegrid";
   const application = getContext(TREEGRID_APPLICATION);
+  const relationError = application?.error ?? writable("");
   import { active_row_path } from "@stores/ui";
   let relationTarget = "";
   let copyMode = "node";
+  let relationAction = "";
+  let relationBusy = false;
+  let relationNodeId;
+  $: if (relationNodeId !== $table_selected_id) {
+    relationNodeId = $table_selected_id;
+    relationAction = "";
+    relationTarget = "";
+  }
+  function openRelation(action) {
+    application.error.set("");
+    relationTarget = "";
+    copyMode = "node";
+    relationAction = action;
+  }
+  async function submitRelation() {
+    relationBusy = true;
+    try {
+      const result =
+        relationAction === "copy"
+          ? await application.copyTo(node.id, relationTarget, copyMode)
+          : relationAction === "detach"
+            ? await application.detach(node.id, $active_row_path)
+            : await application.moveTo(node.id, $active_row_path, relationTarget);
+      if (result) relationAction = "";
+    } finally {
+      relationBusy = false;
+    }
+  }
   const tree_data = application?.tree ?? legacy_tree_data;
   const workspace_tasks_cache = application?.records ?? legacy_workspace_tasks_cache;
 
@@ -30,10 +59,11 @@
   import { selected_ids } from "@stores/ui";
   import debounce from "lodash/debounce";
   import { onDestroy } from "svelte";
-  import { get } from "svelte/store";
+  import { get, writable } from "svelte/store";
   import Memo from "@features/memos/components/Memo.svelte";
   import SegmentedControl from "@lib/primitives/SegmentedControl.svelte";
   import Dialog from "@lib/primitives/Dialog.svelte";
+  import Modal from "@lib/primitives/Modal.svelte";
   import Card from "@lib/primitives/Card.svelte";
   import IconButton from "@lib/primitives/IconButton.svelte";
   import StatusSelect from "@features/tasks/components/StatusSelect.svelte";
@@ -736,6 +766,15 @@
   <Card title={cardTitle} padded={false} style={"height: 100%; width: 100%; overflow: hidden;"}>
     <svelte:fragment slot="header-actions">
       <div class="task-detail-actions">
+        {#if isArchived}<span class="body-label">アーカイブ済み</span>{/if}
+        {#if application && node && !application.isProtected(node.id)}
+          <button class="detail-action" disabled={isArchived} on:click={() => openRelation("move")}
+            >配置…</button
+          >
+          <button class="detail-action" disabled={isArchived} on:click={() => openRelation("copy")}
+            >コピー…</button
+          >
+        {/if}
         <IconButton
           tooltipContent={splitState === "detail-mini"
             ? "詳細欄を表示"
@@ -917,51 +956,9 @@
                   parentIds={currentParentIds}
                   candidates={parentCandidates}
                   nameById={nodeNameById}
-                  disabled={isArchived}
+                  disabled={isArchived || application?.isProtected(node.id)}
                   on:change={(event) => saveParents(event.detail.parentIds)}
                 />
-                {#if application}
-                  <details class="graph-actions">
-                    <summary>配置とコピー</summary>
-                    <p>
-                      操作中の親 <span
-                        >{nodeNameById[($active_row_path || "").split("/").at(-2)] || "なし"}</span
-                      >
-                    </p>
-                    <label
-                      >対象の親
-                      <select aria-label="配置先の親" bind:value={relationTarget}>
-                        <option value="">親を選択</option>
-                        {#each parentCandidates as candidate}<option value={candidate.id}
-                            >{candidate.name}</option
-                          >{/each}
-                      </select>
-                    </label>
-                    <button
-                      disabled={!relationTarget || !($active_row_path || "").includes("/")}
-                      on:click={() => application.moveTo(node.id, $active_row_path, relationTarget)}
-                      >この配置を移動</button
-                    >
-                    <button
-                      disabled={!($active_row_path || "").includes("/")}
-                      on:click={() => application.detach(node.id, $active_row_path)}
-                      >この配置を外す</button
-                    >
-                    <label
-                      >コピー範囲
-                      <select aria-label="コピー範囲" bind:value={copyMode}>
-                        <option value="node">このノードのみ</option>
-                        <option value="share-children">直接の子を共有</option>
-                        <option value="subgraph">子孫もコピー</option>
-                      </select>
-                    </label>
-                    <button
-                      disabled={!relationTarget}
-                      on:click={() => application.copyTo(node.id, relationTarget, copyMode)}
-                      >指定した親へコピー</button
-                    >
-                  </details>
-                {/if}
               </div>
             {/if}
 
@@ -1077,12 +1074,80 @@
   </div>
 {/if}
 
+{#if relationAction && node}
+  <Modal
+    label={relationAction === "copy" ? "ノードをコピー" : "配置を変更"}
+    width="30rem"
+    height="auto"
+    toggle={() => {
+      if (!relationBusy) relationAction = "";
+    }}
+  >
+    <div class="graph-actions">
+      <h2>{relationAction === "copy" ? "ノードをコピー" : "配置を変更"}</h2>
+      {#if $relationError}<p role="alert">{$relationError}</p>{/if}
+      <p>{name}</p>
+      {#if relationAction !== "copy"}
+        <p>現在の親: {nodeNameById[($active_row_path || "").split("/").at(-2)] || "なし"}</p>
+        <label
+          >操作
+          <select bind:value={relationAction} disabled={relationBusy}>
+            <option value="move">この配置を移動</option>
+            <option value="detach">この配置を外す</option>
+          </select>
+        </label>
+      {/if}
+      {#if relationAction !== "detach"}
+        <label
+          >対象の親
+          <select aria-label="配置先の親" bind:value={relationTarget} disabled={relationBusy}>
+            <option value="">親を選択</option>
+            {#each parentCandidates as candidate}<option value={candidate.id}
+                >{candidate.name}{candidate.path ? ` — ${candidate.path}` : ""}</option
+              >{/each}
+          </select>
+        </label>
+      {:else}
+        <p>この親との接続を外します。ノード自体は削除されません。</p>
+      {/if}
+      {#if relationAction === "copy"}
+        <label
+          >コピー範囲
+          <select aria-label="コピー範囲" bind:value={copyMode} disabled={relationBusy}>
+            <option value="node">このノードのみ</option>
+            <option value="share-children">直接の子を共有</option>
+            <option value="subgraph">子孫もコピー</option>
+          </select>
+        </label>
+      {/if}
+      <button disabled={relationBusy} on:click={() => (relationAction = "")}>キャンセル</button>
+      <button
+        disabled={relationBusy ||
+          (relationAction !== "detach" && !relationTarget) ||
+          (relationAction !== "copy" && !($active_row_path || "").includes("/"))}
+        on:click={submitRelation}
+      >
+        {relationAction === "copy" ? "コピー" : relationAction === "detach" ? "配置を外す" : "移動"}
+      </button>
+    </div>
+  </Modal>
+{/if}
+
 <style>
+  .detail-action {
+    color: var(--theme-color-Sub-main);
+    background: transparent;
+    border: 1px solid var(--theme-color-Sub-dark);
+    border-radius: var(--shape-xs);
+    padding: var(--sp1);
+    cursor: pointer;
+  }
+  .detail-action:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
   .graph-actions {
     margin-top: var(--sp2);
-  }
-  .graph-actions summary {
-    cursor: pointer;
   }
   .graph-actions p {
     margin: var(--sp1) 0;
@@ -1378,7 +1443,7 @@
     align-items: center;
     flex: 1 1 auto;
     min-width: 0;
-    height: 1.75rem;
+    height: var(--detail-control-height, 1.75rem);
     box-sizing: border-box;
     border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 30%, transparent);
     border-radius: var(--shape-sm);
@@ -1428,7 +1493,7 @@
     justify-content: space-between;
     gap: var(--sp2);
     flex: 0 0 auto;
-    padding-bottom: var(--sp1);
+    padding: var(--sp1);
   }
   .body-label {
     font-size: var(--font-label-sm);

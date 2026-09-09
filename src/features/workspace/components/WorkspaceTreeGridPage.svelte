@@ -18,12 +18,14 @@
   let previousScope = "";
   void workspaceApplication.load(workspacePath).catch((e) => error.set(e.message));
   $: navigation = $workspaceNavigation;
+  $: if (navigation && !$selected_id) $selected_id = navigation.rootId;
   $: if (navigation && $selected_id === AGENDA_SELECTED_ID) {
     $ganttVisible = true;
     $selected_id = navigation.rootId;
   }
   $: if (navigation && $selected_id === INBOX_SELECTED_ID) {
     $selected_id =
+      navigation.inboxId ||
       Object.entries(navigation.names).find(([, name]) => name.toLowerCase() === "inbox")?.[0] ||
       navigation.rootId;
   }
@@ -35,7 +37,6 @@
     selectOnly(rootId);
     $active_row_path = rootId;
   }
-  $: scopes = navigation?.scopes ?? [];
   $: if ($projection) {
     const index = new Map();
     const visit = (node) => {
@@ -57,29 +58,16 @@
 
 <main class="workspace-treegrid" aria-label="Workspace TreeGrid">
   {#if navigation}
-    <nav class="scope-bar" aria-label="表示範囲">
-      <button
-        class:active={rootId === navigation.rootId}
-        on:click={() => ($selected_id = navigation.rootId)}>Workspace Root</button
-      >
-      <label
-        >Project
-        <select
-          aria-label="Project scope"
-          value={rootId}
-          on:change={(e) => ($selected_id = e.currentTarget.value)}
-        >
-          <option value={navigation.rootId}>Workspace 全体</option>
-          {#each scopes as scope}<option value={scope.rootId}>{scope.name}</option>{/each}
-          {#if rootId !== navigation.rootId && !scopes.some((scope) => scope.rootId === rootId)}<option
-              value={rootId}>{navigation.names[rootId]}</option
-            >{/if}
-        </select>
-      </label>
-      <span>検索・絞り込みは現在の範囲が対象です</span>
+    <nav class="scope-bar" aria-label="現在の表示範囲">
+      <span>{navigation.names[rootId]}</span>
+      <span>検索・列フィルタはこの範囲が対象です</span>
     </nav>
   {/if}
-  {#if $error}<div role="alert">{$error}</div>{/if}
+  {#if $error}<div class="operation-error" role="alert">
+      <span>{$error}</span><button aria-label="通知を閉じる" on:click={() => error.set("")}
+        >×</button
+      >
+    </div>{/if}
   {#if $projection?.truncated}<div role="status">
       表示上限に達しました。Projectを選択して範囲を絞ってください。
     </div>{/if}
@@ -104,30 +92,24 @@
     color: var(--theme-color-Sub-main);
     font-size: var(--font-body-sm);
   }
-  .scope-bar label {
-    display: flex;
-    gap: var(--sp2);
-    align-items: center;
-    min-width: 0;
-  }
-  button,
-  select {
-    background: var(--theme-color-Main-light);
-    color: var(--theme-color-Sub-light);
-    border: 1px solid var(--theme-color-Sub-dark);
-    border-radius: var(--shape-sm);
-    padding: 0.25rem 0.5rem;
-    max-width: 20rem;
-  }
-  button.active {
-    border-color: var(--theme-color-Primary-main);
-  }
   [role="alert"] {
     color: var(--theme-color-Error-main);
     padding: var(--sp2);
   }
+  .operation-error {
+    position: fixed;
+    top: 3rem;
+    right: 1rem;
+    max-width: min(32rem, calc(100vw - 2rem));
+    z-index: 10000;
+    display: flex;
+    gap: var(--sp2);
+    background: var(--theme-color-Main-light);
+    box-shadow: var(--elevation-3);
+    border-radius: var(--shape-sm);
+  }
   @media (max-width: 850px) {
-    .scope-bar > span {
+    .scope-bar > span + span {
       display: none;
     }
   }

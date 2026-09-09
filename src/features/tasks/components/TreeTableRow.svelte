@@ -182,6 +182,10 @@
   }
 
   function dragStart(e) {
+    if (isArchived || application?.isProtected(id) || depth === 0) {
+      e.preventDefault();
+      return;
+    }
     isDragging = true;
 
     // Multi-row drag: only when this row is part of an existing multi-selection.
@@ -189,7 +193,7 @@
     const treeRoot = $tree_data?.data;
     if (treeRoot && $selected_ids.has(id) && $selected_ids.size > 1) {
       dragged_ids = getTopLevelSelection(treeRoot, $selected_ids);
-      dragged_path = undefined;
+      dragged_path = path;
     } else {
       dragged_ids = [id];
       dragged_path = path;
@@ -232,6 +236,7 @@
     } else {
       dragOverType = "DragOverBottom";
     }
+    if (isArchived || (depth === 0 && dragOverType !== "DragOverBottom")) dragOverType = undefined;
   }
 
   function dragLeave() {
@@ -379,7 +384,7 @@
           text={data[header.name]}
           {hasChildren}
           {expanded}
-          isRoot={depth === 0}
+          isRoot={depth === 0 || application?.isProtected(id)}
           canMoveUp={effectiveCanMoveUp}
           canMoveDown={effectiveCanMoveDown}
           canIndent={effectiveCanIndent}

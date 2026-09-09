@@ -1,5 +1,7 @@
 <script>
   import { createEventDispatcher } from "svelte";
+  import { viewportPopover } from "@lib/actions/viewport_popover";
+  import { globalDismiss } from "@lib/actions";
   import { normalizeTag, withTagAdded, withTagRemoved } from "@lib/utils/tags";
 
   /** 現在付いているタグ。 */
@@ -20,6 +22,12 @@
 
   let input = "";
   let inputElement;
+  let suggestionsOpen = false;
+  function floatSuggestions(node) {
+    return showLabels
+      ? {}
+      : viewportPopover(node, () => inputElement.closest(".tag-chips").getBoundingClientRect());
+  }
 
   $: currentTags = tags ?? [];
   $: normalizedQuery = normalizeTag(input);
@@ -39,6 +47,7 @@
   function addTag(value) {
     const next = withTagAdded(currentTags, value);
     input = "";
+    suggestionsOpen = false;
     commit(next);
   }
 
@@ -57,6 +66,7 @@
 
   function focusInput() {
     inputElement?.focus();
+    suggestionsOpen = true;
   }
 </script>
 
@@ -96,6 +106,8 @@
         bind:this={inputElement}
         bind:value={input}
         on:keydown={handleKeydown}
+        on:focus={() => (suggestionsOpen = true)}
+        on:input={() => (suggestionsOpen = true)}
         on:blur={() => input.trim() && addTag(input)}
         placeholder={currentTags.length === 0 ? emptyPlaceholder : placeholder}
         aria-label={ariaLabel}
@@ -105,8 +117,13 @@
     </div>
   </div>
 
-  {#if visibleSuggestions.length > 0}
-    <div class="tag-row">
+  {#if visibleSuggestions.length > 0 && (showLabels || (suggestionsOpen && !disabled))}
+    <div
+      class="tag-row"
+      class:suggestion-popup={!showLabels}
+      use:floatSuggestions
+      use:globalDismiss={() => (suggestionsOpen = false)}
+    >
       {#if showLabels}
         <span class="tag-row-label">{suggestionLabel}</span>
       {/if}
@@ -116,6 +133,7 @@
             type="button"
             class="tag-pill"
             {disabled}
+            on:pointerdown|preventDefault
             on:click={() => addTag(tag)}
             aria-label={`タグ ${tag} を追加`}
           >
@@ -128,6 +146,14 @@
 </div>
 
 <style>
+  .suggestion-popup {
+    z-index: 100000;
+    padding: var(--sp2);
+    border: 1px solid var(--theme-color-Sub-dark);
+    background: var(--theme-color-Main-light);
+    box-shadow: var(--elevation-2);
+    border-radius: var(--shape-sm);
+  }
   .tag-field {
     display: flex;
     flex-direction: column;
@@ -157,13 +183,14 @@
   }
 
   .tag-chips {
+    box-sizing: border-box;
+    min-height: var(--detail-control-height, 1.75rem);
     display: flex;
     flex: 1 1 auto;
     flex-wrap: wrap;
     align-items: center;
     gap: 2px var(--sp1);
     min-width: 0;
-    min-height: 1.5rem;
     padding: 1px var(--sp1);
     border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 30%, transparent);
     border-radius: var(--shape-xs);

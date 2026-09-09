@@ -1,4 +1,5 @@
 <script>
+  import { viewportPopover } from "@lib/actions/viewport_popover";
   import { createEventDispatcher, onDestroy, tick } from "svelte";
 
   export let status = "";
@@ -137,6 +138,7 @@
     tabindex="-1"
     style={popupStyle}
     use:portal
+    use:viewportPopover={() => containerEl.getBoundingClientRect()}
   >
     {#each STATUSES as opt}
       <li class="s-option-shell">

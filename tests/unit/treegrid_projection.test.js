@@ -26,6 +26,24 @@ function fixture() {
   };
 }
 describe("Graph adapter for the existing TreeGrid", () => {
+  it("filters tags with OR semantics and supports untagged nodes", () => {
+    const projection = projectTreeGrid(
+      {
+        rootId: "root",
+        nodes: {
+          root: node("root"),
+          a: node("a", ["root"], { tags: ["design"] }),
+          b: node("b", ["root"], { tags: ["build"] }),
+          c: node("c", ["root"]),
+        },
+      },
+      "root"
+    );
+    expect(
+      filterTree(projection.data, { tags: ["DESIGN", "build"] }).children.map((n) => n.id)
+    ).toEqual(["a", "b"]);
+    expect(filterTree(projection.data, { tags: [""] }).children.map((n) => n.id)).toEqual(["c"]);
+  });
   it("preserves identity while providing separate occurrences and terminal cycles", () => {
     const graph = fixture();
     const projection = projectTreeGrid(graph, "root");

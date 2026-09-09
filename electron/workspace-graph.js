@@ -6,6 +6,7 @@ const {
   executeGraphCommand,
   validateGraph,
   repairRootReachability,
+  identifyInbox,
 } = require("./workspace-graph-engine");
 
 const GRAPH_DIR = ".task-manage";
@@ -154,7 +155,12 @@ async function importLegacyGraph(workspacePath) {
     const metadata = workspace.parseFrontmatter(raw).data;
     if (!metadata.id || typeof metadata.id !== "string")
       throw new Error(`Invalid legacy project: ${entry.name}`);
-    projects.push({ projectDir, rootId: metadata.id, order: Number(metadata.order) });
+    projects.push({
+      projectDir,
+      rootId: metadata.id,
+      order: Number(metadata.order),
+      inbox: metadata.kind === "inbox" || entry.name === "_inbox",
+    });
   }
   projects.sort(
     (a, b) =>
@@ -227,6 +233,9 @@ async function importLegacyGraph(workspacePath) {
     }
   }
   const graph = { schemaVersion: 1, workspaceId, rootId, revision: 0, nodes };
+  const inboxProject = projects.find((project) => project.inbox);
+  if (inboxProject) graph.inboxId = inboxProject.rootId;
+  identifyInbox(graph);
   repairRootReachability(graph);
   validateGraph(graph);
   return graph;
@@ -236,6 +245,7 @@ async function readDocument(workspacePath) {
   const filePath = graphPath(workspacePath);
   try {
     const document = JSON.parse(await fs.promises.readFile(filePath, "utf8"));
+    identifyInbox(document.graph);
     validateGraph(document.graph);
     return document;
   } catch (error) {

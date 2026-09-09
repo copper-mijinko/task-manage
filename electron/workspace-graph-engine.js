@@ -123,8 +123,21 @@ function executeGraphCommand(input, command, origin = "graph") {
   const graph = clone(input);
   const selectedNodeIds = [];
   const copiedFrom = {};
+  identifyInbox(graph);
   const node = command.nodeId ? graph.nodes[command.nodeId] : undefined;
   if (command.nodeId) assertNode(graph, command.nodeId);
+  const protectedInbox =
+    graph.inboxId && (command.nodeId === graph.inboxId || command.childId === graph.inboxId);
+  if (
+    protectedInbox &&
+    (command.type === "delete-node" ||
+      command.type === "detach" ||
+      command.type === "copy" ||
+      command.type === "link" ||
+      (command.type === "move" && command.toParentId !== graph.rootId) ||
+      (command.type === "update-node" && (command.changes.archived || command.changes.archivedAt)))
+  )
+    throw new Error("Inboxは削除・アーカイブ・移動できません。");
 
   if (command.type === "create-node") {
     assertNode(graph, command.parentId);
@@ -364,4 +377,26 @@ function validateGraph(graph) {
     throw new Error("Every node must be reachable from the workspace root");
 }
 
-module.exports = { executeGraphCommand, validateGraph, repairRootReachability, reachableFromRoot };
+function identifyInbox(graph) {
+  if (graph.inboxId) return graph.inboxId;
+  const nodes = Object.values(graph.nodes);
+  const imported = nodes.find(
+    (node) => /[\\/]_inbox$/.test(node.sourceProjectDir || "") && node.sourceTaskDir === "_project"
+  );
+  const legacy = nodes.find(
+    (node) =>
+      node.name?.toLowerCase() === "inbox" &&
+      node.parents?.some((parent) => parent.id === graph.rootId)
+  );
+  const inbox = imported || legacy;
+  if (inbox) graph.inboxId = inbox.id;
+  return graph.inboxId;
+}
+
+module.exports = {
+  executeGraphCommand,
+  validateGraph,
+  repairRootReachability,
+  reachableFromRoot,
+  identifyInbox,
+};

@@ -533,6 +533,7 @@
                 <IconButton
                   tooltipContent={`プロジェクト「${proj.name}」を削除`}
                   ariaLabel={`プロジェクト「${proj.name}」を削除`}
+                  disabled={proj.protected}
                   style="height: 100%; margin:0; box-shadow:none;"
                   normalColor="transparent"
                   activeColor="rgba(255,255,255,0.2)"
