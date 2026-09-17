@@ -423,7 +423,9 @@
             dispatch("outdentTask", { id, path });
           }}
           on:deleteTask={() => {
-            dispatch("deleteTask", { id });
+            // 経路も渡す。多親ノードでは「この行（辺）だけ」を片付ける選択が
+            // あるので、どの親の下の行なのかが要る。
+            dispatch("deleteTask", { id, path });
           }}
           on:restoreTask={() => {
             dispatch("restoreTask", { id, path });

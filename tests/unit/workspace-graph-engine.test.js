@@ -310,3 +310,53 @@ it("copy preserves its source and inserts the new root at the requested order", 
     )
   ).toBe(true);
 });
+
+describe("edge archive", () => {
+  it("archives one edge without touching the node or its other edges", () => {
+    const input = graph([node("root"), node("alpha", ["root"]), node("beta", ["root"])]);
+    input.nodes.shared = node("shared", ["alpha", "beta"]);
+    const archived = executeGraphCommand(input, {
+      type: "archive-edge",
+      childId: "shared",
+      parentId: "alpha",
+      archived: true,
+    }).graph;
+    const edges = Object.fromEntries(archived.nodes.shared.parents.map((p) => [p.id, p]));
+    expect(edges.alpha.archived).toBe(true);
+    expect(typeof edges.alpha.archivedAt).toBe("string");
+    expect(edges.beta.archived).toBeUndefined();
+    expect(archived.nodes.shared.archived).toBeUndefined();
+    expect(archived.nodes.shared.parents.map((p) => p.id)).toEqual(["alpha", "beta"]);
+
+    const restored = executeGraphCommand(archived, {
+      type: "archive-edge",
+      childId: "shared",
+      parentId: "alpha",
+      archived: false,
+    }).graph;
+    const restoredEdge = restored.nodes.shared.parents.find((p) => p.id === "alpha");
+    expect(restoredEdge.archived).toBeUndefined();
+    expect(restoredEdge.archivedAt).toBeUndefined();
+    expect(restoredEdge.order).toBe(0);
+  });
+
+  it("rejects archiving an edge that does not exist and protects the root", () => {
+    const input = graph([node("root"), node("alpha", ["root"]), node("beta", ["root"])]);
+    expect(() =>
+      executeGraphCommand(input, {
+        type: "archive-edge",
+        childId: "alpha",
+        parentId: "beta",
+        archived: true,
+      })
+    ).toThrow("Edge not found");
+    expect(() =>
+      executeGraphCommand(input, {
+        type: "archive-edge",
+        childId: "root",
+        parentId: "alpha",
+        archived: true,
+      })
+    ).toThrow("The workspace root is protected");
+  });
+});

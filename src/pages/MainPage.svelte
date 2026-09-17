@@ -17,6 +17,7 @@
   import Loading from "@lib/primitives/Loading.svelte";
   import ActiveFilterBar from "@features/search/components/ActiveFilterBar.svelte";
   import TaskMenu from "@features/tasks/components/TaskMenu.svelte";
+  import ArchiveScopeDialog from "@features/tasks/components/ArchiveScopeDialog.svelte";
   import { tick } from "svelte";
   import {
     table_selected_id,
@@ -72,6 +73,8 @@
   let show_confirm = false;
   /** 単発時のモード: "archive" | "permanent"。bulk のときは見ない。 */
   let confirm_mode = "archive";
+  /** アーカイブ範囲の確認中の対象（多親ノードのときだけ立つ）。 */
+  let archive_scope_target = null;
   /** bulk の振り分け結果。 */
   let archive_target_ids = [];
   let permanent_target_ids = [];
@@ -511,6 +514,20 @@
         return;
       }
       if (node) {
+        // 多親ノードをアーカイブするときは、その行（辺）だけか、ノードごとかを
+        // 先に聞く。ツリーの行メニューと同じ選択肢を出す。
+        if (application && mode === "archive") {
+          const state = application.archiveStateOf($table_selected_id, $active_row_path);
+          if (state.shared && !state.node && !state.edge) {
+            archive_scope_target = {
+              id: $table_selected_id,
+              path: $active_row_path,
+              name: node.data.name,
+              places: state.places,
+            };
+            return;
+          }
+        }
         confirm_mode = mode;
         is_bulk_confirm = false;
         bulk_confirm_count = 0;
@@ -1318,6 +1335,20 @@
     header={confirmDialogHeader}
     content={confirmDialogContent}
     callback={callback_confirm}
+  />
+  <ArchiveScopeDialog
+    target={archive_scope_target}
+    on:cancel={() => (archive_scope_target = null)}
+    on:edge={() => {
+      const target = archive_scope_target;
+      archive_scope_target = null;
+      void application.archiveEdge(target.id, target.path, true);
+    }}
+    on:node={() => {
+      const target = archive_scope_target;
+      archive_scope_target = null;
+      void application.archive([target.id], true);
+    }}
   />
   <Dialog
     show={show_alert}
