@@ -264,4 +264,30 @@ describe("workspace graph persistence", () => {
     const undo = await graphStore.undoWorkspaceGraph(tempDir, after.revision);
     expect(undo.changed).toBe(false);
   });
+
+  it("retries a transient Windows rename lock without duplicating history", async () => {
+    projectFixture(tempDir);
+    const initial = await graphStore.readWorkspaceGraph(tempDir);
+    const rename = vi
+      .spyOn(fs.promises, "rename")
+      .mockRejectedValueOnce(Object.assign(new Error("locked"), { code: "EPERM" }));
+    try {
+      const result = await graphStore.executeWorkspaceGraphCommand(
+        tempDir,
+        { type: "update-node", nodeId: "task-a", changes: { name: "Saved after retry" } },
+        "tree",
+        initial.revision
+      );
+      expect(result.graph.revision).toBe(initial.revision + 1);
+      const undo = await graphStore.undoWorkspaceGraph(tempDir, result.graph.revision);
+      expect(undo.graph.nodes["task-a"].name).toBe("Task A");
+      expect((await graphStore.undoWorkspaceGraph(tempDir, undo.graph.revision)).changed).toBe(
+        false
+      );
+      const redo = await graphStore.redoWorkspaceGraph(tempDir, undo.graph.revision);
+      expect(redo.graph.nodes["task-a"].name).toBe("Saved after retry");
+    } finally {
+      rename.mockRestore();
+    }
+  });
 });

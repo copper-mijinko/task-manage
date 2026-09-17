@@ -1,4 +1,4 @@
-﻿<script>
+<script>
   import { getContext } from "svelte";
   import { TREEGRID_APPLICATION } from "@features/workspace/application/treegrid";
   const application = getContext(TREEGRID_APPLICATION);
@@ -10,6 +10,8 @@
   import TreeTableHeader from "@features/tasks/components/TreeTableHeader.svelte";
   import TreeTableRow from "@features/tasks/components/TreeTableRow.svelte";
   import BulkActionBar from "@features/tasks/components/BulkActionBar.svelte";
+  import Modal from "@lib/primitives/Modal.svelte";
+  import Button from "@lib/primitives/Button.svelte";
   import Dialog from "@lib/primitives/Dialog.svelte";
   import {
     tree_data as legacy_tree_data,
@@ -19,6 +21,7 @@
     active_row_path,
     table_selected_id,
     theme,
+    ui_density,
     column_settings,
     ganttScrollTop,
   } from "@stores";
@@ -86,6 +89,20 @@
   } from "@lib/utils/hotkey_priority";
 
   let table_root; // Bind
+  let headerComponent;
+  export function openColumns(event) {
+    headerComponent?.openPanel(event);
+  }
+  async function handleColumnWidth() {
+    await tick();
+    if (!table_root) return;
+    unsetResizerEvents(resizers, handlers ?? []);
+    resizers.forEach((r) => r.parentNode?.removeChild(r));
+    const result = createResizers(visibleHeaders, [], true, resize_observer);
+    resizers = result[0];
+    resize_observer = result[3];
+    handlers = setResizersEvents(resizers, result[1], result[2]);
+  }
 
   // Resize
   let resizers = [],
@@ -176,18 +193,23 @@
       return 0;
     }
 
-    return parseFloat(window.getComputedStyle(document.documentElement).fontSize) * 2.5;
+    return (
+      parseFloat(
+        window.getComputedStyle(document.documentElement).getPropertyValue("--tree-row-height")
+      ) || 36
+    );
   };
 
   // Memoize the id→row map against `rows` so scrolling (which only changes
   // scrollTop) does not rebuild it for every frame. Likewise cache the row
-  // height and only recompute it when the theme changes, avoiding a forced
+  // height and only recompute it when theme or density changes, avoiding a forced
   // style recalc (getComputedStyle) on every scroll event.
   // 祖先を辿るキーは経路。多親ノードは同じ id の行が複数あるので id では引けない。
   $: rowByPath = new Map(rows.map((row) => [row.path, row]));
   let stickyRowHeightPx = 0;
   $: {
     void $theme;
+    void $ui_density;
     stickyRowHeightPx = getRowHeightPx();
   }
   $: stickyTrail = buildStickyTrail(rows, scrollTop, stickyRowHeightPx, rowByPath);
@@ -773,7 +795,22 @@
     return !isChild(targetId, draggedId, $tree_data.data);
   }
 
+  let pendingDrop = null;
+  let dropBusy = false;
   function handleReorder(event) {
+    pendingDrop = { ...event.detail };
+  }
+  async function finishDrop(operation) {
+    if (!pendingDrop || dropBusy) return;
+    dropBusy = true;
+    try {
+      await performReorder({ detail: { ...pendingDrop, operation } });
+      pendingDrop = null;
+    } finally {
+      dropBusy = false;
+    }
+  }
+  function performReorder(event) {
     if (application) return application.reorder(event.detail);
     const { draggedIds, draggedPath, targetId, targetPath, mode } = event.detail;
     if (!draggedIds || draggedIds.length === 0) return;
@@ -784,7 +821,21 @@
       return;
     }
 
-    if (draggedIds.length === 1) {
+    if (event.detail.operation === "copy") {
+      const sources = getTopLevelSelection($tree_data.data, new Set(draggedIds))
+        .map((id) => getNode(id, $tree_data.data))
+        .filter(Boolean);
+      $tree_data = {
+        ...$tree_data,
+        data: bulkAddNodes(
+          sources.map((node) => cloneWithNewIds(node)),
+          targetId,
+          $tree_data.data,
+          mode,
+          targetPath
+        ),
+      };
+    } else if (draggedIds.length === 1) {
       // 掴んだ辺を外して、落とした行の位置に付け直す（どちらも経路で決まる）。
       const data = reorderTree(draggedIds[0], targetId, $tree_data.data, mode, {
         targetPath: draggedPath,
@@ -1390,12 +1441,12 @@
         lines.push(`${bulkPermanentTargetIds.length} 件を完全削除`);
       const body = lines.join(" / ");
       if (bulkPermanentTargetIds.length > 0) {
-        return `${body} します。\n完全削除分は取り消せません。`;
+        return `${body} します。\n${application ? "Workspaceの履歴に残っている間は「元に戻す」で復元できます。" : "完全削除分は取り消せません。"}`;
       }
       return `${body} します。\n後でアーカイブ表示から復元できます。`;
     }
     if (deleteMode === "permanent") {
-      return `"${deleteTargetName}" を完全に削除しますか？\nこの操作は取り消せません。`;
+      return `"${deleteTargetName}" を完全に削除しますか？\n${application ? "Workspaceの履歴に残っている間は「元に戻す」で復元できます。" : "この操作は取り消せません。"}`;
     }
     return `"${deleteTargetName}" をアーカイブしますか？\n後でアーカイブ表示から復元できます。`;
   })();
@@ -1421,6 +1472,8 @@
     <div class="TaskFolderOpenError" role="alert">{taskFolderOpenError}</div>
   {/if}
   <TreeTableHeader
+    bind:this={headerComponent}
+    on:columnWidth={handleColumnWidth}
     headers={visibleHeaders}
     {allHeaders}
     {selectedCount}
@@ -1538,6 +1591,35 @@
   callback={confirmDelete}
 />
 
+<Modal
+  show={Boolean(pendingDrop)}
+  toggle={() => {
+    if (!dropBusy) pendingDrop = null;
+  }}
+  width="28rem"
+  height="auto"
+  label="ドロップ操作を選択"
+>
+  <div class="DropChoice">
+    <h2>ドロップ操作</h2>
+    <p>選択した {pendingDrop?.draggedIds.length ?? 0} 件をどう配置しますか？</p>
+    <div class="DropActions">
+      <Button
+        content="キャンセル"
+        variant="text"
+        disabled={dropBusy}
+        on:click={() => (pendingDrop = null)}
+      />
+      <Button
+        content="子孫もコピー"
+        variant="outlined"
+        disabled={dropBusy}
+        on:click={() => finishDrop("copy")}
+      />
+      <Button content="移動" disabled={dropBusy} on:click={() => finishDrop("move")} />
+    </div>
+  </div>
+</Modal>
 <BulkActionBar
   count={selectionSize}
   on:bulkStatus={handleBulkStatus}
@@ -1548,6 +1630,21 @@
 />
 
 <style>
+  .DropChoice {
+    padding: var(--sp4);
+    color: var(--fg-default);
+    background: var(--canvas-default);
+  }
+  .DropChoice h2 {
+    margin: 0;
+    font-size: var(--font-title-md);
+  }
+  .DropActions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp2);
+    justify-content: flex-end;
+  }
   .TableRoot {
     display: flex;
     flex-direction: column;
@@ -1577,9 +1674,9 @@
     pointer-events: none;
   }
   .StickyTrailContent {
-    height: 2.5rem;
-    min-height: 2.5rem;
-    max-height: 2.5rem;
+    height: var(--tree-row-height, 36px);
+    min-height: var(--tree-row-height, 36px);
+    max-height: var(--tree-row-height, 36px);
     margin: 0;
     padding: 0 var(--sp3);
     display: flex;

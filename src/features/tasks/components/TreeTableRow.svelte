@@ -1,4 +1,4 @@
-﻿<script context="module">
+<script context="module">
   // Multi-id drag payload. For a single-row drag this contains exactly one id;
   // for a multi-select drag it contains the top-level selected ancestors in DFS
   // order. Shared module state so dragOver/drop can see what's being dragged.
@@ -450,6 +450,7 @@
         />
       {:else if header.name == "start date"}
         <DateInput
+          displayOnly={true}
           is_dark={isDark}
           backgroundColor={"var(--backgroundColor)"}
           value={data[header.name]}
@@ -462,6 +463,7 @@
         />
       {:else if header.name == "due date"}
         <DateInput
+          displayOnly={true}
           is_dark={isDark}
           backgroundColor={"var(--backgroundColor)"}
           value={data[header.name]}
@@ -611,12 +613,12 @@
     flex-direction: row;
     box-sizing: border-box;
     position: relative;
-    height: 2.5rem;
-    min-height: 2.5rem;
-    max-height: 2.5rem;
+    height: var(--tree-row-height, 36px);
+    min-height: var(--tree-row-height, 36px);
+    max-height: var(--tree-row-height, 36px);
     padding: 0;
     width: 100%;
-    border-bottom: 1px solid var(--theme-color-Main-dark);
+    border-bottom: 1px solid var(--border-muted);
   }
   .TableRow.MenuOpen {
     z-index: 9999;
@@ -661,14 +663,10 @@
     z-index: 999;
   }
   .TableRow:hover {
-    --backgroundColor: var(--theme-color-Main-main);
+    --backgroundColor: var(--hover-bg);
   }
   .TableRow.Selected {
-    --backgroundColor: color-mix(
-      in srgb,
-      var(--theme-color-Primary-main) 14%,
-      var(--theme-color-Main-light)
-    );
+    --backgroundColor: var(--accent-subtle);
   }
   .TableRow:hover .TableData {
     background-color: var(--backgroundColor);
@@ -717,7 +715,7 @@
     height: 100%;
     box-sizing: border-box;
     background-color: var(--backgroundColor);
-    border-right: 1px solid var(--theme-color-Main-dark);
+    border-right: 1px solid var(--border-muted);
   }
   .RowNumber {
     font-size: 0.7rem;
@@ -758,7 +756,7 @@
     align-items: center;
     color: var(--theme-color-Sub-main);
     font-size: var(--font-body-md);
-    border-right: 1px solid var(--theme-color-Main-dark);
+    border-right: 1px solid var(--border-muted);
   }
   .TableData[data-column="name"] {
     --col-min: var(--col-min-name);

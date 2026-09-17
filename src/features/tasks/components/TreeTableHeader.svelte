@@ -10,6 +10,20 @@
   let tagAnchorRect = null;
   $: tagOptions = [...new Set(["", ...$tag_index.keys(), ...($filter.tags ?? [])])];
   import { column_settings } from "@features/tasks/stores/column_settings";
+  import { readColumnWidths, saveColumnWidths } from "@features/tasks/stores/column_layout";
+  let panelTrigger;
+  let widths = readColumnWidths();
+  function setWidth(id, event) {
+    const width = Number(event.target.value);
+    if (!Number.isFinite(width) || width < 32 || width > 4000) return;
+    saveColumnWidths({ [id]: width });
+    widths = readColumnWidths();
+    headerSelectionDispatch("columnWidth", { id, width });
+  }
+  function closePanel() {
+    showPanel = false;
+    panelTrigger?.focus();
+  }
   import { closed_row_paths as legacy_closed_row_paths } from "@stores/ui";
   import { sort_state, SORTABLE_COLUMNS } from "@features/tasks/stores/sort";
   import { activePanelId, newPanelId } from "@stores/panel_coordinator";
@@ -106,6 +120,8 @@
   let statusPanelAnchorRect = null;
 
   function toggleStatusPanel(e) {
+    openTagPanel = false;
+    openCountPanel = null;
     e.stopPropagation();
     showPanel = false;
     openDatePanel = null;
@@ -151,8 +167,13 @@
     return headerName in COUNT_COLUMN_LABELS;
   }
 
-  function openPanel(e) {
+  export function openPanel(e) {
+    openTagPanel = false;
+    openStatusPanel = false;
+    openCountPanel = null;
     e.stopPropagation();
+    panelTrigger = e.currentTarget;
+    widths = readColumnWidths();
     openDatePanel = null;
     openNamePanel = false;
     const rect = e.currentTarget.getBoundingClientRect();
@@ -237,6 +258,8 @@
   }
 
   function toggleCountPanel(e, headerName) {
+    openTagPanel = false;
+    openStatusPanel = false;
     e.stopPropagation();
     showPanel = false;
     openNamePanel = false;
@@ -263,6 +286,9 @@
   }
 
   function toggleDatePanel(e, headerName) {
+    openTagPanel = false;
+    openStatusPanel = false;
+    openCountPanel = null;
     e.stopPropagation();
     showPanel = false;
     openNamePanel = false;
@@ -276,6 +302,9 @@
   }
 
   function toggleNamePanel(e) {
+    openTagPanel = false;
+    openStatusPanel = false;
+    openCountPanel = null;
     e.stopPropagation();
     showPanel = false;
     openDatePanel = null;
@@ -545,6 +574,11 @@
               aria-label="タグフィルター"
               aria-expanded={openTagPanel}
               on:click|stopPropagation={(event) => {
+                openStatusPanel = false;
+                openNamePanel = false;
+                openDatePanel = null;
+                openCountPanel = null;
+                showPanel = false;
                 tagAnchorRect = event.currentTarget.getBoundingClientRect();
                 openTagPanel = !openTagPanel;
               }}
@@ -555,9 +589,24 @@
               {#if filterActive.tags}<span class="FilterSelection">{filterSummaries.tags}</span
                 >{/if}
             </button>
-            {#if filterActive.tags}<button
-                aria-label="タグフィルターをクリア"
-                on:click|stopPropagation={() => clearColumnFilter("tags")}>×</button
+            {#if filterActive.tags}<IconButton
+                variant="text"
+                normalColor="var(--fg-muted)"
+                activeColor="var(--accent-fg)"
+                style="margin:0; width:1.5rem; height:1.5rem;"
+                ariaLabel="タグフィルターをクリア"
+                on:click={(e) => {
+                  e.stopPropagation();
+                  clearColumnFilter("tags");
+                }}
+                ><svg viewBox="0 0 24 24" aria-hidden="true"
+                  ><path
+                    d="m7 7 10 10M17 7 7 17"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  /></svg
+                ></IconButton
               >{/if}
           </div>
         {:else if header.name == "name"}
@@ -727,33 +776,6 @@
       </div>
     </div>
   {/each}
-
-  <IconButton
-    variant="text"
-    normalColor={showPanel ? "var(--theme-color-Primary-main)" : "var(--theme-color-Sub-main)"}
-    activeColor={"var(--theme-color-Primary-main)"}
-    ariaLabel="列の表示設定"
-    tooltipContent="カラム設定"
-    on:click={openPanel}
-    style="margin: 0; width: var(--header-icon-size); height: var(--header-icon-size); box-shadow: none; position: absolute; top: 50%; right: var(--sp2); transform: translateY(-50%); z-index: 1;"
-  >
-    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path
-        d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      />
-      <path
-        d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      />
-    </svg>
-  </IconButton>
 </div>
 
 {#if showPanel}
@@ -765,7 +787,7 @@
     aria-label="カラム表示設定"
     use:portal
     use:viewportPopover
-    use:globalDismiss={() => (showPanel = false)}
+    use:globalDismiss={closePanel}
   >
     <div class="PanelTitle">カラム表示設定</div>
     {#each $column_settings as setting}
@@ -823,6 +845,17 @@
               </button>
             </div>
           {/if}
+          <input
+            type="number"
+            min="32"
+            max="4000"
+            step="1"
+            aria-label={setting.label + "の幅"}
+            value={widths[setting.id] || ""}
+            placeholder="自動"
+            style="width:5rem"
+            on:change={(event) => setWidth(setting.id, event)}
+          />
         </div>
       {/if}
     {/each}
@@ -896,7 +929,7 @@
 
 <style>
   .TableRow {
-    --header-bg: var(--theme-color-Main-dark);
+    --header-bg: var(--canvas-subtle);
     --header-fg: var(--theme-color-Sub-main);
     --header-border: color-mix(in srgb, var(--theme-color-Sub-main) 22%, transparent);
     --header-hover: color-mix(in srgb, var(--theme-color-Sub-main) 12%, transparent);
@@ -950,13 +983,8 @@
   .TableHeader[data-column="tags"] {
     --col-min: var(--col-min-tags);
   }
-  /* 最終列は右端の列表示設定ボタンぶんを padding で空ける。padding は
-     列幅の内側を削るので、その専有ぶんを min-width にも足しておく。
-     足さないと最小幅のとき見出しが読めない幅まで潰れる。 */
   .TableHeader:last-of-type {
-    border-right: 0px;
-    padding-right: var(--col-actions-reserve);
-    min-width: calc(var(--col-min) + var(--col-actions-reserve));
+    border-right: 0;
   }
   .TableHeader:first-of-type {
     border-left: 0;

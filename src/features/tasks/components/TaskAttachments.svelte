@@ -12,6 +12,7 @@
   export let workspaceProjectDir = null;
   export let taskId = null;
   export let onAttachmentsChange = undefined;
+  export let readOnly = false;
 
   let fileInput;
   let isBusy = false;
@@ -56,7 +57,7 @@
   }
 
   function chooseFiles() {
-    if (!canUseAttachments || isBusy) return;
+    if (!canUseAttachments || isBusy || readOnly) return;
     errorMessage = "";
     fileInput?.click();
   }
@@ -69,6 +70,7 @@
   }
 
   async function saveFiles(files) {
+    if (readOnly || isBusy || !canUseAttachments) return;
     if (application) {
       const id = taskId;
       const existing = [...attachments];
@@ -240,6 +242,7 @@
   }
 
   async function deleteAttachment(attachment) {
+    if (readOnly) return;
     if (application) {
       if (window.confirm(`「${attachment.name}」を添付一覧から削除しますか？`))
         await application.update(taskId, {
@@ -297,7 +300,7 @@
       tooltipContent={attachTooltip}
       ariaLabel="添付を追加"
       variant="text"
-      disabled={!canUseAttachments || isBusy}
+      disabled={!canUseAttachments || isBusy || readOnly}
       activeColor={"var(--theme-color-Primary-main)"}
       normalColor={"var(--theme-color-Sub-main)"}
       on:click={chooseFiles}
@@ -322,6 +325,9 @@
     />
   </div>
 
+  {#if !canUseAttachments}<p>添付はWorkspaceで利用できます。</p>{:else if readOnly}<p>
+      アーカイブ済みのため、添付の変更はできません。
+    </p>{/if}
   {#if attachmentList.length > 0}
     <ul class="attachment-list" aria-label="添付ファイル">
       {#each attachmentList as attachment (attachmentPath(attachment))}
@@ -355,12 +361,18 @@
               <span class="attachment-size">{formatBytes(attachment.size)}</span>
             {/if}
           </button>
+          <button
+            class="ui-action"
+            aria-label={attachment.name + "の操作"}
+            data-task-menu-trigger
+            on:click={(event) => openAttachmentMenu(event, attachment)}>…</button
+          >
           <span class="attachment-delete">
             <IconButton
               tooltipContent={`添付を削除 ${attachment.name}`}
               ariaLabel={`添付を削除 ${attachment.name}`}
               variant="text"
-              disabled={!canUseAttachments || isBusy}
+              disabled={!canUseAttachments || isBusy || readOnly}
               activeColor={"var(--theme-color-Error-main)"}
               normalColor={"var(--theme-color-Sub-main)"}
               on:click={() => deleteAttachment(attachment)}
@@ -380,9 +392,12 @@
       {/each}
     </ul>
   {:else}
-    <div class="attachment-empty" aria-label="添付なし">なし</div>
+    <div class="attachment-empty" aria-label="添付なし">添付なし</div>
   {/if}
 
+  {#if canUseAttachments && !readOnly}<p class="attachment-drop-hint">
+      ここにファイルをドロップして添付
+    </p>{/if}
   {#if errorMessage}
     <div class="attachment-error" role="alert">{errorMessage}</div>
   {/if}
@@ -398,6 +413,15 @@
 </div>
 
 <style>
+  .attachment-drop-hint {
+    margin: var(--sp2) 0 0;
+    padding: var(--sp3);
+    border: 1px dashed var(--border-muted);
+    border-radius: var(--shape-sm);
+    color: var(--fg-muted);
+    text-align: center;
+    font-size: var(--font-body-sm);
+  }
   .attachments-field {
     display: flex;
     flex-direction: column;

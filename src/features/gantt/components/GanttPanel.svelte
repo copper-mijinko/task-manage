@@ -932,7 +932,10 @@
     on:scroll={handleBodyScroll}
     on:wheel|nonpassive={handleBodyWheel}
   >
-    <div class="GanttBodyInner" style="width:{totalWidthRem}rem; height:{rows.length * 2.5}rem;">
+    <div
+      class="GanttBodyInner"
+      style="width:{totalWidthRem}rem; height:calc({rows.length} * var(--tree-row-height, 36px));"
+    >
       {#each headerCells as cell}
         <div
           class="GridCell"
@@ -1277,9 +1280,9 @@
   }
 
   .GanttRow {
-    height: 2.5rem;
-    min-height: 2.5rem;
-    max-height: 2.5rem;
+    height: var(--tree-row-height, 36px);
+    min-height: var(--tree-row-height, 36px);
+    max-height: var(--tree-row-height, 36px);
     box-sizing: border-box;
     position: relative;
     border-bottom: 1px solid var(--theme-color-Main-dark);

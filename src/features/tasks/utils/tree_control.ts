@@ -1082,6 +1082,8 @@ export function sortTree(
       result = aOrder - bOrder;
     } else if (column === "name") {
       result = (a.data.name ?? "").localeCompare(b.data.name ?? "");
+    } else if (column === "attachments") {
+      result = (a.data.attachments?.length ?? 0) - (b.data.attachments?.length ?? 0);
     } else if (column === "start date" || column === "due date") {
       const aVal = (a.data[column] as string | undefined) ?? "";
       const bVal = (b.data[column] as string | undefined) ?? "";

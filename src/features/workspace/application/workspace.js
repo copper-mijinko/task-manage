@@ -29,6 +29,32 @@ export const workspaceNavigation = derived(
 let loading;
 let loadingPath;
 export const workspaceApplication = {
+  async capture(path, name) {
+    try {
+      const graph = await this.load(path);
+      let inboxId = graph.inboxId;
+      if (!inboxId) {
+        inboxId = Object.values(graph.nodes).find(
+          (node) =>
+            !node.archived &&
+            node.name?.toLowerCase() === "inbox" &&
+            node.parents.some((parent) => parent.id === graph.rootId)
+        )?.id;
+      }
+      if (!inboxId) {
+        const created = await this.createScope(path, "Inbox");
+        inboxId = created.selectedNodeIds[0];
+      }
+      await workspace_graph_store.execute(
+        { type: "create-node", parentId: inboxId, node: { name } },
+        "tree",
+        path
+      );
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message || String(error) };
+    }
+  },
   async load(path) {
     const current = get(workspace_graph_store);
     if (current.workspacePath === path && current.graph) return current.graph;

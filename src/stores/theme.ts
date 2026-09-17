@@ -46,10 +46,12 @@ function createTheme(initialValue: ThemeName | undefined): ThemeStore {
 
         if (current === "dark") {
           traverse(THEME_DARK as ThemePalette, "--theme");
+          traverse(THEME_DARK.semantic, "-");
           document.documentElement.style.setProperty("--color-scheme", "dark");
           platform.setMetaData("theme", current);
         } else if (current === "light") {
           traverse(THEME_LIGHT as ThemePalette, "--theme");
+          traverse(THEME_LIGHT.semantic, "-");
           document.documentElement.style.setProperty("--color-scheme", "light");
           platform.setMetaData("theme", current);
         }

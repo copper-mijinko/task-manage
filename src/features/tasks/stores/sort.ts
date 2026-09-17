@@ -1,7 +1,13 @@
 ﻿import { writable, type Writable } from "svelte/store";
 import type { SortState } from "@app-types/app";
 
-export const SORTABLE_COLUMNS = new Set(["name", "status", "start date", "due date"]);
+export const SORTABLE_COLUMNS = new Set([
+  "name",
+  "status",
+  "start date",
+  "due date",
+  "attachments",
+]);
 
 export interface SortStore extends Writable<SortState | null> {
   init: () => void;

@@ -338,7 +338,10 @@ export function globalDismiss(node: HTMLElement, callback: () => void) {
     cb?.();
   };
   const handleKey = (e: KeyboardEvent) => {
-    if (e.key === "Escape") cb?.();
+    if (e.key !== "Escape") return;
+    e.preventDefault();
+    e.stopPropagation();
+    cb?.();
   };
 
   // Listen for BOTH mousedown and pointerdown at the capture phase. Some
@@ -353,7 +356,7 @@ export function globalDismiss(node: HTMLElement, callback: () => void) {
   // always mean "I'm done with this pop-up".
   const onBlur = () => cb?.();
   window.addEventListener("blur", onBlur);
-  document.addEventListener("keydown", handleKey);
+  document.addEventListener("keydown", handleKey, true);
 
   return {
     update(next: () => void) {
@@ -363,7 +366,7 @@ export function globalDismiss(node: HTMLElement, callback: () => void) {
       document.removeEventListener("pointerdown", handle, true);
       document.removeEventListener("mousedown", handle, true);
       document.removeEventListener("contextmenu", handle, true);
-      document.removeEventListener("keydown", handleKey);
+      document.removeEventListener("keydown", handleKey, true);
       window.removeEventListener("blur", onBlur);
     },
   };

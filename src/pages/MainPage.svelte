@@ -1,4 +1,4 @@
-﻿<script>
+<script>
   import { getContext } from "svelte";
   import { TREEGRID_APPLICATION } from "@features/workspace/application/treegrid";
   const application = getContext(TREEGRID_APPLICATION);
@@ -11,7 +11,6 @@
   import GanttPanel from "@features/gantt/components/GanttPanel.svelte";
   import TaskDetail from "@features/tasks/components/TaskDetail.svelte";
   import IconButton from "@lib/primitives/IconButton.svelte";
-  import Card from "@lib/primitives/Card.svelte";
   import Dialog from "@lib/primitives/Dialog.svelte";
   import Modal from "@lib/primitives/Modal.svelte";
   import SearchBox from "@lib/primitives/SearchBox.svelte";
@@ -26,7 +25,6 @@
     active_row_path,
     ganttVisible,
     selected_type,
-    ui_density,
   } from "@stores";
   import {
     convertMemoContent,
@@ -168,12 +166,12 @@
         lines.push(`${permanent_target_ids.length} 件を完全削除`);
       const body = lines.join(" / ");
       if (permanent_target_ids.length > 0) {
-        return `${body} します。\n完全削除分は取り消せません。`;
+        return `${body} します。\n${application ? "Workspaceの履歴に残っている間は「元に戻す」で復元できます。" : "完全削除分は取り消せません。"}`;
       }
       return `${body} します。\n後でアーカイブ表示から復元できます。`;
     }
     if (confirm_mode === "permanent") {
-      return `"${name_confirm}" を完全に削除しますか？\nこの操作は取り消せません。`;
+      return `"${name_confirm}" を完全に削除しますか？\n${application ? "Workspaceの履歴に残っている間は「元に戻す」で復元できます。" : "この操作は取り消せません。"}`;
     }
     return `"${name_confirm}" をアーカイブしますか？\n後でアーカイブ表示から復元できます。`;
   })();
@@ -276,8 +274,9 @@
    * 一括変換の対象は「本文を持つノード」。メモがノードになったので、
    * タスク 1 つにつき本文 1 つを見ればよい。
    */
-  function collectProjectMemosForFormat(node, targetFormat, fallbackFormat) {
-    if (!node) return [];
+  function collectProjectMemosForFormat(node, targetFormat, fallbackFormat, seen = new Set()) {
+    if (!node || seen.has(node.id)) return [];
+    seen.add(node.id);
 
     const currentFormat = normalizeMemoFormat(node.data.format, fallbackFormat);
     // 空の本文には変換するものが無い。ここを数えると、まだ何も書いていない
@@ -299,13 +298,14 @@
 
     return ownItems.concat(
       (node.children ?? []).flatMap((child) =>
-        collectProjectMemosForFormat(child, targetFormat, fallbackFormat)
+        collectProjectMemosForFormat(child, targetFormat, fallbackFormat, seen)
       )
     );
   }
 
-  function countProjectMemosForFormat(node, targetFormat, fallbackFormat) {
-    if (!node) return 0;
+  function countProjectMemosForFormat(node, targetFormat, fallbackFormat, seen = new Set()) {
+    if (!node || seen.has(node.id)) return 0;
+    seen.add(node.id);
     const ownCount =
       normalizeMemoFormat(node.data.format, fallbackFormat) === targetFormat ||
       isEmptyMemoContent(node.data.body)
@@ -314,7 +314,8 @@
     return (
       ownCount +
       (node.children ?? []).reduce(
-        (total, child) => total + countProjectMemosForFormat(child, targetFormat, fallbackFormat),
+        (total, child) =>
+          total + countProjectMemosForFormat(child, targetFormat, fallbackFormat, seen),
         0
       )
     );
@@ -361,31 +362,39 @@
     bulkMemoItems = [];
   }
 
-  function applyBulkMemoFormat() {
+  async function applyBulkMemoFormat() {
     if (application) {
       bulkMemoPhase = "running";
-      const commands = bulkMemoItems.map((item) => {
-        const node = getNode(item.id, $tree_data.data);
-        return {
-          type: "update-node",
-          nodeId: item.id,
-          changes: {
-            body: convertMemoContent(
-              node.data.body,
-              node.data.format || defaultMemoFormat,
-              bulkMemoTargetFormat
-            ),
-            format: bulkMemoTargetFormat,
-          },
-        };
-      });
-      void application.dispatch(commands).then((result) => {
-        bulkMemoPhase = "done";
+      try {
+        const commands = bulkMemoItems.map((item) => {
+          const node = getNode(item.id, $tree_data.data);
+          return {
+            type: "update-node",
+            nodeId: item.id,
+            changes: {
+              body: convertMemoContent(
+                node.data.body,
+                node.data.format || defaultMemoFormat,
+                bulkMemoTargetFormat
+              ),
+              format: bulkMemoTargetFormat,
+            },
+          };
+        });
+        const result = await application.dispatch(commands);
         bulkMemoItems = bulkMemoItems.map((item) => ({
           ...item,
-          status: result ? "success" : "error",
+          status: result ? "ok" : "error",
         }));
-      });
+      } catch (error) {
+        bulkMemoItems = bulkMemoItems.map((item) => ({
+          ...item,
+          status: "error",
+          error: error instanceof Error ? error.message : String(error),
+        }));
+      } finally {
+        bulkMemoPhase = "done";
+      }
       return;
     }
     if (!$tree_data?.data) return;
@@ -645,18 +654,11 @@
   const handleExpandAll = () => closed_row_paths.expandAll();
   const handleCollapseAll = () => closed_row_paths.collapseAll();
 
-  // Overflow ("kebab") menu — collapses the secondary action groups into
-  // a single trigger. Only enabled in compact (flat) mode; comfortable
-  // mode keeps the full toolbar inline so power users don't lose any
-  // one-click affordance.
-  $: isCompact = $ui_density === "compact";
+  // Both row densities share one toolbar; secondary actions live in its menu.
+  const isCompact = true;
   let showOverflowMenu = false;
+  let treeComponent;
   let overflowMenuPosition = { x: 0, y: 0, position: "left" };
-  // If the user flips back to comfortable while the menu is open, the
-  // kebab trigger disappears and the floating menu would orphan — close it.
-  $: if (!isCompact && showOverflowMenu) {
-    showOverflowMenu = false;
-  }
 
   $: markdownConvertCount = countProjectMemosForFormat(
     $tree_data?.data,
@@ -810,14 +812,32 @@
       bind:collapsedPane={outerCollapsedPane}
     >
       <Pane style={"min-width: 10rem;"}>
-        <Card title={projectName} padded={false} style={"height: 100%; width: 100%;"}>
-          <span slot="header-actions" class="storage-badge">{projectStorageLabel}</span>
+        <section class="tree-workspace" aria-label="ノード一覧">
+          <header class="tree-heading">
+            <strong>{projectName}</strong><span class="storage-badge">{projectStorageLabel}</span>
+          </header>
           <div class="TaskListToolbar">
-            <!-- Two-row layout: buttons on top, filter search on the
-                 bottom. Splitting these into separate rows pads out the
-                 toolbar height so it matches the memo tab strip on the
-                 TaskDetail side, keeping the two Cards visually aligned. -->
+            <!-- Keep filter search on a separate row at narrow widths. -->
             <div class="TbRow TbButtonsRow" class:TbButtonsRowCompact={isCompact}>
+              <IconButton
+                variant="text"
+                normalColor="var(--fg-default)"
+                activeColor="var(--accent-fg)"
+                ariaLabel="列の設定"
+                tooltipContent="列の設定"
+                style="margin:0; width:2.25rem; height:2.25rem;"
+                on:click={(event) => treeComponent?.openColumns(event)}
+                ><svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  aria-hidden="true"
+                  ><rect x="3" y="4" width="18" height="16" rx="2" /><path
+                    d="M9 4v16M15 4v16"
+                  /></svg
+                ></IconButton
+              >
               <!-- Primary actions: add / add-child / delete (+ restore when
                    the selection contains archived rows). Everything else
                    lives in the overflow ("⋯") menu so the toolbar stays
@@ -1244,8 +1264,8 @@
                    outside-click handler doesn't fight the toggle click. -->
                 <span class="TbGroup" data-task-menu-trigger="overflow">
                   <IconButton
-                    tooltipContent="その他の操作"
-                    ariaLabel="その他の操作"
+                    tooltipContent="表示と操作"
+                    ariaLabel="表示と操作"
                     variant="text"
                     normalColor={"var(--theme-color-Sub-main)"}
                     activeColor={"var(--theme-color-Primary-main)"}
@@ -1277,7 +1297,7 @@
               >
                 <Pane style={"height: 100%; min-width: 6rem;"}>
                   <div class="TreeTable">
-                    <TreeTable />
+                    <TreeTable bind:this={treeComponent} />
                   </div>
                 </Pane>
                 <Pane style={"height: 100%; min-width: 120px;"}>
@@ -1286,11 +1306,11 @@
               </SplitPanes>
             {:else}
               <div class="TreeTable">
-                <TreeTable />
+                <TreeTable bind:this={treeComponent} />
               </div>
             {/if}
           </div>
-        </Card>
+        </section>
       </Pane>
       <Pane style={"min-width: 10rem;"}>
         {#if detailPaneVisible}
@@ -1402,6 +1422,33 @@
 {/if}
 
 <style>
+  :global(.density-compact) .tree-workspace {
+    border-radius: 0;
+  }
+  .tree-workspace {
+    border-radius: var(--shape-lg);
+    box-shadow: var(--elevation-1);
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    background: var(--canvas-default);
+  }
+  .tree-heading {
+    background: var(--theme-color-Theme-main);
+    --fg-default: var(--on-theme-text);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+    gap: var(--sp2);
+    padding: var(--sp2) var(--sp3);
+    border-bottom: 1px solid var(--border-muted);
+    color: var(--fg-default);
+  }
   div.Content {
     display: flex;
     flex: 1;
@@ -1410,8 +1457,21 @@
     height: 100%;
     background-color: var(--theme-color-Main-dark);
     margin: 0;
-    padding: 0;
+    padding: var(--sp2);
     overflow: auto;
+  }
+  :global(.density-compact) div.Content {
+    padding: 0;
+  }
+  /* Each card has its own gutter, including along the split boundary. */
+  div.Content > :global(.SplitPaneRoot) > :global(.Pane:not(.PaneCollapsed):not(.PaneMini)) {
+    padding: var(--sp2);
+  }
+  :global(.density-compact)
+    div.Content
+    > :global(.SplitPaneRoot)
+    > :global(.Pane:not(.PaneCollapsed):not(.PaneMini)) {
+    padding: 0;
   }
   .TbGroup {
     display: flex;
@@ -1451,11 +1511,7 @@
   .TbButtonsRow {
     flex-wrap: wrap;
   }
-  /* Compact (flat) mode: lock the row to a single line and scroll
-     horizontally instead of wrapping. Wrapping would grow the toolbar
-     height at narrow widths, throwing off the height alignment with the
-     TaskDetail Card next door. Comfortable mode keeps the natural wrap
-     behavior because button density is lower there. */
+  /* Scroll the toolbar at narrow widths without shifting the detail pane. */
   .TbButtonsRowCompact {
     flex-wrap: nowrap;
     overflow-x: auto;
@@ -1484,11 +1540,11 @@
     min-width: 0;
   }
   .storage-badge {
+    color: var(--on-theme-text);
     flex: 0 0 auto;
     padding: 0.15rem var(--sp2);
     border-radius: var(--shape-xs);
     background-color: color-mix(in srgb, var(--theme-color-Info-main) 18%, transparent);
-    color: var(--theme-color-Sub-main);
     font-size: var(--font-label-md);
     font-weight: 600;
     white-space: nowrap;

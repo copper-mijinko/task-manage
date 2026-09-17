@@ -16,6 +16,7 @@
   canOutdentNode,
   cloneWithNewIds,
   filterTree,
+  sortTree,
   flattenVisibleTree,
   getNode,
   getTopLevelSelection,
@@ -1020,4 +1021,29 @@ describe("buildStickyTrail", () => {
       "A",
     ]);
   });
+});
+
+test("attachment sorting treats absent lists as zero and keeps equal counts stable", () => {
+  const child = (id, count) => ({
+    id,
+    data: {
+      name: id,
+      ...(count === undefined
+        ? {}
+        : { attachments: Array.from({ length: count }, (_, i) => ({ id: String(i) })) }),
+    },
+    children: [],
+  });
+  const tree = {
+    id: "root",
+    data: { name: "root" },
+    children: [child("two", 2), child("missing"), child("one", 1), child("empty", 0)],
+  };
+  expect(
+    sortTree(tree, { column: "attachments", direction: "asc" }).children.map((n) => n.id)
+  ).toEqual(["missing", "empty", "one", "two"]);
+  expect(
+    sortTree(tree, { column: "attachments", direction: "desc" }).children.map((n) => n.id)
+  ).toEqual(["two", "one", "missing", "empty"]);
+  expect(tree.children.map((n) => n.id)).toEqual(["two", "missing", "one", "empty"]);
 });

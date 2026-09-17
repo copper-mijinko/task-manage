@@ -1,4 +1,4 @@
-﻿<script context="module">
+<script context="module">
   let dragged_id; // Project ID being dragged
   let dragged_section; // Sidebar project section being dragged
 </script>
@@ -11,18 +11,69 @@
   $: workspaceProjects = $workspaceNavigation?.scopes ?? $workspace_store.projects;
   import { onMount, afterUpdate, onDestroy } from "svelte";
   import { slide } from "svelte/transition";
+  import TaskMenu from "@features/tasks/components/TaskMenu.svelte";
+  let projectMenu = null;
+  let projectMenuPosition = { x: 0, y: 0, position: "right" };
+  let projectMenuTrigger;
+  $: projectMenuItems = projectMenu
+    ? [
+        {
+          title: "上に移動",
+          action: "up",
+          disabled:
+            getProjectsForSection(projectMenu.section).findIndex(
+              (p) =>
+                getProjectId(p, projectMenu.section) ===
+                getProjectId(projectMenu.project, projectMenu.section)
+            ) <= 0,
+        },
+        {
+          title: "下に移動",
+          action: "down",
+          disabled: getProjectsForSection(projectMenu.section).at(-1) === projectMenu.project,
+        },
+        { type: "separator" },
+        { title: "プロジェクトを削除", action: "remove", disabled: projectMenu.project.protected },
+      ]
+    : [];
+  function openProjectMenu(event, project, section) {
+    event.stopPropagation();
+    projectMenuTrigger = event.currentTarget;
+    const box = projectMenuTrigger.getBoundingClientRect();
+    projectMenuPosition = { x: box.left, y: box.bottom, position: "right" };
+    projectMenu = { project, section };
+  }
+  function closeProjectMenu() {
+    projectMenu = null;
+    projectMenuTrigger?.focus();
+  }
+  function moveProjectFromMenu(delta) {
+    const { project, section } = projectMenu;
+    const projects = [...getProjectsForSection(section)];
+    const index = projects.findIndex(
+      (p) => getProjectId(p, section) === getProjectId(project, section)
+    );
+    if (index < 0 || index + delta < 0 || index + delta >= projects.length) return;
+    projects.splice(index, 1);
+    projects.splice(index + delta, 0, project);
+    saveProjectOrder(section, projects);
+  }
+  function deleteProjectFromMenu() {
+    const { project, section } = projectMenu;
+    if (section === "WorkspaceProject") {
+      workspace_delete_target = project;
+      show_workspace_delete = true;
+    } else {
+      project_id_confirm = project.id;
+      project_name_confirm = project.name;
+      show_confirm = true;
+    }
+  }
   import IconButton from "@lib/primitives/IconButton.svelte";
   import Dialog from "@lib/primitives/Dialog.svelte";
   import WorkspaceSetup from "@features/workspace/components/WorkspaceSetup.svelte";
   import { ripple, tooltip } from "@lib/actions";
-  import {
-    project_ids,
-    selected_type,
-    selected_id,
-    tag_index,
-    active_tag,
-    sidebarCollapsed,
-  } from "@stores";
+  import { project_ids, selected_type, selected_id, sidebarCollapsed } from "@stores";
   import { workspace_store } from "@features/workspace/stores/workspace";
   import { showWorkspaceSetup } from "@stores/ui";
   import { getDefaultProject } from "@features/tasks/utils/tree_control";
@@ -76,7 +127,6 @@
   let workspace_open_error_timer;
   let workspaceProjectsExpanded = true;
   let inAppProjectsExpanded = true;
-  let tagsExpanded = true;
 
   async function handleOpenActiveWorkspace(e) {
     e.stopPropagation();
@@ -95,7 +145,6 @@
   let show_confirm = false;
   let project_id_confirm;
   let project_name_confirm;
-  let tagQuery = "";
   const toggle_confirm = () => {
     show_confirm = !show_confirm;
   };
@@ -109,18 +158,6 @@
     $selected_id = id;
     $sidebarCollapsed = true;
   }
-  $: tagEntries = [...$tag_index.entries()].sort(([a], [b]) => a.localeCompare(b));
-  $: normalizedTagQuery = tagQuery.trim().toLocaleLowerCase();
-  $: visibleTagEntries = normalizedTagQuery
-    ? tagEntries.filter(([tag]) => tag.toLocaleLowerCase().includes(normalizedTagQuery))
-    : tagEntries;
-  $: tagScopeLabel =
-    $selected_type === "WorkspaceProject"
-      ? "Workspace"
-      : $selected_type === "Projects"
-        ? "db.json"
-        : "Memo";
-
   // Add
   const handleAdd = async (e) => {
     e.stopPropagation();
@@ -348,7 +385,7 @@
       <path
         d="M3 7C3 5.89543 3.89543 5 5 5H9.58579C9.851 5 10.1054 5.10536 10.2929 5.29289L11.7071 6.70711C11.8946 6.89464 12.149 7 12.4142 7H19C20.1046 7 21 7.89543 21 9V17C21 18.1046 20.1046 19 19 19H5C3.89543 19 3 18.1046 3 17V7Z"
         fill="none"
-        stroke="white"
+        stroke="currentColor"
         stroke-width="2"
         stroke-linejoin="round"
       />
@@ -485,14 +522,14 @@
           <IconButton
             tooltipContent="Workspaceプロジェクトを追加"
             ariaLabel="Workspaceプロジェクトを追加"
-            normalColor="rgba(255,255,255,0.1)"
-            activeColor="rgba(255,255,255,0.2)"
+            normalColor="var(--canvas-subtle)"
+            activeColor="var(--hover-bg)"
             on:click={addWorkspaceProject}
           >
             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
               ><path
                 d="M12 5V19M5 12H19"
-                stroke="white"
+                stroke="currentColor"
                 stroke-width="2"
                 stroke-linecap="round"
                 stroke-linejoin="round"
@@ -529,24 +566,12 @@
                   }}>{proj.name}</span
                 >
               </button>
-              <div class="DeleteButtonContainer">
-                <IconButton
-                  tooltipContent={`プロジェクト「${proj.name}」を削除`}
-                  ariaLabel={`プロジェクト「${proj.name}」を削除`}
-                  disabled={proj.protected}
-                  style="height: 100%; margin:0; box-shadow:none;"
-                  normalColor="transparent"
-                  activeColor="rgba(255,255,255,0.2)"
-                  on:click={(e) => handleDeleteWorkspaceProject(e, proj)}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"
-                    ><path
-                      fill="white"
-                      d="M13.05 42q-1.25 0-2.125-.875T10.05 39V10.5H8v-3h9.4V6h13.2v1.5H40v3h-2.05V39q0 1.2-.9 2.1-.9.9-2.1.9Zm21.9-31.5h-21.9V39h21.9Zm-16.6 24.2h3V14.75h-3Zm8.3 0h3V14.75h-3Zm-13.6-24.2V39Z"
-                    /></svg
-                  >
-                </IconButton>
-              </div>
+              <button
+                class="ui-action ProjectMenuTrigger"
+                aria-label={proj.name + "の操作"}
+                data-task-menu-trigger
+                on:click={(event) => openProjectMenu(event, proj, "WorkspaceProject")}>…</button
+              >
             </div>
           {/each}
         {:else}
@@ -607,8 +632,8 @@
             : "アプリ内プロジェクトを追加"}
           ariaLabel={adding_in_app_project ? "プロジェクトを追加中" : "アプリ内プロジェクトを追加"}
           disabled={adding_in_app_project}
-          normalColor="rgba(255,255,255,0.1)"
-          activeColor="rgba(255,255,255,0.2)"
+          normalColor="var(--canvas-subtle)"
+          activeColor="var(--hover-bg)"
           on:click={(e) => {
             handleAdd(e);
           }}
@@ -616,7 +641,7 @@
           <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
             ><path
               d="M12 5V19M5 12H19"
-              stroke="white"
+              stroke="currentColor"
               stroke-width="2"
               stroke-linecap="round"
               stroke-linejoin="round"
@@ -655,117 +680,17 @@
                 }}>{child.name}</span
               >
             </button>
-            <div class="DeleteButtonContainer">
-              <IconButton
-                tooltipContent={`プロジェクト「${child.name}」を削除`}
-                ariaLabel={`プロジェクト「${child.name}」を削除`}
-                style="height: 100%; margin:0; box-shadow:none;"
-                normalColor="transparent"
-                activeColor="rgba(255,255,255,0.2)"
-                on:click={(e) => {
-                  handleDelete(e, child.id);
-                }}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"
-                  ><path
-                    fill="white"
-                    d="M13.05 42q-1.25 0-2.125-.875T10.05 39V10.5H8v-3h9.4V6h13.2v1.5H40v3h-2.05V39q0 1.2-.9 2.1-.9.9-2.1.9Zm21.9-31.5h-21.9V39h21.9Zm-16.6 24.2h3V14.75h-3Zm8.3 0h3V14.75h-3Zm-13.6-24.2V39Z"
-                  /></svg
-                >
-              </IconButton>
-            </div>
+            <button
+              class="ui-action ProjectMenuTrigger"
+              aria-label={child.name + "の操作"}
+              data-task-menu-trigger
+              on:click={(event) => openProjectMenu(event, child, "Projects")}>…</button
+            >
           </div>
         {/each}
       </div>
     {/if}
   </div>
-
-  <!-- Tag browser — laid out exactly like the Workspace/Projects
-       sections (logo + title + collapse chevron + .Contents). -->
-  <br />
-  <div class="Section">
-    <svg class="Logo" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <path
-        d="M20.59 13.41L13.42 20.58A2 2 0 0 1 10.59 20.58L2 12V2H12L20.59 10.59A2 2 0 0 1 20.59 13.41Z"
-        fill="none"
-        stroke="white"
-        stroke-width="2"
-        stroke-linejoin="round"
-      />
-      <circle cx="7" cy="7" r="1.5" fill="white" />
-    </svg>
-    <span class="TextOverFlow">タグ <span class="TagScope">({tagScopeLabel})</span></span>
-    <div class="AddButtonContainer">
-      <IconButton
-        tooltipContent={tagsExpanded ? "タグを折りたたむ" : "タグを展開"}
-        ariaLabel={tagsExpanded ? "タグを折りたたむ" : "タグを展開"}
-        normalColor="rgba(255,255,255,0.1)"
-        activeColor="rgba(255,255,255,0.2)"
-        on:click={() => (tagsExpanded = !tagsExpanded)}
-      >
-        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-          {#if tagsExpanded}
-            <path
-              d="M18 15L12 9L6 15"
-              stroke="white"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          {:else}
-            <path
-              d="M6 9L12 15L18 9"
-              stroke="white"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          {/if}
-        </svg>
-      </IconButton>
-    </div>
-  </div>
-  {#if tagsExpanded}
-    <div class="Contents TagContents">
-      <label class="TagSearch">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M21 21L16.7 16.7M18 11A7 7 0 1 1 4 11A7 7 0 0 1 18 11Z" />
-        </svg>
-        <input
-          bind:value={tagQuery}
-          type="text"
-          placeholder="タグを絞り込み"
-          aria-label="タグを絞り込み"
-        />
-      </label>
-
-      {#if visibleTagEntries.length > 0}
-        {#each visibleTagEntries as [tag, nodes] (tag)}
-          <button
-            class="MenuRow TagRow"
-            class:Selected={$active_tag === tag}
-            use:ripple
-            on:click={() => ($active_tag = $active_tag === tag ? null : tag)}
-          >
-            <div class="TreeLine" style="flex-shrink: 0"></div>
-            <span class="TagRowMark">#</span>
-            <span class="TextOverFlow">{tag}</span>
-            <span class="TagBadge">{nodes.size}</span>
-          </button>
-        {/each}
-      {:else if $tag_index.size > 0}
-        <div class="MenuRow EmptyTagRow">
-          <div class="TreeLine" style="flex-shrink: 0"></div>
-          <span class="TextOverFlow">一致するタグなし</span>
-        </div>
-      {:else}
-        <div class="MenuRow EmptyTagRow">
-          <div class="TreeLine" style="flex-shrink: 0"></div>
-          <span class="TextOverFlow">タグなし</span>
-        </div>
-      {/if}
-    </div>
-  {/if}
 </div>
 <Dialog
   show={show_confirm}
@@ -780,6 +705,16 @@
   header="Workspaceプロジェクトの削除"
   content={`「${workspace_delete_target?.name ?? ""}」のノードと接続を削除します。子ノードは残り、必要ならWorkspace Rootに接続されます。元に戻す操作で復元できます。`}
   callback={callback_workspace_delete}
+/>
+
+<TaskMenu
+  show={Boolean(projectMenu)}
+  position={projectMenuPosition}
+  menuItems={projectMenuItems}
+  on:close={closeProjectMenu}
+  on:up={() => moveProjectFromMenu(-1)}
+  on:down={() => moveProjectFromMenu(1)}
+  on:remove={deleteProjectFromMenu}
 />
 
 <style>
@@ -800,7 +735,7 @@
     height: 2.75rem;
     padding: 0 var(--sp2);
     width: 100%;
-    color: white;
+    color: var(--fg-default);
     align-items: center;
     font-weight: 600;
     font-size: var(--font-title-sm);
@@ -830,7 +765,7 @@
     gap: var(--sp1);
     min-height: 2rem;
     padding: 0 var(--sp1) 0 var(--sp2);
-    color: rgba(255, 255, 255, 0.78);
+    color: var(--fg-muted);
     font-size: var(--font-label-md);
     font-weight: 700;
     letter-spacing: 0.02em;
@@ -851,10 +786,10 @@
     cursor: pointer;
   }
   .ProjectSubsectionToggle:hover {
-    background-color: rgba(255, 255, 255, 0.08);
+    background-color: var(--hover-bg);
   }
   .ProjectSubsectionToggle:focus-visible {
-    outline: 2px solid var(--on-theme-primary);
+    outline: 2px solid var(--accent-fg);
     outline-offset: -2px;
   }
   .Chevron {
@@ -884,8 +819,8 @@
     margin-left: var(--sp1);
     padding: 0 var(--sp1);
     border-radius: var(--shape-pill);
-    color: rgba(255, 255, 255, 0.72);
-    background-color: rgba(255, 255, 255, 0.09);
+    color: var(--fg-muted);
+    background-color: var(--hover-bg);
     font-size: var(--font-label-sm);
     font-weight: 700;
   }
@@ -896,7 +831,7 @@
   .Logo {
     width: 1.25rem;
     height: 1.25rem;
-    fill: white;
+    fill: currentColor;
     margin-right: var(--sp3);
   }
   .AddButtonContainer {
@@ -904,14 +839,9 @@
     height: 100%;
     aspect-ratio: 1;
   }
-  .DeleteButtonContainer {
+  .ProjectMenuTrigger {
     margin-left: auto;
-    height: 100%;
-    aspect-ratio: 1;
     flex: 0 0 auto;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.12s ease;
   }
   .MenuRow {
     display: flex;
@@ -923,7 +853,7 @@
     min-height: 2rem;
     padding: 0 var(--sp2);
     width: 100%;
-    color: white;
+    color: var(--fg-default);
     align-items: center;
     cursor: pointer;
     border-radius: 0 var(--shape-sm) var(--shape-sm) 0;
@@ -934,7 +864,7 @@
     display: block;
   }
   .MenuRow:focus-visible {
-    outline: 2px solid var(--on-theme-primary);
+    outline: 2px solid var(--accent-fg);
     outline-offset: -2px;
     z-index: 1;
   }
@@ -949,20 +879,16 @@
     text-align: left;
   }
   .ProjectSelectButton:focus-visible {
-    outline: 2px solid var(--on-theme-primary);
+    outline: 2px solid var(--accent-fg);
     outline-offset: -2px;
   }
   .ProjectSelectButton .TextOverFlow {
     flex: 1 1 auto;
     min-width: 0;
   }
-  .MenuRow:hover .DeleteButtonContainer,
-  .MenuRow:focus-within .DeleteButtonContainer {
-    opacity: 1;
-    pointer-events: auto;
-  }
+
   .MenuRow:not(.Selected):hover {
-    background-color: rgba(255, 255, 255, 0.08);
+    background-color: var(--hover-bg);
   }
   button {
     border: none;
@@ -972,7 +898,7 @@
     background-color: transparent;
   }
   .Selected {
-    background-color: var(--theme-color-Theme-dark);
+    background-color: var(--canvas-subtle);
   }
   .Selected::before {
     content: "";
@@ -981,7 +907,7 @@
     left: 0;
     width: 3px;
     height: 100%;
-    background-color: var(--on-theme-primary);
+    background-color: var(--accent-fg);
     z-index: 99999;
   }
   .TextOverFlow {
@@ -994,7 +920,7 @@
     align-self: stretch;
     height: auto;
     width: 1rem;
-    border-left: 1px solid white;
+    border-left: 1px solid var(--border-muted);
     left: -1rem;
   }
   /* Drag and drop styles */
@@ -1002,9 +928,9 @@
     position: absolute;
     top: -1000rem;
     display: inline;
-    background-color: var(--on-theme-primary);
-    border: 1px solid var(--on-theme-primary);
-    color: #ffffff;
+    background-color: var(--accent-fg);
+    border: 1px solid var(--accent-fg);
+    color: var(--fg-default);
     padding: 0 var(--sp2);
     z-index: 10000;
   }
@@ -1014,7 +940,7 @@
   }
 
   .MenuRow:global(.DragOverTop):before {
-    border-top: 0.2rem solid var(--on-theme-primary);
+    border-top: 0.2rem solid var(--accent-fg);
     position: absolute;
     content: "";
     height: 2rem;
@@ -1026,7 +952,7 @@
   }
 
   .MenuRow:global(.DragOverBottom):before {
-    border-bottom: 0.2rem solid var(--on-theme-primary);
+    border-bottom: 0.2rem solid var(--accent-fg);
     position: absolute;
     content: "";
     height: 2rem;
@@ -1048,23 +974,23 @@
     flex: 1 1 auto;
     min-width: 0;
     font-size: var(--font-body-sm);
-    color: rgba(255, 255, 255, 0.75);
+    color: var(--fg-muted);
   }
   .NoWorkspaceHint {
     flex: 1 1 auto;
     min-width: 0;
     font-size: var(--font-body-sm);
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--fg-muted);
     font-style: italic;
   }
   .WorkspaceIconBtn,
   .WorkspaceManageBtn {
     display: inline-flex;
     align-items: center;
-    border: 1px solid rgba(255, 255, 255, 0.32);
+    border: 1px solid var(--hover-bg);
     border-radius: var(--shape-xs);
-    background-color: rgba(255, 255, 255, 0.08);
-    color: white;
+    background-color: var(--hover-bg);
+    color: var(--fg-default);
     font-size: var(--font-label-md);
     font-weight: 500;
     cursor: pointer;
@@ -1085,8 +1011,8 @@
   }
   .WorkspaceIconBtn:hover,
   .WorkspaceManageBtn:hover {
-    background-color: rgba(255, 255, 255, 0.18);
-    border-color: rgba(255, 255, 255, 0.5);
+    background-color: var(--hover-bg);
+    border-color: var(--fg-muted);
   }
   .WorkspaceIconBtn svg,
   .WorkspaceManageBtn svg {
@@ -1103,115 +1029,5 @@
     padding: 0 var(--sp2) var(--sp2) var(--sp4);
     color: var(--theme-color-Error-light, #ffb4ab);
     font-size: var(--font-label-md);
-  }
-  .TagRowMark {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    font-weight: 700;
-  }
-  .TagScope {
-    color: rgba(255, 255, 255, 0.6);
-    font-size: var(--font-label-sm);
-    font-weight: 400;
-    letter-spacing: 0;
-    margin-left: 4px;
-  }
-  .TagSearch svg {
-    width: 1rem;
-    height: 1rem;
-  }
-  .TagSearch path {
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 2;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
-  .TagContents {
-    flex: 1 1 auto;
-    min-height: 6rem;
-  }
-  .TagSearch {
-    display: flex;
-    align-items: center;
-    gap: var(--sp1);
-    min-height: 2rem;
-    margin: 0 var(--sp2) var(--sp1);
-    padding: 0 var(--sp2);
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    border-radius: var(--shape-sm);
-    color: rgba(255, 255, 255, 0.58);
-    background-color: rgba(0, 0, 0, 0.14);
-    flex-shrink: 0;
-  }
-  .TagSearch:focus-within {
-    border-color: var(--on-theme-primary);
-    color: white;
-    box-shadow: inset 0 0 0 1px var(--on-theme-primary);
-  }
-  .TagSearch input {
-    min-width: 0;
-    width: 100%;
-    border: none;
-    outline: none;
-    color: white;
-    background: transparent;
-    font-size: var(--font-body-sm);
-  }
-  .TagSearch input::placeholder {
-    color: rgba(255, 255, 255, 0.44);
-  }
-  .TagRow {
-    gap: var(--sp2);
-    min-height: 2rem;
-    padding: 0 var(--sp2);
-    border-radius: var(--shape-sm);
-  }
-  .TagRowMark {
-    width: 1.25rem;
-    height: 1.25rem;
-    border-radius: var(--shape-pill);
-    color: var(--on-theme-primary-light);
-    background-color: rgba(255, 255, 255, 0.07);
-    font-size: var(--font-label-md);
-  }
-  .EmptyTagRow {
-    gap: var(--sp2);
-    color: rgba(255, 255, 255, 0.55);
-    cursor: default;
-  }
-  .EmptyProjectRow {
-    gap: var(--sp2);
-    color: rgba(255, 255, 255, 0.55);
-    cursor: default;
-  }
-  .EmptyProjectRow:hover {
-    background-color: transparent;
-  }
-  .EmptyProjectRow:hover::before {
-    display: none;
-  }
-  .EmptyTagRow:hover {
-    background-color: transparent;
-  }
-  .EmptyTagRow:hover::before {
-    display: none;
-  }
-  .TagBadge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 1.5rem;
-    height: 1.25rem;
-    margin-left: auto;
-    padding: 0 var(--sp1);
-    border-radius: var(--shape-pill);
-    font-size: var(--font-label-sm);
-    font-weight: 700;
-    color: rgba(255, 255, 255, 0.7);
-    background-color: rgba(255, 255, 255, 0.08);
-    flex-shrink: 0;
   }
 </style>

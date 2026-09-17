@@ -43,6 +43,7 @@
      乗る要素も常時同じ色で良い。テーマ依存の theme-color-* を使うと
      ライトテーマで暗色版になり視認性が落ちるので、ダークテーマ寄りの
      明るめバリアントを採用。 */
+  --on-theme-text: #f4f7ff;
   --on-theme-success: #66bb6a;
   --on-theme-warning: #ffa726;
   --on-theme-error: #f44336;
@@ -325,4 +326,41 @@ button:not(:disabled):active,
 ::highlight(page-search-current) {
   background-color: color-mix(in srgb, #ff8a3d 80%, transparent);
   color: #1f1f1f;
+}
+
+/* Renderer semantic foundations; values are supplied by the existing Theme store. */
+body {
+  color: var(--fg-default);
+  background: var(--canvas-default);
+}
+:where(button, input, select, textarea, a, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent-fg);
+  outline-offset: 2px;
+}
+.ui-action {
+  color: var(--fg-default);
+  background: var(--canvas-subtle);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--shape-xs);
+  padding: var(--sp1) var(--sp2);
+  font: inherit;
+  cursor: pointer;
+}
+.ui-action:hover {
+  background: var(--hover-bg);
+}
+.ui-action:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.ui-action.primary {
+  background: var(--accent-emphasis);
+  color: var(--accent-on-emphasis);
+}
+
+:root {
+  --tree-row-height: 36px;
+}
+.density-compact {
+  --tree-row-height: 32px;
 }

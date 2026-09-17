@@ -63,6 +63,7 @@
 </script>
 
 <button
+  {...$$restProps}
   class="IconButton"
   {type}
   {disabled}

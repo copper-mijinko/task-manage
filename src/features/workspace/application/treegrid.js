@@ -14,8 +14,27 @@ import {
   selectOnly,
 } from "@stores/ui";
 import * as platform from "@lib/ipc/platform";
+import { tick } from "svelte";
+import { selected_id } from "@stores/ui";
+import { navigation_history } from "@stores/navigation_history";
 
 export const TREEGRID_APPLICATION = "task-manage:treegrid-application";
+
+function filterProject(project, filters, archived, tag) {
+  if (!project) return undefined;
+  let node = archived ? project.data : stripArchivedNodes(project.data);
+  if (tag && node) {
+    const prune = (item) => {
+      const children = item.children.map(prune).filter(Boolean);
+      return children.length ||
+        item.data.tags.some((value) => value.toLowerCase() === tag.toLowerCase())
+        ? { ...item, children }
+        : null;
+    };
+    node = prune(node);
+  }
+  return node ? filterTree(node, filters) : null;
+}
 
 export function createTreeGridApplication(workspacePath) {
   const scope = writable("");
@@ -27,19 +46,8 @@ export function createTreeGridApplication(workspacePath) {
   const filtered = derived(
     [tree, filter, sort_state, show_archived, active_tag],
     ([project, filters, sort, archived, tag]) => {
-      if (!project) return undefined;
-      let node = archived ? project.data : stripArchivedNodes(project.data);
-      if (tag && node) {
-        const prune = (item) => {
-          const children = item.children.map(prune).filter(Boolean);
-          return children.length ||
-            item.data.tags.some((value) => value.toLowerCase() === tag.toLowerCase())
-            ? { ...item, children }
-            : null;
-        };
-        node = prune(node);
-      }
-      return node ? sortTree(filterTree(node, filters), sort) : null;
+      const node = filterProject(project, filters, archived, tag);
+      return node ? sortTree(node, sort) : node;
     }
   );
   const records = derived(workspace_graph, (graph) => graph?.nodes || {});
@@ -199,7 +207,48 @@ export function createTreeGridApplication(workspacePath) {
   }
   let clipboard = [];
   const copied = writable([]);
+  async function navigateToNode(id, { clearFilters = false } = {}) {
+    const graph = graphNow();
+    if (!graph?.nodes[id]) return { error: "所属先が見つかりません。" };
+    const findPath = (root) => {
+      const pending = root ? [{ node: root, path: root.id }] : [];
+      while (pending.length) {
+        const { node, path } = pending.pop();
+        if (node.id === id && !node.cycleReference) return path;
+        for (const child of [...node.children].reverse())
+          pending.push({ node: child, path: `${path}/${child.id}` });
+      }
+    };
+    const localPath = findPath(get(tree)?.data);
+    const targetProject = localPath ? get(tree) : projectTreeGrid(graph, graph.rootId);
+    const targetPath = localPath || findPath(targetProject?.data);
+    if (!targetPath) return { error: "表示上限または循環参照のため、所属先へ到達できません。" };
+    if (graph.nodes[id].archived && !get(show_archived))
+      return { error: "所属先はアーカイブ済みです。表示メニューでアーカイブを表示してください。" };
+    if (clearFilters) {
+      filter.set({});
+      active_tag.set(null);
+    }
+    const filters = get(filter);
+    const filteredRoot = filterProject(targetProject, filters, get(show_archived), get(active_tag));
+    const visiblePath = findPath(filteredRoot);
+    if (!visiblePath)
+      return { filtered: true, error: "絞り込み条件により所属先を表示できません。" };
+    navigation_history.pushSelection();
+    if (!localPath) {
+      selected_id.set(graph.rootId);
+      scope.set(graph.rootId);
+      await tick();
+      if (graphNow() !== graph || get(scope) !== graph.rootId)
+        return { error: "表示範囲が変更されました。もう一度お試しください。" };
+    }
+    selectOnly(id);
+    revealOccurrence(visiblePath);
+    navigation_history.pushSelection();
+    return { path: visiblePath };
+  }
   return {
+    navigateToNode,
     scope,
     error,
     tree,
@@ -258,7 +307,7 @@ export function createTreeGridApplication(workspacePath) {
           .map((parentId) => ({ type: "detach", childId: nodeId, parentId })),
       ]);
     },
-    reorder: ({ draggedIds, draggedPath, targetId, targetPath, mode }) => {
+    reorder: ({ draggedIds, draggedPath, targetId, targetPath, mode, operation = "move" }) => {
       const sourceId = draggedPath?.split("/").at(-1);
       if (!draggedIds.includes(sourceId)) return;
       const fromParentId = context(sourceId, draggedPath).parentId;
@@ -267,6 +316,40 @@ export function createTreeGridApplication(workspacePath) {
       if (!draggedIds.every((id) => siblings(fromParentId).some((node) => node.id === id))) {
         error.set("同じ親の行を選択してください。");
         return;
+      }
+      if (operation === "copy") {
+        const children = siblings(toParentId);
+        const index =
+          mode === "append"
+            ? children.length
+            : children.findIndex((node) => node.id === targetId) +
+              (mode === "insert" || mode === "insert_before" ? 0 : 1);
+        return dispatch([
+          ...(mode === "append"
+            ? []
+            : children.map((node, i) => ({
+                type: "move",
+                childId: node.id,
+                fromParentId: toParentId,
+                toParentId,
+                order: i < index ? i : i + draggedIds.length,
+              }))),
+          ...draggedIds.map((nodeId, i) => ({
+            type: "copy",
+            nodeId,
+            targetParentId: toParentId,
+            mode: "subgraph",
+            order:
+              mode === "append"
+                ? Math.max(
+                    -1,
+                    ...children.map((node) => node.parents.find((p) => p.id === toParentId).order)
+                  ) +
+                  i +
+                  1
+                : index + i,
+          })),
+        ]);
       }
       const ordered = siblings(toParentId)
         .map((node) => node.id)
@@ -289,6 +372,7 @@ export function createTreeGridApplication(workspacePath) {
       );
     },
     history: async (direction) => {
+      error.set("");
       try {
         await workspace_graph_store[direction]();
       } catch (e) {

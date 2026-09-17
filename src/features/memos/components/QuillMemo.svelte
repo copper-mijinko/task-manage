@@ -6,9 +6,28 @@
   import isEqual from "lodash/isEqual";
   import { memoContentForCompare } from "@features/memos/utils/memo_utils";
 
+  import { formatDate, formatTime } from "@lib/utils/datetime_shortcuts";
+  import { date_time_format } from "@stores/preferences";
   export let saveMemo;
   export let content = "";
   export let readOnly = false;
+  let pendingSave;
+  let unsavedContent;
+  function persistContent(contents, selection) {
+    unsavedContent = contents;
+    const save = saveMemo;
+    pendingSave = Promise.resolve(save(contents, selection))
+      .then((result) => {
+        if (result === false) throw new Error("保存できませんでした。入力は保持されています。");
+        if (unsavedContent === contents) unsavedContent = undefined;
+        return true;
+      })
+      .catch((error) => {
+        errorMessage = error.message;
+        return false;
+      });
+    return pendingSave;
+  }
 
   let editor;
   let quill = null;
@@ -625,11 +644,7 @@
       theme: "snow",
       modules: {
         table: true,
-        toolbar: readOnly
-          ? false
-          : {
-              container: toolbarOptions,
-            },
+        toolbar: { container: toolbarOptions },
         clipboard: {
           matchVisual: false,
         },
@@ -643,9 +658,9 @@
     lastSavedContent = initialContent;
     quill.enable(!readOnly);
 
-    if (!readOnly) {
+    {
       quill.on("text-change", (_delta, _oldDelta, source) => {
-        if (source !== "user") return;
+        if (source !== "user" || readOnly) return;
 
         isEditing = true;
         const currentSelection = quill.hasFocus() ? quill.getSelection() : null;
@@ -659,9 +674,9 @@
         }
 
         if (currentSelection) {
-          saveMemo(contents, currentSelection);
+          persistContent(contents, currentSelection);
         } else {
-          saveMemo(contents);
+          persistContent(contents);
         }
 
         scheduleVisibleSpaceTypingUpdate();
@@ -703,7 +718,7 @@
     };
   });
 
-  $: if (quill && !isEditing) {
+  $: if (quill && !isEditing && !unsavedContent) {
     const normalizedContent = normalizeContent(content);
     const normalizedLastSavedContent = normalizeContent(lastSavedContent);
     const contentIsEmpty = isEmptyContent(normalizedContent);
@@ -729,9 +744,29 @@
   $: if (quill) {
     quill.enable(!readOnly);
   }
+  function insertDateTime(kind) {
+    const range = quill?.getSelection(true) || savedSelection || { index: 0, length: 0 };
+    const text =
+      kind === "date"
+        ? formatDate(new Date(), $date_time_format)
+        : formatTime(new Date(), $date_time_format);
+    quill.deleteText(range.index, range.length, "user");
+    quill.insertText(range.index, text, "user");
+    quill.setSelection(range.index + text.length, 0);
+  }
+  export function flush() {
+    if (unsavedContent) return persistContent(unsavedContent);
+    return pendingSave;
+  }
+  export function hasPendingSave() {
+    return Boolean(unsavedContent);
+  }
+  export function startEditing() {
+    quill?.focus();
+  }
 </script>
 
-<div class="wrapper">
+<div class="wrapper" class:reading={readOnly}>
   {#if errorMessage}
     <div class="error-banner" role="alert">
       <span>{errorMessage}</span>
@@ -740,10 +775,34 @@
       </button>
     </div>
   {/if}
+  {#if !readOnly}
+    <div class="quill-commands">
+      <button class="ui-action" on:mousedown|preventDefault on:click={() => quill?.history.undo()}
+        >元に戻す</button
+      >
+      <button class="ui-action" on:mousedown|preventDefault on:click={() => quill?.history.redo()}
+        >やり直し</button
+      >
+      <button
+        class="ui-action"
+        on:mousedown|preventDefault
+        on:click={() => quill?.setSelection(0, quill.getLength())}>全選択</button
+      >
+      <button class="ui-action" on:mousedown|preventDefault on:click={() => insertDateTime("date")}
+        >日付を挿入</button
+      >
+      <button class="ui-action" on:mousedown|preventDefault on:click={() => insertDateTime("time")}
+        >時刻を挿入</button
+      >
+    </div>
+  {/if}
   <div bind:this={editor} class="editor"></div>
 </div>
 
 <style>
+  .wrapper.reading :global(.ql-toolbar) {
+    display: none;
+  }
   .wrapper {
     --memo-editor-font:
       "BIZ UDゴシック", "BIZ UDGothic", "ＭＳ ゴシック", "MS Gothic", "Cascadia Mono",

@@ -31,6 +31,7 @@ export interface ProjectListItem {
 }
 
 export interface PendingTaskDetailSelection {
+  occurrencePath?: string;
   projectId: string;
   taskId: string;
   selectedType?: "Projects" | "WorkspaceProject";
@@ -151,6 +152,7 @@ export interface ElectronAPI {
   windowToggleMaximize: () => void;
   windowClose: () => void;
   windowGetState: () => Promise<WindowState>;
+  windowZoom?: (action: "in" | "out" | "reset" | "get") => Promise<number>;
   onWindowStateChanged: (callback: (state: WindowState) => void) => void;
 
   // Workspace API

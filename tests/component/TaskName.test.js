@@ -12,6 +12,17 @@ async function openRenameEditor() {
 }
 
 describe("TaskName", () => {
+  test("IME confirmation does not submit the name until the next Enter", async () => {
+    render(TaskNameCommitHarness, { initialText: "Original" });
+    await openRenameEditor();
+    const input = screen.getByDisplayValue("Original");
+    await fireEvent.input(input, { target: { value: "日本語入力" } });
+    await fireEvent.keyDown(input, { key: "Enter", isComposing: true, keyCode: 229 });
+    expect(screen.getByTestId("committed-count")).toHaveTextContent("0");
+    expect(input).not.toBeDisabled();
+    await fireEvent.keyDown(input, { key: "Enter" });
+    expect(screen.getByTestId("last-committed")).toHaveTextContent("日本語入力");
+  });
   test("keeps the task name disabled until editing while row clicks still select", async () => {
     render(TaskNameClickHarness);
 

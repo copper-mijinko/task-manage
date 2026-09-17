@@ -8,6 +8,12 @@
     type UiDensity,
   } from "@stores/preferences";
   import { formatDate, formatTime } from "@lib/utils/datetime_shortcuts";
+  import { windowZoom } from "@lib/ipc/platform";
+  let zoomPercent = 100;
+  $: if (show) void windowZoom("get").then((value) => (zoomPercent = value));
+  async function changeZoom(action: "in" | "out" | "reset") {
+    zoomPercent = await windowZoom(action);
+  }
 
   export let show = false;
   export let toggle: () => void;
@@ -177,9 +183,8 @@
           <header class="DetailHeader">
             <h3 class="DetailTitle">外観</h3>
             <p class="DetailHint">
-              <strong>標準</strong>はカードに影と丸みを付けた既定の見た目です。
-              <strong>コンパクト</strong
-              >はVSCode風のフラットレイアウトで、影と角の丸みを消し、余白を詰めて密度を上げます。
+              <strong>標準</strong>はゆとりのある余白、<strong>コンパクト</strong
+              >は余白を抑えた表示です。文字の読みやすさと操作方法は共通です。
             </p>
           </header>
 
@@ -194,6 +199,12 @@
             />
           </div>
 
+          <div class="Field" aria-label="表示倍率">
+            <span class="FieldLabel">表示倍率 {zoomPercent}%</span>
+            <button class="ui-action" on:click={() => changeZoom("out")}>縮小</button>
+            <button class="ui-action" on:click={() => changeZoom("reset")}>100%に戻す</button>
+            <button class="ui-action" on:click={() => changeZoom("in")}>拡大</button>
+          </div>
           <p class="Note">
             <strong>補足:</strong>
             切り替えは即時反映され、次回起動時にも復元されます。テーマ（Dark / Light）の選択とは独立して機能します。

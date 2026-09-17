@@ -62,18 +62,17 @@ function openPathWithProgramPicker(filePath) {
   }
 
   return new Promise((resolve, reject) => {
-    // OpenAs_RunDLL consumes the raw remainder of the command line as the file
-    // path and does NOT strip surrounding quotes. Node's default Windows arg
-    // quoting wraps any path containing spaces in double quotes, which makes
-    // OpenAs_RunDLL look for a literally-quoted path that does not exist, so the
-    // "Open with" dialog silently fails to appear. We therefore build the command
-    // line verbatim (windowsVerbatimArguments) and pass the path unquoted —
-    // OpenAs_RunDLL treats the rest of the line as the path, spaces included.
-    const child = spawn("rundll32.exe", [`shell32.dll,OpenAs_RunDLL ${filePath}`], {
+    // Use the Windows Open With handler directly. Its normal argument parsing
+    // supports quoted paths, including spaces and non-ASCII file names.
+    const executable = path.join(
+      process.env.SystemRoot || "C:\\Windows",
+      "System32",
+      "OpenWith.exe"
+    );
+    const child = spawn(executable, [filePath], {
       detached: true,
       stdio: "ignore",
       windowsHide: false,
-      windowsVerbatimArguments: true,
     });
     let settled = false;
 
@@ -194,6 +193,20 @@ function shouldOpenDevTools() {
 // can't drift past the usable range. allowEscapeClose=true makes the
 // window dismissible with Esc — appropriate for the image-viewer popup,
 // not for the main / task-detail windows.
+function changeWindowZoom(contents, action) {
+  const current = contents.getZoomLevel();
+  const next =
+    action === "reset"
+      ? 0
+      : action === "in"
+        ? current + 0.5
+        : action === "out"
+          ? current - 0.5
+          : current;
+  contents.setZoomLevel(Math.max(-5, Math.min(5, next)));
+  return Math.round(contents.getZoomFactor() * 100);
+}
+
 function attachZoomControls(win, { allowEscapeClose = false } = {}) {
   const ZOOM_STEP = 0.5;
   const MIN_LEVEL = -5;
@@ -207,13 +220,13 @@ function attachZoomControls(win, { allowEscapeClose = false } = {}) {
     const mod = input.control || input.meta;
     if (mod) {
       if (input.key === "=" || input.key === "+") {
-        win.webContents.setZoomLevel(clamp(win.webContents.getZoomLevel() + ZOOM_STEP));
+        changeWindowZoom(win.webContents, "in");
         event.preventDefault();
       } else if (input.key === "-") {
-        win.webContents.setZoomLevel(clamp(win.webContents.getZoomLevel() - ZOOM_STEP));
+        changeWindowZoom(win.webContents, "out");
         event.preventDefault();
       } else if (input.key === "0") {
-        win.webContents.setZoomLevel(0);
+        changeWindowZoom(win.webContents, "reset");
         event.preventDefault();
       }
     } else if (allowEscapeClose && input.key === "Escape") {
@@ -1444,6 +1457,7 @@ app.on("ready", () => {
     const win = targetWindow(event);
     if (win && !win.isDestroyed()) win.close();
   });
+  trustedHandle("window:zoom", (event, action) => changeWindowZoom(event.sender, action));
   trustedHandle("window:get-state", (event) => {
     const win = targetWindow(event);
     if (!win || win.isDestroyed()) {

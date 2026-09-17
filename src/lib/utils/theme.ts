@@ -1,4 +1,22 @@
 export const THEME_DARK = {
+  semantic: {
+    "fg-default": "#e8edf0",
+    "fg-muted": "#b9c3cc",
+    "fg-subtle": "#aebac4",
+    "canvas-default": "#262d32",
+    "canvas-subtle": "#20262b",
+    "canvas-overlay": "#30383f",
+    "border-default": "#73818c",
+    "border-muted": "#424d56",
+    "accent-fg": "#90caf9",
+    "accent-emphasis": "#90caf9",
+    "accent-on-emphasis": "#101315",
+    "accent-subtle": "#293e50",
+    "success-fg": "#81c784",
+    "attention-fg": "#ffb74d",
+    "danger-fg": "#ffb4ab",
+    "hover-bg": "#353e45",
+  },
   color: {
     Shadow: {
       main: "rgba(0,0,0,0.1)",
@@ -75,6 +93,24 @@ export const THEME_DARK = {
 };
 
 export const THEME_LIGHT = {
+  semantic: {
+    "fg-default": "#262d32",
+    "fg-muted": "#52606b",
+    "fg-subtle": "#596670",
+    "canvas-default": "#ffffff",
+    "canvas-subtle": "#f6f8fa",
+    "canvas-overlay": "#ffffff",
+    "border-default": "#7d8993",
+    "border-muted": "#d8dee4",
+    "accent-fg": "#1565c0",
+    "accent-emphasis": "#1565c0",
+    "accent-on-emphasis": "#ffffff",
+    "accent-subtle": "#e5effb",
+    "success-fg": "#216e39",
+    "attention-fg": "#8a4000",
+    "danger-fg": "#a31515",
+    "hover-bg": "#edf0f3",
+  },
   color: {
     Shadow: {
       main: "rgba(255,255,255,0.1)",

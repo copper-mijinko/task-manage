@@ -22,8 +22,12 @@ describe("Modal", () => {
     expect(screen.queryByRole("button", { name: "設定を開く" })).toBeNull();
     expect(trigger.closest("div[inert]")).not.toBeNull();
 
+    const backgroundEscape = vi.fn();
+    window.addEventListener("keydown", backgroundEscape);
     await fireEvent.keyDown(window, { key: "Escape" });
     await tick();
+    window.removeEventListener("keydown", backgroundEscape);
+    expect(backgroundEscape).not.toHaveBeenCalled();
 
     expect(screen.queryByRole("dialog", { name: "テスト設定" })).toBeNull();
     expect(trigger).toHaveFocus();

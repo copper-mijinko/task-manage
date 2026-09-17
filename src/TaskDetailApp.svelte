@@ -8,6 +8,8 @@
     setTaskDetailWindowTarget,
     table_selected_id,
     theme,
+    ui_density,
+    date_time_format,
     tree_data,
     undoHistory,
     redoHistory,
@@ -39,6 +41,12 @@
   let unregisterDateTimeShortcuts = null;
 
   if (!workspacePath) init_detail_store();
+  else {
+    // Graph detail windows skip legacy tree initialization, but share visual preferences.
+    theme.init();
+    ui_density.init();
+    date_time_format.init();
+  }
 
   async function initialiseDetail() {
     try {

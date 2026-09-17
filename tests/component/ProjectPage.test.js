@@ -24,6 +24,7 @@ vi.mock("@features/gantt/components/GanttPanel.svelte", async () => {
 });
 
 import ProjectPage from "@pages/MainPage.svelte";
+import { TREEGRID_APPLICATION } from "@features/workspace/application/treegrid";
 import {
   closed_row_paths,
   ganttVisible,
@@ -67,6 +68,39 @@ function createProjectData() {
 }
 
 describe("ProjectPage", () => {
+  test.each([true, false, "reject"])(
+    "workspace bulk conversion deduplicates nodes and reports dispatch result %s",
+    async (result) => {
+      const data = createProjectData();
+      data.data.children[0].data.body = { ops: [{ insert: "launch\n" }] };
+      data.data.children[0].data.format = "quill";
+      data.data.children.push(structuredClone(data.data.children[0]));
+      tree_data.set(data);
+      const dispatch =
+        result === "reject"
+          ? vi.fn().mockRejectedValue(new Error("Write failed"))
+          : vi.fn().mockResolvedValue(result);
+      render(ProjectPage, {
+        context: new Map([
+          [
+            TREEGRID_APPLICATION,
+            { tree: tree_data, closed: closed_row_paths, dispatch, isProtected: () => false },
+          ],
+        ]),
+      });
+      await fireEvent.click(screen.getByRole("button", { name: "表示と操作" }));
+      await fireEvent.click(screen.getByRole("menuitem", { name: "全メモをMarkdownへ変換" }));
+      expect(screen.getByText("変換対象（1件）")).toBeInTheDocument();
+      await fireEvent.click(screen.getByRole("button", { name: "変換", exact: true }));
+      await tick();
+      expect(dispatch).toHaveBeenCalledTimes(1);
+      expect(dispatch.mock.calls[0][0]).toHaveLength(1);
+      expect(
+        screen.getByText(result === true ? /OK: First Task/ : /Error: First Task/)
+      ).toBeInTheDocument();
+      if (result === "reject") expect(screen.getByText(/Write failed/)).toBeInTheDocument();
+    }
+  );
   beforeEach(() => {
     vi.useFakeTimers();
     Object.defineProperty(window, "electronAPI", {
@@ -256,11 +290,13 @@ describe("ProjectPage", () => {
 
     expect(screen.getByTestId("task-detail-stub")).toBeInTheDocument();
 
-    await fireEvent.click(screen.getByRole("button", { name: "詳細欄を隠す" }));
+    await fireEvent.click(screen.getByRole("button", { name: "表示と操作" }));
+    await fireEvent.click(screen.getByRole("menuitem", { name: "詳細欄を隠す" }));
 
     expect(screen.queryByTestId("task-detail-stub")).not.toBeInTheDocument();
 
-    await fireEvent.click(screen.getByRole("button", { name: "詳細欄を表示" }));
+    await fireEvent.click(screen.getByRole("button", { name: "表示と操作" }));
+    await fireEvent.click(screen.getByRole("menuitem", { name: "詳細欄を表示" }));
 
     expect(screen.getByTestId("task-detail-stub")).toBeInTheDocument();
   });
@@ -275,7 +311,8 @@ describe("ProjectPage", () => {
 
     render(ProjectPage);
 
-    await fireEvent.click(screen.getByRole("button", { name: "全メモをMarkdownへ変換" }));
+    await fireEvent.click(screen.getByRole("button", { name: "表示と操作" }));
+    await fireEvent.click(screen.getByRole("menuitem", { name: "全メモをMarkdownへ変換" }));
     expect(screen.getByText("変換対象（1件）")).toBeInTheDocument();
     expect(screen.getByText("First Task")).toBeInTheDocument();
     expect(screen.getByText(/情報が損なわれる可能性/)).toBeInTheDocument();
@@ -298,7 +335,8 @@ describe("ProjectPage", () => {
 
     expect(screen.getByTestId("gantt-panel-stub")).toBeInTheDocument();
 
-    await fireEvent.click(screen.getByRole("button", { name: "詳細欄を隠す" }));
+    await fireEvent.click(screen.getByRole("button", { name: "表示と操作" }));
+    await fireEvent.click(screen.getByRole("menuitem", { name: "詳細欄を隠す" }));
 
     expect(screen.queryByTestId("task-detail-stub")).not.toBeInTheDocument();
     expect(screen.getByTestId("gantt-panel-stub")).toBeInTheDocument();

@@ -3,6 +3,7 @@
   import { get } from "svelte/store";
   import MainPage from "@pages/MainPage.svelte";
   import { selected_id, selectOnly, clearSelection, active_row_path } from "@stores/ui";
+  import { pendingTaskDetailSelection, clearPendingTaskDetailSelection } from "@stores/ui";
   import { workspace_store } from "../stores/workspace";
   import { workspaceApplication, workspaceNavigation } from "../application/workspace";
   import { TREEGRID_APPLICATION, createTreeGridApplication } from "../application/treegrid";
@@ -36,6 +37,13 @@
     clearSelection();
     selectOnly(rootId);
     $active_row_path = rootId;
+    if (pendingTaskDetailSelection?.projectId === rootId) {
+      selectOnly(pendingTaskDetailSelection.taskId);
+      $active_row_path = pendingTaskDetailSelection.occurrencePath || rootId;
+      const parts = ($active_row_path || "").split("/");
+      for (let i = 1; i < parts.length; i++) application.closed.delete(parts.slice(0, i).join("/"));
+      clearPendingTaskDetailSelection();
+    }
   }
   $: if ($projection) {
     const index = new Map();
@@ -52,17 +60,10 @@
   }
   onDestroy(() => {
     application.dispose();
-    clearSelection();
   });
 </script>
 
 <main class="workspace-treegrid" aria-label="Workspace TreeGrid">
-  {#if navigation}
-    <nav class="scope-bar" aria-label="現在の表示範囲">
-      <span>{navigation.names[rootId]}</span>
-      <span>検索・列フィルタはこの範囲が対象です</span>
-    </nav>
-  {/if}
   {#if $error}<div class="operation-error" role="alert">
       <span>{$error}</span><button aria-label="通知を閉じる" on:click={() => error.set("")}
         >×</button
@@ -83,15 +84,7 @@
     min-width: 0;
     min-height: 0;
   }
-  .scope-bar {
-    display: flex;
-    align-items: center;
-    gap: var(--sp2);
-    padding: var(--sp2);
-    flex-wrap: wrap;
-    color: var(--theme-color-Sub-main);
-    font-size: var(--font-body-sm);
-  }
+
   [role="alert"] {
     color: var(--theme-color-Error-main);
     padding: var(--sp2);
@@ -107,10 +100,5 @@
     background: var(--theme-color-Main-light);
     box-shadow: var(--elevation-3);
     border-radius: var(--shape-sm);
-  }
-  @media (max-width: 850px) {
-    .scope-bar > span + span {
-      display: none;
-    }
   }
 </style>

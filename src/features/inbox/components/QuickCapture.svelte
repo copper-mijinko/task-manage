@@ -2,6 +2,10 @@
   import { afterUpdate, tick, createEventDispatcher } from "svelte";
   import { workspace_store } from "@features/workspace/stores/workspace";
   import { inbox_store } from "@features/inbox/stores/inbox";
+  import {
+    workspaceApplication,
+    workspaceNavigation,
+  } from "@features/workspace/application/workspace";
   import { modalLayer } from "@lib/actions/modal_layer";
 
   /**
@@ -47,7 +51,9 @@
     }
     busy = true;
     errorMessage = "";
-    const result = await inbox_store.addItem({ name });
+    const result = $workspaceNavigation
+      ? await workspaceApplication.capture($workspace_store.activeWorkspacePath, name)
+      : await inbox_store.addItem({ name });
     busy = false;
     if (!result.success) {
       errorMessage = result.error || "追加に失敗しました";
@@ -65,6 +71,7 @@
 
   function handleKeydown(e) {
     if (e.key === "Escape") {
+      e.stopPropagation();
       e.preventDefault();
       close();
       return;
@@ -134,6 +141,18 @@
         disabled={!workspaceReady}
       />
 
+      <div class="capture-actions">
+        <button
+          class="ui-action"
+          disabled={busy || !workspaceReady || !value.trim()}
+          on:click={() => handleAdd(false)}>追加</button
+        >
+        <button
+          class="ui-action primary"
+          disabled={busy || !workspaceReady || !value.trim()}
+          on:click={() => handleAdd(true)}>追加して閉じる</button
+        >
+      </div>
       <div class="QuickCaptureMeta">
         {#if !workspaceReady}
           <span class="MetaWarn">Workspaceが未設定です。先にワークスペースを追加してください。</span

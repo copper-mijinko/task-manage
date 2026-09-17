@@ -5,6 +5,8 @@
   export let saveMemo = undefined;
   export let memoIndex = 0;
   export let format = undefined;
+  export function flush() {}
+  export function startEditing() {}
   export let currentMemoTitle = "";
 
   onDestroy(() => {

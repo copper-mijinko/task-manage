@@ -78,7 +78,7 @@ describe("App - workspace project rendering", () => {
     });
   });
 
-  test("keeps the unified node workspace mounted while legacy project metadata loads", async () => {
+  test("does not run the legacy loader or clear graph selection on Workspace navigation", async () => {
     let resolveReadProject;
     const readProject = new Promise((resolve) => {
       resolveReadProject = resolve;
@@ -115,8 +115,7 @@ describe("App - workspace project rendering", () => {
     await tick();
     await tick();
 
-    expect(get(projectLoading)).toBe(true);
-    expect(screen.getByText("読み込み中...")).toBeInTheDocument();
+    expect(get(projectLoading)).toBe(false);
     await waitFor(() => expect(screen.getByTestId("node-workspace-stub")).toBeInTheDocument());
     expect(screen.queryByTestId("tree-table-stub")).toBeNull();
 
@@ -139,7 +138,6 @@ describe("App - workspace project rendering", () => {
     await waitFor(() => {
       expect(screen.getByTestId("node-workspace-stub")).toBeInTheDocument();
     });
-    expect(get(tree_data).data.data.name).toBe("Beta");
-    expect(api.wsReadProject).toHaveBeenCalledWith("C:/workspace/beta");
+    expect(api.wsReadProject).not.toHaveBeenCalled();
   });
 });
