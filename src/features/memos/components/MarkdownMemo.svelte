@@ -12,7 +12,7 @@
     EditorView,
     keymap,
     layer,
-    lineNumbers,
+    placeholder,
     type LayerMarker,
     type ViewUpdate,
   } from "@codemirror/view";
@@ -121,8 +121,10 @@
   let modeDropdownEl: HTMLElement | null = null;
   let markdownSplitPercent = 55;
   let currentHeadingLevel = "normal";
-  let tableActionValue = "";
   let modeMenuOpen = false;
+  /** ツールバーのドロップダウン。開いているものだけを覚える。 */
+  let openToolbarMenu: "heading" | "table" | "more" | null = null;
+  let toolbarEl: HTMLElement | null = null;
 
   const SPLIT_MIN_PERCENT = 30;
   const SPLIT_MAX_PERCENT = 72;
@@ -147,6 +149,9 @@
     bulletList: quillIcons.list.bullet,
     quote: quillIcons.blockquote,
     codeBlock: codeBlockIconSvg,
+    indent: quillIcons.indent["+1"],
+    outdent: quillIcons.indent["-1"],
+    table: quillIcons.table,
   };
   const tableActionOptions = [
     { value: "insert", label: "表を挿入" },
@@ -159,6 +164,47 @@
     { value: "delete-table", label: "表を削除" },
   ] as const;
   type TableAction = (typeof tableActionOptions)[number]["value"];
+  type ToolbarMenuEntry =
+    | { kind: "group"; label: string }
+    | { kind: "item"; command: string; label: string };
+  const headingOptions = [
+    { command: "heading:0", label: "本文", short: "本文", level: "normal" },
+    { command: "heading:1", label: "見出し 1", short: "H1", level: "1" },
+    { command: "heading:2", label: "見出し 2", short: "H2", level: "2" },
+  ];
+  // 表はツールバーの独立したメニューに出す（「…」の奥に埋めると、行や列を
+  // 足すたびに 2 手かかる）。セル移動も表の操作なのでここに置く。
+  const tableMenuEntries: ToolbarMenuEntry[] = [
+    ...tableActionOptions.map((action) => ({
+      kind: "item" as const,
+      command: `table:${action.value}`,
+      label: action.label,
+    })),
+    { kind: "item", command: "next-cell", label: "次のセルへ" },
+    { kind: "item", command: "previous-cell", label: "前のセルへ" },
+  ];
+  // ネイティブ select 3 つ（編集操作 / 見出し / 表）でツールバーの 3/4 が
+  // 埋まり、狭いペインでは 2 段に折り返していた。よく使う操作はボタンで
+  // 残し、たまにしか使わないものだけこの「…」にまとめる。
+  const moreMenuEntries: ToolbarMenuEntry[] = [
+    { kind: "group", label: "編集" },
+    { kind: "item", command: "undo", label: "元に戻す" },
+    { kind: "item", command: "redo", label: "やり直し" },
+    { kind: "item", command: "search", label: "本文内を検索・置換" },
+    { kind: "item", command: "all", label: "すべて選択" },
+    { kind: "group", label: "挿入" },
+    { kind: "item", command: "date", label: "日付" },
+    { kind: "item", command: "time", label: "時刻" },
+    { kind: "item", command: "break", label: "改行" },
+    { kind: "item", command: "image", label: "画像" },
+  ];
+  // 他の Quill アイコンと同じく ql-fill を付ける。付けないと SVG 既定の黒で
+  // 描かれ、Dark テーマの暗い帯の上でほとんど見えなくなる。
+  const moreIconSvg =
+    '<svg viewBox="0 0 24 24" aria-hidden="true">' +
+    '<circle class="ql-fill" cx="5" cy="12" r="1.7"/>' +
+    '<circle class="ql-fill" cx="12" cy="12" r="1.7"/>' +
+    '<circle class="ql-fill" cx="19" cy="12" r="1.7"/></svg>';
   type MarkdownMemoMode = "preview" | "edit" | "split";
   type EditableMarkdownMemoMode = Exclude<MarkdownMemoMode, "preview">;
   const memoModeOptions = [
@@ -465,12 +511,6 @@
     }
     syncHeadingLevel();
     view.focus();
-  }
-
-  function handleHeadingChange(event: Event) {
-    const value = (event.currentTarget as HTMLSelectElement).value;
-    const level = value === "normal" ? 0 : Number(value);
-    formatHeading(level === 1 || level === 2 ? level : 0);
   }
 
   function toggleLinePrefix(prefix: string) {
@@ -1048,11 +1088,86 @@
     }
   }
 
-  function handleTableActionChange(event: Event) {
-    const value = (event.currentTarget as HTMLSelectElement).value as TableAction | "";
-    if (!value) return;
-    runTableAction(value);
-    tableActionValue = "";
+  /** ツールバーのメニュー項目をひとつのコマンド名で捌く。 */
+  function runToolbarCommand(command: string) {
+    openToolbarMenu = null;
+    if (!view) return;
+    if (command.startsWith("heading:")) {
+      const level = Number(command.slice("heading:".length));
+      formatHeading(level === 1 || level === 2 ? level : 0);
+      return;
+    }
+    if (command.startsWith("table:")) {
+      runTableAction(command.slice("table:".length) as TableAction);
+      return;
+    }
+    switch (command) {
+      case "undo":
+        undo(view);
+        break;
+      case "redo":
+        redo(view);
+        break;
+      case "search":
+        openSearchPanel(view);
+        return;
+      case "all":
+        selectAll(view);
+        break;
+      case "indent":
+        indentMore(view);
+        break;
+      case "outdent":
+        indentLess(view);
+        break;
+      case "date":
+        insertTextAtSelection(view, formatDate(new Date(), $date_time_format));
+        break;
+      case "time":
+        insertTextAtSelection(view, formatTime(new Date(), $date_time_format));
+        break;
+      case "break":
+        insertMarkdownHardBreak(view);
+        break;
+      case "next-cell":
+        formatTableAndMoveCell(view, 1);
+        break;
+      case "previous-cell":
+        formatTableAndMoveCell(view, -1);
+        break;
+      case "image":
+        imageTarget = view;
+        imageInput.click();
+        return;
+      default:
+        return;
+    }
+    view.focus();
+  }
+
+  function toggleToolbarMenu(menu: "heading" | "table" | "more") {
+    openToolbarMenu = openToolbarMenu === menu ? null : menu;
+  }
+
+  function handleToolbarMenuKeydown(event: KeyboardEvent) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      openToolbarMenu = null;
+      view?.focus();
+      return;
+    }
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    event.preventDefault();
+    const options = Array.from(
+      (event.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>(".tool-menu-item")
+    );
+    if (options.length === 0) return;
+    const currentIndex = Math.max(0, options.indexOf(document.activeElement as HTMLButtonElement));
+    const nextIndex =
+      event.key === "ArrowDown"
+        ? (currentIndex + 1) % options.length
+        : (currentIndex - 1 + options.length) % options.length;
+    options[nextIndex]?.focus();
   }
 
   async function resolveImageSources(html: string): Promise<string> {
@@ -1414,18 +1529,26 @@
       overflow: "auto",
       fontFamily: markdownSourceFontFamily,
       fontSize: "var(--font-body-md)",
-      lineHeight: "1.5",
+      // 1.5 だと日本語の行が詰まって読みにくい。原稿を書く画面なので
+      // 本文寄りの行送りにする。
+      lineHeight: "1.8",
       fontKerning: "none",
       fontVariantLigatures: "none",
       fontFeatureSettings: '"liga" 0, "calt" 0',
     },
     ".cm-content": {
-      padding: "var(--sp2) var(--sp3)",
+      padding: "var(--sp3) var(--sp4)",
       caretColor: "var(--theme-color-Sub-light)",
       minHeight: "100%",
     },
+    ".cm-placeholder": {
+      color: "color-mix(in srgb, var(--theme-color-Sub-main) 55%, transparent)",
+    },
+    // 塗りつぶしの Primary-dark は Light テーマで文字が沈むので、
+    // 文字色をそのまま読める薄い網掛けにする。
     "&.cm-focused .cm-selectionBackground, .cm-selectionBackground": {
-      backgroundColor: "var(--theme-color-Primary-dark) !important",
+      backgroundColor:
+        "color-mix(in srgb, var(--theme-color-Primary-main) 32%, transparent) !important",
     },
     ".cm-selectionMatch": {
       backgroundColor: "var(--theme-color-Primary-main)",
@@ -1433,6 +1556,7 @@
     },
     ".cm-cursor, .cm-dropCursor": {
       borderLeftColor: "var(--theme-color-Sub-light)",
+      borderLeftWidth: "2px",
     },
     ".cm-visibleSpaceLayer": {
       pointerEvents: "none",
@@ -1448,22 +1572,7 @@
       border: "1px solid color-mix(in srgb, var(--theme-color-Primary-main) 42%, transparent)",
     },
     ".cm-activeLine": {
-      backgroundColor: "rgba(255, 255, 255, 0.02)",
-    },
-    ".cm-gutters": {
-      backgroundColor: "var(--theme-color-Main-light)",
-      color: "color-mix(in srgb, var(--theme-color-Sub-main) 70%, transparent)",
-      borderRight: "1px solid color-mix(in srgb, var(--theme-color-Sub-dark) 25%, transparent)",
-      userSelect: "none",
-    },
-    ".cm-lineNumbers .cm-gutterElement": {
-      padding: "0 var(--sp1) 0 var(--sp2)",
-      minWidth: "2.25rem",
-      fontVariantNumeric: "tabular-nums",
-    },
-    ".cm-activeLineGutter": {
-      backgroundColor: "color-mix(in srgb, var(--theme-color-Primary-main) 12%, transparent)",
-      color: "var(--theme-color-Sub-light)",
+      backgroundColor: "color-mix(in srgb, var(--theme-color-Primary-main) 7%, transparent)",
     },
   });
 
@@ -1494,7 +1603,7 @@
   function buildExtensions() {
     return [
       editorTheme,
-      lineNumbers(),
+      placeholder("Markdown で入力…"),
       visibleSpaces,
       markdown({ base: markdownLanguage, codeLanguages: languages, addKeymap: false }),
       indentUnit.of("  "),
@@ -1752,9 +1861,12 @@
   }
 
   function handleWindowClick(event: MouseEvent) {
-    if (!modeMenuOpen || !modeDropdownEl || !(event.target instanceof Node)) return;
-    if (!modeDropdownEl.contains(event.target)) {
+    if (!(event.target instanceof Node)) return;
+    if (modeMenuOpen && modeDropdownEl && !modeDropdownEl.contains(event.target)) {
       closeModeMenu();
+    }
+    if (openToolbarMenu && toolbarEl && !toolbarEl.contains(event.target)) {
+      openToolbarMenu = null;
     }
   }
 
@@ -1863,6 +1975,20 @@
   }
 
   $: normalizedContent = toMarkdown(content);
+  $: saveStatusLabel =
+    saveState === "dirty"
+      ? "未保存"
+      : saveState === "saving"
+        ? "保存要求中"
+        : saveState === "error"
+          ? "保存失敗"
+          : saveState === "saved"
+            ? "保存要求済み"
+            : "";
+  $: currentHeadingOption =
+    headingOptions.find((option) => option.level === currentHeadingLevel) ?? headingOptions[0];
+  $: currentHeadingLabel = currentHeadingOption.label;
+  $: currentHeadingShortLabel = currentHeadingOption.short;
   $: isEditing = markdownMode !== "preview";
   $: currentModeLabel =
     memoModeOptions.find((mode) => mode.value === markdownMode)?.label ?? "プレビュー";
@@ -1901,60 +2027,45 @@
   {#if isEditing}
     <div class="edit-mode">
       <div class="edit-bar">
-        <div class="toolbar">
-          <span class="toolbar-picker">
-            <select
-              aria-label="編集操作"
-              on:change={(event) => {
-                if (!view) return;
-                const command = event.currentTarget.value;
-                if (command === "undo") undo(view);
-                if (command === "redo") redo(view);
-                if (command === "search") openSearchPanel(view);
-                if (command === "all") selectAll(view);
-                if (command === "indent") indentMore(view);
-                if (command === "outdent") indentLess(view);
-                if (command === "date")
-                  insertTextAtSelection(view, formatDate(new Date(), $date_time_format));
-                if (command === "time")
-                  insertTextAtSelection(view, formatTime(new Date(), $date_time_format));
-                if (command === "break") insertMarkdownHardBreak(view);
-                if (command === "next-cell") formatTableAndMoveCell(view, 1);
-                if (command === "previous-cell") formatTableAndMoveCell(view, -1);
-                if (command === "image") {
-                  imageTarget = view;
-                  imageInput.click();
-                }
-                event.currentTarget.value = "";
-                if (command !== "search") view.focus();
-              }}
-            >
-              <option value="">編集操作</option>
-              <option value="undo">元に戻す</option><option value="redo">やり直し</option>
-              <option value="search">本文内を検索・置換</option><option value="all"
-                >すべて選択</option
-              >
-              <option value="indent">字下げ</option><option value="outdent">字下げ解除</option>
-              <option value="date">日付を挿入</option><option value="time">時刻を挿入</option>
-              <option value="break">改行を挿入</option>
-              <option value="next-cell">表の次のセル</option><option value="previous-cell"
-                >表の前のセル</option
-              >
-              <option value="image">画像を挿入</option>
-            </select>
-          </span>
-          <span class="heading-picker toolbar-picker">
-            <select
+        <div class="toolbar" bind:this={toolbarEl}>
+          <div class="tool-menu">
+            <button
+              type="button"
+              class="tool-trigger"
               aria-label="見出し"
-              title="見出し"
-              bind:value={currentHeadingLevel}
-              on:change={handleHeadingChange}
+              title={`見出し（現在: ${currentHeadingLabel}）`}
+              aria-haspopup="menu"
+              aria-expanded={openToolbarMenu === "heading"}
+              on:mousedown|preventDefault
+              on:click|stopPropagation={() => toggleToolbarMenu("heading")}
             >
-              <option value="normal">本文</option>
-              <option value="1">見出し 1</option>
-              <option value="2">見出し 2</option>
-            </select>
-          </span>
+              <span class="tool-trigger-label">{currentHeadingShortLabel}</span>
+              <!-- eslint-disable-next-line svelte/no-at-html-tags -- Static SVG. -->
+              <span class="tool-chevron" aria-hidden="true">{@html chevronDownIconSvg}</span>
+            </button>
+            {#if openToolbarMenu === "heading"}
+              <div
+                class="tool-menu-list"
+                role="menu"
+                aria-label="見出し"
+                tabindex="-1"
+                on:keydown={handleToolbarMenuKeydown}
+              >
+                {#each headingOptions as option}
+                  <button
+                    type="button"
+                    class="tool-menu-item"
+                    class:active={option.level === currentHeadingLevel}
+                    role="menuitem"
+                    on:mousedown|preventDefault
+                    on:click|stopPropagation={() => runToolbarCommand(option.command)}
+                  >
+                    {option.label}
+                  </button>
+                {/each}
+              </div>
+            {/if}
+          </div>
           <span class="tool-sep"></span>
           <button
             type="button"
@@ -2035,33 +2146,116 @@
             <span class="tool-icon" aria-hidden="true">{@html toolbarIcons.codeBlock}</span>
           </button>
           <span class="tool-sep"></span>
-          <span class="table-picker toolbar-picker">
-            <select
+          <button
+            type="button"
+            class="tool-btn"
+            aria-label="字下げ解除"
+            title="字下げ解除"
+            on:mousedown|preventDefault
+            on:click={() => runToolbarCommand("outdent")}
+          >
+            <!-- eslint-disable-next-line svelte/no-at-html-tags -- Static SVG from the bundled Quill icon set. -->
+            <span class="tool-icon" aria-hidden="true">{@html toolbarIcons.outdent}</span>
+          </button>
+          <button
+            type="button"
+            class="tool-btn"
+            aria-label="字下げ"
+            title="字下げ"
+            on:mousedown|preventDefault
+            on:click={() => runToolbarCommand("indent")}
+          >
+            <!-- eslint-disable-next-line svelte/no-at-html-tags -- Static SVG from the bundled Quill icon set. -->
+            <span class="tool-icon" aria-hidden="true">{@html toolbarIcons.indent}</span>
+          </button>
+          <div class="tool-menu">
+            <button
+              type="button"
+              class="tool-btn"
               aria-label="表"
               title="表"
-              bind:value={tableActionValue}
-              on:change={handleTableActionChange}
+              aria-haspopup="menu"
+              aria-expanded={openToolbarMenu === "table"}
+              on:mousedown|preventDefault
+              on:click|stopPropagation={() => toggleToolbarMenu("table")}
             >
-              <option value="" disabled>表</option>
-              {#each tableActionOptions as action}
-                <option value={action.value}>{action.label}</option>
-              {/each}
-            </select>
-          </span>
-          <!-- eslint-enable svelte/no-at-html-tags -->
+              <!-- eslint-disable-next-line svelte/no-at-html-tags -- Static SVG from the bundled Quill icon set. -->
+              <span class="tool-icon" aria-hidden="true">{@html toolbarIcons.table}</span>
+            </button>
+            {#if openToolbarMenu === "table"}
+              <div
+                class="tool-menu-list tool-menu-list-wide"
+                role="menu"
+                aria-label="表"
+                tabindex="-1"
+                on:keydown={handleToolbarMenuKeydown}
+              >
+                {#each tableMenuEntries as entry}
+                  {#if entry.kind === "item"}
+                    <button
+                      type="button"
+                      class="tool-menu-item"
+                      role="menuitem"
+                      on:mousedown|preventDefault
+                      on:click|stopPropagation={() => runToolbarCommand(entry.command)}
+                    >
+                      {entry.label}
+                    </button>
+                  {/if}
+                {/each}
+              </div>
+            {/if}
+          </div>
+          <span class="tool-sep"></span>
+          <div class="tool-menu">
+            <button
+              type="button"
+              class="tool-btn"
+              aria-label="その他の編集操作"
+              title="その他の編集操作"
+              aria-haspopup="menu"
+              aria-expanded={openToolbarMenu === "more"}
+              on:mousedown|preventDefault
+              on:click|stopPropagation={() => toggleToolbarMenu("more")}
+            >
+              <!-- eslint-disable-next-line svelte/no-at-html-tags -- Static SVG. -->
+              <span class="tool-icon" aria-hidden="true">{@html moreIconSvg}</span>
+            </button>
+            {#if openToolbarMenu === "more"}
+              <div
+                class="tool-menu-list tool-menu-list-wide"
+                role="menu"
+                aria-label="その他の編集操作"
+                tabindex="-1"
+                on:keydown={handleToolbarMenuKeydown}
+              >
+                {#each moreMenuEntries as entry}
+                  {#if entry.kind === "group"}
+                    <span class="tool-menu-group">{entry.label}</span>
+                  {:else}
+                    <button
+                      type="button"
+                      class="tool-menu-item"
+                      role="menuitem"
+                      on:mousedown|preventDefault
+                      on:click|stopPropagation={() => runToolbarCommand(entry.command)}
+                    >
+                      {entry.label}
+                    </button>
+                  {/if}
+                {/each}
+              </div>
+            {/if}
+          </div>
         </div>
         <div class="edit-bar-end">
-          <span class="save-status" aria-live="polite">
-            {saveState === "dirty"
-              ? "未保存"
-              : saveState === "saving"
-                ? "保存要求中"
-                : saveState === "error"
-                  ? "保存失敗"
-                  : saveState === "saved"
-                    ? "保存要求済み"
-                    : ""}
-          </span>
+          <!-- 「保存要求済み」の 6 文字がツールバーの幅を食っていたので、
+               目で見るぶんは点だけにして、文言は title と読み上げに回す。 -->
+          {#if saveStatusLabel}
+            <span class="save-dot" data-state={saveState} title={saveStatusLabel} aria-hidden="true"
+            ></span>
+          {/if}
+          <span class="save-status-text" aria-live="polite">{saveStatusLabel}</span>
           <!-- eslint-disable svelte/no-at-html-tags -->
           <div class="memo-mode-dropdown" bind:this={modeDropdownEl}>
             <button
@@ -2233,7 +2427,7 @@
     --memo-quill-button-color: var(--theme-color-Sub-light);
     --memo-quill-button-active-color: #06c;
     --memo-quill-button-height: 24px;
-    --memo-quill-button-width: 28px;
+    --memo-quill-button-width: 24px;
 
     display: flex;
     flex-direction: column;
@@ -2269,9 +2463,10 @@
   .edit-bar {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
+    align-items: center;
     padding: var(--sp1) var(--sp2);
-    background-color: var(--theme-color-Main-dark);
+    background-color: var(--theme-color-Main-light);
+    border-bottom: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 16%, transparent);
     flex-shrink: 0;
     gap: var(--sp2);
     min-width: 0;
@@ -2280,11 +2475,13 @@
   .toolbar {
     display: flex;
     align-items: center;
-    gap: 0;
-    flex-wrap: wrap;
+    gap: 2px;
     flex: 1 1 auto;
     min-width: 0;
-    row-gap: var(--sp1);
+    /* ドロップダウンがはみ出せるよう overflow は殺さない。入りきらない
+       ときだけ折り返す（通常のペイン幅では 1 段に収まる）。 */
+    flex-wrap: wrap;
+    row-gap: 2px;
     overflow: visible;
     scrollbar-width: none;
   }
@@ -2300,12 +2497,12 @@
     flex: 0 0 auto;
     height: var(--memo-quill-button-height);
     width: var(--memo-quill-button-width);
-    padding: 3px 5px;
+    padding: 2px 3px;
     margin: 0;
     font-size: 14px;
     background: none;
     border: none;
-    border-radius: 0;
+    border-radius: var(--shape-xs);
     color: var(--memo-quill-button-color);
     cursor: pointer;
     line-height: 1;
@@ -2316,13 +2513,14 @@
   }
 
   .tool-btn:hover,
-  .tool-btn:focus-visible {
-    background-color: color-mix(in srgb, var(--theme-color-Sub-light) 10%, transparent);
-    color: var(--memo-quill-button-active-color);
+  .tool-btn:focus-visible,
+  .tool-btn[aria-expanded="true"] {
+    background-color: color-mix(in srgb, var(--theme-color-Primary-main) 14%, transparent);
+    color: var(--theme-color-Primary-main);
   }
 
   .tool-btn:active {
-    background-color: color-mix(in srgb, var(--theme-color-Sub-light) 16%, transparent);
+    background-color: color-mix(in srgb, var(--theme-color-Primary-main) 22%, transparent);
   }
 
   .tool-icon {
@@ -2386,69 +2584,128 @@
     min-width: var(--memo-quill-button-width);
   }
 
-  .toolbar-picker {
+  .tool-menu {
     position: relative;
-    display: inline-block;
+    display: inline-flex;
     flex: 0 0 auto;
+  }
+
+  /* 見出し切り替え。ネイティブ select の見た目（枠・OS 依存の矢印）を
+     やめ、他のツールボタンと同じ平らなボタンに揃える。 */
+  .tool-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
     height: var(--memo-quill-button-height);
+    max-width: 7rem;
+    padding: 0 var(--sp1);
+    border: 0;
+    border-radius: var(--shape-xs);
+    background: none;
     color: var(--memo-quill-button-color);
-    font-size: 14px;
-    font-weight: 500;
-    vertical-align: middle;
+    font-size: var(--font-label-md);
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+    transition:
+      color 0.1s ease,
+      background-color 0.1s ease;
   }
 
-  .heading-picker {
-    width: 98px;
+  .tool-trigger:hover,
+  .tool-trigger:focus-visible,
+  .tool-trigger[aria-expanded="true"] {
+    background-color: color-mix(in srgb, var(--theme-color-Primary-main) 14%, transparent);
+    color: var(--theme-color-Primary-main);
+    outline: none;
   }
 
-  .table-picker {
-    width: 112px;
+  .tool-trigger-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  .toolbar-picker select {
-    appearance: none;
+  .tool-chevron {
+    display: inline-flex;
+    flex: 0 0 auto;
+    width: 0.85rem;
+    height: 0.85rem;
+  }
+
+  .tool-chevron :global(svg) {
     width: 100%;
     height: 100%;
-    padding: 0 20px 0 8px;
-    margin: 0;
-    border: none;
-    border-radius: 0;
-    outline: none;
-    color: inherit;
-    background: transparent;
-    cursor: pointer;
-    font: inherit;
-    line-height: 22px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
   }
 
-  .toolbar-picker::after {
-    content: "";
+  .tool-menu-list {
     position: absolute;
-    top: 50%;
-    right: 6px;
-    width: 6px;
-    height: 6px;
-    border-right: 1.5px solid currentColor;
-    border-bottom: 1.5px solid currentColor;
-    transform: translateY(-65%) rotate(45deg);
-    pointer-events: none;
-  }
-
-  .toolbar-picker:hover,
-  .toolbar-picker:focus-within {
-    color: var(--memo-quill-button-active-color);
-  }
-
-  .toolbar-picker select option {
-    color: var(--theme-color-Sub-light);
+    top: calc(100% + 4px);
+    left: 0;
+    z-index: 25;
+    display: flex;
+    flex-direction: column;
+    min-width: 8rem;
+    max-height: 18rem;
+    padding: 4px;
+    overflow-y: auto;
+    border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 28%, transparent);
+    border-radius: var(--shape-xs);
     background-color: var(--theme-color-Main-light);
+    box-shadow: var(--shadow-md);
+  }
+
+  /* 「…」は右端に近いので、右揃えで出したほうがはみ出しにくい。 */
+  .tool-menu-list-wide {
+    left: auto;
+    right: 0;
+    min-width: 11rem;
+  }
+
+  .tool-menu-group {
+    padding: var(--sp1) var(--sp2) 2px;
+    color: color-mix(in srgb, var(--theme-color-Sub-main) 70%, transparent);
+    font-size: var(--font-label-sm);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    user-select: none;
+  }
+
+  .tool-menu-item {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-height: 1.65rem;
+    padding: 0 var(--sp2);
+    border: 0;
+    border-radius: var(--shape-xs);
+    color: var(--theme-color-Sub-main);
+    background-color: transparent;
+    font-size: var(--font-label-md);
+    line-height: 1;
+    text-align: left;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .tool-menu-item:hover,
+  .tool-menu-item:focus,
+  .tool-menu-item.active {
+    color: var(--theme-color-Primary-main);
+    background-color: color-mix(in srgb, var(--theme-color-Primary-main) 14%, transparent);
+    outline: none;
   }
 
   .tool-sep {
-    width: 0;
-    height: var(--memo-quill-button-height);
-    background-color: transparent;
-    margin: 0 var(--sp2) 0 var(--sp1);
+    width: 1px;
+    height: 0.9rem;
+    background-color: color-mix(in srgb, var(--theme-color-Sub-main) 20%, transparent);
+    margin: 0 var(--sp1);
     flex-shrink: 0;
   }
 
@@ -2602,16 +2859,35 @@
     white-space: nowrap;
   }
 
-  .save-status {
-    min-width: 3rem;
-    text-align: right;
-    color: var(--theme-color-Sub-main);
-    font-size: var(--font-label-md);
-    white-space: nowrap;
+  /* 保存状態。文言は title と読み上げに任せ、見た目は 6px の点だけ。 */
+  .save-dot {
+    flex: 0 0 auto;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: color-mix(in srgb, var(--theme-color-Sub-main) 45%, transparent);
   }
 
-  .save-status:empty {
-    display: none;
+  .save-dot[data-state="dirty"],
+  .save-dot[data-state="saving"] {
+    background-color: var(--attention-fg, #d18616);
+  }
+
+  .save-dot[data-state="error"] {
+    background-color: var(--danger-fg, #d33);
+  }
+
+  /* 画面には出さないが読み上げには残す（保存状態はテキストで伝えたい）。 */
+  .save-status-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
   }
 
   .edit-body {

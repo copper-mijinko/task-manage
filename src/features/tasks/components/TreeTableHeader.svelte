@@ -167,16 +167,23 @@
     return headerName in COUNT_COLUMN_LABELS;
   }
 
-  export function openPanel(e) {
+  /**
+   * カラム表示設定を開く。トリガーはツールバーの「…」メニュー項目なので、
+   * クリックイベントそのものが渡ってくるとは限らない。要素を持たない
+   * 呼び出し側のために、位置だけ（DOMRect）でも開けるようにしておく。
+   */
+  export function openPanel(anchor) {
     openTagPanel = false;
     openStatusPanel = false;
     openCountPanel = null;
-    e.stopPropagation();
-    panelTrigger = e.currentTarget;
+    const isEvent = typeof anchor?.stopPropagation === "function";
+    if (isEvent) anchor.stopPropagation();
+    const triggerElement = isEvent ? anchor.currentTarget : (anchor?.element ?? null);
+    panelTrigger = triggerElement;
     widths = readColumnWidths();
     openDatePanel = null;
     openNamePanel = false;
-    const rect = e.currentTarget.getBoundingClientRect();
+    const rect = isEvent ? anchor.currentTarget.getBoundingClientRect() : (anchor?.rect ?? anchor);
     panelStyle = `top: ${rect.bottom}px; right: calc(100vw - ${rect.right}px);`;
     if (!showPanel) {
       activePanelId.set(columnSettingsPanelId);
@@ -396,48 +403,50 @@
       <div class="HeaderLabelRow" class:sortActive={$sort_state?.column === header.name}>
         <span class="HeaderLabelText TextOverFlow">{getColumnLabel(header.name)}</span>
         {#if SORTABLE_COLUMNS.has(header.name)}
-          <IconButton
-            variant="text"
-            normalColor={sortDirections[header.name]
-              ? "var(--theme-color-Primary-main)"
-              : "var(--theme-color-Sub-main)"}
-            activeColor={"var(--theme-color-Primary-main)"}
-            ariaLabel={getSortButtonLabel(header.name)}
-            tooltipContent={getSortButtonLabel(header.name)}
-            on:click={(e) => {
-              e.stopPropagation();
-              handleSortClick(e, header.name);
-            }}
-            style="margin: 0; width: var(--header-icon-size); height: var(--header-icon-size); box-shadow: none;"
-          >
-            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              {#if sortDirections[header.name] === "asc"}
-                <path
-                  d="M6 15l6-6 6 6"
-                  stroke="currentColor"
-                  stroke-width="2.4"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-              {:else if sortDirections[header.name] === "desc"}
-                <path
-                  d="M6 9l6 6 6-6"
-                  stroke="currentColor"
-                  stroke-width="2.4"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-              {:else}
-                <path
-                  d="M6 9l6 6 6-6"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-              {/if}
-            </svg>
-          </IconButton>
+          <span class="HeaderSortButton">
+            <IconButton
+              variant="text"
+              normalColor={sortDirections[header.name]
+                ? "var(--theme-color-Primary-main)"
+                : "var(--theme-color-Sub-main)"}
+              activeColor={"var(--theme-color-Primary-main)"}
+              ariaLabel={getSortButtonLabel(header.name)}
+              tooltipContent={getSortButtonLabel(header.name)}
+              on:click={(e) => {
+                e.stopPropagation();
+                handleSortClick(e, header.name);
+              }}
+              style="margin: 0; width: var(--header-icon-size); height: var(--header-icon-size); box-shadow: none;"
+            >
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                {#if sortDirections[header.name] === "asc"}
+                  <path
+                    d="M6 15l6-6 6 6"
+                    stroke="currentColor"
+                    stroke-width="2.4"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                {:else if sortDirections[header.name] === "desc"}
+                  <path
+                    d="M6 9l6 6 6-6"
+                    stroke="currentColor"
+                    stroke-width="2.4"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                {:else}
+                  <path
+                    d="M6 9l6 6 6-6"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                {/if}
+              </svg>
+            </IconButton>
+          </span>
         {/if}
         {#if header.name == "name"}
           <div class="HeaderUtilityButtons">
@@ -957,7 +966,8 @@
     min-width: var(--col-min);
     display: flex;
     flex-direction: column;
-    border-right: 1px solid var(--header-border);
+    /* 列同士は線で区切らない。境目は列幅ハンドル（hover で Primary の線が
+       出る）と余白で分かる。 */
     border-bottom: 1px solid var(--header-border);
     background-color: var(--header-bg);
     color: var(--header-fg);
@@ -966,6 +976,37 @@
     font-weight: 600;
     font-size: var(--font-label-md);
     letter-spacing: 0.02em;
+  }
+  /* 並べ替え・絞り込みは副次的な操作。使っていない列では控えめにして、
+     hover / focus か、実際に効いているときだけはっきり出す。
+     見出しの幅を食わないよう、並べ替えボタンは浮かせて置く（出入りで
+     見出しの文字がずれないようにするため）。 */
+  .HeaderSortButton {
+    position: absolute;
+    right: 2px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: inline-flex;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+  }
+  /* タスク名の列だけは右端に「すべて展開 / 折りたたみ」が並ぶので、その手前。 */
+  .TableHeader[data-column="name"] .HeaderSortButton {
+    right: 2.75rem;
+  }
+  .TableHeader:hover .HeaderSortButton,
+  .TableHeader:focus-within .HeaderSortButton,
+  .HeaderLabelRow.sortActive .HeaderSortButton {
+    opacity: 1;
+  }
+  .HeaderControlRow {
+    opacity: 0.55;
+    transition: opacity 0.12s ease;
+  }
+  .TableHeader:hover .HeaderControlRow,
+  .TableHeader:focus-within .HeaderControlRow,
+  .HeaderControlRow:has(.active) {
+    opacity: 1;
   }
   .TableHeader[data-column="name"] {
     --col-min: var(--col-min-name);
@@ -983,12 +1024,6 @@
   .TableHeader[data-column="tags"] {
     --col-min: var(--col-min-tags);
   }
-  .TableHeader:last-of-type {
-    border-right: 0;
-  }
-  .TableHeader:first-of-type {
-    border-left: 0;
-  }
   .CheckboxHeaderCell {
     flex: 0 0 1.75rem;
     width: 1.75rem;
@@ -999,7 +1034,6 @@
     box-sizing: border-box;
     line-height: 0;
     background-color: var(--header-bg);
-    border-right: 1px solid var(--header-border);
     border-bottom: 1px solid var(--header-border);
   }
   .HeaderCheckbox {
@@ -1019,6 +1053,7 @@
   }
 
   .HeaderLabelRow {
+    position: relative;
     display: flex;
     flex: 0 0 1.75rem;
     width: 100%;
@@ -1037,6 +1072,10 @@
   .HeaderLabelText {
     flex: 1 1 auto;
     min-width: 0;
+    /* 見出しは本文より「少し強い」程度。小さめ・やや太字・薄い色で、
+       行の内容より先に目に入らないようにする。 */
+    font-size: var(--font-label-sm);
+    color: var(--fg-muted);
     text-align: center;
     overflow: hidden;
     text-overflow: ellipsis;

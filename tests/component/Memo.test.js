@@ -153,12 +153,28 @@ function markdownToolButton(label) {
   return document.querySelector(`button[aria-label="${label}"]`);
 }
 
+/** ツールバーの「表」メニューから項目を選ぶ。 */
 async function chooseMarkdownTableAction(label) {
-  const select = document.querySelector('select[aria-label="表"]');
-  expect(select).toBeInTheDocument();
-  const option = [...select.options].find((candidate) => candidate.textContent === label);
-  expect(option).toBeTruthy();
-  await fireEvent.change(select, { target: { value: option.value } });
+  const trigger = document.querySelector('button[aria-label="表"]');
+  expect(trigger).toBeInTheDocument();
+  await fireEvent.click(trigger);
+  const item = [...document.querySelectorAll(".tool-menu-item")].find(
+    (candidate) => candidate.textContent.trim() === label
+  );
+  expect(item).toBeTruthy();
+  await fireEvent.click(item);
+}
+
+/** 見出しメニューから見出しレベルを選ぶ。 */
+async function chooseMarkdownHeading(label) {
+  const trigger = document.querySelector('button[aria-label="見出し"]');
+  expect(trigger).toBeInTheDocument();
+  await fireEvent.click(trigger);
+  const item = [...document.querySelectorAll(".tool-menu-item")].find(
+    (candidate) => candidate.textContent.trim() === label
+  );
+  expect(item).toBeTruthy();
+  await fireEvent.click(item);
 }
 
 describe("Memo mode routing", () => {
@@ -238,17 +254,18 @@ describe("Memo mode routing", () => {
     expect(getComputedStyle(scroller).fontFamily).toContain("Consolas");
   });
 
-  test("uses a Quill-like heading picker in the Markdown toolbar", async () => {
+  test("keeps the Markdown toolbar on one row of buttons and menus", async () => {
     const view = await openMarkdownEditor({ content: "Title" });
-    const headingPicker = document.querySelector('select[aria-label="見出し"]');
+    const headingTrigger = document.querySelector('button[aria-label="見出し"]');
 
-    expect(headingPicker).toBeInTheDocument();
+    expect(headingTrigger).toBeInTheDocument();
+    // ネイティブ select は使わない（狭いペインで 2 段に折り返していた）。
+    expect(document.querySelector(".toolbar select")).not.toBeInTheDocument();
     expect(
-      [...document.querySelector(".toolbar").querySelectorAll("select, button")].map((control) =>
+      [...document.querySelector(".toolbar").querySelectorAll("button")].map((control) =>
         control.getAttribute("aria-label")
       )
     ).toEqual([
-      "編集操作",
       "見出し",
       "太字",
       "斜体",
@@ -257,18 +274,24 @@ describe("Memo mode routing", () => {
       "箇条書き",
       "引用",
       "コードブロック",
+      "字下げ解除",
+      "字下げ",
       "表",
+      "その他の編集操作",
     ]);
     expect(markdownToolButton("Heading 1")).not.toBeInTheDocument();
-    expect([...headingPicker.options].map((option) => option.value)).toEqual(["normal", "1", "2"]);
     expect(markdownToolButton("Checklist")).not.toBeInTheDocument();
     expect(markdownToolButton("表を挿入")).not.toBeInTheDocument();
+    // 「保存要求済み」の文字列はツールバーに出さない（点と読み上げのみ）。
+    expect(document.querySelector(".save-status")).not.toBeInTheDocument();
 
-    await fireEvent.change(headingPicker, { target: { value: "2" } });
+    await chooseMarkdownHeading("見出し 2");
     expect(view.state.doc.toString()).toBe("## Title");
-    expect(headingPicker.value).toBe("2");
+    // トリガーは幅を取らない短縮表示（H2）、正式名は title に入れる。
+    expect(headingTrigger.textContent).toContain("H2");
+    expect(headingTrigger.getAttribute("title")).toContain("見出し 2");
 
-    await fireEvent.change(headingPicker, { target: { value: "normal" } });
+    await chooseMarkdownHeading("本文");
     expect(view.state.doc.toString()).toBe("Title");
   });
 

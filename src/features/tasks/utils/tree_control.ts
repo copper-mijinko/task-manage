@@ -126,6 +126,14 @@ export interface VisibleTreeRow {
   canMoveDown: boolean;
   canIndent: boolean;
   canOutdent: boolean;
+  /**
+   * ツリーのガイド線。祖先の段ごとに「この行より下にその祖先の兄弟がまだ
+   * 続くか」を持つ（`length === depth - 1`、深さ 0 と 1 の行では空）。false の
+   * 段は線を引かない＝末っ子の下で線が伸びっぱなしにならない。
+   */
+  guideLines: boolean[];
+  /** 表示上の末っ子か。末っ子の縦線は行の中央で閉じる（└ の形）。 */
+  isLastSibling: boolean;
 }
 
 const FILTER_FLAG_KEYS = new Set(["search_memo"]);
@@ -520,6 +528,10 @@ export function flattenVisibleTree(
     parentPath: string,
     /** 直前の兄弟の id。インデント可否の判定に使う。 */
     previousSiblingId: string | undefined,
+    /** 祖先の段ごとの「まだ兄弟が続くか」。`guideLines` にそのまま入る。 */
+    guideLines: boolean[],
+    /** この行の下に、実際に描画される兄弟がまだあるか。 */
+    hasNextRenderedSibling: boolean,
     // いま辿っている経路の祖先。編集の結果ツリーに循環ができても、
     // ここで打ち切って画面が落ちないようにする（防御。作らせない方は
     // canIndentNode / canDropTarget 側で止める）。
@@ -562,6 +574,8 @@ export function flattenVisibleTree(
       // ボタンを押せてしまうと、押しても何も起きない行ができる。
       canIndent: siblingIndex > 0 && !previousSiblingIsDescendant,
       canOutdent: depth > 1,
+      guideLines,
+      isLastSibling: !hasNextRenderedSibling,
     });
 
     if (!hasChildren || !expanded) {
@@ -570,8 +584,17 @@ export function flattenVisibleTree(
 
     const pathAncestors = new Set(ancestors).add(node.id);
     const childCount = node.children.length;
+    // 実際に行になる子だけを見て「次の兄弟が居るか」を決める。循環で打ち切る
+    // 子やアーカイブで隠す子を数えると、末っ子の下に線が残ってしまう。
+    const willRender = node.children.map(
+      (child) =>
+        !(pathAncestors.has(child.id) && !child.cycleReference) &&
+        !((effectivelyArchived || !!child.archived) && !includeArchived)
+    );
+    // ルート行は兄弟を持たない単独の行なので、その段のガイドは引かない。
+    const childGuideLines = depth === 0 ? [] : [...guideLines, hasNextRenderedSibling];
     node.children.forEach((child, index) => {
-      if (pathAncestors.has(child.id) && !child.cycleReference) return;
+      if (!willRender[index]) return;
       visit(
         child,
         depth + 1,
@@ -581,12 +604,14 @@ export function flattenVisibleTree(
         effectivelyArchived,
         path,
         node.children[index - 1]?.id,
+        childGuideLines,
+        willRender.slice(index + 1).some(Boolean),
         pathAncestors
       );
     });
   };
 
-  visit(tree_data, 0, undefined, 0, 1, false, "", undefined, new Set<string>());
+  visit(tree_data, 0, undefined, 0, 1, false, "", undefined, [], false, new Set<string>());
 
   return rows;
 }

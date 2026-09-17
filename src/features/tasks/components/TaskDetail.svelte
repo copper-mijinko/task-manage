@@ -1244,6 +1244,10 @@
     gap: var(--sp2);
     flex: 0 0 auto;
     min-width: 0;
+    /* タグ欄は枠を TagField 自身が描くので、他項目の .detail-control と
+       同じ高さになるよう寸法を渡す。渡さないと 1.75rem の既定値のままで、
+       1 行だけ背の低い入力欄が混ざる。 */
+    --detail-control-height: var(--tree-row-height);
   }
   .detail-field {
     display: grid;
@@ -1257,6 +1261,15 @@
      1 行まるごと使う。 */
   .detail-field-wide {
     grid-column: 1 / -1;
+  }
+  /* 中身は短い語が 1〜2 個。他項目と同じだけ横に伸ばすと、空のときに
+     幅いっぱいの空箱が出るので上限を切って左に寄せる。 */
+  .detail-field-wide :global(.tag-field) {
+    max-width: 22rem;
+  }
+  /* 枠の見え方も .detail-control に合わせる（角丸だけ別値だった）。 */
+  .detail-field-wide :global(.tag-chips) {
+    border-radius: var(--shape-sm);
   }
   .detail-value {
     padding: 0 var(--sp2);

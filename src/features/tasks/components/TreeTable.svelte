@@ -90,8 +90,9 @@
 
   let table_root; // Bind
   let headerComponent;
-  export function openColumns(event) {
-    headerComponent?.openPanel(event);
+  /** ツールバーの「…」メニュー、またはクリックイベントから開かれる。 */
+  export function openColumns(anchor) {
+    headerComponent?.openPanel(anchor);
   }
   async function handleColumnWidth() {
     await tick();
@@ -109,13 +110,15 @@
     handlers,
     resize_observer;
 
+  // 初回レイアウトの配分。Tree/Name が主役なので大きく取り、属性列は
+  // 中身が読める幅にとどめる（保存済みの幅があればそちらが優先）。
   const BUILT_IN_HEADERS = [
-    { name: "name", default_ratio: 10 },
+    { name: "name", default_ratio: 16 },
     { name: "status", default_ratio: 3 },
-    { name: "start date", default_ratio: 3 },
-    { name: "due date", default_ratio: 3 },
-    { name: "attachments", default_ratio: 1.5 },
-    { name: "tags", default_ratio: 3 },
+    { name: "start date", default_ratio: 2.5 },
+    { name: "due date", default_ratio: 2.5 },
+    { name: "attachments", default_ratio: 1.2 },
+    { name: "tags", default_ratio: 2 },
   ];
 
   $: rows = $filtered_data
