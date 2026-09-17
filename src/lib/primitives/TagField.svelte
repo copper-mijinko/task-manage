@@ -171,6 +171,14 @@
     min-width: 0;
   }
 
+  /* 候補リストは body 直下へポータルされる。そこで .tag-row の width:100%
+     が効くとウィンドウ幅いっぱいの帯になり、入力欄の下にも並べられない。
+     幅は viewportPopover が入れる最小幅（＝入力欄の幅）に任せ、候補が
+     増えたら横に伸ばさず折り返す。 */
+  .tag-row.suggestion-popup {
+    width: min-content;
+  }
+
   .tag-row-label {
     flex: 0 0 auto;
     width: 2.75rem;

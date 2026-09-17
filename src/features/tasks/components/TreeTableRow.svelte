@@ -96,6 +96,9 @@
   let isMenuOpen = false;
 
   $: rowDueUrgency = dueDateUrgency(data["due date"] || inheritedDueDate, data["status"]);
+  // ツリーのガイド線。祖先の段ごとの「まだ兄弟が続くか」と、自分が末っ子か。
+  $: guideLines = row.guideLines ?? [];
+  $: isLastSibling = row.isLastSibling ?? false;
   $: rowTags = normalizeTagList(data.tags);
   // 列幅は限られるので、読める大きさで出せる範囲だけ表示し、残りは「+N」で示す
   // （全件はセルの title と詳細ペインで確認できる）。3 件以上あるときは
@@ -299,6 +302,8 @@
   class:DueSoonRow={rowDueUrgency === "today" || rowDueUrgency === "due-soon"}
   class:ArchivedRow={isArchived}
   class:RootRow={depth === 0}
+  class:ParentRow={hasChildren}
+  style:--row-depth={depth}
   use:ripple
   tabindex={isTabStop ? 0 : -1}
   draggable="true"
@@ -344,8 +349,14 @@
   {#each headers as header, i}
     <div class:TableData={true} data-column={header.name} role="gridcell" style:z-index={i + 100}>
       {#if header.name == "name"}
-        {#each Array(depth) as _}
-          <div class:TreeLine={true} style="flex-shrink: 0"></div>
+        {#each Array(depth) as _, level}
+          <div
+            class:TreeLine={true}
+            class:ParentLine={level === depth - 1}
+            class:GuideEnd={level === depth - 1 && isLastSibling}
+            class:GuideHidden={level < depth - 1 && !guideLines[level]}
+            style="flex-shrink: 0"
+          ></div>
         {/each}
         {#if hasChildren}
           <button
@@ -362,16 +373,10 @@
             </svg>
           </button>
         {:else}
-          <div class:Space={true}>
-            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path
-                d="M9 8H15M9 12H15M9 16H12M8.2 21H15.8C16.9201 21 17.4802 21 17.908 20.782C18.2843 20.5903 18.5903 20.2843 18.782 19.908C19 19.4802 19 18.9201 19 17.8V6.2C19 5.0799 19 4.51984 18.782 4.09202C18.5903 3.71569 18.2843 3.40973 17.908 3.21799C17.4802 3 16.9201 3 15.8 3H8.2C7.0799 3 6.51984 3 6.09202 3.21799C5.71569 3.40973 5.40973 3.71569 5.21799 4.09202C5 4.51984 5 5.07989 5 6.2V17.8C5 18.9201 5 19.4802 5.21799 19.908C5.40973 20.2843 5.71569 20.5903 6.09202 20.782C6.51984 21 7.07989 21 8.2 21Z"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              ></path>
-            </svg>
-          </div>
+          <!-- 子を持たない行は開閉ボタンぶんの幅だけ空ける。全行に書類
+               アイコンを並べると、字下げより先にアイコンの列が目に入って
+               階層が読みにくくなる。 -->
+          <div class:Space={true} aria-hidden="true"></div>
         {/if}
         {#if node.cycleReference}<span
             class="cycle-reference"
@@ -618,6 +623,8 @@
     max-height: var(--tree-row-height, 36px);
     padding: 0;
     width: 100%;
+    /* 行の区切りだけを引く（セルの縦罫線は引かない）。薄くしすぎると行の
+       切れ目が読めないので、区切り線の標準色をそのまま使う。 */
     border-bottom: 1px solid var(--border-muted);
   }
   .TableRow.MenuOpen {
@@ -626,20 +633,8 @@
   .TableRow {
     --backgroundColor: var(--theme-color-Main-light);
   }
-  .TableRow.OverdueRow {
-    --backgroundColor: color-mix(
-      in srgb,
-      var(--theme-color-Error-main) 10%,
-      var(--theme-color-Main-light)
-    );
-  }
-  .TableRow.DueSoonRow {
-    --backgroundColor: color-mix(
-      in srgb,
-      var(--theme-color-Warning-main) 10%,
-      var(--theme-color-Main-light)
-    );
-  }
+  /* 期限の状態は日付セル（文字色・太さ・左の縁）で示す。行全体を塗ると
+     選択やホバーと区別が付かず、色の意味も読めなくなるため塗らない。 */
   /* Archived rows: muted, with subtle diagonal striping to visually flag
      "this is in the archive view". Stronger than urgency tints so it reads
      even when the row is also overdue. */
@@ -715,7 +710,6 @@
     height: 100%;
     box-sizing: border-box;
     background-color: var(--backgroundColor);
-    border-right: 1px solid var(--border-muted);
   }
   .RowNumber {
     font-size: 0.7rem;
@@ -756,7 +750,6 @@
     align-items: center;
     color: var(--theme-color-Sub-main);
     font-size: var(--font-body-md);
-    border-right: 1px solid var(--border-muted);
   }
   .TableData[data-column="name"] {
     --col-min: var(--col-min-name);
@@ -773,11 +766,10 @@
   }
   .TableData[data-column="tags"] {
     --col-min: var(--col-min-tags);
-  }
-  /* ヘッダーの最終列は列表示設定ボタンぶんだけ最小幅が広い。行側も
-     同じだけ広げておかないと、最小幅まで縮めたときに列がずれる。 */
-  .TableData:last-of-type {
-    min-width: calc(var(--col-min) + var(--col-actions-reserve));
+    /* チップ自身が丸い余白を持っているので、セル側の左右余白まで他の列と
+       同じだけ取ると二重に空く。タグ列だけ詰めて、列を細くしたときに
+       チップの文字が先に消えないようにする。 */
+    padding-inline: var(--sp1);
   }
   /* プロジェクトのルート行。これまで子タスクとの差はインデントとアイコン
      だけで、木の頂点がどこか一目で分からなかった。名前を太くし、下辺を
@@ -824,7 +816,7 @@
 
   /* タグセルは行内で 1 行に収める。溢れた分は横スクロールではなく
      単純に切り落とし、詳細ペインで全部見てもらう。 */
-  .TagCellChips {
+  .TableData .TagCellChips {
     /* .TableData span の共通ルール（flex:1 / center）を上書きする。
        中央寄せのままだとチップが左右どちらもはみ出して両端が切れる。 */
     display: flex;
@@ -835,7 +827,7 @@
     min-width: 0;
     overflow: hidden;
   }
-  .TagOverflow {
+  .TableData .TagOverflow {
     flex: 0 0 auto;
     color: color-mix(in srgb, var(--theme-color-Sub-main) 70%, transparent);
     font-size: var(--font-label-sm);
@@ -844,9 +836,11 @@
   }
   .TagChip {
     max-width: 8rem;
-    min-width: 3.5rem;
+    min-width: 0;
     height: 1.25rem;
-    padding: 0 var(--sp2);
+    /* 詳細ペインの .tag-chip と同じ詰め方。8px だと 2〜3 文字のタグでも
+       文字より余白のほうが広くなり、列の最小幅を無駄に押し上げていた。 */
+    padding: 0 var(--sp1);
     border: 1px solid color-mix(in srgb, var(--theme-color-Primary-main) 55%, transparent);
     border-radius: var(--shape-pill);
     background-color: color-mix(in srgb, var(--theme-color-Primary-main) 14%, transparent);
@@ -890,13 +884,44 @@
     position: relative;
     display: inline-block;
     align-self: stretch;
-    width: 0.6rem;
+    /* 1 段ぶんの字下げ（ガイド線 + 余白でおよそ 17px）。階層は主にこの
+       字下げで読ませる。 */
+    width: 1.1rem;
     margin-top: calc(-1 * var(--sp1));
     margin-bottom: calc(-1 * var(--sp1) - 1px);
     margin-left: var(--sp1);
-    border-left: 1px solid color-mix(in srgb, var(--theme-color-Sub-light) 40%, transparent);
     flex-shrink: 0;
   }
+  /* 縦線。末っ子では行の中央で止めたいので、border ではなく擬似要素で引く。
+     階層は面の色ではなくこの線で示すので、区切り線より強い濃さにする。 */
+  .TreeLine::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    border-left: 1px solid color-mix(in srgb, var(--fg-muted) 42%, transparent);
+  }
+  /* 末っ子は「└」。中央で閉じて、下に線を垂らさない。 */
+  .TreeLine.GuideEnd::before {
+    bottom: 50%;
+  }
+  /* その段の祖先がもう末っ子なら、この行に線は通らない。 */
+  .TreeLine.GuideHidden::before {
+    display: none;
+  }
+  /* 一番手前の 1 本＝自分の親。ここから自分の行へ横枝を伸ばして、
+     「この行はこの縦線にぶら下がっている」と一目で分かるようにする。 */
+  .TreeLine.ParentLine::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 0;
+    width: 100%;
+    border-top: 1px solid color-mix(in srgb, var(--fg-muted) 42%, transparent);
+    pointer-events: none;
+  }
+
   .ExpandButton:focus-visible {
     outline: 2px solid var(--theme-color-Primary-main);
     outline-offset: 2px;
@@ -928,8 +953,11 @@
     height: 1rem;
     flex-shrink: 0;
   }
-  .Space svg {
-    stroke: var(--theme-color-Sub-light);
+  /* 親（子を持つ行）は「少しだけ強い」程度に差を付ける。太い枠や濃い塗りは
+     使わず、文字の太さとごく薄い面の差だけ。 */
+  .TableRow.ParentRow :global(.highlight-display),
+  .TableRow.ParentRow :global(input[type="text"]) {
+    font-weight: 600;
   }
   .TextOverFlow {
     text-overflow: ellipsis;

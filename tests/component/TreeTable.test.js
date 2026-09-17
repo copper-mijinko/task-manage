@@ -490,7 +490,9 @@ describe("TreeTable", () => {
 
     const firstResizer = container.querySelector(".Resizer");
     const nameRatio = 10;
-    const ratioSum = 10 + 4 + 3 + 4 + 2 + 2;
+    // fixture の headers（name 10 / status 4 / due date 4 / memo 2 / attachments 2）
+    // に、BUILT_IN_HEADERS から補われる start date (2.5) を足した合計。
+    const ratioSum = 10 + 4 + 2.5 + 4 + 2 + 2;
     const checkboxWidth = 28;
     const expectedNameWidth = ((1000 - checkboxWidth) * nameRatio) / ratioSum;
 

@@ -95,6 +95,26 @@ function scheduleSafetySweep() {
 }
 
 // tooltip
+/**
+ * カーソルの右下に置く。はみ出すときは左／上に回して、画面内に収める。
+ * position: fixed なのでビューポート座標 (clientX/clientY) で測る。
+ */
+function placeTooltip(element: HTMLElement, event: MouseEvent) {
+  const margin = 8;
+  const offset = 16;
+  const { width, height } = element.getBoundingClientRect();
+  let left = event.clientX + offset;
+  if (left + width > window.innerWidth - margin) {
+    left = Math.min(event.clientX - offset - width, window.innerWidth - margin - width);
+  }
+  let top = event.clientY + offset;
+  if (top + height > window.innerHeight - margin) {
+    top = Math.min(event.clientY - offset - height, window.innerHeight - margin - height);
+  }
+  element.style.left = `${Math.max(margin, left)}px`;
+  element.style.top = `${Math.max(margin, top)}px`;
+}
+
 export function tooltip(
   node: ActionNode,
   params: TooltipParams = {
@@ -161,12 +181,18 @@ export function tooltip(
       border-radius: 0.5rem;
       padding: 0.5rem;
       position: fixed;
-      top: calc(${e.pageY}px + 1rem);
-      left: calc(${e.pageX}px + 1rem);
+      /* 画面右端のボタンだと、カーソル右に置いた吹き出しに残り幅が数 px しか
+         なく、1 文字ずつ縦に折り返して読めなくなっていた。折り返さずに、
+         入らないときはカーソルの左側へ回す。 */
+      white-space: nowrap;
+      max-width: calc(100vw - 1rem);
+      top: 0;
+      left: 0;
       pointer-events: none;
       z-index: 9999999999;
     `;
     document.body.appendChild(element);
+    placeTooltip(element, e);
     entry = { node: target, element };
     activeTooltips.add(entry);
     scheduleSafetySweep();
@@ -176,8 +202,7 @@ export function tooltip(
   };
   const handleMouseMove = (e: MouseEvent) => {
     if (entry) {
-      entry.element.style.left = `calc(${e.pageX}px + 1rem)`;
-      entry.element.style.top = `calc(${e.pageY}px + 1rem)`;
+      placeTooltip(entry.element, e);
     }
   };
   // Once the anchor is activated, the tooltip has served its purpose. Keeping

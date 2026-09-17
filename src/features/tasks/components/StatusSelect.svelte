@@ -113,10 +113,14 @@
     aria-expanded={open}
     {disabled}
     data-current-status={status}
+    title={STATUS_LABELS[status] ?? status}
     on:click={toggle}
   >
     <span class="s-dot" style="--dot-color: {color_map[status]};"></span>
-    <span class="s-label">{STATUS_LABELS[status] ?? status}</span>
+    <!-- 未設定は「ステータスなし」の 7 文字を全行に並べると、列の中でいちばん
+         目立つ文字列になってしまう。日付や件数と同じくダッシュにして、
+         正式な呼び名は title と選択肢の側に残す。 -->
+    <span class="s-label">{status ? (STATUS_LABELS[status] ?? status) : "—"}</span>
     <svg class="s-caret" viewBox="0 0 12 12" aria-hidden="true">
       <path
         d="M3 4.5L6 7.5L9 4.5"
@@ -251,6 +255,18 @@
     width: 0.75rem;
     height: 0.75rem;
     flex-shrink: 0;
+    /* 行にずらりと並ぶドロップダウン記号は、状態そのものより目立ってしまう。
+       ツリー行の中では hover / focus のときだけ出す（詳細ペインなど
+       .TableRow の外では今までどおり常時表示）。 */
+    opacity: 0.7;
+    transition: opacity 0.12s ease;
+  }
+  :global(.TableRow) .s-caret {
+    opacity: 0;
+  }
+  :global(.TableRow:hover) .s-caret,
+  :global(.TableRow:focus-within) .s-caret,
+  :global(.TableRow.Selected) .s-caret {
     opacity: 0.7;
   }
   .s-popup {

@@ -659,6 +659,7 @@
   let showOverflowMenu = false;
   let treeComponent;
   let overflowMenuPosition = { x: 0, y: 0, position: "left" };
+  let overflowTrigger = null;
 
   $: markdownConvertCount = countProjectMemosForFormat(
     $tree_data?.data,
@@ -714,6 +715,11 @@
     ];
     const viewGroup = [
       {
+        id: "columnSettings",
+        action: "overflowAction",
+        title: "列の設定",
+      },
+      {
         id: "toggleGantt",
         action: "overflowAction",
         title: $ganttVisible ? "ガントチャートを閉じる" : "ガントチャートを表示",
@@ -746,6 +752,9 @@
     }
     const rect = e.currentTarget.getBoundingClientRect();
     overflowMenuPosition = { x: rect.right, y: rect.bottom, position: "left" };
+    // カラム表示設定はこのメニューから開くので、吹き出しの位置合わせ用に
+    // トリガーを覚えておく（メニューを閉じたあとに開くため）。
+    overflowTrigger = { rect, element: e.currentTarget };
     showOverflowMenu = true;
   }
 
@@ -788,6 +797,9 @@
       case "memoQuill":
         requestBulkMemoFormat("quill");
         break;
+      case "columnSettings":
+        treeComponent?.openColumns(overflowTrigger);
+        break;
       case "toggleGantt":
         $ganttVisible = !$ganttVisible;
         break;
@@ -819,25 +831,6 @@
           <div class="TaskListToolbar">
             <!-- Keep filter search on a separate row at narrow widths. -->
             <div class="TbRow TbButtonsRow" class:TbButtonsRowCompact={isCompact}>
-              <IconButton
-                variant="text"
-                normalColor="var(--fg-default)"
-                activeColor="var(--accent-fg)"
-                ariaLabel="列の設定"
-                tooltipContent="列の設定"
-                style="margin:0; width:2.25rem; height:2.25rem;"
-                on:click={(event) => treeComponent?.openColumns(event)}
-                ><svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.6"
-                  aria-hidden="true"
-                  ><rect x="3" y="4" width="18" height="16" rx="2" /><path
-                    d="M9 4v16M15 4v16"
-                  /></svg
-                ></IconButton
-              >
               <!-- Primary actions: add / add-child / delete (+ restore when
                    the selection contains archived rows). Everything else
                    lives in the overflow ("⋯") menu so the toolbar stays
@@ -1437,9 +1430,11 @@
     overflow: hidden;
     background: var(--canvas-default);
   }
+  /* テーマカラーの濃い帯はウィンドウ上端のヘッダーだけに任せる。ここにも
+     同じ色を敷くと帯が二本並んで境目が読めなくなるので、カード内の見出しは
+     下地に近いグレーで面を分ける。 */
   .tree-heading {
-    background: var(--theme-color-Theme-main);
-    --fg-default: var(--on-theme-text);
+    background: var(--canvas-subtle);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -1540,11 +1535,11 @@
     min-width: 0;
   }
   .storage-badge {
-    color: var(--on-theme-text);
+    color: var(--fg-muted);
     flex: 0 0 auto;
     padding: 0.15rem var(--sp2);
     border-radius: var(--shape-xs);
-    background-color: color-mix(in srgb, var(--theme-color-Info-main) 18%, transparent);
+    background-color: color-mix(in srgb, var(--fg-muted) 12%, transparent);
     font-size: var(--font-label-md);
     font-weight: 600;
     white-space: nowrap;

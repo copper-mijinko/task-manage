@@ -61,18 +61,18 @@
      app's default window size no task name was readable. Counters need
      room for 2-3 digits, dates for a localized date, and the name column
      absorbs whatever space is left (see fitNameColumn in TreeTable). */
-  --col-min-name: 12rem;
+  /* Tree/Name が主役の列。ここだけは十分な最小幅を取り、余った幅も
+     すべて Name が吸う（TreeTable の fitNameColumn）。 */
+  --col-min-name: 15rem;
   /* ステータスは「ステータス」5 文字 + 並べ替えボタンが並ぶので、日付列
      （3 文字）より少し広く要る。7rem では見出しが「ステー...」に切れていた。 */
-  --col-min-status: 8.5rem;
+  --col-min-status: 8rem;
   --col-min-date: 8rem;
   --col-min-count: 5rem;
-  --col-min-tags: 9rem;
+  /* タグ列は中身が短いチップ 1〜2 個。ヘッダーの「タグ」表示が
+     読める幅だけ確保する。 */
+  --col-min-tags: 4rem;
   --col-min-default: 8rem;
-  /* 最終列の右端には列表示設定ボタンが浮いている。その専有ぶんは列の
-     最小幅に上乗せする（各列の min-width から引いてしまうと、最小幅の
-     ときに最終列の見出しが数 px まで潰れる）。 */
-  --col-actions-reserve: calc(var(--sp7) + var(--sp2));
 
   /* Card body padding — overridable by density mode so we don't squash
      every other --sp3 consumer. Defaults to the comfortable 12px. */
@@ -359,8 +359,10 @@ body {
 }
 
 :root {
-  --tree-row-height: 36px;
+  /* 一覧なので、1 行に本文 14px が収まる範囲でできるだけ詰める。36px では
+     画面に入る行数が少なかった。 */
+  --tree-row-height: 32px;
 }
 .density-compact {
-  --tree-row-height: 32px;
+  --tree-row-height: 28px;
 }
