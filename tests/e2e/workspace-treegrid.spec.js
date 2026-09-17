@@ -42,8 +42,8 @@ test("Gantt rows align at both densities and pointer edits persist their dates",
     const ganttRow = page.locator('.GanttRow[data-row-path="root/alpha/review"]');
     const treeRow = page.locator('.TreeTable [data-row-path="root/alpha/review"]');
     for (const [label, height] of [
-      ["標準", 36],
-      ["コンパクト", 32],
+      ["標準", 32],
+      ["コンパクト", 28],
     ]) {
       await page.getByRole("button", { name: "設定を開く", exact: true }).click();
       await page.getByRole("button", { name: label, exact: true }).click();
@@ -193,11 +193,13 @@ test("detail view state leaves records unchanged and pending body saves keep the
     await page.getByRole("tab", { name: "本文", exact: true }).click();
     await page.getByRole("tab", { name: /^添付/ }).click();
     await page.getByRole("tab", { name: "概要", exact: true }).click();
-    await page.getByRole("button", { name: "列の設定", exact: true }).click();
+    await page.getByRole("button", { name: "表示と操作", exact: true }).click();
+    await page.getByRole("menuitem", { name: "列の設定", exact: true }).click();
     await page.getByRole("spinbutton", { name: "ステータスの幅", exact: true }).fill("180");
     await page.getByRole("spinbutton", { name: "ステータスの幅", exact: true }).blur();
     await page.keyboard.press("Escape");
-    await expect(page.getByRole("button", { name: "列の設定", exact: true })).toBeFocused();
+    // 閉じたらメニューを開いたボタンへフォーカスが戻る。
+    await expect(page.getByRole("button", { name: "表示と操作", exact: true })).toBeFocused();
     expect(graphOf(app)).toEqual(before);
     await page.getByRole("tab", { name: "本文", exact: true }).click();
     await page.getByRole("button", { name: /^メモ表示モード：/ }).click();
@@ -455,7 +457,8 @@ test("TreeGrid scope, search, filter, columns and terminal cycles", async () => 
     await page.getByRole("button", { name: "ステータスフィルター", exact: true }).click();
     await page.getByRole("button", { name: "フィルター解除", exact: true }).click();
     await page.keyboard.press("Escape");
-    await page.getByRole("button", { name: "列の設定" }).click();
+    await page.getByRole("button", { name: "表示と操作", exact: true }).click();
+    await page.getByRole("menuitem", { name: "列の設定", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "カラム表示設定" });
     await dialog.getByRole("checkbox", { name: "タグ", exact: true }).check();
     await dialog.getByRole("checkbox", { name: "開始日", exact: true }).uncheck();
@@ -484,7 +487,7 @@ test("TreeGrid scope, search, filter, columns and terminal cycles", async () => 
           (await page.getByRole("columnheader", { name: /ステータス/ }).boundingBox()).width
       )
       .toBe(statusWidth);
-    await expect(page.getByRole("button", { name: "列の設定" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "表示と操作", exact: true })).toBeVisible();
     await select(page, "alpha/shared");
     await page.screenshot({ path: testInfo.outputPath("treegrid-900.png") });
     await page.reload();
