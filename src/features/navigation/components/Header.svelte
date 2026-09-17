@@ -1,4 +1,5 @@
 <script>
+  import { showQuickCapture } from "@stores/ui";
   import { workspaceNavigation } from "@features/workspace/application/workspace";
   import { onMount } from "svelte";
   import IconButton from "@lib/primitives/IconButton.svelte";
@@ -148,7 +149,7 @@
       <svg class="Menu" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"
         ><path
           d="M4 6H20M4 12H20M4 18H20"
-          stroke="#ffffff"
+          stroke="var(--fg-default)"
           stroke-width="2"
           stroke-linecap="round"
           stroke-linejoin="round"
@@ -159,7 +160,7 @@
       <svg class="Menu" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"
         ><path
           d="M15 6L9 12L15 18"
-          stroke="#ffffff"
+          stroke="var(--fg-default)"
           stroke-width="2"
           stroke-linecap="round"
           stroke-linejoin="round"
@@ -370,6 +371,13 @@
     {/if}
   </button>
 
+  <button
+    class="ui-action"
+    title="Inboxへクイック追加"
+    style="white-space: nowrap; flex-shrink: 0;"
+    disabled={!$workspace_store.activeWorkspacePath}
+    on:click={() => ($showQuickCapture = true)}>クイック追加</button
+  >
   <div class="HeaderRight">
     <div
       class="SaveIndicator"
@@ -392,8 +400,8 @@
         right={"Light"}
         leftColor="black"
         rightColor="white"
-        leftTextColor="rgba(255,255,255,0.95)"
-        rightTextColor="rgba(255,255,255,0.95)"
+        leftTextColor="var(--fg-muted)"
+        rightTextColor="var(--fg-muted)"
         leftColorBack="rgba(0,0,0,0.5)"
         rightColorBack="rgba(255,255,255,0.5)"
         checked={$theme == "light"}
@@ -460,7 +468,7 @@
               height="6.5"
               stroke="currentColor"
               stroke-width="1.5"
-              fill="var(--theme-color-Theme-main)"
+              fill="var(--canvas-subtle)"
             />
           </svg>
         {:else}
@@ -518,11 +526,19 @@
     box-sizing: border-box;
     padding-left: var(--sp1);
     background-color: var(--theme-color-Theme-main);
-    color: white;
+    --fg-default: var(--on-theme-text);
+    --fg-muted: var(--on-theme-text);
+    --hover-bg: rgba(255, 255, 255, 0.14);
+    color: var(--fg-default);
     position: sticky;
     top: 0;
     z-index: 999;
     -webkit-app-region: drag;
+  }
+  .Container :global(.ui-action) {
+    background: transparent;
+    color: var(--on-theme-text);
+    border-color: rgba(255, 255, 255, 0.35);
   }
   .Container.webRuntime {
     -webkit-app-region: no-drag;
@@ -564,10 +580,10 @@
     height: 1.75rem;
     padding: 0;
     margin: 0;
-    border: 1px solid rgba(255, 255, 255, 0.25);
+    border: 1px solid var(--hover-bg);
     border-radius: var(--shape-sm);
-    background-color: rgba(255, 255, 255, 0.1);
-    color: white;
+    background-color: var(--hover-bg);
+    color: var(--fg-default);
     cursor: pointer;
     transition:
       background-color 0.12s ease,
@@ -575,11 +591,11 @@
       opacity 0.12s ease;
   }
   .NavHistoryBtn:hover:not(:disabled) {
-    background-color: rgba(255, 255, 255, 0.22);
-    border-color: rgba(255, 255, 255, 0.55);
+    background-color: var(--hover-bg);
+    border-color: var(--fg-muted);
   }
   .NavHistoryBtn:focus-visible {
-    outline: 2px solid var(--on-theme-primary);
+    outline: 2px solid var(--accent-fg);
     outline-offset: 2px;
   }
   .NavHistoryBtn:disabled {
@@ -592,7 +608,7 @@
     fill: none;
   }
   svg {
-    fill: white;
+    fill: currentColor;
   }
 
   /* Search field — actual input */
@@ -604,18 +620,18 @@
     max-width: 25rem;
     min-width: 8rem;
     padding: 2px var(--sp2);
-    border: 1px solid rgba(255, 255, 255, 0.25);
+    border: 1px solid var(--hover-bg);
     border-radius: var(--shape-sm);
-    background-color: rgba(255, 255, 255, 0.12);
-    color: rgba(255, 255, 255, 0.92);
+    background-color: var(--hover-bg);
+    color: var(--fg-muted);
     transition:
       background-color 0.12s ease,
       border-color 0.12s ease;
     cursor: text;
   }
   .SearchField:focus-within {
-    background-color: rgba(255, 255, 255, 0.22);
-    border-color: rgba(255, 255, 255, 0.55);
+    background-color: var(--hover-bg);
+    border-color: var(--fg-muted);
   }
   .SearchIcon {
     width: 1rem;
@@ -634,22 +650,22 @@
     border: none;
     outline: none;
     background: transparent;
-    color: white;
+    color: var(--fg-default);
     font-size: var(--font-body-sm);
     font-family: inherit;
     padding: 0;
   }
   .SearchInput::placeholder {
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--fg-muted);
   }
   .SearchInput::-webkit-search-cancel-button {
     -webkit-appearance: none;
   }
   .SearchShortcut {
     font-size: var(--font-label-sm);
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--fg-muted);
     padding: 1px var(--sp1);
-    border: 1px solid rgba(255, 255, 255, 0.3);
+    border: 1px solid var(--hover-bg);
     border-radius: var(--shape-xs);
     font-family: "Consolas", "Courier New", monospace;
     flex-shrink: 0;
@@ -660,7 +676,7 @@
   .SearchCount {
     flex-shrink: 0;
     font-size: var(--font-label-sm);
-    color: rgba(255, 255, 255, 0.78);
+    color: var(--fg-muted);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
     padding: 0 var(--sp1);
@@ -674,14 +690,14 @@
     border-radius: var(--shape-xs);
     border: none;
     background: transparent;
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--fg-muted);
     cursor: pointer;
     display: inline-flex;
     align-items: center;
     justify-content: center;
   }
   .SearchNavBtn:hover {
-    background-color: rgba(255, 255, 255, 0.18);
+    background-color: var(--hover-bg);
   }
   .SearchNavBtn:disabled {
     opacity: 0.38;
@@ -703,23 +719,23 @@
     width: 1.75rem;
     height: 1.75rem;
     flex-shrink: 0;
-    border: 1px solid rgba(255, 255, 255, 0.25);
+    border: 1px solid var(--hover-bg);
     border-radius: var(--shape-sm);
-    background-color: rgba(255, 255, 255, 0.1);
-    color: white;
+    background-color: var(--hover-bg);
+    color: var(--fg-default);
     cursor: pointer;
     transition:
       background-color 0.12s ease,
       border-color 0.12s ease;
   }
   .InboxBtn:hover {
-    background-color: rgba(255, 255, 255, 0.22);
-    border-color: rgba(255, 255, 255, 0.55);
+    background-color: var(--hover-bg);
+    border-color: var(--fg-muted);
   }
   .InboxBtn.Active {
-    background-color: rgba(255, 255, 255, 0.3);
-    border-color: rgba(255, 255, 255, 0.75);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+    background-color: var(--hover-bg);
+    border-color: var(--fg-muted);
+    box-shadow: inset 0 0 0 1px var(--hover-bg);
   }
   .InboxBtn.Disabled {
     opacity: 0.45;
@@ -744,7 +760,7 @@
     height: 1.25rem;
     padding: 0 0.3rem;
     border-radius: var(--shape-pill);
-    background-color: var(--on-theme-primary);
+    background-color: var(--accent-fg);
     color: #101315;
     font-size: var(--font-label-sm);
     font-weight: 700;
@@ -766,7 +782,7 @@
     padding: 0 var(--sp2);
     border-radius: var(--shape-xs);
     font-size: var(--font-label-md);
-    color: rgba(255, 255, 255, 0.92);
+    color: var(--fg-muted);
     white-space: nowrap;
   }
   .SaveDot {
@@ -803,18 +819,18 @@
     flex-shrink: 0;
     padding: 0;
     margin: 0;
-    border: 1px solid rgba(255, 255, 255, 0.25);
+    border: 1px solid var(--hover-bg);
     border-radius: var(--shape-sm);
-    background-color: rgba(255, 255, 255, 0.1);
-    color: white;
+    background-color: var(--hover-bg);
+    color: var(--fg-default);
     cursor: pointer;
     transition:
       background-color 0.12s ease,
       border-color 0.12s ease;
   }
   .SettingsBtn:hover {
-    background-color: rgba(255, 255, 255, 0.22);
-    border-color: rgba(255, 255, 255, 0.55);
+    background-color: var(--hover-bg);
+    border-color: var(--fg-muted);
   }
   .SettingsBtn svg {
     width: 1.1rem;
@@ -842,19 +858,19 @@
     margin: 0;
     border: none;
     background: transparent;
-    color: rgba(255, 255, 255, 0.92);
+    color: var(--fg-muted);
     cursor: pointer;
     transition: background-color 0.12s ease;
   }
   .WinCtrlBtn:hover {
-    background-color: rgba(255, 255, 255, 0.12);
+    background-color: var(--hover-bg);
   }
   .WinCtrlBtn:active {
-    background-color: rgba(255, 255, 255, 0.18);
+    background-color: var(--hover-bg);
   }
   .WinCtrlBtn.Close:hover {
     background-color: #e81123;
-    color: #ffffff;
+    color: var(--fg-default);
   }
   .WinCtrlBtn.Close:active {
     background-color: #c4101f;

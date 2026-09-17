@@ -8,19 +8,21 @@
   export let height = "90%";
   export let label = undefined;
   export let labelledBy = undefined;
+  let layer;
 
   function handleKeydown(event) {
-    if (show && event.key === "Escape") {
+    if (show && !layer?.hasAttribute("inert") && event.key === "Escape") {
       event.preventDefault();
+      event.stopImmediatePropagation();
       toggle();
     }
   }
 </script>
 
-<svelte:window on:keydown={handleKeydown} />
+<svelte:window on:keydown|capture={handleKeydown} />
 
 {#if show}
-  <div class="ModalLayer" use:modalLayer data-page-search-skip>
+  <div class="ModalLayer" bind:this={layer} use:modalLayer data-page-search-skip>
     <button
       type="button"
       class="Mask"

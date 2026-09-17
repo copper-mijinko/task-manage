@@ -1,4 +1,4 @@
-﻿<script>
+<script>
   import { getContext, tick, createEventDispatcher } from "svelte";
   import { writable } from "svelte/store";
   import { TREEGRID_APPLICATION } from "@features/workspace/application/treegrid";
@@ -91,18 +91,15 @@
     // 3. Clipboard — copy is bulk-aware; paste disallowed onto archived
     // (archived は読み取り専用なので子追加が禁止扱い)。
     [
-      ...(!isRoot
-        ? [
-            {
-              title: `${countPrefix}コピー`,
-              action: "copyTask",
-              icon: {
-                viewBox: "0 0 24 24",
-                path: "M8 4v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7.242a2 2 0 0 0-.602-1.43L16.083 2.57A2 2 0 0 0 14.685 2H10a2 2 0 0 0-2 2ZM4 8H2v12a2 2 0 0 0 2 2h8v-2H4Z",
-              },
-            },
-          ]
-        : []),
+      {
+        title: `${countPrefix}コピー`,
+        action: "copyTask",
+        icon: {
+          viewBox: "0 0 24 24",
+          path: "M8 4v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7.242a2 2 0 0 0-.602-1.43L16.083 2.57A2 2 0 0 0 14.685 2H10a2 2 0 0 0-2 2ZM4 8H2v12a2 2 0 0 0 2 2h8v-2H4Z",
+        },
+      },
+
       {
         title: "子タスクとして貼り付け",
         action: "pasteTask",
@@ -426,6 +423,7 @@
       }
     }}
     on:keydown={(e) => {
+      if (e.isComposing || e.keyCode === 229) return;
       if (!isEditing) {
         return;
       }

@@ -1,5 +1,7 @@
 ﻿<script context="module" lang="ts">
   // marked.use() の設定はモジュール読込時に一度だけ行う (下の instance <script> 参照)。
+  import { Marked } from "marked";
+  const marked = new Marked();
   let markedConfigured = false;
 </script>
 
@@ -44,8 +46,11 @@
     indentLess,
     indentMore,
   } from "@codemirror/commands";
+  import { undo, redo, selectAll } from "@codemirror/commands";
+  import { formatDate, formatTime } from "@lib/utils/datetime_shortcuts";
+  import { date_time_format } from "@stores/preferences";
+  import { openSearchPanel } from "@codemirror/search";
   import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
-  import { marked } from "marked";
   import { markedHighlight } from "marked-highlight";
   import hljs from "highlight.js/lib/common";
   import mermaid from "mermaid";
@@ -56,12 +61,8 @@
   import { theme } from "@stores/theme";
   import "@features/memos/styles/hljs-theme.css";
 
-  // marked は共有シングルトンで marked.use() は extension を「積み上げる」ため、
-  // この設定はコンポーネントのマウントごとではなく一度だけ実行する必要がある。
-  // 以前はこの呼び出しがインスタンス <script> にあり、マウントのたびに markedHighlight が
-  // 再登録され、その walkTokens によるコードブロックの hljs エスケープが 1 段ずつ重なっていた
-  // (`>` → `&gt;` → `&amp;gt;` → `&amp;amp;gt;` …)。本文(段落)は renderer が一度だけ
-  // エスケープするため影響を受けず、コードブロックだけで多重エスケープが顕在化していた。
+  // Use a component-module parser so remounts and HMR cannot accumulate
+  // highlight extensions on the shared parser used by format conversion.
   if (!markedConfigured) {
     markedConfigured = true;
     marked.use(
@@ -89,7 +90,7 @@
     );
   }
 
-  export let saveMemo: (content: string) => void;
+  export let saveMemo: (content: string) => unknown;
   export let content: unknown = "";
   export let readOnly = false;
   export let memoTitles: string[] = [];
@@ -104,11 +105,13 @@
   let container: HTMLElement;
   let view: EditorView | null = null;
   let saveTimer: ReturnType<typeof setTimeout>;
-  let savedTimer: ReturnType<typeof setTimeout>;
   let isEditing = false;
   let markdownMode: MarkdownMemoMode = "preview";
   let hasChanges = false;
-  let saveState: "clean" | "dirty" | "saved" = "clean";
+  let saveState: "clean" | "dirty" | "saved" | "saving" | "error" = "clean";
+  let saveError = "";
+  let pendingSave: Promise<boolean> | undefined;
+  let saveVersion = 0;
   let currentContent = toMarkdown(content);
   let renderedHtml = "";
   let renderSequence = 0;
@@ -256,15 +259,41 @@
   function flushSave(nextContent: string) {
     clearTimeout(saveTimer);
     currentContent = nextContent;
-    saveMemo(currentContent);
-    hasChanges = false;
-    saveState = "saved";
-    clearTimeout(savedTimer);
-    savedTimer = setTimeout(() => {
-      if (!hasChanges) {
-        saveState = "clean";
-      }
-    }, 1600);
+    const version = ++saveVersion;
+    const save = saveMemo;
+    saveState = "saving";
+    pendingSave = Promise.resolve()
+      .then(() => save(nextContent))
+      .then((result) => {
+        if (result === false) throw new Error("保存できませんでした。入力は保持されています。");
+        if (version === saveVersion && currentContent === nextContent) {
+          hasChanges = false;
+          saveState = "saved";
+          saveError = "";
+        }
+        return true;
+      })
+      .catch((error) => {
+        if (version === saveVersion) {
+          hasChanges = true;
+          saveState = "error";
+          saveError = error.message;
+        }
+        return false;
+      });
+    return pendingSave;
+  }
+
+  export function flush() {
+    if (hasChanges) return flushSave(view?.state.doc.toString() ?? currentContent);
+    return pendingSave;
+  }
+  export function hasPendingSave() {
+    return hasChanges || saveState === "saving";
+  }
+
+  export function startEditing() {
+    if (!readOnly) void startEdit("edit");
   }
 
   function canSavePastedImages(): boolean {
@@ -273,6 +302,27 @@
       (workspaceProjectDir && taskId && platform.isPlatformAvailable()) ||
       !workspaceProjectDir
     );
+  }
+
+  let imageInput: HTMLInputElement;
+  let imageTarget: EditorView | null = null;
+  async function insertChosenImage(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    const target = imageTarget;
+    input.value = "";
+    if (!file || !target || target !== view) return;
+    try {
+      const src = canSavePastedImages()
+        ? await persistPastedImage(file)
+        : await imageToDataUrl(file);
+      if (src && target === view) {
+        insertTextAtSelection(target, `${buildImageMarkdown(src, file.name)}\n`);
+        target.focus();
+      }
+    } catch (error) {
+      saveError = error instanceof Error ? error.message : String(error);
+    }
   }
 
   function readFileAsDataUrl(file: File): Promise<string | null> {
@@ -1078,7 +1128,6 @@
   // mermaid の初期化はテーマに依存する。最初の renderMermaidBlocks 呼び出し
   // および theme 変更時に setupMermaidTheme で再初期化する。
   let mermaidThemeApplied: "dark" | "default" | null = null;
-  let mermaidIdCounter = 0;
 
   function setupMermaidTheme(themeName: "dark" | "light" | undefined) {
     const next: "dark" | "default" = themeName === "dark" ? "dark" : "default";
@@ -1088,6 +1137,7 @@
       securityLevel: "strict",
       theme: next,
       fontFamily: "inherit",
+      htmlLabels: false,
     });
     mermaidThemeApplied = next;
     return true;
@@ -1108,17 +1158,30 @@
       const source = (code.textContent ?? "").trim();
       const container = document.createElement("div");
       container.className = "mermaid-block";
-      const id = `mermaid-${++mermaidIdCounter}`;
+      pre.replaceWith(container);
+      const id = `mermaid-${crypto.randomUUID()}`;
       try {
-        const { svg, bindFunctions } = await mermaid.render(id, source);
+        const { svg, bindFunctions } = await mermaid.render(id, source, container);
         container.innerHTML = svg;
         bindFunctions?.(container);
+        // Electron can report stale bounds while Mermaid measures detached
+        // SVG nodes. Fit the attached diagram after layout has completed.
+        requestAnimationFrame(() => {
+          const diagram = container.querySelector("svg");
+          if (!container.isConnected || !diagram) return;
+          const bounds = diagram.getBBox();
+          if (bounds.width <= 0 || bounds.height <= 0) return;
+          diagram.setAttribute(
+            "viewBox",
+            `${bounds.x - 8} ${bounds.y - 8} ${bounds.width + 16} ${bounds.height + 16}`
+          );
+          diagram.style.maxWidth = `${bounds.width + 16}px`;
+        });
       } catch (error) {
         container.classList.add("mermaid-error");
         const msg = error instanceof Error ? error.message : String(error);
         container.textContent = `Mermaid: ${msg}`;
       }
-      pre.replaceWith(container);
     }
   }
 
@@ -1537,7 +1600,7 @@
             } else {
               imageSrc = await imageToDataUrl(file);
             }
-            if (!imageSrc) {
+            if (!imageSrc || view !== editorView) {
               return;
             }
 
@@ -1698,7 +1761,6 @@
   onDestroy(() => {
     persistMarkdownPreferences();
     stopSplitResize();
-    clearTimeout(savedTimer);
     if (view) {
       clearTimeout(saveTimer);
       if (hasChanges) flushSave(view.state.doc.toString());
@@ -1805,7 +1867,7 @@
   $: currentModeLabel =
     memoModeOptions.find((mode) => mode.value === markdownMode)?.label ?? "プレビュー";
   $: hasRenderedContent = Boolean(currentContent.trim());
-  $: if (!isEditing && normalizedContent !== currentContent) {
+  $: if (!isEditing && !hasChanges && normalizedContent !== currentContent) {
     currentContent = normalizedContent;
   }
   $: if (readOnly && isEditing) {
@@ -1825,11 +1887,62 @@
 <svelte:window on:click={handleWindowClick} />
 
 <div class="wrapper">
+  <input
+    type="file"
+    accept="image/*"
+    aria-label="本文に挿入する画像"
+    bind:this={imageInput}
+    on:change={insertChosenImage}
+    hidden
+  />
+  {#if saveError}<div role="alert">
+      {saveError}<button class="ui-action" on:click={flush}>再試行</button>
+    </div>{/if}
   {#if isEditing}
     <div class="edit-mode">
       <div class="edit-bar">
         <div class="toolbar">
-          <!-- eslint-disable svelte/no-at-html-tags -->
+          <span class="toolbar-picker">
+            <select
+              aria-label="編集操作"
+              on:change={(event) => {
+                if (!view) return;
+                const command = event.currentTarget.value;
+                if (command === "undo") undo(view);
+                if (command === "redo") redo(view);
+                if (command === "search") openSearchPanel(view);
+                if (command === "all") selectAll(view);
+                if (command === "indent") indentMore(view);
+                if (command === "outdent") indentLess(view);
+                if (command === "date")
+                  insertTextAtSelection(view, formatDate(new Date(), $date_time_format));
+                if (command === "time")
+                  insertTextAtSelection(view, formatTime(new Date(), $date_time_format));
+                if (command === "break") insertMarkdownHardBreak(view);
+                if (command === "next-cell") formatTableAndMoveCell(view, 1);
+                if (command === "previous-cell") formatTableAndMoveCell(view, -1);
+                if (command === "image") {
+                  imageTarget = view;
+                  imageInput.click();
+                }
+                event.currentTarget.value = "";
+                if (command !== "search") view.focus();
+              }}
+            >
+              <option value="">編集操作</option>
+              <option value="undo">元に戻す</option><option value="redo">やり直し</option>
+              <option value="search">本文内を検索・置換</option><option value="all"
+                >すべて選択</option
+              >
+              <option value="indent">字下げ</option><option value="outdent">字下げ解除</option>
+              <option value="date">日付を挿入</option><option value="time">時刻を挿入</option>
+              <option value="break">改行を挿入</option>
+              <option value="next-cell">表の次のセル</option><option value="previous-cell"
+                >表の前のセル</option
+              >
+              <option value="image">画像を挿入</option>
+            </select>
+          </span>
           <span class="heading-picker toolbar-picker">
             <select
               aria-label="見出し"
@@ -1851,6 +1964,7 @@
             on:mousedown|preventDefault
             on:click={formatBold}
           >
+            <!-- eslint-disable-next-line svelte/no-at-html-tags -- Static SVG from the bundled Quill icon set. -->
             <span class="tool-icon" aria-hidden="true">{@html toolbarIcons.bold}</span>
           </button>
           <button
@@ -1861,6 +1975,7 @@
             on:mousedown|preventDefault
             on:click={formatItalic}
           >
+            <!-- eslint-disable-next-line svelte/no-at-html-tags -- Static SVG from the bundled Quill icon set. -->
             <span class="tool-icon" aria-hidden="true">{@html toolbarIcons.italic}</span>
           </button>
           <button
@@ -1871,6 +1986,7 @@
             on:mousedown|preventDefault
             on:click={formatInlineCode}
           >
+            <!-- eslint-disable-next-line svelte/no-at-html-tags -- Static SVG from the bundled Quill icon set. -->
             <span class="tool-icon" aria-hidden="true">{@html toolbarIcons.inlineCode}</span>
           </button>
           <span class="tool-sep"></span>
@@ -1882,6 +1998,7 @@
             on:mousedown|preventDefault
             on:click={formatLink}
           >
+            <!-- eslint-disable-next-line svelte/no-at-html-tags -- Static SVG from the bundled Quill icon set. -->
             <span class="tool-icon" aria-hidden="true">{@html toolbarIcons.link}</span>
           </button>
           <button
@@ -1892,6 +2009,7 @@
             on:mousedown|preventDefault
             on:click={formatBulletList}
           >
+            <!-- eslint-disable-next-line svelte/no-at-html-tags -- Static SVG from the bundled Quill icon set. -->
             <span class="tool-icon" aria-hidden="true">{@html toolbarIcons.bulletList}</span>
           </button>
           <button
@@ -1902,6 +2020,7 @@
             on:mousedown|preventDefault
             on:click={formatQuote}
           >
+            <!-- eslint-disable-next-line svelte/no-at-html-tags -- Static SVG from the bundled Quill icon set. -->
             <span class="tool-icon" aria-hidden="true">{@html toolbarIcons.quote}</span>
           </button>
           <button
@@ -1912,6 +2031,7 @@
             on:mousedown|preventDefault
             on:click={formatCodeBlock}
           >
+            <!-- eslint-disable-next-line svelte/no-at-html-tags -- Static SVG from the bundled Quill icon set. -->
             <span class="tool-icon" aria-hidden="true">{@html toolbarIcons.codeBlock}</span>
           </button>
           <span class="tool-sep"></span>
@@ -1932,7 +2052,15 @@
         </div>
         <div class="edit-bar-end">
           <span class="save-status" aria-live="polite">
-            {saveState === "dirty" ? "未保存" : saveState === "saved" ? "保存済み" : ""}
+            {saveState === "dirty"
+              ? "未保存"
+              : saveState === "saving"
+                ? "保存要求中"
+                : saveState === "error"
+                  ? "保存失敗"
+                  : saveState === "saved"
+                    ? "保存要求済み"
+                    : ""}
           </span>
           <!-- eslint-disable svelte/no-at-html-tags -->
           <div class="memo-mode-dropdown" bind:this={modeDropdownEl}>

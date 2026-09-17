@@ -80,16 +80,13 @@ describe("TaskDetail", () => {
     expect(screen.getByText("タスクを選択してください")).toBeInTheDocument();
   });
 
-  // タブが無くなったので「メモはまだありません」という空状態も無くなった。
-  // ノードは常に本文を 1 つ持ち、いつでも書き始められる。
-  test("選択したノードには常に本文エディタが出る", () => {
+  test("starts with a reading overview and loads the body on demand", async () => {
     table_selected_id.set("task-1");
     render(TaskDetail);
-
+    expect(screen.getByRole("tab", { name: "概要" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByTestId("memo-stub")).toBeNull();
+    await fireEvent.click(screen.getByRole("tab", { name: "本文" }));
     expect(screen.getByTestId("memo-stub")).toBeInTheDocument();
-    expect(screen.getByText("本文")).toBeInTheDocument();
-    expect(screen.getByText("First Task")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "メモを追加" })).not.toBeInTheDocument();
   });
 
   test("opens the selected task detail from the card header action", async () => {
@@ -105,7 +102,8 @@ describe("TaskDetail", () => {
 
     render(TaskDetail);
 
-    await fireEvent.click(screen.getByRole("button", { name: "タスク詳細を別ウィンドウで開く" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Node詳細の操作" }));
+    await fireEvent.click(screen.getByRole("menuitem", { name: "別Windowで開く" }));
     await tick();
 
     expect(window.electronAPI.openTaskDetailWindow).toHaveBeenCalledWith(
@@ -120,88 +118,28 @@ describe("TaskDetail", () => {
     );
   });
 
-  test("collapses task fields to keep the memo pane wide", async () => {
+  test("retains the active tab across node selections without changing node records", async () => {
     table_selected_id.set("task-1");
-    const { container } = render(TaskDetail);
-
-    const body = container.querySelector(".task-detail-card-body");
-    const collapseButton = screen.getByRole("button", {
-      name: "詳細欄をたたんでメモを広げる",
-    });
-    expect(collapseButton).toHaveAttribute("aria-pressed", "false");
-
-    await fireEvent.click(collapseButton);
-    await tick();
-
-    expect(body).toHaveClass("detail-mini");
-    expect(screen.getByRole("button", { name: "詳細欄を表示" })).toHaveAttribute(
-      "aria-pressed",
-      "true"
-    );
-
+    render(TaskDetail);
+    const before = JSON.stringify(get(tree_data));
+    await fireEvent.click(screen.getByRole("tab", { name: "本文" }));
     table_selected_id.set("task-2");
     await tick();
-
-    expect(body).toHaveClass("detail-mini");
-
-    await fireEvent.click(screen.getByRole("button", { name: "詳細欄を表示" }));
-    await tick();
-
-    expect(body).not.toHaveClass("detail-mini");
-    expect(screen.getByRole("button", { name: "詳細欄をたたんでメモを広げる" })).toHaveAttribute(
-      "aria-pressed",
-      "false"
-    );
+    expect(screen.getByRole("tab", { name: "本文" })).toHaveAttribute("aria-selected", "true");
+    expect(JSON.stringify(get(tree_data))).toBe(before);
+    await fireEvent.click(screen.getByRole("tab", { name: "概要" }));
+    expect(screen.getByRole("button", { name: "編集", exact: true })).toBeInTheDocument();
   });
-
-  test("keeps the split boundary available while details are collapsed", async () => {
+  test("shows a contextual title and omits the separate-window action when requested", async () => {
     table_selected_id.set("task-1");
-    const { container } = render(TaskDetail);
-    const body = container.querySelector(".task-detail-card-body");
-
-    await fireEvent.click(screen.getByRole("button", { name: "詳細欄をたたんでメモを広げる" }));
-    await tick();
-
-    const separator = screen.getByRole("separator", {
-      name: "タスク詳細とメモの高さを変更",
+    render(TaskDetail, {
+      props: { titleOverride: "Sample Project / First Task", showOpenWindowAction: false },
     });
-    expect(body).toHaveClass("detail-mini");
-    expect(separator).toHaveAttribute("aria-valuenow", "0");
-    expect(separator).toHaveAttribute(
-      "aria-valuetext",
-      "詳細欄をたたんでいます。下へドラッグすると表示できます"
-    );
-    expect(getComputedStyle(separator).display).not.toBe("none");
-
-    await fireEvent.keyDown(separator, { key: "Enter" });
-    await tick();
-
-    expect(body).not.toHaveClass("detail-mini");
-    expect(separator).toHaveAttribute(
-      "aria-valuetext",
-      "ドラッグして詳細欄とメモ欄の高さを変更できます"
-    );
-  });
-
-  test("uses a path title and hides the open-window action in the dedicated detail window layout", async () => {
-    table_selected_id.set("task-1");
-    const { container } = render(TaskDetail, {
-      props: {
-        titleOverride: "Sample Project / First Task",
-        showOpenWindowAction: false,
-      },
-    });
-
-    expect(screen.getByText("Sample Project / First Task")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "詳細欄をたたんでメモを広げる" })
+      screen.getByRole("heading", { name: "Sample Project / First Task" })
     ).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "タスク詳細を別ウィンドウで開く" })).toBeNull();
-
-    await fireEvent.click(screen.getByRole("button", { name: "詳細欄をたたんでメモを広げる" }));
-    await tick();
-
-    expect(container.querySelector(".task-detail-card-body")).toHaveClass("detail-mini");
+    await fireEvent.click(screen.getByRole("button", { name: "Node詳細の操作" }));
+    expect(screen.queryByRole("menuitem", { name: "別Windowで開く" })).toBeNull();
   });
 
   test("選択したノードの本文だけを読みに行く", async () => {
@@ -225,6 +163,7 @@ describe("TaskDetail", () => {
     };
 
     render(TaskDetail);
+    await fireEvent.click(screen.getByRole("tab", { name: "本文" }));
 
     await waitFor(() => {
       expect(window.electronAPI.wsReadTaskBody).toHaveBeenCalledWith(
@@ -258,6 +197,7 @@ describe("TaskDetail", () => {
     };
 
     const { container } = render(TaskDetail);
+    await fireEvent.click(screen.getByRole("tab", { name: /添付/ }));
     const input = container.querySelector('[data-testid="attachment-file-input"]');
     const file = new File(["spec"], "spec.pdf", { type: "application/pdf" });
 
@@ -288,6 +228,7 @@ describe("TaskDetail", () => {
     const clickSpy = vi.spyOn(HTMLInputElement.prototype, "click").mockImplementation(() => {});
 
     render(TaskDetail);
+    await fireEvent.click(screen.getByRole("tab", { name: /添付/ }));
 
     await fireEvent.click(screen.getByRole("button", { name: "添付を追加" }));
 
@@ -316,6 +257,7 @@ describe("TaskDetail", () => {
     };
 
     render(TaskDetail);
+    await fireEvent.click(screen.getByRole("tab", { name: /添付/ }));
     const file = new File(["drop"], "drop.txt", { type: "text/plain" });
 
     await fireEvent.drop(screen.getByTestId("task-attachments"), {
@@ -364,6 +306,7 @@ describe("TaskDetail", () => {
     };
 
     render(TaskDetail);
+    await fireEvent.click(screen.getByRole("tab", { name: /添付/ }));
 
     await fireEvent.contextMenu(screen.getByTitle("spec.pdf"), { clientX: 24, clientY: 32 });
     await tick();
@@ -412,6 +355,7 @@ describe("TaskDetail", () => {
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
 
     render(TaskDetail);
+    await fireEvent.click(screen.getByRole("tab", { name: /添付/ }));
 
     await fireEvent.click(screen.getByTitle("spec.pdf"));
     expect(window.electronAPI.wsOpenTaskAttachment).toHaveBeenCalledWith(
@@ -436,6 +380,7 @@ describe("TaskDetail", () => {
   test("edits task detail fields independent of visible table columns", async () => {
     table_selected_id.set("task-1");
     render(TaskDetail);
+    await fireEvent.click(screen.getByRole("button", { name: "編集", exact: true }));
 
     await fireEvent.input(screen.getByLabelText("タスク名"), {
       target: { value: "Updated Task" },
@@ -473,6 +418,7 @@ describe("TaskDetail", () => {
     tree_data.set(project);
     table_selected_id.set("task-1");
     render(TaskDetail);
+    await fireEvent.click(screen.getByRole("tab", { name: "本文" }));
 
     await fireEvent.click(screen.getByTestId("memo-save"));
     await tick();
@@ -488,8 +434,10 @@ describe("TaskDetail", () => {
     table_selected_id.set("task-1");
 
     render(TaskDetail);
+    await fireEvent.click(screen.getByRole("tab", { name: "本文" }));
 
-    await fireEvent.click(screen.getByRole("button", { name: "Markdown形式を使用" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Node詳細の操作" }));
+    await fireEvent.click(screen.getByRole("menuitem", { name: "形式を変換" }));
 
     expect(screen.getByText(/情報が損なわれる可能性/)).toBeInTheDocument();
     await fireEvent.click(screen.getByRole("button", { name: "ok" }));
@@ -509,8 +457,10 @@ describe("TaskDetail", () => {
     table_selected_id.set("task-1");
 
     render(TaskDetail);
+    await fireEvent.click(screen.getByRole("tab", { name: "本文" }));
 
-    await fireEvent.click(screen.getByRole("button", { name: "Quill形式を使用" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Node詳細の操作" }));
+    await fireEvent.click(screen.getByRole("menuitem", { name: "形式を変換" }));
     await tick();
 
     expect(screen.queryByText(/情報が損なわれる可能性/)).not.toBeInTheDocument();
@@ -528,13 +478,16 @@ describe("TaskDetail", () => {
     window.__memoStubSaveOnDestroy = "stale markdown save";
 
     render(TaskDetail);
+    await fireEvent.click(screen.getByRole("tab", { name: "本文" }));
 
-    await fireEvent.click(screen.getByRole("button", { name: "Quill形式を使用" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Node詳細の操作" }));
+    await fireEvent.click(screen.getByRole("menuitem", { name: "形式を変換" }));
     await fireEvent.click(screen.getByRole("button", { name: "ok" }));
     await tick();
 
     const data = get(tree_data).data.children[0].data;
     expect(data.format).toBe("quill");
+    expect(data.body).toEqual({ ops: [{ insert: "stale markdown save\n" }] });
     expect(screen.getByTestId("memo-stub")).toHaveAttribute("data-format", "quill");
   });
 
@@ -559,6 +512,7 @@ describe("TaskDetail", () => {
     table_selected_id.set("task-1");
 
     render(TaskDetail);
+    await fireEvent.click(screen.getByRole("tab", { name: "本文" }));
 
     await fireEvent.click(screen.getByTestId("memo-save"));
     await tick();

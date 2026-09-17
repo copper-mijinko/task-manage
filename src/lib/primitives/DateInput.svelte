@@ -1,5 +1,6 @@
 ﻿<script>
   import { dueDateUrgency, dueDateUrgencyLabel } from "@lib/utils/date_urgency";
+  import { tick } from "svelte";
 
   export let is_dark = false;
   export let backgroundColor = "var(--theme-color-Main-light)";
@@ -10,6 +11,15 @@
   export let style = "";
   export let inheritedDate = "";
   export let ariaLabel = "日付";
+  export let displayOnly = false;
+  let editing = false;
+  let input;
+  async function beginEdit() {
+    if (disabled) return;
+    editing = true;
+    await tick();
+    input?.focus();
+  }
   /**
    * true のときだけ期限としての差し迫り具合を枠線と文字色に出す。
    * 開始日のような「期限ではない日付」は false にする。過ぎた開始日は
@@ -52,24 +62,60 @@
     ? 'dark'
     : ''}; --backgroundColor: {backgroundColor}; --borderColor: {borderColor}; --color-datetime: {textColor};"
 >
-  <input
-    {style}
-    class="Date"
-    class:Inherited={isInherited}
-    id={id || undefined}
-    type="date"
-    {disabled}
-    value={displayDate}
-    title={inputTitle}
-    aria-label={ariaLabel}
-    on:change
-    on:click={(e) => {
-      e.stopPropagation();
-    }}
-  />
+  {#if displayOnly && !editing}
+    <button
+      class="DateValue"
+      class:Inherited={isInherited}
+      {disabled}
+      title={inputTitle}
+      aria-label={ariaLabel}
+      on:click|stopPropagation={beginEdit}
+    >
+      {displayDate || "—"}{#if isInherited}<span aria-label="親から継承"> ↳</span>{/if}
+    </button>
+  {:else}
+    <input
+      bind:this={input}
+      {style}
+      class="Date"
+      class:Inherited={isInherited}
+      id={id || undefined}
+      type="date"
+      {disabled}
+      value={displayDate}
+      title={inputTitle}
+      aria-label={ariaLabel}
+      on:change
+      on:blur={() => (editing = false)}
+      on:click={(e) => {
+        e.stopPropagation();
+      }}
+    />
+  {/if}
 </div>
 
 <style>
+  .DateValue {
+    font: inherit;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+    height: 100%;
+    text-align: left;
+    border: 0;
+    border-radius: var(--shape-xs);
+    background: transparent;
+    color: var(--color-datetime);
+    cursor: pointer;
+    padding: 0 var(--sp1);
+  }
+  .DateValue:hover {
+    background: var(--hover-bg);
+  }
+  .DateValue.Inherited {
+    font-style: italic;
+  }
   .Container {
     position: relative;
     display: flex;

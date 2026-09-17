@@ -10,6 +10,7 @@
   const dispatch = createEventDispatcher();
   let menuElement;
   let listenersAttached = false;
+  let focusOrigin;
 
   $: menuSideClass = position.position === "left" ? "menu-position-left" : "menu-position-right";
   $: submenuSideClass =
@@ -29,10 +30,33 @@
   }
 
   function handleKeydown(event) {
-    if (!show || event.key !== "Escape") return;
+    if (!show) return;
+    if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+      const items = [
+        ...(menuElement?.querySelectorAll('[role="menuitem"]:not(:disabled)') || []),
+      ].filter((item) => item.getClientRects().length);
+      if (!items.length) return;
+      const index = items.indexOf(document.activeElement);
+      const next =
+        event.key === "Home"
+          ? 0
+          : event.key === "End"
+            ? items.length - 1
+            : index < 0
+              ? event.key === "ArrowUp"
+                ? items.length - 1
+                : 0
+              : (index + (event.key === "ArrowUp" ? -1 : 1) + items.length) % items.length;
+      event.preventDefault();
+      event.stopPropagation();
+      items[next]?.focus();
+      return;
+    }
+    if (event.key !== "Escape") return;
     event.preventDefault();
     event.stopPropagation();
     dispatch("close");
+    focusOrigin?.focus();
   }
 
   function handleModalOpen() {
@@ -41,6 +65,7 @@
 
   function attachListeners() {
     if (listenersAttached || typeof document === "undefined") return;
+    focusOrigin = document.activeElement;
     // Use capture-phase pointerdown/mousedown so other buttons that call
     // stopPropagation in their click handlers still close the menu before
     // they fire. pointerdown also catches disabled buttons, whose mousedown

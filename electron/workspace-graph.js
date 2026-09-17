@@ -117,10 +117,7 @@ async function strictProjectPreflight(projectDir, rootId) {
 }
 
 async function atomicWriteJson(filePath, value) {
-  await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
-  const tmp = `${filePath}.${process.pid}.${crypto.randomUUID()}.tmp`;
-  await fs.promises.writeFile(tmp, JSON.stringify(value, null, 2) + "\n", "utf8");
-  await fs.promises.rename(tmp, filePath);
+  await workspace.atomicWriteFile(filePath, JSON.stringify(value, null, 2) + "\n", "utf8");
 }
 
 function enqueue(workspacePath, operation) {

@@ -27,6 +27,8 @@ export interface FilterStore extends Writable<FilterState> {
 }
 
 let workspaceBodyHydrationKey = "";
+const usesGraphSelection = () =>
+  get(selected_type) === "WorkspaceProject" && Boolean(get(workspace_store).activeWorkspacePath);
 
 function hasBodySearch(current: FilterState): boolean {
   return (
@@ -146,7 +148,7 @@ function createFilter(initialValue: FilterState): FilterStore {
       applyFilteredData.cancel();
       workspaceBodyHydrationKey = "";
       filtered_data.set(undefined);
-      table_selected_id.set(undefined);
+      if (!usesGraphSelection()) table_selected_id.set(undefined);
       return;
     }
 
@@ -156,7 +158,7 @@ function createFilter(initialValue: FilterState): FilterStore {
     if (!visibleTreeData?.data) {
       applyFilteredData.cancel();
       filtered_data.set(undefined);
-      table_selected_id.set(undefined);
+      if (!usesGraphSelection()) table_selected_id.set(undefined);
       return;
     }
 
@@ -172,7 +174,7 @@ function createFilter(initialValue: FilterState): FilterStore {
         // A filter can clear the focused row when it temporarily hides that row.
         // When the full tree returns, focus the project root so the detail pane
         // never remains in an orphaned "No data." state.
-        selectOnly(nextTree.id);
+        if (!usesGraphSelection()) selectOnly(nextTree.id);
       }
 
       filtered_data.set(nextTree);
@@ -191,7 +193,7 @@ function createFilter(initialValue: FilterState): FilterStore {
         !sorted ||
         !getNode(get(table_selected_id) as string, sorted)
       ) {
-        table_selected_id.set(undefined);
+        if (!usesGraphSelection()) table_selected_id.set(undefined);
       }
 
       filtered_data.set(sorted);

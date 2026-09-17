@@ -60,6 +60,29 @@ describe("theme contrast", () => {
   ] as const) {
     describe(themeName, () => {
       const c = theme.color;
+      const semantic = theme.semantic;
+      it("keeps semantic foregrounds and focus visible on their surfaces", () => {
+        for (const background of [
+          semantic["canvas-default"],
+          semantic["canvas-subtle"],
+          semantic["canvas-overlay"],
+        ]) {
+          for (const foreground of [
+            semantic["fg-default"],
+            semantic["fg-muted"],
+            semantic["fg-subtle"],
+            semantic["accent-fg"],
+            semantic["danger-fg"],
+            semantic["attention-fg"],
+          ]) {
+            expect(contrastRatio(foreground, background)).toBeGreaterThanOrEqual(4.5);
+          }
+          expect(contrastRatio(semantic["accent-fg"], background)).toBeGreaterThanOrEqual(3);
+        }
+        expect(
+          contrastRatio(semantic["accent-on-emphasis"], semantic["accent-emphasis"])
+        ).toBeGreaterThanOrEqual(4.5);
+      });
       // トークンごとに「実際に載る背景」だけを見る。総当たりにすると
       // Primary の文字が期限切れバッジに載る、といった存在しない組み合わせ
       // まで縛ってしまう。行の淡い着色（アクセント 10%）と予定ビューの

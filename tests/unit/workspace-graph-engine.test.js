@@ -286,3 +286,27 @@ describe("workspace graph commands", () => {
     ).toHaveLength(1);
   });
 });
+
+it("copy preserves its source and inserts the new root at the requested order", () => {
+  const input = graph([
+    node("root"),
+    node("source", ["root"]),
+    node("child", ["source"]),
+    node("target", ["root"]),
+  ]);
+  const result = executeGraphCommand(input, {
+    type: "copy",
+    nodeId: "source",
+    targetParentId: "target",
+    mode: "subgraph",
+    order: 3,
+  }).graph;
+  expect(result.nodes.source).toEqual(input.nodes.source);
+  const copy = Object.values(result.nodes).find((n) => n.id !== "source" && n.name === "source");
+  expect(copy.parents).toEqual([{ id: "target", order: 3 }]);
+  expect(
+    Object.values(result.nodes).some(
+      (n) => n.id !== "child" && n.parents.some((p) => p.id === copy.id)
+    )
+  ).toBe(true);
+});

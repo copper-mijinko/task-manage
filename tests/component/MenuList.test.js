@@ -121,12 +121,8 @@ describe("MenuList project subsections", () => {
 
     expect(within(workspaceProject).queryByRole("button")).toBeNull();
     expect(within(inAppProject).queryByRole("button")).toBeNull();
-    expect(
-      screen.getByRole("button", { name: "プロジェクト「Workspace Alpha」を削除" })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "プロジェクト「InApp Alpha」を削除" })
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Workspace Alphaの操作" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "InApp Alphaの操作" })).toBeInTheDocument();
   });
 
   test("closes the drawer after selecting a project", async () => {

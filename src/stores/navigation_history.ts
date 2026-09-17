@@ -1,7 +1,14 @@
 import { derived, get, writable, type Readable } from "svelte/store";
 import type { SelectedType } from "@app-types/app";
 import { workspace_store } from "@features/workspace/stores/workspace";
-import { selected_id, selected_type, setPendingTaskDetailSelection, table_selected_id } from "./ui";
+import {
+  selected_id,
+  selected_type,
+  setPendingTaskDetailSelection,
+  table_selected_id,
+  active_row_path,
+  selectOnly,
+} from "./ui";
 
 /**
  * 1 件の「ページ」エントリ。
@@ -25,6 +32,7 @@ export interface NavigationEntry {
   projectDir: string | null;
   workspacePath: string | null;
   tableSelectedId: string | undefined;
+  occurrencePath?: string;
 }
 
 export interface NavigationHistoryState {
@@ -102,6 +110,7 @@ function createNavigationHistory(): NavigationHistoryStore {
       projectDir: type === "WorkspaceProject" ? (ws.activeProjectDir ?? null) : null,
       workspacePath: ws.activeWorkspacePath ?? null,
       tableSelectedId: get(table_selected_id),
+      occurrencePath: get(active_row_path),
     };
   }
 
@@ -192,7 +201,9 @@ function createNavigationHistory(): NavigationHistoryStore {
     // 動かさないので loader が起動しない。代わりに table_selected_id を
     // 直接巻き戻す。workspace 系はすべて同値で no-op になる。
     if (pageEqual(current, target)) {
-      table_selected_id.set(target.tableSelectedId);
+      if (target.tableSelectedId) selectOnly(target.tableSelectedId);
+      else table_selected_id.set(undefined);
+      active_row_path.set(target.occurrencePath);
       return;
     }
 
@@ -210,6 +221,7 @@ function createNavigationHistory(): NavigationHistoryStore {
         taskId: target.tableSelectedId,
         selectedType: target.selectedType,
         projectDir: target.projectDir,
+        occurrencePath: target.occurrencePath,
       });
     } else {
       setPendingTaskDetailSelection(undefined);
@@ -248,7 +260,8 @@ function createNavigationHistory(): NavigationHistoryStore {
       if (
         current &&
         pageEqual(current, entry) &&
-        current.tableSelectedId === entry.tableSelectedId
+        current.tableSelectedId === entry.tableSelectedId &&
+        current.occurrencePath === entry.occurrencePath
       ) {
         // 既に同じ状態が積まれている。重複しない。
         return state;

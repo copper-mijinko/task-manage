@@ -101,6 +101,7 @@ vi.mock("quill", () => {
 });
 
 import Memo from "@features/memos/components/Memo.svelte";
+import { pendingMemoDrafts } from "@features/memos/stores/pending_drafts";
 
 async function waitForMemoComponent() {
   await waitFor(
@@ -161,6 +162,30 @@ async function chooseMarkdownTableAction(label) {
 }
 
 describe("Memo mode routing", () => {
+  test("recovers a failed body after unmount and retries it without losing edits", async () => {
+    const key = "recovery-test:node";
+    const reject = vi.fn().mockResolvedValue(false);
+    const first = await renderMarkdownMemo({
+      content: "original",
+      draftKey: key,
+      saveMemo: reject,
+    });
+    await chooseMarkdownMode("edit");
+    const view = EditorView.findFromDOM(document.querySelector(".cm-editor"));
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "unsaved body" } });
+    expect(await first.component.flush()).toBe(false);
+    first.unmount();
+    await waitFor(() => expect(pendingMemoDrafts.get(key)?.content).toBe("unsaved body"));
+    const save = vi.fn().mockResolvedValue(true);
+    const second = await renderMarkdownMemo({ content: "original", draftKey: key, saveMemo: save });
+    await waitFor(() =>
+      expect(document.querySelector(".preview")).toHaveTextContent("unsaved body")
+    );
+    expect(await second.component.flush()).toBe(true);
+    expect(save).toHaveBeenCalledWith("unsaved body");
+    expect(pendingMemoDrafts.has(key)).toBe(false);
+  }, 60000);
+
   beforeEach(() => {
     quillInstances.length = 0;
     window.electronAPI = { wsResolveMemoAsset: vi.fn(), openExternalLink: vi.fn() };
@@ -223,6 +248,7 @@ describe("Memo mode routing", () => {
         control.getAttribute("aria-label")
       )
     ).toEqual([
+      "編集操作",
       "見出し",
       "太字",
       "斜体",
@@ -408,6 +434,21 @@ describe("Memo mode routing", () => {
     await tick();
 
     expect(saveMemo).toHaveBeenCalledWith({ ops: [{ insert: "changed\n" }] });
+  });
+
+  test("keeps unsaved Quill input when a source refresh arrives after a failed save", async () => {
+    const result = await renderMemo({
+      saveMemo: vi.fn().mockResolvedValue(false),
+      content: { ops: [{ insert: "original\n" }] },
+      format: "quill",
+    });
+    const quill = quillInstances.at(-1);
+    quill.handlers["text-change"]({}, {}, "user");
+    await result.component.flush();
+    quill.setContents.mockClear();
+    await result.rerender({ content: { ops: [{ insert: "external\n" }] } });
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(quill.setContents).not.toHaveBeenCalled();
   });
 
   test("does not reapply matching Quill Delta after a user edit", async () => {

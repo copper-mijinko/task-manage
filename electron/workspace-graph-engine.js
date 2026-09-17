@@ -292,7 +292,12 @@ function executeGraphCommand(input, command, origin = "graph") {
     }
     const newRootId = idMap.get(command.nodeId);
     graph.nodes[newRootId].parents = [
-      { id: command.targetParentId, order: nextOrder(graph, command.targetParentId) },
+      {
+        id: command.targetParentId,
+        order: Number.isFinite(command.order)
+          ? command.order
+          : nextOrder(graph, command.targetParentId),
+      },
     ];
     if (command.mode === "share-children") {
       for (const childId of childrenIndex(input).get(command.nodeId) || []) {

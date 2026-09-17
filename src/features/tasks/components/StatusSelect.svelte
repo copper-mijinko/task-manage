@@ -37,7 +37,7 @@
 
   const color_map = {
     [NO_STATUS]: "transparent",
-    [UNDEFINED_STATUS]: "var(--theme-color-Info-main)",
+    [UNDEFINED_STATUS]: "var(--fg-muted)",
     Open: "var(--theme-color-Primary-main)",
     "In Progress": "var(--theme-color-Info-main)",
     Pending: "var(--theme-color-Warning-main)",

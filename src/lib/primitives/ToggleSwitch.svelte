@@ -17,7 +17,7 @@
 >
   <span class="Left">{left}</span>
   <label class="ToggleButton">
-    <input type="checkbox" {checked} on:click />
+    <input type="checkbox" aria-label={`${left} / ${right}`} {checked} on:click />
   </label>
   <span class="Right">{right}</span>
 </div>
@@ -78,6 +78,16 @@
   }
 
   .ToggleButton input {
-    display: none;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+  .ToggleButton:has(input:focus-visible) {
+    outline: 2px solid var(--accent-fg);
+    outline-offset: 3px;
   }
 </style>

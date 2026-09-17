@@ -577,10 +577,7 @@
         {/if}
       {/if}
       {#if !isTaskDetailWindow && !$sidebarCollapsed}
-        <!-- Drawer 風マスク: サイドバー表示中はメイン領域への操作を遮断し、
-             クリックでサイドバーを閉じる。これがないと SplitPane のリサイザを
-             掴んだ瞬間にサイドバーが閉じて Main 幅が変わり、リサイザの初期計算
-             がずれてしまう。 -->
+        <!-- Overlay drawer keeps the content geometry stable. -->
         <button
           type="button"
           class="SidebarMask"
@@ -665,8 +662,6 @@
     box-sizing: border-box;
     height: 100vh;
     width: 100vw;
-    max-width: 100vw;
-    max-height: 100vh;
     background-color: var(--theme-color-Main-dark);
     margin: 0;
     padding: 0;
@@ -677,6 +672,7 @@
     height: 2.75rem;
   }
   div.Body {
+    position: relative;
     display: flex;
     flex-direction: row;
     flex: 1;
@@ -689,23 +685,22 @@
     height: 100%;
   }
   aside.Sidebar {
-    flex: 0 0 18rem;
+    position: absolute;
+    inset: 0 auto 0 0;
+    z-index: 1001;
     width: 18rem;
-    min-width: 18rem;
+    max-width: 90%;
     height: 100%;
-    background-color: var(--theme-color-Theme-main);
+    background-color: var(--canvas-subtle);
     box-shadow: var(--elevation-1);
     transition:
-      flex-basis 0.18s ease,
-      width 0.18s ease,
-      min-width 0.18s ease;
+      transform 0.18s ease,
+      visibility 0.18s;
     overflow: hidden;
     box-sizing: border-box;
   }
   aside.Sidebar.Collapsed {
-    flex: 0 0 0;
-    width: 0;
-    min-width: 0;
+    transform: translateX(-100%);
     box-shadow: none;
     visibility: hidden;
     pointer-events: none;

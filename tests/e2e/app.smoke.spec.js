@@ -68,7 +68,7 @@ async function openTaskDetailWindow(
   // The standalone TaskDetail window renders the same pure Card as the main
   // pane, so the task name lives in the Card title rather than a separate H1.
   await expect(
-    detailWindow.locator(".CardHeaderTitle", { hasText: detailData.taskName })
+    detailWindow.getByRole("heading", { name: new RegExp(detailData.taskName) })
   ).toBeVisible();
 
   return detailWindow;
@@ -153,7 +153,9 @@ test("collapses and restores detail from the tree-priority split boundary", asyn
     await expect(panes.nth(1)).toHaveClass(/PaneCollapsed/);
     await expect(resizer).toBeVisible();
     await expect(resizer).toHaveAttribute("aria-valuenow", "100");
-    await expect(app.window.getByRole("button", { name: "詳細欄を表示" })).toBeVisible();
+    await app.window.getByRole("button", { name: "表示と操作", exact: true }).click();
+    await expect(app.window.getByRole("menuitem", { name: "詳細欄を表示" })).toBeVisible();
+    await app.window.keyboard.press("Escape");
 
     // Drag the retained edge left to restore the detail pane.
     resizerBox = await resizer.boundingBox();
@@ -163,7 +165,9 @@ test("collapses and restores detail from the tree-priority split boundary", asyn
     await app.window.mouse.up();
 
     await expect(panes.nth(1)).not.toHaveClass(/PaneCollapsed/);
-    await expect(app.window.getByRole("button", { name: "詳細欄を隠す" })).toBeVisible();
+    await app.window.getByRole("button", { name: "表示と操作", exact: true }).click();
+    await expect(app.window.getByRole("menuitem", { name: "詳細欄を隠す" })).toBeVisible();
+    await app.window.keyboard.press("Escape");
 
     // Dragging hard left must not collapse the priority tree pane; it clamps
     // at its declared minimum instead.
@@ -288,9 +292,7 @@ test("keeps the task detail window Card title in sync when the task name changes
       window.electronAPI.setTreeData(project);
     });
 
-    await expect(
-      detailWindow.locator(".CardHeaderTitle", { hasText: "Renamed Task" })
-    ).toBeVisible();
+    await expect(detailWindow.getByRole("heading", { name: /Renamed Task/ })).toBeVisible();
   } finally {
     await closeSeededApp(app);
   }

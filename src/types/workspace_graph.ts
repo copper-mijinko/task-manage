@@ -51,6 +51,7 @@ export type WorkspaceGraphCommand =
   | { type: "delete-node"; nodeId: string }
   | {
       type: "copy";
+      order?: number;
       nodeId: string;
       targetParentId: string;
       mode: "node" | "share-children" | "subgraph";

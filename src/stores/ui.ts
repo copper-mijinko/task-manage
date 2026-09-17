@@ -110,6 +110,14 @@ function createSelectedID(initialValue: string | undefined): SelectedIdStore {
             return;
           }
 
+          // Graph pages own their projection and selection; the legacy loader must not clear them.
+          if (
+            currentSelectedType === "WorkspaceProject" &&
+            get(workspace_store).activeWorkspacePath
+          ) {
+            projectLoading.set(false);
+            return;
+          }
           tree_data.flushPendingPersist();
           clearSelection();
           copied_tasks.set([]);

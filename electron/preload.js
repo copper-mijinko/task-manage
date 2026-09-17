@@ -119,6 +119,7 @@ const electronAPI = {
   windowToggleMaximize: () => ipcRenderer.send("window:toggle-maximize"),
   windowClose: () => ipcRenderer.send("window:close"),
   windowGetState: () => ipcRenderer.invoke("window:get-state"),
+  windowZoom: (action) => ipcRenderer.invoke("window:zoom", action),
   onWindowStateChanged: (callback) => {
     ipcRenderer.on("window-state-changed", (event, state) => {
       callback(state);

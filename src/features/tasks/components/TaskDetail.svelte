@@ -54,18 +54,20 @@
     workspace_tasks_cache as legacy_workspace_tasks_cache,
     tag_index,
     theme,
-    ui_density,
   } from "@stores";
   import { selected_ids } from "@stores/ui";
   import debounce from "lodash/debounce";
   import { onDestroy } from "svelte";
   import { get, writable } from "svelte/store";
   import Memo from "@features/memos/components/Memo.svelte";
-  import SegmentedControl from "@lib/primitives/SegmentedControl.svelte";
+
+  import IconButton from "@lib/primitives/IconButton.svelte";
+  import Button from "@lib/primitives/Button.svelte";
   import Dialog from "@lib/primitives/Dialog.svelte";
   import Modal from "@lib/primitives/Modal.svelte";
-  import Card from "@lib/primitives/Card.svelte";
-  import IconButton from "@lib/primitives/IconButton.svelte";
+  import TaskMenu from "./TaskMenu.svelte";
+  import { tick } from "svelte";
+
   import StatusSelect from "@features/tasks/components/StatusSelect.svelte";
   import TaskAttachments from "@features/tasks/components/TaskAttachments.svelte";
   import DateInput from "@lib/primitives/DateInput.svelte";
@@ -107,43 +109,100 @@
   $: isWorkspaceProject = $selected_type === "WorkspaceProject";
   $: workspaceProjectDir = isWorkspaceProject ? $workspace_store.activeProjectDir : null;
   $: defaultMemoFormat = isWorkspaceProject ? "markdown" : "quill";
-  const bodyFormatOptions = [
-    { value: "markdown", label: "Markdown", ariaLabel: "Markdown形式を使用" },
-    { value: "quill", label: "Quill", ariaLabel: "Quill形式を使用" },
-  ];
+
   $: isDark = $theme === "dark";
   const detailDateStyle =
     "border: 0; padding: 0 var(--sp7) 0 var(--sp2); font-size: 1rem; background-color: transparent;";
-  const RESIZER_SIZE = 5;
-  const MINI_PANE_SIZE = 0;
-  const SNAP_THRESHOLD = 80;
-  const DETAIL_MIN_HEIGHT = 96;
-  const MEMO_MIN_HEIGHT = 160;
-  const SNAP_TRANSITION_MS = 180;
-
-  let splitBody;
-  let detailPane;
-  let memoPane;
-  let detailPanePercent = 40;
-  let detailPaneSize = "40%";
-  let splitState = "open";
-  let splitSnapping = false;
-  // Comfortable / Compact ごとにユーザーが選んだ分割状態を保持する。
-  // 初回だけ Compact はメモ優先、Comfortable は 40/60 を既定とする。
-  let memoFocusMode = false;
-  let previousUiDensity = undefined;
-  let layoutRestoreVersion = 0;
-  $: if ($ui_density !== previousUiDensity) {
-    previousUiDensity = $ui_density;
-    void restoreCardSplitPreference($ui_density);
+  const statusLabels = {
+    Open: "未着手",
+    Pending: "保留",
+    "In Progress": "進行中",
+    Completed: "完了",
+    Canceled: "キャンセル",
+    Undefined: "未定義",
+  };
+  let activeTab = "overview";
+  let editingProperties = false;
+  let editingBody = false;
+  let bodyVisited = false;
+  let memoEditor;
+  let detailMenu = false;
+  let detailTrigger;
+  let detailMenuPosition = { x: 0, y: 0, position: "left" };
+  let parentEditing = false;
+  let parentNotice = "";
+  let blockedParent = "";
+  let dangerTarget = null;
+  const requestDanger = () => {
+    dangerTarget = { id: node.id, name, permanent: isArchived };
+  };
+  async function confirmDanger() {
+    const target = dangerTarget;
+    dangerTarget = null;
+    if (!target) return;
+    if ((await memoEditor?.flush()) === false) return;
+    if (target.permanent) await application.remove([target.id]);
+    else await application.archive([target.id]);
   }
-  let snapTimer;
-  let resizeStartY = 0;
-  let startDetailSize = 0;
-  let startMemoSize = 0;
-  let lastDesiredDetailSize = 0;
-  let lastDesiredMemoSize = 0;
-  let lastOpenDetailSize = 0;
+  $: detailMenuItems = [
+    ...(application && node
+      ? [
+          {
+            title: "配置を変更",
+            action: "move",
+            disabled: isArchived || application.isProtected(node.id),
+          },
+          { title: "コピー先を指定", action: "copy", disabled: isArchived },
+          ...(isArchived
+            ? [
+                {
+                  title: "アーカイブから復元",
+                  action: "restore",
+                  disabled: application.isProtected(node.id),
+                },
+              ]
+            : []),
+          {
+            title: isArchived ? "完全削除…" : "アーカイブ…",
+            action: "danger",
+            disabled: application.isProtected(node.id),
+          },
+        ]
+      : []),
+    ...(showOpenWindowAction ? [{ title: "別Windowで開く", action: "window" }] : []),
+    ...(activeTab === "body"
+      ? [{ title: "形式を変換", action: "format", disabled: isArchived || bodyLoading }]
+      : []),
+  ];
+  function toggleDetailMenu(event) {
+    detailTrigger = event.currentTarget;
+    const box = detailTrigger.getBoundingClientRect();
+    detailMenuPosition = { x: box.right, y: box.bottom, position: "left" };
+    detailMenu = !detailMenu;
+  }
+  function closeDetailMenu() {
+    detailMenu = false;
+    detailTrigger?.focus();
+  }
+  async function changeTab(tab) {
+    flushNameChange();
+    if ((await memoEditor?.flush()) === false) return;
+    activeTab = tab;
+    if (tab === "body") bodyVisited = true;
+  }
+  async function toggleBodyEditing() {
+    if ((await memoEditor?.flush()) === false) return;
+    editingBody = !editingBody;
+    await tick();
+    if (editingBody) memoEditor?.startEditing();
+  }
+  async function visitParent(id, clearFilters = false) {
+    if ((await memoEditor?.flush()) === false) return;
+    flushNameChange();
+    const result = await application.navigateToNode(id, { clearFilters });
+    parentNotice = result?.error || "";
+    blockedParent = result?.filtered ? id : "";
+  }
 
   const getEditContext = () => ({
     selectedType: $selected_type,
@@ -249,6 +308,11 @@
   $: if (editContextKey !== previousEditContextKey) {
     changeDataDebounce.cancel();
     previousEditContextKey = editContextKey;
+    editingProperties = false;
+    editingBody = false;
+    parentEditing = false;
+    parentNotice = "";
+    blockedParent = "";
   }
 
   const unsubscribeCancelPending = cancelPendingOperations.subscribe(() => {
@@ -256,8 +320,6 @@
   });
 
   onDestroy(() => {
-    stopCardResize();
-    clearTimeout(snapTimer);
     changeDataDebounce.cancel();
     unsubscribeCancelPending();
   });
@@ -274,18 +336,30 @@
    * ノードは本文を 1 つだけ持つ（「1 つのメモ ＝ 1 つのノード」）。複数の記録を
    * 残したいときはタブではなく子ノードを足す。
    */
-  const saveBody = (editedContent) => {
-    const editContext = getEditContext();
-    const liveNode = getLiveNode(editContext);
-    if (!liveNode) return false;
-    const targetFormat = normalizeMemoFormat(liveNode.data.format, defaultMemoFormat);
-    const sourceFormat = isQuillDelta(editedContent) ? "quill" : "markdown";
-    changeData(
-      liveNode,
-      "body",
-      convertMemoContent(editedContent, sourceFormat, targetFormat),
-      editContext
+  const assetSaver = (id) => (file) => application.saveAsset(id, file);
+  const assetResolver = (id) => (path) => application.resolveAsset(id, path);
+  // Capture the identity before an editor can finish an asynchronous save.
+  const bodySaveCallback = (target, editContext) => (editedContent) => {
+    if (!target) return false;
+    const currentTarget = application
+      ? get(application.records)[target.id]
+      : getNode(target.id, get(tree_data)?.data)?.data;
+    const targetFormat = normalizeMemoFormat(
+      currentTarget?.format ?? target.data.format,
+      defaultMemoFormat
     );
+    const sourceFormat = isQuillDelta(editedContent) ? "quill" : "markdown";
+    const body = convertMemoContent(editedContent, sourceFormat, targetFormat);
+    if (application) return application.update(target.id, { body }).then(Boolean);
+    if (
+      editContext.selectedType !== $selected_type ||
+      editContext.selectedId !== $selected_id ||
+      editContext.activeProjectDir !== $workspace_store.activeProjectDir
+    )
+      return false;
+    const current = get(tree_data);
+    if (!current?.data) return false;
+    tree_data.set({ ...current, data: updateNodeDataById(current.data, target.id, { body }) });
     return true;
   };
 
@@ -309,7 +383,8 @@
    * Markdown ⇄ Quill の変換では装飾や埋め込みが落ちうるので、中身があるときは
    * 必ず確認を挟む。空の本文なら落ちるものが無いので、そのまま変換する。
    */
-  const requestBodyFormat = (nextFormat) => {
+  const requestBodyFormat = async (nextFormat) => {
+    if ((await memoEditor?.flush()) === false) return;
     const liveNode = getLiveNode(getEditContext());
     if (!liveNode) return;
     if (normalizeMemoFormat(liveNode.data.format, defaultMemoFormat) === nextFormat) return;
@@ -477,265 +552,6 @@
     changeDataDebounce.flush?.();
   };
 
-  function resetCardSplit() {
-    clearTimeout(snapTimer);
-    if (memoFocusMode) {
-      detailPaneSize = `${MINI_PANE_SIZE}px`;
-      detailPanePercent = 0;
-      splitState = "detail-mini";
-    } else {
-      detailPaneSize = "auto";
-      detailPanePercent = 0;
-      splitState = "open";
-    }
-    splitSnapping = false;
-  }
-
-  function cardSplitPreferenceKey(density) {
-    return `layout.task-detail.vertical.${density}`;
-  }
-
-  function isSavedCardSplit(value) {
-    return (
-      value &&
-      typeof value === "object" &&
-      ["open", "detail-mini", "memo-mini"].includes(value.state) &&
-      Number.isFinite(value.detailPercent)
-    );
-  }
-
-  async function restoreCardSplitPreference(density) {
-    const version = ++layoutRestoreVersion;
-    memoFocusMode = density === "compact";
-    resetCardSplit();
-    if (!memoFocusMode) {
-      detailPanePercent = 40;
-      detailPaneSize = "40%";
-    }
-
-    try {
-      const saved = await platform.getMetaData(cardSplitPreferenceKey(density));
-      if (version !== layoutRestoreVersion || !isSavedCardSplit(saved)) return;
-      splitState = saved.state;
-      memoFocusMode = saved.state === "detail-mini";
-      detailPanePercent = Math.min(100, Math.max(0, saved.detailPercent));
-      if (saved.state === "detail-mini") {
-        detailPaneSize = `${MINI_PANE_SIZE}px`;
-      } else if (saved.state === "memo-mini") {
-        detailPaneSize = `calc(100% - ${MINI_PANE_SIZE}px - ${RESIZER_SIZE}px)`;
-      } else {
-        detailPanePercent = Math.min(76, Math.max(24, detailPanePercent || 40));
-        detailPaneSize = `${detailPanePercent}%`;
-      }
-    } catch {
-      // 設定を読めない場合は、密度ごとの既定レイアウトを使う。
-    }
-  }
-
-  function persistCardSplitPreference() {
-    const detailPercent =
-      splitState === "detail-mini" ? 0 : splitState === "memo-mini" ? 100 : detailPanePercent || 40;
-    platform.setMetaData(cardSplitPreferenceKey($ui_density), {
-      state: splitState,
-      detailPercent,
-    });
-  }
-
-  function getCurrentPaneSizes() {
-    const total = Math.max(0, splitBody?.getBoundingClientRect().height - RESIZER_SIZE);
-    const detailHeight = detailPane?.getBoundingClientRect().height ?? 0;
-    const memoHeight =
-      memoPane?.getBoundingClientRect().height ?? Math.max(0, total - detailHeight);
-    return {
-      total: detailHeight + memoHeight || total,
-      detailHeight,
-      memoHeight,
-    };
-  }
-
-  function finishSnapTransition() {
-    clearTimeout(snapTimer);
-    snapTimer = setTimeout(() => {
-      splitSnapping = false;
-    }, SNAP_TRANSITION_MS);
-  }
-
-  function applyDetailSize(detailHeight, totalHeight, nextState = "open", snap = false) {
-    const safeTotal = Math.max(1, totalHeight);
-    splitState = nextState;
-    splitSnapping = snap;
-
-    if (nextState === "open") {
-      detailPanePercent = (detailHeight / safeTotal) * 100;
-      detailPaneSize = `${detailHeight}px`;
-    } else if (nextState === "detail-mini") {
-      detailPaneSize = `${MINI_PANE_SIZE}px`;
-      detailPanePercent = 0;
-    } else {
-      detailPaneSize = `${Math.max(0, safeTotal - MINI_PANE_SIZE)}px`;
-      detailPanePercent = 100;
-    }
-
-    if (snap) {
-      finishSnapTransition();
-    }
-  }
-
-  function handleCardResizePointerMove(event) {
-    const delta = event.clientY - resizeStartY;
-    let rawDetailSize = startDetailSize + delta;
-    let rawMemoSize = startMemoSize - delta;
-
-    if (rawDetailSize < 0) {
-      rawMemoSize += rawDetailSize;
-      rawDetailSize = 0;
-    }
-    if (rawMemoSize < 0) {
-      rawDetailSize += rawMemoSize;
-      rawMemoSize = 0;
-    }
-
-    lastDesiredDetailSize = rawDetailSize;
-    lastDesiredMemoSize = rawMemoSize;
-    applyDetailSize(rawDetailSize, startDetailSize + startMemoSize, "open");
-  }
-
-  function stopCardResize() {
-    window.removeEventListener("pointermove", handleCardResizePointerMove);
-    window.removeEventListener("pointerup", finishCardResize);
-    document.body.style.removeProperty("cursor");
-    document.body.style.removeProperty("user-select");
-  }
-
-  function finishCardResize() {
-    document.body.style.cursor = "";
-    stopCardResize();
-
-    const totalHeight = startDetailSize + startMemoSize;
-    let finalDetailSize = lastDesiredDetailSize;
-    let finalMemoSize = lastDesiredMemoSize;
-    let nextState = "open";
-
-    if (finalDetailSize < SNAP_THRESHOLD) {
-      finalDetailSize = MINI_PANE_SIZE;
-      finalMemoSize = totalHeight - MINI_PANE_SIZE;
-      nextState = "detail-mini";
-    } else if (finalDetailSize < DETAIL_MIN_HEIGHT) {
-      finalDetailSize = DETAIL_MIN_HEIGHT;
-      finalMemoSize = totalHeight - DETAIL_MIN_HEIGHT;
-    }
-
-    if (finalMemoSize < SNAP_THRESHOLD) {
-      finalMemoSize = MINI_PANE_SIZE;
-      finalDetailSize = totalHeight - MINI_PANE_SIZE;
-      nextState = "memo-mini";
-    } else if (nextState === "open" && finalMemoSize < MEMO_MIN_HEIGHT) {
-      finalMemoSize = MEMO_MIN_HEIGHT;
-      finalDetailSize = totalHeight - MEMO_MIN_HEIGHT;
-    }
-
-    applyDetailSize(finalDetailSize, totalHeight, nextState, true);
-    persistCardSplitPreference();
-  }
-
-  function startCardResize(event) {
-    event.preventDefault();
-    memoFocusMode = false;
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-    clearTimeout(snapTimer);
-    splitSnapping = false;
-    const { total, detailHeight, memoHeight } = getCurrentPaneSizes();
-    resizeStartY = event.clientY;
-    startDetailSize = detailHeight;
-    startMemoSize = memoHeight || Math.max(0, total - detailHeight);
-    lastDesiredDetailSize = startDetailSize;
-    lastDesiredMemoSize = startMemoSize;
-    document.body.style.cursor = "row-resize";
-    document.body.style.userSelect = "none";
-    window.addEventListener("pointermove", handleCardResizePointerMove);
-    window.addEventListener("pointerup", finishCardResize);
-  }
-
-  function setDetailPanePercent(nextPercent) {
-    memoFocusMode = false;
-    detailPanePercent = Math.min(76, Math.max(24, nextPercent));
-    detailPaneSize = `${detailPanePercent}%`;
-    splitState = "open";
-    persistCardSplitPreference();
-  }
-
-  function snapCardSplit(nextState) {
-    memoFocusMode = nextState === "detail-mini";
-    const { total } = getCurrentPaneSizes();
-    const nextDetailSize = nextState === "detail-mini" ? MINI_PANE_SIZE : total - MINI_PANE_SIZE;
-    applyDetailSize(nextDetailSize, total, nextState, true);
-    persistCardSplitPreference();
-  }
-
-  function getRestoredDetailSize(totalHeight) {
-    const safeTotal =
-      totalHeight > 0 ? totalHeight : DETAIL_MIN_HEIGHT + MEMO_MIN_HEIGHT + RESIZER_SIZE;
-    const maxDetailSize = Math.max(MINI_PANE_SIZE, safeTotal - MEMO_MIN_HEIGHT);
-    const preferredDetailSize = lastOpenDetailSize || safeTotal * 0.4;
-
-    if (maxDetailSize < DETAIL_MIN_HEIGHT) {
-      return Math.max(MINI_PANE_SIZE, safeTotal * 0.4);
-    }
-
-    return Math.min(Math.max(preferredDetailSize, DETAIL_MIN_HEIGHT), maxDetailSize);
-  }
-
-  function collapseDetailForMemo() {
-    const { total, detailHeight } = getCurrentPaneSizes();
-    if (detailHeight >= SNAP_THRESHOLD) {
-      lastOpenDetailSize = detailHeight;
-    }
-    memoFocusMode = true;
-    applyDetailSize(MINI_PANE_SIZE, total, "detail-mini", true);
-    persistCardSplitPreference();
-  }
-
-  function restoreDetailPane() {
-    const { total } = getCurrentPaneSizes();
-    memoFocusMode = false;
-    applyDetailSize(getRestoredDetailSize(total), total, "open", true);
-    persistCardSplitPreference();
-  }
-
-  function toggleMemoFocusMode() {
-    if (splitState !== "open") {
-      restoreDetailPane();
-    } else {
-      collapseDetailForMemo();
-    }
-  }
-
-  function handleCardResizeKeydown(event) {
-    switch (event.key) {
-      case "ArrowUp":
-        event.preventDefault();
-        setDetailPanePercent(detailPanePercent - 5);
-        break;
-      case "ArrowDown":
-        event.preventDefault();
-        setDetailPanePercent(detailPanePercent + 5);
-        break;
-      case "Home":
-        event.preventDefault();
-        snapCardSplit("detail-mini");
-        break;
-      case "End":
-        event.preventDefault();
-        snapCardSplit("memo-mini");
-        break;
-      case "Enter":
-      case " ":
-        event.preventDefault();
-        toggleMemoFocusMode();
-        break;
-    }
-  }
-
   function openTaskDetailInWindow() {
     if (application && node) {
       application.openDetail(node.id, name);
@@ -763,114 +579,104 @@
 </script>
 
 {#if is_selected && node}
-  <Card title={cardTitle} padded={false} style={"height: 100%; width: 100%; overflow: hidden;"}>
-    <svelte:fragment slot="header-actions">
+  <section class="node-detail" aria-label="Node詳細">
+    <header class="detail-header">
+      <h2>{cardTitle}</h2>
       <div class="task-detail-actions">
-        {#if isArchived}<span class="body-label">アーカイブ済み</span>{/if}
-        {#if application && node && !application.isProtected(node.id)}
-          <button class="detail-action" disabled={isArchived} on:click={() => openRelation("move")}
-            >配置…</button
-          >
-          <button class="detail-action" disabled={isArchived} on:click={() => openRelation("copy")}
-            >コピー…</button
-          >
-        {/if}
         <IconButton
-          tooltipContent={splitState === "detail-mini"
-            ? "詳細欄を表示"
-            : "詳細欄をたたんでメモを広げる"}
-          ariaLabel={splitState === "detail-mini" ? "詳細欄を表示" : "詳細欄をたたんでメモを広げる"}
-          ariaPressed={splitState === "detail-mini" ? "true" : "false"}
           variant="text"
-          normalColor={splitState === "detail-mini"
-            ? "var(--theme-color-Primary-main)"
-            : "var(--theme-color-Sub-main)"}
-          activeColor={"var(--theme-color-Primary-main)"}
-          on:click={toggleMemoFocusMode}
+          normalColor="var(--fg-default)"
+          activeColor="var(--accent-fg)"
+          ariaLabel={editingProperties ? "編集終了" : "編集"}
+          tooltipContent={editingProperties ? "編集終了" : "編集"}
+          style="margin:0; width:2.25rem; height:2.25rem;"
+          disabled={isArchived}
+          on:click={async () => {
+            if ((await memoEditor?.flush()) === false) return;
+            flushNameChange();
+            editingProperties = !editingProperties;
+            activeTab = "overview";
+          }}
+          ><svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            aria-hidden="true"
+            >{#if editingProperties}<path d="m5 12 4 4L19 6" />{:else}<path
+                d="m15 4 5 5-11 11H4v-5L15 4Z M13 6l5 5"
+              />{/if}</svg
+          ></IconButton
         >
-          {#if splitState === "detail-mini"}
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <rect
-                x="3"
-                y="4"
-                width="18"
-                height="16"
-                rx="2"
-                stroke="currentColor"
-                stroke-width="1.8"
-              />
-              <path d="M3 10H21" stroke="currentColor" stroke-width="1.8" />
-              <path
-                d="M8 14L12 10L16 14"
-                stroke="currentColor"
-                stroke-width="1.8"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-          {:else}
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <rect
-                x="3"
-                y="4"
-                width="18"
-                height="16"
-                rx="2"
-                stroke="currentColor"
-                stroke-width="1.8"
-              />
-              <path d="M3 10H21" stroke="currentColor" stroke-width="1.8" />
-              <path
-                d="M8 7L12 11L16 7"
-                stroke="currentColor"
-                stroke-width="1.8"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-          {/if}
-        </IconButton>
-        {#if showOpenWindowAction}
-          <IconButton
-            tooltipContent="別ウィンドウで開く"
-            ariaLabel="タスク詳細を別ウィンドウで開く"
-            variant="text"
-            normalColor={"var(--theme-color-Sub-main)"}
-            activeColor={"var(--theme-color-Primary-main)"}
-            on:click={openTaskDetailInWindow}
-          >
-            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path
-                d="M14 3h7v7M21 3l-9 9M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-          </IconButton>
-        {/if}
+        <IconButton
+          variant="text"
+          normalColor="var(--fg-default)"
+          activeColor="var(--accent-fg)"
+          ariaLabel="Node詳細の操作"
+          aria-haspopup="menu"
+          aria-expanded={detailMenu}
+          data-task-menu-trigger
+          style="margin:0; width:2.25rem; height:2.25rem;"
+          on:click={toggleDetailMenu}
+          ><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"
+            ><circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle
+              cx="19"
+              cy="12"
+              r="1.5"
+            /></svg
+          ></IconButton
+        >
       </div>
-    </svelte:fragment>
-
+    </header>
+    <TaskMenu
+      show={detailMenu}
+      position={detailMenuPosition}
+      menuItems={detailMenuItems}
+      on:danger={requestDanger}
+      on:restore={() => application.archive([node.id], false)}
+      on:close={closeDetailMenu}
+      on:move={() => openRelation("move")}
+      on:copy={() => openRelation("copy")}
+      on:window={openTaskDetailInWindow}
+      on:format={() => requestBodyFormat(bodyFormat === "markdown" ? "quill" : "markdown")}
+    />
+    <div class="detail-tabs" role="tablist" aria-label="Nodeの内容">
+      {#each [{ id: "overview", label: "概要" }, { id: "attachments", label: "添付 (" + attachments.length + ")" }, { id: "body", label: "本文" }] as tab}
+        <button
+          role="tab"
+          id={"detail-tab-" + tab.id}
+          aria-controls={"detail-panel-" + tab.id}
+          aria-selected={activeTab === tab.id}
+          tabindex={activeTab === tab.id ? 0 : -1}
+          on:click={() => changeTab(tab.id)}
+          on:keydown={(event) => {
+            const ids = ["overview", "attachments", "body"];
+            let index = ids.indexOf(activeTab);
+            if (event.key === "ArrowRight") index = (index + 1) % 3;
+            else if (event.key === "ArrowLeft") index = (index + 2) % 3;
+            else if (event.key === "Home") index = 0;
+            else if (event.key === "End") index = 2;
+            else return;
+            event.preventDefault();
+            event.stopPropagation();
+            void changeTab(ids[index]);
+            document.getElementById("detail-tab-" + ids[index])?.focus();
+          }}>{tab.label}</button
+        >
+      {/each}
+    </div>
     {#if extraSelectedCount > 0}
       <div class="multi-select-indicator" role="status" aria-live="polite">
         他 {extraSelectedCount} 件選択中（一括操作はバーから行えます）
       </div>
     {/if}
-    <div
-      class="task-detail-card-body"
-      class:detail-mini={splitState === "detail-mini"}
-      class:memo-mini={splitState === "memo-mini"}
-      class:split-snapping={splitSnapping}
-      bind:this={splitBody}
-      style={`--detail-pane-size: ${detailPaneSize}`}
-    >
+    <div class="task-detail-card-body">
       <div
         class="detail-pane"
-        class:auto-detail={detailPaneSize === "auto"}
-        class:archived={isArchived}
-        bind:this={detailPane}
+        role="tabpanel"
+        id="detail-panel-overview"
+        aria-labelledby="detail-tab-overview"
+        hidden={activeTab !== "overview"}
       >
         {#if isArchived}
           <div class="archived-banner" role="status">
@@ -891,67 +697,156 @@
           <div class="detail-fields">
             <label class="detail-field">
               <span class="detail-label">タスク名</span>
-              <div class="detail-control">
-                <input
-                  class="detail-input"
-                  type="text"
-                  value={name}
-                  aria-label="タスク名"
-                  on:input={handleNameInput}
-                  on:blur={flushNameChange}
-                />
+              <div class="detail-control" class:reading={!editingProperties || isArchived}>
+                {#if editingProperties && !isArchived}
+                  <input
+                    class="detail-input"
+                    type="text"
+                    value={name}
+                    aria-label="タスク名"
+                    on:input={handleNameInput}
+                    on:blur={flushNameChange}
+                  />
+                {:else}<span class="detail-value">{name || "未設定"}</span>{/if}
               </div>
             </label>
 
             <label class="detail-field">
               <span class="detail-label">ステータス</span>
-              <div class="detail-control">
-                <StatusSelect
-                  status={node.data.status ?? ""}
-                  ariaLabel="ステータス"
-                  style="height: 100%; font-size: var(--font-body-md);"
-                  on:change={(event) => changeTaskField("status", event.detail.value)}
-                />
+              <div class="detail-control" class:reading={!editingProperties || isArchived}>
+                {#if editingProperties && !isArchived}
+                  <StatusSelect
+                    status={node.data.status ?? ""}
+                    ariaLabel="ステータス"
+                    style="height: 100%; font-size: var(--font-body-md);"
+                    on:change={(event) => changeTaskField("status", event.detail.value)}
+                  />
+                {:else}<span class="detail-value"
+                    >{statusLabels[node.data.status] || node.data.status || "未設定"}</span
+                  >{/if}
               </div>
             </label>
 
             <label class="detail-field">
               <span class="detail-label">開始日</span>
-              <div class="detail-control">
-                <DateInput
-                  is_dark={isDark}
-                  id="detail-start-date"
-                  backgroundColor={"var(--theme-color-Main-light)"}
-                  style={detailDateStyle}
-                  value={node.data["start date"] ?? ""}
-                  ariaLabel="開始日"
-                  showUrgency={false}
-                  on:change={(event) =>
-                    changeTaskField("start date", event.target.value || undefined)}
-                />
+              <div class="detail-control" class:reading={!editingProperties || isArchived}>
+                {#if editingProperties && !isArchived}
+                  <DateInput
+                    is_dark={isDark}
+                    id="detail-start-date"
+                    backgroundColor={"var(--theme-color-Main-light)"}
+                    style={detailDateStyle}
+                    value={node.data["start date"] ?? ""}
+                    ariaLabel="開始日"
+                    showUrgency={false}
+                    on:change={(event) =>
+                      changeTaskField("start date", event.target.value || undefined)}
+                  />
+                {:else}<span class="detail-value">{node.data["start date"] || "未設定"}</span>{/if}
               </div>
             </label>
 
             <label class="detail-field">
               <span class="detail-label">期限日</span>
-              <div class="detail-control">
-                <DateInput
-                  is_dark={isDark}
-                  id="detail-due-date"
-                  backgroundColor={"var(--theme-color-Main-light)"}
-                  style={detailDateStyle}
-                  value={node.data["due date"] ?? ""}
-                  ariaLabel="期限日"
-                  status={node.data["status"]}
-                  on:change={(event) =>
-                    changeTaskField("due date", event.target.value || undefined)}
-                />
+              <div class="detail-control" class:reading={!editingProperties || isArchived}>
+                {#if editingProperties && !isArchived}
+                  <DateInput
+                    is_dark={isDark}
+                    id="detail-due-date"
+                    backgroundColor={"var(--theme-color-Main-light)"}
+                    style={detailDateStyle}
+                    value={node.data["due date"] ?? ""}
+                    ariaLabel="期限日"
+                    status={node.data["status"]}
+                    on:change={(event) =>
+                      changeTaskField("due date", event.target.value || undefined)}
+                  />
+                {:else}<span class="detail-value">{node.data["due date"] || "未設定"}</span>{/if}
               </div>
             </label>
 
-            {#if isWorkspaceProject && node && !isProjectRoot}
-              <div class="detail-field detail-field-wide">
-                <span class="detail-label" id="lbl-task-parents">親</span>
+            <div class="detail-field detail-field-wide">
+              <span class="detail-label" id="lbl-task-tags">タグ</span>
+              {#if editingProperties && !isArchived}<TagField
+                  tags={taskTags}
+                  suggestions={allTags}
+                  disabled={isArchived}
+                  showLabels={false}
+                  ariaLabel="タスクのタグ"
+                  on:change={(event) => saveTaskTags(event.detail.tags)}
+                />{:else}<div class="detail-control reading">
+                  <span class="detail-value">{taskTags.join(" · ") || "未設定"}</span>
+                </div>{/if}
+            </div>
+          </div>
+          {#if isWorkspaceProject && !isProjectRoot}
+            <section class="parent-context" aria-label="所属する場所">
+              <h3>所属する場所</h3>
+              {#each currentParentIds as parentId}
+                <div class="parent-location">
+                  {#if application}<button
+                      class="parent-link"
+                      on:click={() => visitParent(parentId)}
+                      >{nodeNameById[parentId] || parentId}</button
+                    >
+                  {:else}<span>{nodeNameById[parentId] || parentId}</span>{/if}
+                  <small title={parentId}>{nodePathById[parentId] || "Workspace内の所属先"}</small>
+                  {#if ($active_row_path || "").split("/").at(-2) === parentId}<small
+                      >現在の表示経路</small
+                    >{/if}
+                  <IconButton
+                    variant="text"
+                    normalColor="var(--fg-default)"
+                    activeColor="var(--accent-fg)"
+                    style="margin:0; width:2rem; height:2rem;"
+                    ariaLabel={(nodeNameById[parentId] || parentId) + "の所属操作"}
+                    disabled={isArchived ||
+                      currentParentIds.length < 2 ||
+                      application?.isProtected(node.id)}
+                    on:click={() => {
+                      relationTarget = parentId;
+                      parentEditing = true;
+                    }}
+                    ><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"
+                      ><circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle
+                        cx="19"
+                        cy="12"
+                        r="1.5"
+                      /></svg
+                    ></IconButton
+                  >
+                  {#if parentEditing && relationTarget === parentId}
+                    <Button
+                      variant="text"
+                      normalColor="var(--fg-default)"
+                      activeColor="var(--accent-fg)"
+                      content="この所属を外す"
+                      disabled={isArchived || currentParentIds.length < 2}
+                      on:click={() => saveParents(currentParentIds.filter((id) => id !== parentId))}
+                    />
+                  {/if}
+                </div>
+              {/each}
+              {#if parentNotice}<p role="status">{parentNotice}</p>{/if}
+              {#if blockedParent}<Button
+                  variant="text"
+                  normalColor="var(--fg-default)"
+                  activeColor="var(--accent-fg)"
+                  content="絞り込みを解除して表示"
+                  on:click={() => visitParent(blockedParent, true)}
+                />{/if}
+              <Button
+                variant="text"
+                normalColor="var(--fg-default)"
+                activeColor="var(--accent-fg)"
+                content="所属先を追加"
+                disabled={isArchived || application?.isProtected(node.id)}
+                on:click={() => {
+                  parentEditing = !parentEditing;
+                  relationTarget = "";
+                }}
+              />
+              {#if parentEditing}
                 <ParentField
                   parentIds={currentParentIds}
                   candidates={parentCandidates}
@@ -959,98 +854,102 @@
                   disabled={isArchived || application?.isProtected(node.id)}
                   on:change={(event) => saveParents(event.detail.parentIds)}
                 />
-              </div>
-            {/if}
-
-            <div class="detail-field detail-field-wide">
-              <span class="detail-label" id="lbl-task-tags">タグ</span>
-              <TagField
-                tags={taskTags}
-                suggestions={allTags}
-                disabled={isArchived}
-                showLabels={false}
-                ariaLabel="タスクのタグ"
-                on:change={(event) => saveTaskTags(event.detail.tags)}
-              />
-            </div>
-          </div>
-
-          <TaskAttachments
-            {attachments}
-            {isWorkspaceProject}
-            {workspaceProjectDir}
-            taskId={$table_selected_id ?? null}
-            onAttachmentsChange={saveAttachments}
-          />
+              {/if}
+            </section>
+          {/if}
         </div>
       </div>
 
-      <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-      <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
       <div
-        class="card-split-resizer"
-        role="separator"
-        aria-label="タスク詳細とメモの高さを変更"
-        aria-orientation="horizontal"
-        aria-valuemin="0"
-        aria-valuemax="100"
-        aria-valuenow={splitState === "detail-mini"
-          ? 0
-          : splitState === "memo-mini"
-            ? 100
-            : Math.round(detailPanePercent)}
-        aria-valuetext={splitState === "detail-mini"
-          ? "詳細欄をたたんでいます。下へドラッグすると表示できます"
-          : splitState === "memo-mini"
-            ? "メモ欄をたたんでいます。上へドラッグすると表示できます"
-            : "ドラッグして詳細欄とメモ欄の高さを変更できます"}
-        title={splitState === "detail-mini"
-          ? "下へドラッグして詳細欄を表示"
-          : splitState === "memo-mini"
-            ? "上へドラッグしてメモ欄を表示"
-            : "ドラッグして詳細欄とメモ欄の高さを変更"}
-        tabindex="0"
-        on:pointerdown={startCardResize}
-        on:dblclick={toggleMemoFocusMode}
-        on:keydown={handleCardResizeKeydown}
-      ></div>
+        class="attachment-pane"
+        role="tabpanel"
+        id="detail-panel-attachments"
+        aria-labelledby="detail-tab-attachments"
+        hidden={activeTab !== "attachments"}
+      >
+        <TaskAttachments
+          {attachments}
+          readOnly={isArchived}
+          {isWorkspaceProject}
+          {workspaceProjectDir}
+          taskId={$table_selected_id ?? null}
+          onAttachmentsChange={saveAttachments}
+        />
+      </div>
 
-      <div class="memo-pane" class:archived={isArchived} bind:this={memoPane}>
+      <div
+        class="memo-pane"
+        role="tabpanel"
+        id="detail-panel-body"
+        aria-labelledby="detail-tab-body"
+        hidden={activeTab !== "body"}
+      >
         <div class="body-container">
           <div class="body-toolbar" data-page-search-skip>
-            <span class="body-label">本文</span>
-            <div class="body-format-control">
-              <SegmentedControl
-                options={bodyFormatOptions}
-                value={bodyFormat}
-                ariaLabel="本文の形式"
-                size="md"
+            <span class="body-label">{bodyFormat === "markdown" ? "Markdown" : "Quill"}</span>
+            {#if bodyFormat !== "markdown"}
+              <Button
+                variant="text"
+                normalColor="var(--fg-default)"
+                activeColor="var(--accent-fg)"
                 disabled={isArchived || bodyLoading}
-                on:change={(e) => requestBodyFormat(e.detail.value)}
+                on:click={toggleBodyEditing}
+                content={editingBody ? "プレビュー" : "編集"}
               />
-            </div>
+            {/if}
+            <IconButton
+              variant="text"
+              normalColor="var(--fg-default)"
+              activeColor="var(--accent-fg)"
+              ariaLabel="今すぐ保存"
+              tooltipContent="今すぐ保存"
+              disabled={isArchived || bodyLoading}
+              style="margin:0; width:2rem; height:2rem;"
+              on:click={() => memoEditor?.flush()}
+              ><svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.6"
+                aria-hidden="true"><path d="M5 3h12l4 4v14H3V3h2Z M7 3v6h10V3M7 21v-8h10v8" /></svg
+              ></IconButton
+            >
           </div>
           <div class="body-editor">
-            <Memo
-              saveImage={application ? (file) => application.saveAsset(node.id, file) : undefined}
-              resolveAsset={application
-                ? (path) => application.resolveAsset(node.id, path)
-                : undefined}
-              saveMemo={saveBody}
-              content={nodeBody}
-              readOnly={isArchived || bodyLoading}
-              memoTitles={siblingNodeNames}
-              currentMemoTitle={node?.data?.name ?? ""}
-              {isWorkspaceProject}
-              format={bodyFormat}
-              {workspaceProjectDir}
-              taskId={$table_selected_id ?? null}
-            />
+            {#if bodyVisited}
+              {#key `${editContextKey}:${bodyFormat}`}
+                <Memo
+                  bind:this={memoEditor}
+                  freezeTarget={true}
+                  draftKey={`${$workspace_store.activeWorkspacePath || workspaceProjectDir || $selected_id}:${node.id}`}
+                  saveImage={application ? assetSaver(node.id) : undefined}
+                  resolveAsset={application ? assetResolver(node.id) : undefined}
+                  saveMemo={bodySaveCallback(node, getEditContext())}
+                  content={nodeBody}
+                  readOnly={isArchived ||
+                    bodyLoading ||
+                    (bodyFormat !== "markdown" && !editingBody)}
+                  memoTitles={siblingNodeNames}
+                  currentMemoTitle={node?.data?.name ?? ""}
+                  {isWorkspaceProject}
+                  format={bodyFormat}
+                  {workspaceProjectDir}
+                  taskId={$table_selected_id ?? null}
+                />
+              {/key}
+            {/if}
           </div>
         </div>
       </div>
     </div>
-  </Card>
+  </section>
+  <Dialog
+    show={Boolean(dangerTarget)}
+    toggle={() => (dangerTarget = null)}
+    header={dangerTarget?.permanent ? "完全削除の確認" : "アーカイブの確認"}
+    content={`「${dangerTarget?.name || ""}」を${dangerTarget?.permanent ? "完全削除" : "アーカイブ"}しますか？\n${dangerTarget?.permanent ? "Workspaceの履歴に残っている間は「元に戻す」で復元できます。" : "後でアーカイブ表示から復元できます。"}`}
+    callback={confirmDanger}
+  />
   <Dialog
     show={show_format_confirm}
     toggle={toggle_format_confirm}
@@ -1134,18 +1033,110 @@
 {/if}
 
 <style>
-  .detail-action {
-    color: var(--theme-color-Sub-main);
+  :global(.density-compact) .node-detail {
+    border-radius: 0;
+  }
+  .node-detail {
+    border-radius: var(--shape-lg);
+    box-shadow: var(--elevation-1);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    width: 100%;
+    background: var(--canvas-default);
+    color: var(--fg-default);
+  }
+  .detail-header {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--sp3);
+    padding: var(--sp2) var(--sp3);
+  }
+  .detail-header h2 {
+    margin: 0;
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    font-size: var(--font-title-md);
+    font-weight: 600;
+  }
+  .detail-tabs {
+    display: flex;
+    gap: var(--sp2);
+    padding: 0 var(--sp4);
+    border-bottom: 1px solid var(--border-muted);
+  }
+  .detail-tabs button {
+    font: inherit;
+    color: var(--fg-muted);
     background: transparent;
-    border: 1px solid var(--theme-color-Sub-dark);
-    border-radius: var(--shape-xs);
-    padding: var(--sp1);
+    border: 0;
+    border-bottom: 2px solid transparent;
+    padding: var(--sp2);
     cursor: pointer;
   }
-  .detail-action:disabled {
-    opacity: 0.5;
-    cursor: default;
+  .detail-tabs button[aria-selected="true"] {
+    color: var(--fg-default);
+    border-bottom-color: var(--accent-fg);
+    font-weight: 600;
   }
+  .detail-tabs button:hover {
+    background: var(--hover-bg);
+  }
+  .detail-pane,
+  .attachment-pane {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+  }
+  .attachment-pane {
+    padding: var(--sp4);
+  }
+  .memo-pane {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+  [hidden] {
+    display: none !important;
+  }
+  small {
+    color: var(--fg-muted);
+    font-size: var(--font-body-sm);
+  }
+  .parent-context {
+    margin-top: var(--sp6);
+  }
+  h3 {
+    font-size: var(--font-title-md);
+    font-weight: 600;
+  }
+  .parent-location {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--sp2);
+    padding: var(--sp2) 0;
+  }
+  .parent-link {
+    color: var(--accent-fg);
+    border: 0;
+    background: transparent;
+    padding: 0;
+    cursor: pointer;
+    text-align: left;
+    font: inherit;
+  }
+  .parent-link:hover {
+    text-decoration: underline;
+  }
+  .parent-location small {
+    overflow-wrap: anywhere;
+  }
+
   .graph-actions {
     margin-top: var(--sp2);
   }
@@ -1231,121 +1222,6 @@
     gap: var(--sp2);
     flex: 0 0 auto;
   }
-  .detail-pane {
-    flex: 0 0 var(--detail-pane-size);
-    min-height: 0;
-    box-sizing: border-box;
-    overflow: hidden;
-  }
-  .detail-pane.auto-detail {
-    flex-basis: auto;
-  }
-  /* archived タスクの右ペイン: バナーを除く入力系をすべて非活性化。
-     pointer-events: none で入力フォーカス自体を阻止し、視覚的にも mute する。 */
-  .detail-pane.archived .detail-container,
-  .memo-pane.archived {
-    pointer-events: none;
-    opacity: 0.55;
-    user-select: text;
-  }
-  .archived-banner {
-    display: flex;
-    align-items: center;
-    gap: var(--sp2);
-    padding: var(--sp1) var(--sp3);
-    background-color: color-mix(in srgb, var(--theme-color-Sub-main) 12%, transparent);
-    color: var(--theme-color-Sub-main);
-    font-size: var(--font-label-md);
-    border-bottom: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 25%, transparent);
-  }
-  .archived-banner svg {
-    width: 1rem;
-    height: 1rem;
-    flex-shrink: 0;
-  }
-  .memo-pane {
-    display: flex;
-    flex-direction: column;
-    flex: 1 1 auto;
-    min-height: 0;
-    box-sizing: border-box;
-    overflow: hidden;
-  }
-  .task-detail-card-body.split-snapping .detail-pane,
-  .task-detail-card-body.split-snapping .memo-pane {
-    transition: flex-basis 0.18s ease;
-  }
-  .task-detail-card-body.detail-mini .detail-pane {
-    flex-basis: 0;
-  }
-  .task-detail-card-body.memo-mini .detail-pane {
-    flex: 1 1 auto;
-  }
-  .task-detail-card-body.memo-mini .memo-pane {
-    flex: 0 0 0;
-  }
-  .task-detail-card-body.detail-mini .detail-container,
-  .task-detail-card-body.memo-mini .body-container {
-    display: none;
-  }
-  .card-split-resizer {
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex: 0 0 5px;
-    min-height: 5px;
-    padding: 0;
-    cursor: row-resize;
-    background-color: transparent;
-    border: none;
-    touch-action: none;
-  }
-  .card-split-resizer::before {
-    content: "";
-    position: absolute;
-    top: 1px;
-    left: 0;
-    width: 100%;
-    height: 3px;
-    background-color: color-mix(in srgb, var(--theme-color-Sub-dark) 48%, transparent);
-    border-radius: 1.5px;
-    opacity: 0.85;
-    transition:
-      background-color 0.15s ease,
-      height 0.15s ease,
-      opacity 0.15s ease;
-  }
-  .card-split-resizer::after {
-    content: "";
-    position: absolute;
-    top: 1px;
-    left: 50%;
-    width: 1.5rem;
-    height: 3px;
-    transform: translateX(-50%);
-    background-image: radial-gradient(circle, var(--theme-color-Main-main) 1px, transparent 1.2px);
-    background-size: 4px 3px;
-    background-repeat: repeat-x;
-    opacity: 0.9;
-    pointer-events: none;
-  }
-  .card-split-resizer:hover::before,
-  .card-split-resizer:focus-visible::before {
-    top: 0;
-    height: 5px;
-    background-color: var(--theme-color-Primary-main);
-    opacity: 1;
-  }
-  .task-detail-card-body.detail-mini .card-split-resizer::before,
-  .task-detail-card-body.memo-mini .card-split-resizer::before {
-    background-color: color-mix(in srgb, var(--theme-color-Primary-main) 68%, transparent);
-    opacity: 1;
-  }
-  .card-split-resizer:focus-visible {
-    outline: 2px solid var(--theme-color-Primary-main);
-    outline-offset: -2px;
-  }
   /* Vertical split: the fixed fields block on top (natural height), then
      the attachments field taking whatever height remains. overflow: auto is
      only the fallback for panes too short to fit even the fixed fields. */
@@ -1355,57 +1231,25 @@
     gap: var(--sp1);
     flex: 1;
     width: 100%;
-    height: 100%;
     min-height: 0;
     box-sizing: border-box;
-    padding: var(--sp2);
+    padding: var(--sp4);
     overflow: auto;
     container-type: inline-size;
   }
   .detail-fields {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
     align-content: start;
-    gap: var(--sp1) var(--sp3);
+    gap: var(--sp2);
     flex: 0 0 auto;
     min-width: 0;
   }
-  .detail-pane.auto-detail .detail-container {
-    height: auto;
-    min-height: 0;
-    overflow: visible;
-  }
-  /* Fixed-split mode (slider-controlled pane height): the attachments field
-     absorbs the remaining pane height and overflow scrolls INSIDE the
-     attachment list, so Name/Status/dates always stay visible instead of
-     the whole container scrolling. min-height on the list keeps a usable
-     strip when the pane gets very short; below that the container's
-     overflow: auto fallback takes over. */
-  .detail-pane:not(.auto-detail) .detail-container > :global(.attachments-field) {
-    flex: 1 1 auto;
-    min-height: 0;
-  }
-  .detail-pane:not(.auto-detail) .detail-container :global(.attachment-list) {
-    flex: 1 1 auto;
-    min-height: 5rem;
-    overflow-y: auto;
-  }
-  /* Auto-detail mode: the container is height:auto/overflow:visible, so
-     nothing above bounds the attachment grid — a long list would inflate
-     the detail pane and push the memo pane out of view. Cap the list
-     (rendered by TaskAttachments.svelte, hence :global) and scroll inside
-     it instead. The viewport-relative clamp adapts to window height; cqh is
-     not an option because this container is inline-size only (switching to
-     container-type: size would defeat the height:auto above). */
-  .detail-pane.auto-detail .detail-container :global(.attachment-list) {
-    max-height: clamp(8rem, 28vh, 18rem);
-    overflow-y: auto;
-  }
   .detail-field {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0.1rem;
+    display: grid;
+    grid-template-columns: 6rem minmax(0, 1fr);
+    align-items: start;
+    gap: var(--sp2);
     min-width: 0;
     color: var(--theme-color-Sub-main);
   }
@@ -1414,7 +1258,20 @@
   .detail-field-wide {
     grid-column: 1 / -1;
   }
+  .detail-value {
+    padding: 0 var(--sp2);
+    overflow-wrap: anywhere;
+  }
+  .detail-control.reading {
+    border-color: transparent;
+    background: transparent;
+    height: auto;
+    min-height: var(--tree-row-height);
+  }
   .detail-label {
+    display: flex;
+    align-items: center;
+    min-height: var(--tree-row-height);
     flex: 0 0 auto;
     min-width: 0;
     color: var(--theme-color-Sub-main);
@@ -1443,7 +1300,7 @@
     align-items: center;
     flex: 1 1 auto;
     min-width: 0;
-    height: var(--detail-control-height, 1.75rem);
+    height: var(--tree-row-height);
     box-sizing: border-box;
     border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 30%, transparent);
     border-radius: var(--shape-sm);
@@ -1500,11 +1357,7 @@
     font-weight: 600;
     color: color-mix(in srgb, var(--theme-color-Sub-main) 75%, transparent);
   }
-  .body-format-control {
-    display: inline-flex;
-    align-items: center;
-    flex: 0 0 auto;
-  }
+
   .body-editor {
     display: flex;
     flex: 1 1 auto;

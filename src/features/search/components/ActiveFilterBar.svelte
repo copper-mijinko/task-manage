@@ -2,120 +2,76 @@
   import { filter } from "@features/search/stores/search";
   import { active_tag } from "@features/memos/stores/tags";
   import { tokenizeFullTextQuery } from "@features/tasks/utils/tree_control";
-
-  // Each entry in $filter.full_text is one AND term / chip (see SearchBox.svelte).
-  // fullTextTokens keeps one displayable chip label per entry; tokenizeFullTextQuery
-  // is still used to trim quoting artifacts so labels match what the user typed.
-  $: fullTextEntries = (
-    ($filter as Record<string, string[] | null | undefined>)?.full_text ?? []
-  ).filter((entry) => entry.trim() !== "");
-  $: fullTextTokens = fullTextEntries.map((entry) => {
-    const parts = tokenizeFullTextQuery(entry.trim());
-    return parts.length > 0 ? parts.join(" ") : entry.trim();
-  });
-  $: searchMemoOn =
-    ((($filter as Record<string, string[] | null | undefined>)?.search_memo ?? []).length ?? 0) > 0;
-  $: activeTag = $active_tag ?? "";
-  $: hasFilters = fullTextTokens.length > 0 || Boolean(activeTag);
-  $: showClearAll = fullTextTokens.length + (activeTag ? 1 : 0) > 1;
-
-  function clearFullText() {
-    filter.update((f) => {
-      const next = { ...(f as Record<string, unknown>) };
-      delete next.full_text;
-      return next as typeof f;
-    });
-  }
-
-  function removeToken(index: number) {
-    const remaining = fullTextEntries.filter((_, i) => i !== index);
-    if (remaining.length === 0) {
-      clearFullText();
-      return;
+  const labels: Record<string, string> = {
+    full_text: "検索",
+    name: "タスク名",
+    status: "ステータス",
+    tags: "タグ",
+    "start date": "開始日",
+    "due date": "期限日",
+    attachments: "添付数",
+  };
+  $: chips = Object.entries($filter).flatMap(([key, values]) => {
+    if (!labels[key] || !values?.length) return [];
+    if (["start date", "due date", "attachments"].includes(key)) {
+      if (!values.some(Boolean)) return [];
+      return [
+        {
+          key,
+          index: -1,
+          label: labels[key],
+          value: (values[0] || "指定なし") + " 〜 " + (values[1] || "指定なし"),
+        },
+      ];
     }
-    filter.update(
-      (f) =>
-        ({
-          ...(f as Record<string, unknown>),
-          full_text: remaining,
-        }) as typeof f
-    );
+    return values.map((value, index) => ({
+      key,
+      index,
+      label: key === "full_text" && $filter.search_memo?.length ? "検索(メモ含む)" : labels[key],
+      value:
+        key === "full_text" ? tokenizeFullTextQuery(value.trim()).join(" ") : value || "未設定",
+    }));
+  });
+  function removeChip(key: string, index: number) {
+    const values = $filter[key] ?? [];
+    if (key === "tags" && $active_tag) active_tag.set(null);
+    filter.update((f) => ({
+      ...f,
+      [key]: index === -1 ? [] : values.filter((_, i) => i !== index),
+    }));
   }
-
-  function clearTag() {
-    // active_tag drives filter.tags via the subscriber in src/stores/index.ts
-    active_tag.set(null);
-  }
-
   function clearAll() {
-    if (activeTag) active_tag.set(null);
-    if (fullTextTokens.length > 0) clearFullText();
+    active_tag.set(null);
+    filter.set({ search_memo: $filter.search_memo });
   }
 </script>
 
-{#if hasFilters}
+{#if chips.length}
   <div class="ActiveFilterBar" role="status" aria-live="polite">
-    <span class="Label" aria-hidden="true">
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path
-          d="M3 7C3 6.44772 3.44772 6 4 6H20C20.5523 6 21 6.44772 21 7C21 7.55228 20.5523 8 20 8H4C3.44772 8 3 7.55228 3 7ZM6 12C6 11.4477 6.44772 11 7 11H17C17.5523 11 18 11.4477 18 12C18 12.5523 17.5523 13 17 13H7C6.44772 13 6 12.5523 6 12ZM9 17C9 16.4477 9.44772 16 10 16H14C14.5523 16 15 16.4477 15 17C15 17.5523 14.5523 18 14 18H10C9.44772 18 9 17.5523 9 17Z"
-          fill="currentColor"
-        />
-      </svg>
-      <span class="LabelText">絞り込み中</span>
-    </span>
-
-    {#each fullTextTokens as token, i (i + ":" + token)}
-      <span class="Chip" title={searchMemoOn ? "全文検索（メモ本文を含む）" : "全文検索"}>
-        <span class="ChipKind">{searchMemoOn ? "検索(メモ含む)" : "検索"}</span>
-        <span class="ChipValue">{token}</span>
+    <span class="Label">絞り込み中</span>
+    {#each chips as chip (chip.key + ":" + chip.index)}
+      <span class="Chip">
+        <span class="ChipKind">{chip.label}</span><span class="ChipValue">{chip.value}</span>
         <button
           type="button"
           class="ChipClear"
-          aria-label={`全文フィルタ「${token}」を削除`}
-          title={`「${token}」を削除`}
-          on:click={() => removeToken(i)}
+          aria-label={chip.key === "full_text"
+            ? "全文フィルタ「" + chip.value + "」を削除"
+            : chip.label + "フィルタ「" + chip.value + "」を削除"}
+          on:click={() => removeChip(chip.key, chip.index)}
         >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path
+          <svg viewBox="0 0 24 24" aria-hidden="true"
+            ><path
               d="M7 7L17 17M17 7L7 17"
               stroke="currentColor"
               stroke-width="2"
-              stroke-linecap="round"
               fill="none"
-            />
-          </svg>
+            /></svg
+          >
         </button>
       </span>
     {/each}
-
-    {#if activeTag}
-      <span class="Chip" title="タグフィルタ">
-        <span class="ChipKind">タグ</span>
-        <span class="ChipValue">#{activeTag}</span>
-        <button
-          type="button"
-          class="ChipClear"
-          aria-label="タグフィルタをクリア"
-          title="タグフィルタをクリア"
-          on:click={clearTag}
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path
-              d="M7 7L17 17M17 7L7 17"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              fill="none"
-            />
-          </svg>
-        </button>
-      </span>
-    {/if}
-
-    {#if showClearAll}
-      <button type="button" class="ClearAll" on:click={clearAll}>すべてクリア</button>
-    {/if}
+    <button type="button" class="ClearAll" on:click={clearAll}>すべてクリア</button>
   </div>
 {/if}
 
@@ -141,14 +97,7 @@
     color: var(--theme-color-Primary-main);
     font-weight: 600;
   }
-  .Label svg {
-    width: 1rem;
-    height: 1rem;
-    flex-shrink: 0;
-  }
-  .LabelText {
-    white-space: nowrap;
-  }
+
   .Chip {
     display: inline-flex;
     align-items: center;

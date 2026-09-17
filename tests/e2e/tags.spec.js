@@ -88,10 +88,6 @@ async function launchTagsApp() {
   await projectBtn.waitFor();
   await projectBtn.click();
   await expect(graphNode(window, "Tagged Task")).toBeVisible();
-  await window
-    .getByRole("button", { name: "\u30b5\u30a4\u30c9\u30d0\u30fc\u3092\u8868\u793a" })
-    .click();
-
   return { tempDir, electronApp, window };
 }
 
@@ -103,38 +99,19 @@ async function closeTagsApp(app) {
   }
 }
 
-test("tag browser appears in sidebar when workspace project has tagged nodes", async () => {
+test("search tag mode and column filters share removable conditions", async () => {
   const app = await launchTagsApp();
   try {
-    await expect(app.window.locator(".TagContents")).toBeVisible();
-    await expect(
-      app.window.locator(".TagContents").getByText("design", { exact: false })
-    ).toBeVisible();
-    await expect(
-      app.window.locator(".TagContents").getByText("frontend", { exact: false })
-    ).toBeVisible();
-  } finally {
-    await closeTagsApp(app);
-  }
-});
-
-test("clicking a tag in the sidebar filters to tasks with that tag", async () => {
-  const app = await launchTagsApp();
-  try {
-    await app.window.locator(".TagContents button").filter({ hasText: "design" }).click();
-    await expect(graphNode(app.window, "Tagged Task")).toBeVisible();
-  } finally {
-    await closeTagsApp(app);
-  }
-});
-
-test("clicking the active tag again clears the filter", async () => {
-  const app = await launchTagsApp();
-  try {
-    const tagButton = app.window.locator(".TagContents button").filter({ hasText: "design" });
-    await tagButton.click();
-    await tagButton.click();
-    await expect(graphNode(app.window, "Tagged Task")).toBeVisible();
+    const page = app.window;
+    await expect(page.locator(".TagContents")).toHaveCount(0);
+    await page.getByRole("combobox", { name: "絞り込みの対象" }).selectOption("tags");
+    await page.getByLabel("タスク一覧を絞り込み").fill("design");
+    await page.getByLabel("タスク一覧を絞り込み").press("Enter");
+    await expect(graphNode(page, "Design Notes")).toBeVisible();
+    await expect(page.locator(".ActiveFilterBar")).toContainText("design");
+    await page.getByRole("button", { name: "タグフィルタ「design」を削除" }).click();
+    await expect(page.locator(".ActiveFilterBar")).toHaveCount(0);
+    await expect(graphNode(page, "Tagged Task")).toBeVisible();
   } finally {
     await closeTagsApp(app);
   }
@@ -175,6 +152,7 @@ test("tag input adds a chip and the tag persists after app restart", async () =>
 
     // Dispatch click directly on the row element to avoid child stopPropagation
     await graphNode(window1, "Design Notes").click();
+    await window1.getByRole("button", { name: "編集", exact: true }).click();
 
     // The imported memo is a graph node, so edit its tags in the shared inspector.
     const tagInput = window1.locator(".tag-input");
@@ -204,7 +182,7 @@ test("tag input adds a chip and the tag persists after app restart", async () =>
     await expect(graphNode(window2, "Tagged Task")).toBeVisible();
     await graphNode(window2, "Design Notes").click();
 
-    await expect(window2.locator(".tag-chip").filter({ hasText: "ux" })).toBeVisible();
+    await expect(window2.locator(".detail-fields")).toContainText("ux");
   } finally {
     await app2.close();
     fs.rmSync(tempDir, { recursive: true, force: true });

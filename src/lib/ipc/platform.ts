@@ -154,6 +154,10 @@ export function windowGetState(): Promise<WindowState> {
   return api()?.windowGetState?.() ?? Promise.resolve({ isMaximized: false, isFullScreen: false });
 }
 
+export function windowZoom(action: "in" | "out" | "reset" | "get"): Promise<number> {
+  return api()?.windowZoom?.(action) ?? Promise.resolve(100);
+}
+
 export function onWindowStateChanged(callback: (state: WindowState) => void): void {
   api()?.onWindowStateChanged?.(callback);
 }

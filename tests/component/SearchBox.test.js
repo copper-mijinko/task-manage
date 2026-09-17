@@ -188,3 +188,17 @@ describe("SearchBox", () => {
     expect(screen.getByText("urgent")).toBeInTheDocument();
   });
 });
+
+test("tag mode keeps text conditions and does not confirm IME composition", async () => {
+  filter.set({ full_text: ["release"] });
+  render(SearchBox);
+  await fireEvent.change(screen.getByRole("combobox", { name: "絞り込みの対象" }), {
+    target: { value: "tags" },
+  });
+  const input = screen.getByLabelText("タスク一覧を絞り込み");
+  await fireEvent.input(input, { target: { value: "設計" } });
+  await fireEvent.keyDown(input, { key: "Enter", isComposing: true });
+  expect(input).toHaveValue("設計");
+  await fireEvent.keyDown(input, { key: "Enter" });
+  expect(get(filter)).toEqual({ full_text: ["release"], tags: ["設計"] });
+});

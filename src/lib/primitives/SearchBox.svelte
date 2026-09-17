@@ -2,6 +2,13 @@
   import IconButton from "@lib/primitives/IconButton.svelte";
   import { tooltip } from "@lib/actions";
   import { filter } from "@stores";
+  import { tag_index, active_tag } from "@features/memos/stores/tags";
+  let searchMode = "full_text";
+  function changeMode() {
+    terms = [...($filter?.[searchMode] ?? [])];
+    search_text = "";
+    search_box?.focus();
+  }
 
   let terms = []; // confirmed chips
   let search_text = ""; // current in-progress typing
@@ -29,9 +36,10 @@
   };
 
   const applyFilter = () => {
+    if (searchMode === "tags" && $active_tag) active_tag.set(null);
     $filter = {
       ...$filter,
-      full_text: currentFullText(),
+      [searchMode]: currentFullText(),
     };
   };
 
@@ -85,7 +93,7 @@
     // term for a moment before Enter/dedupe decides whether to keep it. If
     // we deduped before this comparison, that in-progress state would look
     // like a mismatch and get clobbered.
-    const stored = $filter?.full_text ?? [];
+    const stored = $filter?.[searchMode] ?? [];
     const isFocused =
       typeof document !== "undefined" &&
       root_el &&
@@ -106,7 +114,7 @@
         terms = deduped;
         search_text = "";
         if (deduped.length !== stored.length) {
-          $filter = { ...$filter, full_text: deduped.length > 0 ? deduped : null };
+          $filter = { ...$filter, [searchMode]: deduped.length > 0 ? deduped : null };
         }
       }
     }
@@ -124,6 +132,17 @@
 </script>
 
 <div class="SearchBoxRoot" data-page-search-skip bind:this={root_el}>
+  <select
+    class="SearchMode"
+    aria-label="絞り込みの対象"
+    bind:value={searchMode}
+    on:change={changeMode}
+  >
+    <option value="full_text">全文</option><option value="tags">タグ</option>
+  </select>
+  <datalist id="task-search-tags"
+    >{#each [...$tag_index.keys()] as tag}<option value={tag}></option>{/each}</datalist
+  >
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
@@ -156,7 +175,12 @@
       bind:this={search_box}
       bind:value={search_text}
       draggable="false"
-      placeholder={terms.length === 0 ? "タスクを絞り込み" : ""}
+      list={searchMode === "tags" ? "task-search-tags" : undefined}
+      placeholder={terms.length === 0
+        ? searchMode === "tags"
+          ? "タグ名で絞り込み"
+          : "タスクを絞り込み"
+        : ""}
       aria-label="タスク一覧を絞り込み"
       on:input={() => {
         applyFilter();
@@ -165,6 +189,7 @@
         e.stopPropagation();
       }}
       on:keydown={(e) => {
+        if (e.isComposing || e.keyCode === 229) return;
         if ("Enter" == e.key) {
           confirmChip();
         } else if ("Backspace" == e.key && search_text === "") {
@@ -228,6 +253,14 @@
 </div>
 
 <style>
+  .SearchMode {
+    color: var(--fg-default);
+    background: var(--canvas-default);
+    border: 1px solid var(--border-muted);
+    border-radius: var(--shape-sm);
+    height: 2rem;
+    font: inherit;
+  }
   .SearchBoxRoot {
     width: clamp(9rem, 100%, 22rem);
     max-width: 100%;
