@@ -135,6 +135,7 @@ function executeGraphCommand(input, command, origin = "graph") {
       command.type === "copy" ||
       command.type === "link" ||
       (command.type === "move" && command.toParentId !== graph.rootId) ||
+      command.type === "archive-edge" ||
       (command.type === "update-node" && (command.changes.archived || command.changes.archivedAt)))
   )
     throw new Error("Inboxは削除・アーカイブ・移動できません。");
@@ -227,6 +228,26 @@ function executeGraphCommand(input, command, origin = "graph") {
     );
     if (before === graph.nodes[command.childId].parents.length) throw new Error("Edge not found");
     repairRootReachability(graph);
+    selectedNodeIds.push(command.childId);
+  } else if (command.type === "archive-edge") {
+    // 辺だけのアーカイブ。ノードは残るので、他の親の下では今までどおり見える。
+    if (command.childId === graph.rootId) throw new Error("The workspace root is protected");
+    assertNode(graph, command.childId);
+    const edge = (graph.nodes[command.childId].parents || []).find(
+      (parent) => parent.id === command.parentId
+    );
+    if (!edge) throw new Error("Edge not found");
+    const archived = command.archived !== false;
+    graph.nodes[command.childId] = {
+      ...graph.nodes[command.childId],
+      parents: graph.nodes[command.childId].parents.map((parent) =>
+        parent.id === command.parentId
+          ? archived
+            ? { ...parent, archived: true, archivedAt: new Date().toISOString() }
+            : { id: parent.id, order: parent.order }
+          : parent
+      ),
+    };
     selectedNodeIds.push(command.childId);
   } else if (command.type === "move") {
     assertNode(graph, command.childId);

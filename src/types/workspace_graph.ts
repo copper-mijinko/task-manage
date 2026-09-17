@@ -48,6 +48,13 @@ export type WorkspaceGraphCommand =
       order?: number;
     }
   | { type: "detach"; childId: string; parentId: string }
+  | {
+      /** その辺だけをアーカイブ／復元する（ノード自体の archived とは独立）。 */
+      type: "archive-edge";
+      childId: string;
+      parentId: string;
+      archived: boolean;
+    }
   | { type: "delete-node"; nodeId: string }
   | {
       type: "copy";

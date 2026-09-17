@@ -357,6 +357,50 @@ test("Inbox is protected and notifications do not shift the tree", async () => {
     await cleanup(app);
   }
 });
+test("archiving a shared node asks whether to clear one place or the whole node", async () => {
+  const app = await launch(fixture());
+  try {
+    const page = app.window;
+    await expect(row(page, "root/alpha/shared")).toBeVisible();
+    await expect(row(page, "root/beta/shared")).toBeVisible();
+
+    // この場所だけ: alpha の下の行だけが消え、beta の下は現役のまま。
+    await select(page, "root/alpha/shared");
+    await row(page, "root/alpha/shared").getByRole("button", { name: "タスク操作を開く" }).click();
+    await page.getByRole("menuitem", { name: "アーカイブ", exact: true }).click();
+    await page.getByRole("button", { name: "この場所だけ", exact: true }).click();
+    await expect(row(page, "root/alpha/shared")).toHaveCount(0);
+    await expect(row(page, "root/beta/shared")).toBeVisible();
+    await expect
+      .poll(() => graphOf(app).nodes.shared.parents.find((p) => p.id === "alpha").archived)
+      .toBe(true);
+    expect(graphOf(app).nodes.shared.archived).toBeUndefined();
+    expect(graphOf(app).nodes.shared.parents.find((p) => p.id === "beta").archived).toBeUndefined();
+
+    // アーカイブ表示から復元すると、その行が戻る。
+    await page.getByRole("button", { name: "表示と操作", exact: true }).click();
+    await page.getByRole("menuitem", { name: "アーカイブ済みを表示", exact: true }).click();
+    await expect(row(page, "root/alpha/shared")).toBeVisible();
+    await row(page, "root/alpha/shared").getByRole("button", { name: "タスク操作を開く" }).click();
+    await page.getByRole("menuitem", { name: "復元", exact: true }).click();
+    await expect
+      .poll(() => graphOf(app).nodes.shared.parents.find((p) => p.id === "alpha").archived)
+      .toBeUndefined();
+    await page.getByRole("button", { name: "表示と操作", exact: true }).click();
+    await page.getByRole("menuitem", { name: "アーカイブ済みを隠す", exact: true }).click();
+
+    // ノード全体: どの親の下からも消える。
+    await select(page, "root/alpha/shared");
+    await row(page, "root/alpha/shared").getByRole("button", { name: "タスク操作を開く" }).click();
+    await page.getByRole("menuitem", { name: "アーカイブ", exact: true }).click();
+    await page.getByRole("button", { name: "ノード全体", exact: true }).click();
+    await expect(row(page, "root/alpha/shared")).toHaveCount(0);
+    await expect(row(page, "root/beta/shared")).toHaveCount(0);
+    await expect.poll(() => graphOf(app).nodes.shared.archived).toBe(true);
+  } finally {
+    await cleanup(app);
+  }
+});
 function fixture() {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "tm-treegrid-"));
   const workspacePath = path.join(tempDir, "workspace");

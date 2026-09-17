@@ -33,6 +33,14 @@ export interface WorkspaceParentLink {
   id: string;
   /** その親の下での並び順。未指定は「末尾」扱い。 */
   order?: number;
+  /**
+   * この**辺だけ**をアーカイブしたか。多親ノードで「この場所からは片付けたい
+   * が、他の親の下では現役のまま」を表す。ノード自体の `archived` とは別で、
+   * どちらかが立っていればその行はアーカイブ扱いになる。
+   */
+  archived?: boolean;
+  /** 辺をアーカイブした時刻（ISO 文字列）。 */
+  archivedAt?: string;
 }
 
 export interface WorkspaceTask {

@@ -10,6 +10,7 @@
   import TreeTableHeader from "@features/tasks/components/TreeTableHeader.svelte";
   import TreeTableRow from "@features/tasks/components/TreeTableRow.svelte";
   import BulkActionBar from "@features/tasks/components/BulkActionBar.svelte";
+  import ArchiveScopeDialog from "@features/tasks/components/ArchiveScopeDialog.svelte";
   import Modal from "@lib/primitives/Modal.svelte";
   import Button from "@lib/primitives/Button.svelte";
   import Dialog from "@lib/primitives/Dialog.svelte";
@@ -227,6 +228,12 @@
   /** bulk のときの振り分け結果。 */
   let bulkArchiveTargetIds = [];
   let bulkPermanentTargetIds = [];
+  /**
+   * 多親ノードをアーカイブするときの範囲選択。行は「ノードの辺」なので、
+   * この行だけ片付けたいのか、ノードごと（＝全部の行）なのかを選ばせる。
+   * 親がひとつしかないノードでは差が無いので出さない。
+   */
+  let archiveScopeTarget = null;
   let taskFolderOpenError = "";
   let taskFolderOpenErrorTimer;
 
@@ -1284,7 +1291,21 @@
   }
 
   function requestDelete(event) {
-    const { id } = event.detail;
+    const { id, path } = event.detail;
+    if (application && !isInMultiSelection(id)) {
+      const occurrencePath = path ?? $active_row_path;
+      const state = application.archiveStateOf(id, occurrencePath);
+      if (state.shared && !state.node && !state.edge) {
+        const node = $tree_data?.data ? getNode(id, $tree_data.data) : null;
+        archiveScopeTarget = {
+          id,
+          path: occurrencePath,
+          name: node?.data?.name ?? "",
+          places: state.places,
+        };
+        return;
+      }
+    }
     if (isInMultiSelection(id)) {
       // bulk は自動振り分けに統一（active→archive、archived→完全削除）
       handleBulkDelete();
@@ -1327,11 +1348,15 @@
   }
 
   function requestRestore(event) {
-    if (application)
-      return application.archive(
-        isInMultiSelection(event.detail.id) ? [...selectionSet] : [event.detail.id],
-        false
-      );
+    if (application) {
+      const { id, path } = event.detail;
+      if (!isInMultiSelection(id)) {
+        // 辺だけのアーカイブと、ノードごとのアーカイブは画面では同じに見える。
+        // 立っている方を外す（両方立っていれば両方）。
+        return application.restoreOccurrence(id, path ?? $active_row_path);
+      }
+      return application.archive([...selectionSet], false);
+    }
     const { id, path } = event.detail;
     if (isInMultiSelection(id)) {
       if (!$tree_data?.data || selectionSize === 0) return;
@@ -1623,6 +1648,22 @@
     </div>
   </div>
 </Modal>
+<ArchiveScopeDialog
+  target={archiveScopeTarget}
+  on:cancel={() => (archiveScopeTarget = null)}
+  on:edge={() => {
+    const target = archiveScopeTarget;
+    archiveScopeTarget = null;
+    void application.archiveEdge(target.id, target.path, true);
+    clearSelection();
+  }}
+  on:node={() => {
+    const target = archiveScopeTarget;
+    archiveScopeTarget = null;
+    void application.archive([target.id], true);
+    clearSelection();
+  }}
+/>
 <BulkActionBar
   count={selectionSize}
   on:bulkStatus={handleBulkStatus}

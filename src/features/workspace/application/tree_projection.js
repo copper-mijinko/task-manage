@@ -8,9 +8,15 @@ export function projectTreeGrid(graph, rootId) {
   let root;
   for (const row of rows) {
     const node = row.node;
+    // その辺だけがアーカイブされている場合も、この出現は archived として扱う
+    // （ノード自体は残るので、他の親の下の行は通常表示のまま）。
+    const edge = row.parentId
+      ? (node.parents || []).find((parent) => parent.id === row.parentId)
+      : undefined;
     const item = {
       id: node.id,
-      archived: node.archived,
+      archived: node.archived || edge?.archived || undefined,
+      archivedEdge: edge?.archived || undefined,
       cycleReference: row.cycleReference,
       data: {
         name: node.name,

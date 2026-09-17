@@ -247,6 +247,33 @@ export function createTreeGridApplication(workspacePath) {
     navigation_history.pushSelection();
     return { path: visiblePath };
   }
+  /** その行がアーカイブされている理由（ノード側か、辺側か）。 */
+  function archiveStateOf(nodeId, path) {
+    const node = graphNow()?.nodes?.[nodeId];
+    const parentId = (path || "").split("/").at(-2);
+    return {
+      node: Boolean(node?.archived),
+      edge: Boolean(node?.parents?.find((parent) => parent.id === parentId)?.archived),
+      /** その行以外にも出現があるか（＝アーカイブ範囲を選ばせる意味があるか）。 */
+      shared: (node?.parents || []).length > 1,
+      /** いくつの親の下に置かれているか。 */
+      places: (node?.parents || []).length,
+    };
+  }
+  /**
+   * その行を復元する。辺だけアーカイブされていたのか、ノードごとだったのかは
+   * 画面からは同じに見えるので、立っている方を（両方なら両方を）まとめて外す。
+   */
+  function restoreOccurrence(nodeId, path) {
+    const state = archiveStateOf(nodeId, path);
+    const parentId = (path || "").split("/").at(-2);
+    const commands = [];
+    if (state.edge && parentId)
+      commands.push({ type: "archive-edge", childId: nodeId, parentId, archived: false });
+    if (state.node) commands.push({ type: "update-node", nodeId, changes: { archived: false } });
+    if (commands.length === 0) return Promise.resolve();
+    return dispatch(commands);
+  }
   return {
     navigateToNode,
     scope,
@@ -272,7 +299,21 @@ export function createTreeGridApplication(workspacePath) {
         occurrencePath: path,
         selectedType: "WorkspaceProject",
       }),
+    /** ノードごとアーカイブ（そのノードの行がすべて片付く）。 */
     archive: (targets = ids(), archived = true) => updateMany({ archived }, targets),
+    /**
+     * その行（＝辺）だけをアーカイブ。ノードは残るので、他の親の下では
+     * 今までどおり見える。`path` は行の経路で、親はその末尾ひとつ手前。
+     */
+    archiveEdge: (nodeId, path, archived = true) =>
+      dispatch({
+        type: "archive-edge",
+        childId: nodeId,
+        parentId: context(nodeId, path).parentId,
+        archived,
+      }),
+    archiveStateOf,
+    restoreOccurrence,
     remove: (targets) => dispatch(targets.map((nodeId) => ({ type: "delete-node", nodeId }))),
     copied,
     copy: (targets = ids()) => {
