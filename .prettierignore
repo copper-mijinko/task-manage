@@ -5,3 +5,9 @@ package-lock.json
 .claude/
 electron/workspace-state/
 docs/
+
+# ローカルの作業用チェックアウト・フィクスチャ（コミット対象ではない）。
+# push 前の `prettier --check .` がここで止まるので除外する。
+.review-latest/
+.ui-fixture/
+.worktrees/
