@@ -388,15 +388,20 @@
 
 <div class:TableRow={true} role="row">
   <div class="CheckboxHeaderCell" role="columnheader">
-    <input
-      bind:this={headerCheckboxEl}
-      type="checkbox"
-      class="HeaderCheckbox"
-      checked={headerChecked}
-      aria-label={headerCheckboxLabel}
-      title={headerCheckboxLabel}
-      on:click={onHeaderCheckboxClick}
-    />
+    <!-- 当たり判定はセル全体、グリフは本文に見合う大きさ。label で包むと
+         セルのどこを押しても input がトグルするので、input 自体を 24px に
+         膨らませる必要がない。 -->
+    <label class="CheckboxHit">
+      <input
+        bind:this={headerCheckboxEl}
+        type="checkbox"
+        class="HeaderCheckbox"
+        checked={headerChecked}
+        aria-label={headerCheckboxLabel}
+        title={headerCheckboxLabel}
+        on:click={onHeaderCheckboxClick}
+      />
+    </label>
   </div>
   {#each headers as header}
     <div class:TableHeader={true} data-column={header.name} role="columnheader">
@@ -1040,13 +1045,27 @@
     background-color: var(--header-bg);
     border-bottom: 1px solid var(--header-border);
   }
+  /* 当たり判定 (SC 2.5.8 の 24px) はこの label が持ち、グリフは下の
+     .HeaderCheckbox が持つ。input 自体を 24px にすると、14px の本文や
+     32px の行に対してチェックボックスだけが不釣り合いに大きくなる。 */
+  .CheckboxHit {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    min-width: var(--tap-min);
+    min-height: var(--tap-min);
+    cursor: pointer;
+  }
   .HeaderCheckbox {
     display: block;
-    /* チェックボックス自体の見た目は据え置きつつ、クリック領域を 24px 角まで
-       広げる。実測 11x11 は SC 2.5.8 を大きく割っていた。 */
-    flex: 0 0 var(--tap-min);
-    width: var(--tap-min);
-    height: var(--tap-min);
+    flex: 0 0 auto;
+    /* グリフは本文と同寸にする。選択の目印が本文より目立つと、行の主役が
+       タスク名ではなくチェックボックスになってしまう。当たり判定は
+       .CheckboxHit 側が 24px を担保するので、ここを大きくする必要はない。 */
+    width: var(--font-body-md);
+    height: var(--font-body-md);
     margin: 0;
     line-height: 1;
     cursor: pointer;

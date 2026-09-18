@@ -352,16 +352,19 @@
       <span class="RowNumber" aria-hidden="true" data-page-search-skip>{lineNumber}</span>
     {/if}
     {#if depth > 0}
-      <input
-        type="checkbox"
-        class="RowCheckbox"
-        checked={bulkSelectionActive && selected}
-        aria-label="一括操作の対象として選択"
-        title="一括操作の対象として選択"
-        tabindex={cellTabIndex}
-        on:click={toggleCheckbox}
-        on:keydown|stopPropagation
-      />
+      <!-- 当たり判定はセル全体、グリフは本文に見合う大きさ（.CheckboxHit）。 -->
+      <label class="CheckboxHit">
+        <input
+          type="checkbox"
+          class="RowCheckbox"
+          checked={bulkSelectionActive && selected}
+          aria-label="一括操作の対象として選択"
+          title="一括操作の対象として選択"
+          tabindex={cellTabIndex}
+          on:click={toggleCheckbox}
+          on:keydown|stopPropagation
+        />
+      </label>
     {/if}
   </div>
   {#each headers as header, i}
@@ -806,12 +809,25 @@
     pointer-events: none;
     font-variant-numeric: tabular-nums;
   }
-  .RowCheckbox {
+  /* 当たり判定 (SC 2.5.8 の 24px) はこの label、グリフは .RowCheckbox が持つ。
+     input 自体を 24px にすると、14px の本文や 32px の行に対して
+     チェックボックスだけが不釣り合いに大きくなる。 */
+  .CheckboxHit {
     display: none;
-    /* 一括選択のチェックボックス。実測 11x11 で SC 2.5.8 を大きく割っていた。
-       ヘッダーの全選択チェックボックスと同じ下限に合わせる。 */
-    width: var(--tap-min);
-    height: var(--tap-min);
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    min-width: var(--tap-min);
+    min-height: var(--tap-min);
+    cursor: pointer;
+  }
+  .RowCheckbox {
+    /* グリフは本文と同寸にする。選択の目印が本文より目立つと、行の主役が
+       タスク名ではなくチェックボックスになってしまう。当たり判定は
+       .CheckboxHit 側が 24px を担保するので、ここを大きくする必要はない。 */
+    width: var(--font-body-md);
+    height: var(--font-body-md);
     margin: 0;
     cursor: pointer;
     accent-color: var(--theme-color-Primary-dark);
@@ -821,9 +837,9 @@
   .CheckboxCell.HasCheckbox.Visible .RowNumber {
     display: none;
   }
-  .TableRow:hover .CheckboxCell.HasCheckbox .RowCheckbox,
-  .CheckboxCell.HasCheckbox.Visible .RowCheckbox {
-    display: inline-block;
+  .TableRow:hover .CheckboxCell.HasCheckbox .CheckboxHit,
+  .CheckboxCell.HasCheckbox.Visible .CheckboxHit {
+    display: flex;
   }
   .TableData {
     flex-shrink: 0;
@@ -834,7 +850,9 @@
     --col-min: var(--col-min-default);
     min-width: var(--col-min);
     background-color: var(--backgroundColor);
-    padding: var(--sp1) var(--sp2);
+    /* 左は先頭セル（24px）のすぐ隣なので詰める。ここに 8px 置くと、
+       チェックボックスと名前のあいだの余白がさらに広がる。 */
+    padding: var(--sp1) var(--sp2) var(--sp1) var(--sp1);
     align-items: center;
     color: var(--theme-color-Sub-main);
     font-size: var(--font-body-md);
@@ -1022,12 +1040,13 @@
     position: relative;
     display: inline-block;
     align-self: stretch;
-    /* 1 段ぶんの字下げ（ガイド線 + 余白でおよそ 17px）。階層は主にこの
-       字下げで読ませる。 */
-    width: 0.825rem;
+    /* 1 段ぶんの字下げは開閉トグルの幅ちょうど。ここが一致していないと、
+       子の開閉トグルが親の開閉トグルの内側にめり込む（13px 字下げに対して
+       トグルが 24px だったため、親 44..68 の中に子のトグル 57..81 が
+       重なっていた）。1 段下がるごとにトグル 1 個ぶん右へ、が正しい。 */
+    width: var(--tap-min);
     margin-top: calc(-1 * var(--sp1));
     margin-bottom: calc(-1 * var(--sp1) - 1px);
-    margin-left: var(--sp1);
     flex-shrink: 0;
   }
   /* 縦線。末っ子では行の中央で止めたいので、border ではなく擬似要素で引く。
@@ -1035,7 +1054,9 @@
   .TreeLine::before {
     content: "";
     position: absolute;
-    left: 0;
+    /* 縦線は枠の中心 ＝ 親の開閉トグルの中心。左端に引くと、線が親トグルの
+       左端から落ちてきて、どのトグルにぶら下がっているのか読めなくなる。 */
+    left: 50%;
     top: 0;
     bottom: 0;
     border-left: 1px solid color-mix(in srgb, var(--fg-muted) 42%, transparent);
@@ -1054,8 +1075,9 @@
     content: "";
     position: absolute;
     top: 50%;
-    left: 0;
-    width: 100%;
+    /* 縦線（枠の中心）から、次の段のトグルが始まる枠の右端までを結ぶ。 */
+    left: 50%;
+    width: 50%;
     border-top: 1px solid color-mix(in srgb, var(--fg-muted) 42%, transparent);
     pointer-events: none;
   }
@@ -1086,16 +1108,22 @@
       background-color 0.12s ease;
   }
   .ExpandButton svg {
-    width: 0.5625rem;
-    height: 0.5625rem;
+    /* 0.5625rem は rem 一括変換のときに、この用途で入れた 0.75rem がさらに
+       0.75 倍された結果。9px はシェブロンとして小さすぎた。 */
+    width: 0.75rem;
+    height: 0.75rem;
     fill: var(--theme-color-Sub-light);
   }
   .ExpandButton.Expanded {
     transform: rotate(90deg);
   }
+  /* 子を持たない行が開閉ボタンぶん空ける枠。ボタンと同じ幅でなければ、
+     同じ深さの行でも開閉ボタンの有無だけで名前の開始位置がずれる。
+     ボタンを 24px (--tap-min) に広げたとき、ここが 12px のまま取り残されて
+     実測で depth=2 の行が 103px と 115px に分かれていた。 */
   .Space {
-    width: 0.75rem;
-    height: 0.75rem;
+    width: var(--tap-min);
+    height: var(--tap-min);
     flex-shrink: 0;
   }
   /* 親（子を持つ行）は「少しだけ強い」程度に差を付ける。太い枠や濃い塗りは
