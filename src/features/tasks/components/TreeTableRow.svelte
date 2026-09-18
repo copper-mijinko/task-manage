@@ -43,6 +43,8 @@
    * `data-node-id` で引ける。
    */
   export let isPrimaryOccurrence = true;
+  /** このノードが置かれている場所（親の名前）。2 つ以上なら共有ノード。 */
+  export let sharedPlaces = [];
   /**
    * いま操作している行と同じノードを指す、別の親の下の行。選択はノード単位
    * なので多親ノードを選ぶと出現がすべて選択色になるが、「同じものがここにも
@@ -377,6 +379,26 @@
                アイコンを並べると、字下げより先にアイコンの列が目に入って
                階層が読みにくくなる。 -->
           <div class:Space={true} aria-hidden="true"></div>
+        {/if}
+        {#if sharedPlaces.length > 1}
+          <!-- 同じノードが複数の場所に出ていることを示す印。コピーで増えた
+               別ノードとは、この印の有無で見分けられる。 -->
+          <span
+            class="SharedMark"
+            role="img"
+            aria-label={`${sharedPlaces.length} か所に配置: ${sharedPlaces.join(" / ")}`}
+            title={`${sharedPlaces.length} か所に配置: ${sharedPlaces.join(" / ")}`}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M9.5 14.5 14.5 9.5M10.5 6.5 12 5a4 4 0 0 1 5.7 5.7l-1.5 1.5M13.5 17.5 12 19a4 4 0 0 1-5.7-5.7l1.5-1.5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+              />
+            </svg>
+          </span>
         {/if}
         {#if node.cycleReference}<span
             class="cycle-reference"
@@ -874,6 +896,22 @@
     display: flex;
     justify-content: center;
     align-items: center;
+  }
+  /* 共有の印。名前より先に目に入ってはいけないので、本文より薄い色の
+     小さなリンク記号にとどめる。`.TableData span`（flex:1 / 中央寄せ）の
+     共通ルールより強く指定しないと、セルの半分を占めて名前を押し出す。 */
+  .TableData .SharedMark {
+    flex: 0 0 0.85rem;
+    display: inline-flex;
+    align-items: center;
+    width: 0.85rem;
+    height: 0.85rem;
+    margin-right: 2px;
+    color: color-mix(in srgb, var(--fg-muted) 75%, transparent);
+  }
+  .TableData .SharedMark svg {
+    width: 100%;
+    height: 100%;
   }
   .TableData .cycle-reference {
     flex: 0 0 1.2rem;

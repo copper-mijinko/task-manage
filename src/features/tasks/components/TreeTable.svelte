@@ -145,6 +145,32 @@
   }
   $: tabStopRowPath = $active_row_path;
   $: activeRowId = rows.find((row) => row.path === $active_row_path)?.id ?? null;
+  /**
+   * ノードごとの「置かれている場所」。同じノードが複数の親の下に出るのが
+   * 普通なので、行だけを見ても別ノードなのか同じノードなのか分からない。
+   * 行に共有の印を出すために、折り畳みや絞り込みとは関係ない**全体の木**から
+   * 数える（畳んである側の出現も 1 か所として数えたい）。
+   */
+  function buildOccurrenceIndex(root) {
+    const index = new Map();
+    if (!root) return index;
+    const stack = [root];
+    const seenEdges = new Set();
+    while (stack.length) {
+      const node = stack.pop();
+      for (const child of node.children ?? []) {
+        const edge = `${node.id}>${child.id}`;
+        if (seenEdges.has(edge)) continue;
+        seenEdges.add(edge);
+        const places = index.get(child.id) ?? [];
+        places.push(node.data?.name ?? "");
+        index.set(child.id, places);
+        if (!child.cycleReference) stack.push(child);
+      }
+    }
+    return index;
+  }
+  $: occurrenceIndex = buildOccurrenceIndex($tree_data?.data);
   $: inheritedDueDateMap = buildInheritedDueDateMap(rows);
   $: nodePathMap = buildNodePathMap(rows);
   $: lineNumberMap = buildLineNumberMap($filtered_data);
@@ -1551,6 +1577,7 @@
         bulkCanOutdent={canBulkOutdent}
         inheritedDueDate={inheritedDueDateMap.get(row.path) ?? ""}
         nodePath={nodePathMap.get(row.path) ?? ""}
+        sharedPlaces={occurrenceIndex.get(row.id) ?? []}
         lineNumber={lineNumberMap.get(row.path) ?? 0}
         isTabStop={row.path === tabStopRowPath}
         isEchoRow={row.id === activeRowId && row.path !== $active_row_path}
