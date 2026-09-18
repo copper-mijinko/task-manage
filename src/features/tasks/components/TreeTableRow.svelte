@@ -385,8 +385,8 @@
              くいので、印が無い行でも同じ幅の枠を空けておく。 -->
         {#if sharedPlaces.length > 1}
           <!-- 主体（原本）を決めていないモデルなので、どこかを指し示す「鎖」の
-               記号は使わない。2 つの親から 1 つのノードへ線が集まる形＝「この行の
-               ノードは複数の親にぶら下がっている」を、そのまま絵にする。 -->
+               記号は使わない。ツリーは左上から右下へ伸びるので、記号も同じ流れで
+               「1 つのノードが右へ 2 か所に分かれて現れる」形にする。 -->
           <span
             class="SharedMark"
             role="img"
@@ -395,15 +395,16 @@
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path
-                d="M6.5 7.5 12 16.5M17.5 7.5 12 16.5"
+                d="M7.5 12h3.5l5-5.5M11 12l5 5.5"
                 fill="none"
                 stroke="currentColor"
                 stroke-width="2"
                 stroke-linecap="round"
+                stroke-linejoin="round"
               />
-              <circle cx="6.5" cy="5.5" r="2.4" fill="currentColor" />
-              <circle cx="17.5" cy="5.5" r="2.4" fill="currentColor" />
-              <circle cx="12" cy="18.5" r="2.8" fill="currentColor" />
+              <circle cx="5" cy="12" r="2.8" fill="currentColor" />
+              <circle cx="18" cy="6" r="2.4" fill="currentColor" />
+              <circle cx="18" cy="18" r="2.4" fill="currentColor" />
             </svg>
             <span class="SharedMarkCount">{sharedPlaces.length}</span>
           </span>
