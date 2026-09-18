@@ -383,34 +383,6 @@
         <!-- 同じノードが複数の場所に出ていることを示す印。コピーで増えた別ノード
              とは、この印の有無で見分ける。印の有無で名前の位置がずれると比べに
              くいので、印が無い行でも同じ幅の枠を空けておく。 -->
-        {#if sharedPlaces.length > 1}
-          <!-- 主体（原本）を決めていないモデルなので、どこかを指し示す「鎖」の
-               記号は使わない。ツリーは左上から右下へ伸びるので、記号も同じ流れで
-               「1 つのノードが右へ 2 か所に分かれて現れる」形にする。 -->
-          <span
-            class="SharedMark"
-            role="img"
-            aria-label={`同じノードが${sharedPlaces.length}か所にあります: ${sharedPlaces.join(" / ")}`}
-            title={`同じノードが${sharedPlaces.length}か所にあります: ${sharedPlaces.join(" / ")}`}
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path
-                d="M7.5 12h3.5l5-5.5M11 12l5 5.5"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-              <circle cx="5" cy="12" r="2.8" fill="currentColor" />
-              <circle cx="18" cy="6" r="2.4" fill="currentColor" />
-              <circle cx="18" cy="18" r="2.4" fill="currentColor" />
-            </svg>
-            <span class="SharedMarkCount">{sharedPlaces.length}</span>
-          </span>
-        {:else}
-          <span class="SharedMarkSpacer" aria-hidden="true"></span>
-        {/if}
         {#if node.cycleReference}<span
             class="cycle-reference"
             role="img"
@@ -479,6 +451,34 @@
             dispatch("openTaskFolder", { id });
           }}
         />
+        {#if sharedPlaces.length > 1}
+          <!-- 同じノードが複数の場所に出ていることを示す印。コピーで増えた別ノード
+               とは、この印の有無で見分ける。ツリーは左上から右下へ伸びるので、
+               「1 つのノードが右へ 2 か所に分かれて現れる」形にしている。
+               名前の前に置くと、印の無い行と文字の開始位置がずれる（あるいは
+               全行にその幅を空けることになる）ので、名前の後ろに置く。 -->
+          <span
+            class="SharedMark"
+            role="img"
+            aria-label={`同じノードが${sharedPlaces.length}か所にあります: ${sharedPlaces.join(" / ")}`}
+            title={`同じノードが${sharedPlaces.length}か所にあります: ${sharedPlaces.join(" / ")}`}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M7.5 12h3.5l5-5.5M11 12l5 5.5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <circle cx="5" cy="12" r="2.8" fill="currentColor" />
+              <circle cx="18" cy="6" r="2.4" fill="currentColor" />
+              <circle cx="18" cy="18" r="2.4" fill="currentColor" />
+            </svg>
+            <span class="SharedMarkCount">{sharedPlaces.length}</span>
+          </span>
+        {/if}
       {:else if header.name == "status"}
         <StatusSelect
           status={data[header.name]}
@@ -917,7 +917,7 @@
     gap: 1px;
     height: 1.05rem;
     padding: 0 3px 0 1px;
-    margin-right: var(--sp1);
+    margin-left: var(--sp1);
     border-radius: var(--shape-pill);
     background-color: color-mix(in srgb, var(--accent-fg) 14%, transparent);
     color: var(--accent-fg);
@@ -934,14 +934,6 @@
     font-size: var(--font-label-sm);
     font-weight: 700;
     font-variant-numeric: tabular-nums;
-  }
-  /* 印が無い行の同じ幅の空き。行ごとに名前の開始位置がずれないようにする。 */
-  .TableData .SharedMarkSpacer {
-    flex: 0 0 auto;
-    display: inline-block;
-    width: 1.95rem;
-    height: 1px;
-    margin-right: var(--sp1);
   }
   .TableData .cycle-reference {
     flex: 0 0 1.2rem;

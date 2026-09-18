@@ -216,7 +216,6 @@
 
   $: visibleHeaders = computeVisibleHeaders($tree_data?.headers, $column_settings);
   $: allHeaders = mergeBuiltInHeaders($tree_data?.headers);
-  $: minWidth = visibleHeaders.length ? `${4 * visibleHeaders.length}rem` : "auto";
 
   const getRowHeightPx = () => {
     if (typeof window === "undefined") {
@@ -441,7 +440,7 @@
       const leadingColumnWidth = getLeadingColumnWidth();
       const default_root_width = Math.max(
         0,
-        tableRows[0].getBoundingClientRect().width - leadingColumnWidth
+        (table_root.clientWidth || tableRows[0].getBoundingClientRect().width) - leadingColumnWidth
       );
       const savedWidths = readColumnWidths();
       const default_data_widths = currentHeaders.map(
@@ -504,7 +503,9 @@
       if (!table_root?.isConnected || domHeaders.length === 0 || !domHeaders[0]?.isConnected) {
         return;
       }
-      const tableWidth = table_root.getBoundingClientRect().width;
+      // 縦スクロールバーぶんを含まない内側の幅。getBoundingClientRect() だと
+      // バーの幅（9px 前後）まで列に配れてしまい、最終列がバーの下に潜る。
+      const tableWidth = table_root.clientWidth || table_root.getBoundingClientRect().width;
       const leadingColumnWidth = getLeadingColumnWidth();
       const widths = domHeaders.map((h) => h.getBoundingClientRect().width);
       const fixedTotal = widths.slice(1).reduce((s, w) => s + w, 0);
@@ -1511,7 +1512,6 @@
 <div
   bind:this={table_root}
   class:TableRoot={true}
-  style="--minWidth: {minWidth}"
   role="treegrid"
   aria-label="Task tree"
   aria-multiselectable="true"
@@ -1721,7 +1721,10 @@
     flex-direction: column;
     width: 100%;
     height: 100%;
-    min-width: var(--minWidth);
+    /* 列の最小幅は各セルが持っていて、はみ出した分はこの要素が横スクロール
+       する。ここに「列数 × 4rem」の下限を置くと、ガント表示などでペインが
+       狭いときにペイン（overflow:hidden）からはみ出して右端が切れる。 */
+    min-width: 0;
     overflow-y: auto;
     position: relative;
     /* Establish a stacking context so the absolutely-positioned column

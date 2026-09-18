@@ -21,14 +21,23 @@
   let bdcolor = "gray";
   let shadow = "0 .2rem .5rem rgba(0,0,0,0.25), 0 .1em .25rem rgba(0,0,0,0);";
 
+  /**
+   * 無効時の色。以前は文字も背景も同じ "gray" で、ラベルが背景に溶けて
+   * まったく読めなかった（例: アーカイブ済みタスクや Inbox での「所属先を追加」）。
+   * 押せないことは薄い面で示し、文字は読める濃さを残す。
+   */
+  const DISABLED_FG = "var(--fg-muted)";
+  const DISABLED_BG = "color-mix(in srgb, var(--fg-muted) 16%, transparent)";
+  const DISABLED_BD = "color-mix(in srgb, var(--fg-muted) 28%, transparent)";
+
   $: {
-    afcolor = disabled ? "gray" : "var(--theme-color-Main-light)";
-    abgcolor = disabled ? "gray" : activeColor;
-    abdcolor = disabled ? "gray" : "none";
-    fcolor = disabled ? "gray" : "var(--theme-color-Main-light)";
-    bgcolor = disabled ? "gray" : normalColor;
-    bdcolor = disabled ? "gray" : "none";
-    shadow = "0 .2rem .5rem rgba(0,0,0,0.25), 0 .1em .25rem rgba(0,0,0,0);";
+    afcolor = disabled ? DISABLED_FG : "var(--theme-color-Main-light)";
+    abgcolor = disabled ? DISABLED_BG : activeColor;
+    abdcolor = disabled ? DISABLED_BD : "none";
+    fcolor = disabled ? DISABLED_FG : "var(--theme-color-Main-light)";
+    bgcolor = disabled ? DISABLED_BG : normalColor;
+    bdcolor = disabled ? DISABLED_BD : "none";
+    shadow = disabled ? "none" : "0 .2rem .5rem rgba(0,0,0,0.25), 0 .1em .25rem rgba(0,0,0,0);";
 
     if (!disabled) {
       switch (variant) {
