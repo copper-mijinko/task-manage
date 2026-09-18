@@ -630,10 +630,10 @@
 <style>
   .notification-stack {
     position: fixed;
-    top: 3rem;
-    right: 1rem;
-    width: min(32rem, calc(100vw - 2rem));
-    max-height: calc(100vh - 4rem);
+    top: 2.25rem;
+    right: 0.75rem;
+    width: min(24rem, calc(100vw - 1.5rem));
+    max-height: calc(100vh - 3rem);
     overflow-y: auto;
     z-index: 10000;
     display: grid;
@@ -646,23 +646,7 @@
     box-shadow: var(--elevation-3);
     overflow-wrap: anywhere;
   }
-  /* ここでルート font-size を 75% にしているため、このアプリの `rem` は
-     すべて 0.75 倍で効く（1rem = 12px）。一方 global.css の --sp* / --font-*
-     / --col-min-* は px 固定なので等倍のまま。つまり rem 指定と px トークンは
-     別スケールで、`1.5rem` と書いても 24px にはならず 18px になる。
-
-     これが原因で、24px のつもりで書いた当たり判定が 18px、16px のつもりの
-     ツリー展開トグルが 12px になり、WCAG 2.2 SC 2.5.8 (24x24) を広範に
-     割っていた。最小寸法を指定するときは rem ではなく px のトークン
-     （global.css の --tap-min）を使うこと。
-
-     利用者が「小さい」と感じた場合の逃げ道はアプリ内の表示倍率
-     （Ctrl +/-/0、Ctrl+ホイール、設定モーダルの「表示倍率」）で、これは px と
-     rem を同じ比率で拡大するのでこの問題の影響を受けない。
-     75% 自体を外すと rem 指定だけが 1.33 倍になって全画面のレイアウトが動く
-     ため、px トークンの再調整とセットでないと実施できない。 */
   :global(html) {
-    font-size: 75%;
     overflow: hidden;
   }
   :global(body) {
@@ -684,7 +668,7 @@
     position: relative;
   }
   div.Header {
-    height: 2.75rem;
+    height: 2.0625rem;
   }
   div.Body {
     position: relative;
@@ -693,7 +677,7 @@
     flex: 1;
     min-height: 0;
     width: 100%;
-    height: calc(100% - 2.75rem);
+    height: calc(100% - 2.0625rem);
     overflow: hidden;
   }
   div.Body.DetailWindowBody {
@@ -703,7 +687,7 @@
     position: absolute;
     inset: 0 auto 0 0;
     z-index: 1001;
-    width: 18rem;
+    width: 13.5rem;
     max-width: 90%;
     height: 100%;
     background-color: var(--canvas-subtle);
@@ -737,14 +721,14 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    max-width: 32rem;
+    max-width: 24rem;
     padding: var(--sp6);
     color: var(--theme-color-Sub-main);
     text-align: center;
   }
   .EmptyStart svg {
-    width: 3rem;
-    height: 3rem;
+    width: 2.25rem;
+    height: 2.25rem;
     margin-bottom: var(--sp3);
     fill: none;
     stroke: currentColor;
@@ -763,7 +747,7 @@
     font-size: var(--font-body-md);
   }
   .EmptyStart button {
-    min-height: 2.5rem;
+    min-height: 1.875rem;
     padding: 0 var(--sp4);
     border: 1px solid var(--theme-color-Primary-main);
     border-radius: var(--shape-sm);
@@ -863,8 +847,8 @@
     background: var(--theme-color-Theme-main);
     color: #fff;
     box-shadow: var(--elevation-2);
-    max-width: 32rem;
-    min-width: 22rem;
+    max-width: 24rem;
+    min-width: 16.5rem;
   }
   .flush-overlay-text {
     display: flex;
@@ -876,8 +860,8 @@
     font-size: var(--font-body-md);
   }
   .flush-spinner {
-    width: 2rem;
-    height: 2rem;
+    width: 1.5rem;
+    height: 1.5rem;
     border-radius: 50%;
     border: 3px solid rgba(255, 255, 255, 0.25);
     border-top-color: #fff;

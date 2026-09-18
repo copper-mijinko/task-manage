@@ -19,7 +19,7 @@
    * ままだと、削除の確認と保存の確認が同じ見た目になる。
    */
   export let danger = false;
-  export let width = "28rem";
+  export let width = "21rem";
   export let height = "auto";
 
   const dialogHeaderId = `dialog-header-${Math.random().toString(36).slice(2)}`;

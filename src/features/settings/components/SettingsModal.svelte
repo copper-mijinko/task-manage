@@ -326,8 +326,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 1.75rem;
-    height: 1.75rem;
+    width: 1.3125rem;
+    height: 1.3125rem;
     padding: 0;
     margin: 0;
     border: none;
@@ -340,8 +340,8 @@
     background-color: color-mix(in srgb, var(--theme-color-Sub-main) 12%, transparent);
   }
   .CloseBtn svg {
-    width: 1.1rem;
-    height: 1.1rem;
+    width: 0.825rem;
+    height: 0.825rem;
   }
 
   .Body {
@@ -351,7 +351,7 @@
   }
 
   .Sidebar {
-    flex: 0 0 18rem;
+    flex: 0 0 13.5rem;
     min-width: 0;
     border-right: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 18%, transparent);
     background-color: var(--theme-color-Main-main);
@@ -467,7 +467,7 @@
     padding: var(--sp1) 0;
   }
   .PreviewKey {
-    flex: 0 0 8rem;
+    flex: 0 0 6rem;
     font-size: var(--font-body-sm);
     color: var(--theme-color-Sub-main);
   }
@@ -494,7 +494,7 @@
     display: grid;
     /* 説明が折り返さない幅を優先する。狭いときは 1 列、広い設定画面では
        2 列に自然に増える。 */
-    grid-template-columns: repeat(auto-fit, minmax(24rem, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
     gap: var(--sp4);
     align-content: start;
   }
@@ -538,7 +538,7 @@
     align-items: center;
     gap: 2px;
     flex: 0 0 auto;
-    min-width: 6.5rem;
+    min-width: 4.875rem;
     margin: 0;
   }
 
@@ -575,7 +575,7 @@
     border-top: none;
   }
   .AboutKey {
-    flex: 0 0 8rem;
+    flex: 0 0 6rem;
     margin: 0;
     font-size: var(--font-body-sm);
     font-weight: 500;

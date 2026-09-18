@@ -212,8 +212,8 @@
     font-weight: 600;
   }
   .HeaderIcon {
-    width: 1.4rem;
-    height: 1.4rem;
+    width: 1.05rem;
+    height: 1.05rem;
     color: var(--theme-color-Primary-main);
     flex-shrink: 0;
   }
@@ -222,10 +222,10 @@
     background: transparent;
     border: none;
     color: color-mix(in srgb, var(--theme-color-Sub-main) 70%, transparent);
-    font-size: 1.1rem;
+    font-size: 0.825rem;
     cursor: pointer;
     line-height: 1;
-    padding: 0.2rem var(--sp2);
+    padding: 0.15rem var(--sp2);
     border-radius: var(--shape-xs);
   }
   .CloseBtn:hover {
@@ -240,7 +240,7 @@
     color: var(--theme-color-Sub-main);
     border-radius: var(--shape-sm);
     padding: var(--sp3);
-    font-size: 1.1rem;
+    font-size: 0.825rem;
     outline: none;
   }
   .QuickCaptureInput:focus {
@@ -253,7 +253,7 @@
   }
   .QuickCaptureMeta {
     font-size: var(--font-label-md);
-    min-height: 1.1rem;
+    min-height: 0.825rem;
   }
   .MetaHint {
     color: color-mix(in srgb, var(--theme-color-Sub-main) 60%, transparent);
@@ -284,7 +284,7 @@
     gap: 1px;
   }
   .RecentList li {
-    padding: 0.15rem var(--sp2);
+    padding: 0.1125rem var(--sp2);
     background-color: color-mix(in srgb, var(--theme-color-Success-main) 8%, transparent);
     border-left: 2px solid var(--theme-color-Success-main);
     color: var(--theme-color-Sub-main);

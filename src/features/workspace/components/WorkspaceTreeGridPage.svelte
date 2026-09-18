@@ -90,9 +90,9 @@
   }
   .operation-error {
     position: fixed;
-    top: 3rem;
-    right: 1rem;
-    max-width: min(32rem, calc(100vw - 2rem));
+    top: 2.25rem;
+    right: 0.75rem;
+    max-width: min(24rem, calc(100vw - 1.5rem));
     z-index: 10000;
     display: flex;
     gap: var(--sp2);

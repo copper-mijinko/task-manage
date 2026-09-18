@@ -119,7 +119,7 @@
     align-items: center;
     gap: var(--sp1);
     width: 100%;
-    min-height: 1.9rem;
+    min-height: 1.425rem;
     padding-right: var(--sp2);
     border: none;
     background-color: transparent;
@@ -152,8 +152,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 1rem;
-    height: 1rem;
+    width: 0.75rem;
+    height: 0.75rem;
     flex-shrink: 0;
     color: color-mix(in srgb, var(--theme-color-Sub-main) 55%, transparent);
     transition: transform 0.12s ease;
@@ -168,12 +168,12 @@
     transform: rotate(90deg);
   }
   .Chevron svg {
-    width: 0.75rem;
-    height: 0.75rem;
+    width: 0.5625rem;
+    height: 0.5625rem;
   }
   .Spacer {
-    width: 1rem;
-    height: 1rem;
+    width: 0.75rem;
+    height: 0.75rem;
     flex-shrink: 0;
   }
   .NodeName {

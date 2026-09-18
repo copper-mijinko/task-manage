@@ -111,7 +111,7 @@
     border: 1px solid var(--theme-color-Main-dark);
     border-radius: var(--shape-sm);
     box-shadow: var(--elevation-2);
-    min-width: 14rem;
+    min-width: 10.5rem;
     color: var(--theme-color-Sub-main);
     padding: var(--sp1) 0;
     box-sizing: border-box;
@@ -141,8 +141,8 @@
     background-color: color-mix(in srgb, var(--theme-color-Primary-main) 10%, transparent);
   }
   .OptionRow input[type="checkbox"] {
-    width: 0.95rem;
-    height: 0.95rem;
+    width: 0.7125rem;
+    height: 0.7125rem;
     margin: 0;
     accent-color: var(--theme-color-Primary-main);
   }

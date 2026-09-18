@@ -257,8 +257,8 @@
     white-space: nowrap;
   }
   .s-caret {
-    width: 0.75rem;
-    height: 0.75rem;
+    width: 0.5625rem;
+    height: 0.5625rem;
     flex-shrink: 0;
     /* 行にずらりと並ぶドロップダウン記号は、状態そのものより目立ってしまう。
        ツリー行の中では hover / focus のときだけ出す（詳細ペインなど
@@ -285,7 +285,7 @@
     background-color: var(--theme-color-Main-main);
     box-shadow: var(--elevation-3);
     color: var(--theme-color-Sub-main);
-    min-width: 8rem;
+    min-width: 6rem;
     animation: s-pop 0.12s ease-out;
   }
   @keyframes s-pop {
@@ -338,8 +338,8 @@
     opacity: 0.7;
   }
   .s-check {
-    width: 0.9rem;
-    height: 0.9rem;
+    width: 0.675rem;
+    height: 0.675rem;
     color: var(--theme-color-Primary-main);
     flex-shrink: 0;
   }

@@ -53,7 +53,7 @@
   }
 </script>
 
-<Modal {show} {toggle} width="44rem" height="auto">
+<Modal {show} {toggle} width="33rem" height="auto">
   <div class="container">
     <div class="header">ワークスペース管理</div>
 
@@ -83,7 +83,7 @@
                   ariaLabel="削除"
                   tooltipContent="このワークスペースを削除"
                   variant="text"
-                  style="height:2rem; width:2rem; margin:0; box-shadow:none;"
+                  style="height:1.5rem; width:1.5rem; margin:0; box-shadow:none;"
                   normalColor="var(--theme-color-Error-main)"
                   activeColor="var(--theme-color-Error-dark)"
                   on:click={() => handleRemove(ws.path)}
@@ -186,7 +186,7 @@
   .header {
     padding: var(--sp3) var(--sp4);
     font-weight: bold;
-    font-size: 1.4rem;
+    font-size: 1.05rem;
     color: var(--theme-color-Sub-main);
     background-color: var(--theme-color-Main-main);
     border-bottom: 1px solid var(--theme-color-Sub-dark);
@@ -233,7 +233,7 @@
     overflow: hidden;
   }
   .ws-label {
-    font-size: 1rem;
+    font-size: 0.75rem;
     color: var(--theme-color-Sub-main);
     font-weight: bold;
   }
@@ -252,7 +252,7 @@
   }
   .active-badge {
     font-size: var(--font-label-md);
-    padding: 0.1rem var(--sp2);
+    padding: 0.075rem var(--sp2);
     border-radius: var(--shape-xs);
     background-color: var(--theme-color-Primary-dark);
     color: white;
@@ -278,7 +278,7 @@
     font-size: var(--font-body-md);
     background-color: var(--theme-color-Main-dark);
     color: var(--theme-color-Sub-main);
-    width: 10rem;
+    width: 7.5rem;
   }
   .select-dir-btn,
   .action-btn {
@@ -381,13 +381,13 @@
     background-color: color-mix(in srgb, var(--theme-color-Sub-main) 6%, transparent);
   }
   .policy-option input[type="radio"] {
-    margin-top: 0.25rem;
+    margin-top: 0.1875rem;
     flex-shrink: 0;
   }
   .policy-text {
     display: flex;
     flex-direction: column;
-    gap: 0.25rem;
+    gap: 0.1875rem;
     font-size: var(--font-body-md);
     color: var(--theme-color-Sub-main);
   }

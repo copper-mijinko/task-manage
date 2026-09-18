@@ -736,7 +736,7 @@
     flex-direction: row;
     box-sizing: border-box;
     position: relative;
-    height: 2.75rem;
+    height: 2.0625rem;
     padding: 0 var(--sp2);
     width: 100%;
     color: var(--fg-default);
@@ -749,7 +749,7 @@
     display: flex;
     flex-direction: column;
     width: 100%;
-    max-height: 18rem;
+    max-height: 13.5rem;
     overflow-y: auto;
     overflow-x: hidden;
   }
@@ -767,7 +767,7 @@
     display: flex;
     align-items: center;
     gap: var(--sp1);
-    min-height: 2rem;
+    min-height: 1.5rem;
     padding: 0 var(--sp1) 0 var(--sp2);
     color: var(--fg-muted);
     font-size: var(--font-label-md);
@@ -797,8 +797,8 @@
     outline-offset: -2px;
   }
   .Chevron {
-    width: 1rem;
-    height: 1rem;
+    width: 0.75rem;
+    height: 0.75rem;
     flex-shrink: 0;
     transition: transform 0.12s ease;
   }
@@ -818,8 +818,8 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    min-width: 1.35rem;
-    height: 1.1rem;
+    min-width: 1.0125rem;
+    height: 0.825rem;
     margin-left: var(--sp1);
     padding: 0 var(--sp1);
     border-radius: var(--shape-pill);
@@ -833,8 +833,8 @@
     overflow-y: visible;
   }
   .Logo {
-    width: 1.25rem;
-    height: 1.25rem;
+    width: 0.9375rem;
+    height: 0.9375rem;
     fill: currentColor;
     margin-right: var(--sp3);
   }
@@ -859,9 +859,9 @@
     flex-direction: row;
     box-sizing: border-box;
     position: relative;
-    flex: 0 0 2rem;
-    height: 2rem;
-    min-height: 2rem;
+    flex: 0 0 1.5rem;
+    height: 1.5rem;
+    min-height: 1.5rem;
     padding: 0 var(--sp2);
     width: 100%;
     color: var(--fg-default);
@@ -931,14 +931,14 @@
     display: block;
     align-self: stretch;
     height: auto;
-    width: 1rem;
+    width: 0.75rem;
     border-left: 1px solid var(--border-muted);
-    left: -1rem;
+    left: -0.75rem;
   }
   /* Drag and drop styles */
   :global(.NameTag) {
     position: absolute;
-    top: -1000rem;
+    top: -750rem;
     display: inline;
     background-color: var(--accent-fg);
     border: 1px solid var(--accent-fg);
@@ -952,10 +952,10 @@
   }
 
   .MenuRow:global(.DragOverTop):before {
-    border-top: 0.2rem solid var(--accent-fg);
+    border-top: 0.15rem solid var(--accent-fg);
     position: absolute;
     content: "";
-    height: 2rem;
+    height: 1.5rem;
     padding: 0;
     width: 100%;
     box-sizing: border-box;
@@ -964,10 +964,10 @@
   }
 
   .MenuRow:global(.DragOverBottom):before {
-    border-bottom: 0.2rem solid var(--accent-fg);
+    border-bottom: 0.15rem solid var(--accent-fg);
     position: absolute;
     content: "";
-    height: 2rem;
+    height: 1.5rem;
     padding: 0;
     width: 100%;
     box-sizing: border-box;
@@ -980,7 +980,7 @@
     align-items: center;
     gap: var(--sp2);
     padding: 0 var(--sp2) var(--sp2) var(--sp4);
-    min-height: 1.75rem;
+    min-height: 1.3125rem;
   }
   .WorkspaceName {
     flex: 1 1 auto;
@@ -1013,7 +1013,7 @@
   }
   .WorkspaceIconBtn {
     justify-content: center;
-    /* 1.75rem は html が 75% なので実寸 21px。SC 2.5.8 の 24px を割る。 */
+    /* 1.3125rem は html が 75% なので実寸 21px。SC 2.5.8 の 24px を割る。 */
     width: var(--tap-min);
     height: var(--tap-min);
     padding: 0;
@@ -1021,7 +1021,7 @@
   .WorkspaceManageBtn {
     gap: var(--sp1);
     min-height: var(--tap-min);
-    padding: 0.2rem var(--sp2);
+    padding: 0.15rem var(--sp2);
   }
   .WorkspaceIconBtn:hover,
   .WorkspaceManageBtn:hover {
@@ -1030,8 +1030,8 @@
   }
   .WorkspaceIconBtn svg,
   .WorkspaceManageBtn svg {
-    width: 0.9rem;
-    height: 0.9rem;
+    width: 0.675rem;
+    height: 0.675rem;
     flex-shrink: 0;
   }
   .WorkspaceOpenError {

@@ -297,8 +297,8 @@
     border-bottom: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 12%, transparent);
   }
   .HeaderIcon {
-    width: 1.3rem;
-    height: 1.3rem;
+    width: 0.975rem;
+    height: 0.975rem;
     color: var(--theme-color-Primary-main);
     flex-shrink: 0;
   }
@@ -307,10 +307,10 @@
     background: transparent;
     border: none;
     color: color-mix(in srgb, var(--theme-color-Sub-main) 70%, transparent);
-    font-size: 1.05rem;
+    font-size: 0.7875rem;
     cursor: pointer;
     line-height: 1;
-    padding: 0.2rem var(--sp2);
+    padding: 0.15rem var(--sp2);
     border-radius: var(--shape-xs);
   }
   .CloseBtn:hover {
@@ -347,7 +347,7 @@
     width: 100%;
     border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 18%, transparent);
     border-radius: var(--shape-xs);
-    padding: 0.35rem var(--sp2);
+    padding: 0.2625rem var(--sp2);
     background-color: var(--theme-color-Main-light);
     color: var(--theme-color-Sub-main);
     font-size: var(--font-body-sm);
@@ -362,7 +362,7 @@
     width: 100%;
     border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 18%, transparent);
     border-radius: var(--shape-xs);
-    padding: 0.35rem var(--sp2);
+    padding: 0.2625rem var(--sp2);
     background-color: var(--theme-color-Main-light);
     color: var(--theme-color-Sub-main);
     font-size: var(--font-body-sm);
@@ -374,7 +374,7 @@
   }
   .PickerBody {
     flex: 1 1 auto;
-    min-height: 12rem;
+    min-height: 9rem;
     overflow-y: auto;
     border-top: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 12%, transparent);
     border-bottom: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 12%, transparent);
@@ -436,7 +436,7 @@
   .ConfirmBtn {
     border: none;
     border-radius: var(--shape-xs);
-    padding: 0.4rem var(--sp3);
+    padding: 0.3rem var(--sp3);
     font-size: var(--font-body-sm);
     cursor: pointer;
   }

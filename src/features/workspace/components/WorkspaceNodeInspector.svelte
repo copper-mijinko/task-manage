@@ -218,48 +218,48 @@
 <style>
   .inspector {
     border-left: 1px solid var(--theme-color-Sub-dark);
-    padding: 1rem;
+    padding: 0.75rem;
     overflow: auto;
     background: var(--theme-color-Main-main);
   }
   .title {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.375rem;
   }
   .title h2 {
     margin: 0;
-    font-size: 1.1rem;
+    font-size: 0.825rem;
   }
   .title span,
   fieldset p {
-    font-size: 0.7rem;
+    font-size: 0.525rem;
     color: var(--theme-color-Sub-main);
   }
   label {
     display: flex;
     flex-direction: column;
-    gap: 0.25rem;
-    margin: 0.6rem 0;
-    font-size: 0.78rem;
+    gap: 0.1875rem;
+    margin: 0.45rem 0;
+    font-size: 0.585rem;
   }
   input,
   select {
     box-sizing: border-box;
     width: 100%;
-    min-height: 2rem;
+    min-height: 1.5rem;
     border: 1px solid var(--theme-color-Sub-dark);
     border-radius: var(--shape-sm);
     background: var(--theme-color-Main-light);
     color: var(--theme-color-Sub-light);
-    padding: 0.35rem;
+    padding: 0.2625rem;
   }
   button {
     border: 1px solid var(--theme-color-Sub-dark);
     border-radius: var(--shape-sm);
     background: var(--theme-color-Main-light);
     color: inherit;
-    padding: 0.4rem 0.55rem;
+    padding: 0.3rem 0.4125rem;
   }
   button:disabled {
     opacity: 0.4;
@@ -269,7 +269,7 @@
   .danger,
   .attachment {
     display: flex;
-    gap: 0.4rem;
+    gap: 0.3rem;
   }
   .dates > * {
     flex: 1;
@@ -278,21 +278,21 @@
     flex-wrap: wrap;
   }
   fieldset {
-    margin: 0.8rem 0;
-    padding: 0.55rem;
+    margin: 0.6rem 0;
+    padding: 0.4125rem;
     border: 1px solid var(--theme-color-Sub-dark);
     border-radius: var(--shape-sm);
   }
   .attachment {
-    margin-top: 0.35rem;
+    margin-top: 0.2625rem;
   }
   .attachment button:first-child {
     flex: 1;
     text-align: left;
   }
   .memo {
-    height: 18rem;
+    height: 13.5rem;
     border-top: 1px solid var(--theme-color-Sub-dark);
-    padding-top: 0.6rem;
+    padding-top: 0.45rem;
   }
 </style>

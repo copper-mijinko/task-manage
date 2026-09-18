@@ -42,7 +42,7 @@
         : `${selected.length} selected.`);
 
   $: listStyle = anchorRect
-    ? `top: ${anchorRect.bottom + 2}px; left: ${anchorRect.left}px; min-width: max(${anchorRect.width}px, 14rem);`
+    ? `top: ${anchorRect.bottom + 2}px; left: ${anchorRect.left}px; min-width: max(${anchorRect.width}px, 10.5rem);`
     : "";
 
   function updateSelected() {
@@ -116,7 +116,7 @@
       </div>
       {#if selected.length > 0}
         <IconButton
-          style={"margin: 0rem; padding: var(--sp1); margin-left: auto; width: 1.5rem; height: 1.5rem; flex-shrink: 0;"}
+          style={"margin: 0rem; padding: var(--sp1); margin-left: auto; width: 1.125rem; height: 1.125rem; flex-shrink: 0;"}
           ariaLabel="Clear filter selection"
           on:click={(e) => {
             expanded = false;
@@ -194,7 +194,7 @@
   }
   .container {
     width: 100%;
-    height: 2rem;
+    height: 1.5rem;
     box-sizing: border-box;
     padding: 0;
     margin: 0;
@@ -206,8 +206,8 @@
   .svgContainer {
     margin: 0;
     padding: var(--sp1);
-    width: 1.5rem;
-    height: 1.5rem;
+    width: 1.125rem;
+    height: 1.125rem;
     flex-shrink: 0;
   }
   .selectContainer {
@@ -246,8 +246,8 @@
     background-color: color-mix(in srgb, var(--theme-color-Primary-main) 12%, transparent);
   }
   .elmContainer input[type="checkbox"] {
-    width: 0.9rem;
-    height: 0.9rem;
+    width: 0.675rem;
+    height: 0.675rem;
     margin: 0;
     flex-shrink: 0;
     accent-color: var(--theme-color-Primary-main);

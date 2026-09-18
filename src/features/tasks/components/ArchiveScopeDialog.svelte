@@ -25,7 +25,7 @@
 <Modal
   show={Boolean(target)}
   toggle={() => dispatch("cancel")}
-  width="34rem"
+  width="25.5rem"
   height="auto"
   label="アーカイブの範囲を選択"
 >

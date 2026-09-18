@@ -112,7 +112,7 @@
 
   $: isDark = $theme === "dark";
   const detailDateStyle =
-    "border: 0; padding: 0 var(--sp7) 0 var(--sp2); font-size: 1rem; background-color: transparent;";
+    "border: 0; padding: 0 var(--sp7) 0 var(--sp2); font-size: 0.75rem; background-color: transparent;";
   const statusLabels = {
     Open: "未着手",
     Pending: "保留",
@@ -589,7 +589,7 @@
           activeColor="var(--accent-fg)"
           ariaLabel={editingProperties ? "編集終了" : "編集"}
           tooltipContent={editingProperties ? "編集終了" : "編集"}
-          style="margin:0; width:2.25rem; height:2.25rem;"
+          style="margin:0; width:1.6875rem; height:1.6875rem;"
           disabled={isArchived}
           on:click={async () => {
             if ((await memoEditor?.flush()) === false) return;
@@ -616,7 +616,7 @@
           aria-haspopup="menu"
           aria-expanded={detailMenu}
           data-task-menu-trigger
-          style="margin:0; width:2.25rem; height:2.25rem;"
+          style="margin:0; width:1.6875rem; height:1.6875rem;"
           on:click={toggleDetailMenu}
           ><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"
             ><circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle
@@ -798,7 +798,7 @@
                     variant="text"
                     normalColor="var(--fg-default)"
                     activeColor="var(--accent-fg)"
-                    style="margin:0; width:2rem; height:2rem;"
+                    style="margin:0; width:1.5rem; height:1.5rem;"
                     ariaLabel={(nodeNameById[parentId] || parentId) + "の所属操作"}
                     disabled={isArchived ||
                       currentParentIds.length < 2 ||
@@ -904,7 +904,7 @@
               ariaLabel="今すぐ保存"
               tooltipContent="今すぐ保存"
               disabled={isArchived || bodyLoading}
-              style="margin:0; width:2rem; height:2rem;"
+              style="margin:0; width:1.5rem; height:1.5rem;"
               on:click={() => memoEditor?.flush()}
               ><svg
                 viewBox="0 0 24 24"
@@ -979,7 +979,7 @@
 {#if relationAction && node}
   <Modal
     label={relationAction === "copy" ? "ノードをコピー" : "配置を変更"}
-    width="30rem"
+    width="22.5rem"
     height="auto"
     toggle={() => {
       if (!relationBusy) relationAction = "";
@@ -1190,8 +1190,8 @@
     text-align: center;
   }
   .empty-state-icon {
-    width: 2.25rem;
-    height: 2.25rem;
+    width: 1.6875rem;
+    height: 1.6875rem;
     color: color-mix(in srgb, var(--theme-color-Primary-main) 75%, transparent);
   }
   .empty-state-title {
@@ -1202,7 +1202,7 @@
   }
   .empty-state-hint {
     margin: 0;
-    max-width: 22rem;
+    max-width: 16.5rem;
     font-size: var(--font-body-sm);
     line-height: 1.5;
   }
@@ -1261,9 +1261,9 @@
     line-height: 1.5;
   }
   .archived-banner svg {
-    flex: 0 0 1.15rem;
-    width: 1.15rem;
-    height: 1.15rem;
+    flex: 0 0 0.8625rem;
+    width: 0.8625rem;
+    height: 0.8625rem;
   }
   .detail-fields {
     display: grid;
@@ -1273,13 +1273,13 @@
     flex: 0 0 auto;
     min-width: 0;
     /* タグ欄は枠を TagField 自身が描くので、他項目の .detail-control と
-       同じ高さになるよう寸法を渡す。渡さないと 1.75rem の既定値のままで、
+       同じ高さになるよう寸法を渡す。渡さないと 1.3125rem の既定値のままで、
        1 行だけ背の低い入力欄が混ざる。 */
     --detail-control-height: var(--tree-row-height);
   }
   .detail-field {
     display: grid;
-    grid-template-columns: 6rem minmax(0, 1fr);
+    grid-template-columns: 4.5rem minmax(0, 1fr);
     align-items: start;
     gap: var(--sp2);
     min-width: 0;
@@ -1293,7 +1293,7 @@
   /* 中身は短い語が 1〜2 個。他項目と同じだけ横に伸ばすと、空のときに
      幅いっぱいの空箱が出るので上限を切って左に寄せる。 */
   .detail-field-wide :global(.tag-field) {
-    max-width: 22rem;
+    max-width: 16.5rem;
   }
   /* 枠の見え方も .detail-control に合わせる（角丸だけ別値だった）。 */
   .detail-field-wide :global(.tag-chips) {
@@ -1362,14 +1362,14 @@
     box-sizing: border-box;
   }
   .detail-control :global(.StatusContainer svg) {
-    flex: 0 0 1.1rem;
-    width: 1.1rem;
+    flex: 0 0 0.825rem;
+    width: 0.825rem;
   }
   .detail-control :global(.select select) {
-    font-size: 1rem;
+    font-size: 0.75rem;
   }
   .detail-control :global(.Date) {
-    font-size: 1rem;
+    font-size: 0.75rem;
   }
   .body-container {
     display: flex;
@@ -1411,7 +1411,7 @@
     min-width: 0;
     min-height: 0;
   }
-  @container (max-width: 28rem) {
+  @container (max-width: 21rem) {
     .detail-fields {
       grid-template-columns: 1fr;
     }

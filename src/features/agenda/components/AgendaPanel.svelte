@@ -267,9 +267,9 @@
   }
 
   .AgendaSearch {
-    flex: 1 1 12rem;
-    min-width: 8rem;
-    height: 1.75rem;
+    flex: 1 1 9rem;
+    min-width: 6rem;
+    height: 1.3125rem;
     padding: 0 var(--sp2);
     border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 30%, transparent);
     border-radius: var(--shape-xs);
@@ -360,8 +360,8 @@
 
   .StatusDot {
     flex: 0 0 auto;
-    width: 0.5rem;
-    height: 0.5rem;
+    width: 0.375rem;
+    height: 0.375rem;
     border-radius: 50%;
     background-color: var(--dot-color);
   }
@@ -451,13 +451,13 @@
 
   .EmptyState p {
     margin: 0;
-    max-width: 28rem;
+    max-width: 21rem;
     font-size: var(--font-body-sm);
   }
 
   .EmptyIcon {
-    width: 2.5rem;
-    height: 2.5rem;
+    width: 1.875rem;
+    height: 1.875rem;
     fill: none;
     stroke: color-mix(in srgb, var(--theme-color-Primary-main) 75%, transparent);
     stroke-width: 1.5;

@@ -846,7 +846,7 @@
     border: none;
     color: #fff;
     cursor: pointer;
-    font-size: 1rem;
+    font-size: 0.75rem;
     line-height: 1;
     padding: 0 var(--sp1);
   }
@@ -1024,7 +1024,7 @@
   .wrapper :global(.ql-editor table td) {
     border: 1px solid var(--theme-color-Sub-dark);
     padding: 0.3em 0.6em;
-    min-width: 2.5rem;
+    min-width: 1.875rem;
     vertical-align: top;
     white-space: break-spaces;
     word-wrap: break-word;

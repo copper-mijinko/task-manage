@@ -16,7 +16,7 @@
       use_ripple={false}
       activeColor={"transparent"}
       normalColor={"transparent"}
-      style={"box-shadow: none; width: 3rem; height: 3rem;"}
+      style={"box-shadow: none; width: 2.25rem; height: 2.25rem;"}
     >
       <svg fill="white" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"
         ><path
@@ -70,6 +70,6 @@
     background-color: var(--theme-color-Theme-main);
   }
   .Container.Shown {
-    width: 18rem;
+    width: 13.5rem;
   }
 </style>

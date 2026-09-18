@@ -68,8 +68,8 @@
   /* Arrow */
   .select svg {
     position: absolute;
-    width: 1rem;
-    height: 1rem;
+    width: 0.75rem;
+    height: 0.75rem;
     top: 50%;
     right: var(--sp2);
     transition: 0.2s fill ease;

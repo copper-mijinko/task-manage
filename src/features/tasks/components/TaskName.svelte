@@ -330,7 +330,7 @@
 
   const getMenuPosition = (x, y) => {
     const viewportWidth = window.innerWidth;
-    const menuWidth = 224; // 14rem at 16px base font, matches actual CSS min-width
+    const menuWidth = 224; // 10.5rem at 16px base font, matches actual CSS min-width
 
     if (x + menuWidth > viewportWidth) {
       return {
@@ -578,8 +578,8 @@
     pointer-events: none;
   }
   button {
-    width: 1.75rem;
-    height: 1.75rem;
+    width: 1.3125rem;
+    height: 1.3125rem;
     flex: 0 0 auto;
     display: flex;
     justify-content: center;
@@ -601,8 +601,8 @@
     outline-offset: 2px;
   }
   button svg {
-    width: 1.15rem;
-    height: 1.15rem;
+    width: 0.8625rem;
+    height: 0.8625rem;
     fill: currentColor;
   }
   .menu-button {
@@ -614,8 +614,8 @@
     justify-content: center;
   }
   .menu-button svg {
-    width: 1.25rem;
-    height: 1.25rem;
+    width: 0.9375rem;
+    height: 0.9375rem;
   }
 
   :global(#task-menu) {

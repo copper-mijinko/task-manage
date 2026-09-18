@@ -19,7 +19,7 @@
   let fcolor = "gray";
   let bgcolor = "gray";
   let bdcolor = "gray";
-  let shadow = "0 .2rem .5rem rgba(0,0,0,0.25), 0 .1em .25rem rgba(0,0,0,0);";
+  let shadow = "0 0.15rem 0.375rem rgba(0,0,0,0.25), 0 .1em 0.1875rem rgba(0,0,0,0);";
 
   /**
    * 無効時の色。以前は文字も背景も同じ "gray" で、ラベルが背景に溶けて
@@ -37,7 +37,9 @@
     fcolor = disabled ? DISABLED_FG : "var(--theme-color-Main-light)";
     bgcolor = disabled ? DISABLED_BG : normalColor;
     bdcolor = disabled ? DISABLED_BD : "none";
-    shadow = disabled ? "none" : "0 .2rem .5rem rgba(0,0,0,0.25), 0 .1em .25rem rgba(0,0,0,0);";
+    shadow = disabled
+      ? "none"
+      : "0 0.15rem 0.375rem rgba(0,0,0,0.25), 0 .1em 0.1875rem rgba(0,0,0,0);";
 
     if (!disabled) {
       switch (variant) {
@@ -92,8 +94,8 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    height: 2rem;
-    min-height: 2rem;
+    height: 1.5rem;
+    min-height: 1.5rem;
     border-radius: var(--shape-pill);
     border: 1px solid var(--borderColor);
     margin: var(--button-margin, 0);

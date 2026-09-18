@@ -323,7 +323,7 @@
       separatorLabel="Inbox一覧と詳細の幅を変更"
       persistenceKey="layout.inbox.list-detail"
     >
-      <Pane style="min-width: 14rem;">
+      <Pane style="min-width: 10.5rem;">
         <Card title="Inbox" padded={false} style="height: 100%; width: 100%;">
           <span slot="header-actions" class="ItemCount">{items.length}件</span>
 
@@ -515,7 +515,7 @@
         </Card>
       </Pane>
 
-      <Pane style="min-width: 14rem;">
+      <Pane style="min-width: 10.5rem;">
         <InboxDetailPanel item={activeItem} />
       </Pane>
     </SplitPanes>
@@ -577,7 +577,7 @@
     display: inline-flex;
     align-items: center;
     gap: var(--sp1);
-    padding: 0.3rem var(--sp3);
+    padding: 0.225rem var(--sp3);
     border: 1px solid var(--theme-color-Theme-main);
     border-radius: var(--shape-xs);
     background-color: var(--theme-color-Theme-main);
@@ -595,11 +595,11 @@
     outline-offset: 2px;
   }
   .AddBtn svg {
-    width: 1rem;
-    height: 1rem;
+    width: 0.75rem;
+    height: 0.75rem;
   }
   .InboxEmptyState {
-    max-width: 34rem;
+    max-width: 25.5rem;
     width: 100%;
     align-self: center;
     margin: auto;
@@ -610,8 +610,8 @@
     font-size: var(--font-title-lg);
   }
   .EmptyInboxIcon {
-    width: 3rem;
-    height: 3rem;
+    width: 2.25rem;
+    height: 2.25rem;
     fill: none;
     stroke: color-mix(in srgb, var(--theme-color-Primary-main) 75%, transparent);
     stroke-width: 1.4;
@@ -620,7 +620,7 @@
   }
   .EmptyAddBtn {
     margin-top: var(--sp3);
-    padding: 0.45rem var(--sp4);
+    padding: 0.3375rem var(--sp4);
     font-size: var(--font-body-md);
   }
   .ShortcutHint {
@@ -632,7 +632,7 @@
     display: inline-flex;
     align-items: center;
     gap: var(--sp1);
-    padding: 0.3rem var(--sp3);
+    padding: 0.225rem var(--sp3);
     border: 1px solid color-mix(in srgb, var(--theme-color-Primary-main) 40%, transparent);
     border-radius: var(--shape-xs);
     background-color: color-mix(in srgb, var(--theme-color-Primary-main) 8%, transparent);
@@ -642,8 +642,8 @@
     cursor: pointer;
   }
   .SendBtn svg {
-    width: 1rem;
-    height: 1rem;
+    width: 0.75rem;
+    height: 0.75rem;
   }
   .send-error-toast {
     position: fixed;
@@ -675,31 +675,31 @@
     color: var(--theme-color-Primary-text);
     font-size: var(--font-label-md);
     cursor: pointer;
-    padding: 0.2rem var(--sp1);
+    padding: 0.15rem var(--sp1);
   }
   .LinkBtn:disabled {
     color: color-mix(in srgb, var(--theme-color-Sub-main) 45%, transparent);
     cursor: not-allowed;
   }
   .SelectionTools {
-    min-height: 1.8rem;
+    min-height: 1.35rem;
   }
   .FilterBox {
     display: inline-flex;
     align-items: center;
     gap: var(--sp1);
-    flex: 1 1 12rem;
-    max-width: 24rem;
-    min-width: 8rem;
+    flex: 1 1 9rem;
+    max-width: 18rem;
+    min-width: 6rem;
     margin-left: auto;
-    padding: 0.2rem var(--sp2);
+    padding: 0.15rem var(--sp2);
     border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 18%, transparent);
     border-radius: var(--shape-xs);
     background-color: var(--theme-color-Main-light);
   }
   .FilterIcon {
-    width: 0.9rem;
-    height: 0.9rem;
+    width: 0.675rem;
+    height: 0.675rem;
     fill: none;
     stroke: currentColor;
     stroke-width: 2;
@@ -751,9 +751,9 @@
     background-color: color-mix(in srgb, var(--theme-color-Sub-main) 12%, transparent);
     border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 25%, transparent);
     border-radius: var(--shape-xs);
-    padding: 0 0.3rem;
+    padding: 0 0.225rem;
     font-family: "Consolas", "Courier New", monospace;
-    font-size: 0.8rem;
+    font-size: 0.6rem;
   }
   .ItemList {
     list-style: none;
@@ -765,7 +765,7 @@
   }
   .ItemRow {
     display: grid;
-    grid-template-columns: 1.25rem 1.25rem minmax(4rem, 1fr) 5.75rem 9rem 3rem;
+    grid-template-columns: 0.9375rem 0.9375rem minmax(3rem, 1fr) 4.3125rem 6.75rem 2.25rem;
     align-items: center;
     gap: var(--sp2);
     padding: var(--sp2) var(--sp2) var(--sp2) var(--sp1);
@@ -823,7 +823,7 @@
   }
   .DragHandle {
     color: color-mix(in srgb, var(--theme-color-Sub-main) 40%, transparent);
-    font-size: 0.8rem;
+    font-size: 0.6rem;
     user-select: none;
     cursor: grab;
     text-align: center;
@@ -844,7 +844,7 @@
     background-color: transparent;
     color: var(--theme-color-Sub-main);
     font-size: var(--font-body-md);
-    padding: 0.2rem var(--sp1);
+    padding: 0.15rem var(--sp1);
     border-radius: var(--shape-xs);
   }
   .NameInput:hover {
@@ -857,18 +857,18 @@
   .StatusCell {
     display: inline-flex;
     align-items: center;
-    width: 5.75rem;
+    width: 4.3125rem;
     min-width: 0;
   }
   .DueCell {
     display: inline-flex;
     align-items: center;
-    width: 9rem;
-    min-width: 9rem;
+    width: 6.75rem;
+    min-width: 6.75rem;
   }
   .MemoBadge {
     display: inline-block;
-    width: 3rem;
+    width: 2.25rem;
     box-sizing: border-box;
     color: color-mix(in srgb, var(--theme-color-Sub-main) 70%, transparent);
     font-size: var(--font-label-sm);
@@ -886,27 +886,27 @@
   /* The Inbox pane is resizable independently from the window. Keep the
      editable name and selection controls visible, and progressively move
      secondary metadata to the detail pane instead of clipping row content. */
-  @container (max-width: 28rem) {
+  @container (max-width: 21rem) {
     .ItemRow {
-      grid-template-columns: 1.25rem 1.25rem minmax(4rem, 1fr) 5.75rem 9rem;
+      grid-template-columns: 0.9375rem 0.9375rem minmax(3rem, 1fr) 4.3125rem 6.75rem;
     }
     .MemoBadge {
       display: none;
     }
   }
 
-  @container (max-width: 21rem) {
+  @container (max-width: 15.75rem) {
     .ItemRow {
-      grid-template-columns: 1.25rem 1.25rem minmax(4rem, 1fr) 5.75rem;
+      grid-template-columns: 0.9375rem 0.9375rem minmax(3rem, 1fr) 4.3125rem;
     }
     .DueCell {
       display: none;
     }
   }
 
-  @container (max-width: 15rem) {
+  @container (max-width: 11.25rem) {
     .ItemRow {
-      grid-template-columns: 1.25rem 1.25rem minmax(4rem, 1fr);
+      grid-template-columns: 0.9375rem 0.9375rem minmax(3rem, 1fr);
     }
     .StatusCell {
       display: none;

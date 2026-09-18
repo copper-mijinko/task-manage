@@ -97,9 +97,9 @@
     z-index: 99999999;
     background: var(--theme-color-Main-main);
     border-radius: var(--shape-sm);
-    box-shadow: 0 0.2rem 0.5rem rgba(0, 0, 0, 0.25);
+    box-shadow: 0 0.15rem 0.375rem rgba(0, 0, 0, 0.25);
     padding: 4px 0;
-    min-width: 14rem;
+    min-width: 10.5rem;
     color: var(--theme-color-Sub-light);
   }
   .PanelTitle {
@@ -118,7 +118,7 @@
     font-size: var(--font-body-sm);
   }
   .DateRow label {
-    width: 2.5rem;
+    width: 1.875rem;
     flex-shrink: 0;
     user-select: none;
   }
@@ -128,7 +128,7 @@
     color: var(--theme-color-Sub-light);
     border: 1px solid var(--theme-color-Sub-dark);
     border-radius: var(--shape-xs);
-    padding: 0.2rem var(--sp1);
+    padding: 0.15rem var(--sp1);
     font-size: var(--font-label-md);
     color-scheme: var(--color-scheme, dark);
     box-sizing: border-box;

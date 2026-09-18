@@ -238,23 +238,23 @@
   header {
     display: flex;
     align-items: center;
-    gap: 0.45rem;
-    padding: 0.8rem 1rem;
+    gap: 0.3375rem;
+    padding: 0.6rem 0.75rem;
     border-bottom: 1px solid var(--theme-color-Sub-dark);
     background: var(--theme-color-Main-main);
   }
   header h1 {
     margin: 0;
-    font-size: 1.15rem;
+    font-size: 0.8625rem;
   }
   header p {
-    margin: 0.15rem 1rem 0 0;
+    margin: 0.1125rem 0.75rem 0 0;
     color: var(--theme-color-Sub-main);
-    font-size: 0.75rem;
+    font-size: 0.5625rem;
   }
   nav {
     display: flex;
-    gap: 0.2rem;
+    gap: 0.15rem;
     margin-left: auto;
   }
   button {
@@ -262,7 +262,7 @@
     border-radius: var(--shape-sm);
     background: var(--theme-color-Main-light);
     color: inherit;
-    padding: 0.4rem 0.6rem;
+    padding: 0.3rem 0.45rem;
   }
   button.active {
     background: var(--theme-color-Primary-main);
@@ -271,25 +271,25 @@
   .archived {
     display: flex;
     align-items: center;
-    gap: 0.3rem;
-    font-size: 0.75rem;
+    gap: 0.225rem;
+    font-size: 0.5625rem;
     white-space: nowrap;
   }
   .body {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 21rem;
+    grid-template-columns: minmax(0, 1fr) 15.75rem;
     flex: 1;
     min-height: 0;
   }
   .canvas {
     min-width: 0;
     overflow: auto;
-    padding: 1rem;
+    padding: 0.75rem;
   }
   .alert,
   .status {
-    padding: 0.4rem 1rem;
-    font-size: 0.8rem;
+    padding: 0.3rem 0.75rem;
+    font-size: 0.6rem;
   }
   .alert {
     color: var(--theme-color-Error-main);
@@ -298,7 +298,7 @@
     color: var(--theme-color-Success-main);
   }
   .empty {
-    padding: 3rem;
+    padding: 2.25rem;
     text-align: center;
     color: var(--theme-color-Sub-main);
   }

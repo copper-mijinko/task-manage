@@ -257,8 +257,8 @@
 
   .search-box-container {
     position: fixed;
-    top: 4rem;
-    right: 1rem;
+    top: 3rem;
+    right: 0.75rem;
     z-index: 9999;
     box-shadow: var(--elevation-2);
     border-radius: var(--shape-xs);
@@ -276,7 +276,7 @@
   .search-input-container {
     display: flex;
     min-width: 250px;
-    height: 2rem;
+    height: 1.5rem;
   }
 
   input {

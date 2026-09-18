@@ -166,7 +166,7 @@
       ariaLabel="コピー"
       tooltipContent="クリップボードへコピー（右クリック→Ctrl+V でペースト）"
       on:click={() => dispatch("bulkCopy")}
-      style="margin: 0; width: 2rem; height: 2rem; box-shadow: none;"
+      style="margin: 0; width: 1.5rem; height: 1.5rem; box-shadow: none;"
     >
       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path
@@ -181,7 +181,7 @@
       ariaLabel="選択を解除"
       tooltipContent="選択を解除"
       on:click={() => dispatch("clearSelection")}
-      style="margin: 0; width: 2rem; height: 2rem; box-shadow: none;"
+      style="margin: 0; width: 1.5rem; height: 1.5rem; box-shadow: none;"
     >
       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path
@@ -274,7 +274,7 @@
   }
   .Divider {
     width: 1px;
-    height: 1.5rem;
+    height: 1.125rem;
     background-color: color-mix(in srgb, var(--theme-color-Sub-main) 24%, transparent);
     flex-shrink: 0;
   }
@@ -305,8 +305,8 @@
     outline-offset: 2px;
   }
   .Caret {
-    width: 0.75rem;
-    height: 0.75rem;
+    width: 0.5625rem;
+    height: 0.5625rem;
     opacity: 0.7;
   }
   .StatusPopup {
@@ -320,7 +320,7 @@
     background-color: var(--theme-color-Main-main);
     box-shadow: var(--elevation-3);
     color: var(--theme-color-Sub-main);
-    min-width: 10rem;
+    min-width: 7.5rem;
   }
   .StatusOption {
     margin: 0;

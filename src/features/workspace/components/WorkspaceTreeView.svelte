@@ -76,7 +76,7 @@
 
 <style>
   .tree {
-    max-width: 52rem;
+    max-width: 39rem;
   }
   .row {
     display: flex;
@@ -94,10 +94,10 @@
     border: 0;
     background: transparent;
     color: inherit;
-    min-height: 2.25rem;
+    min-height: 1.6875rem;
   }
   .twisty {
-    width: 2rem;
+    width: 1.5rem;
     padding: 0;
   }
   .label {
@@ -106,7 +106,7 @@
     cursor: pointer;
   }
   .label small {
-    margin-left: 0.7rem;
+    margin-left: 0.525rem;
     color: var(--theme-color-Sub-main);
   }
 </style>

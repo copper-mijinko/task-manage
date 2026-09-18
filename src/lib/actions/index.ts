@@ -177,15 +177,15 @@ export function tooltip(
       border: none;
       color: ${getFg()};
       background-color: ${getBg()};
-      box-shadow: 0 .2rem .5rem rgba(0,0,0,0.25), 0 .1em .25rem rgba(0,0,0,0);
-      border-radius: 0.5rem;
-      padding: 0.5rem;
+      box-shadow: 0 0.15rem 0.375rem rgba(0,0,0,0.25), 0 .1em 0.1875rem rgba(0,0,0,0);
+      border-radius: 0.375rem;
+      padding: 0.375rem;
       position: fixed;
       /* 画面右端のボタンだと、カーソル右に置いた吹き出しに残り幅が数 px しか
          なく、1 文字ずつ縦に折り返して読めなくなっていた。折り返さずに、
          入らないときはカーソルの左側へ回す。 */
       white-space: nowrap;
-      max-width: calc(100vw - 1rem);
+      max-width: calc(100vw - 0.75rem);
       top: 0;
       left: 0;
       pointer-events: none;
