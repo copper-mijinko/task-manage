@@ -1,5 +1,6 @@
 <script>
   import { getContext } from "svelte";
+  import { dismissAllTooltips } from "@lib/actions";
   import { TREEGRID_APPLICATION } from "@features/workspace/application/treegrid";
   const application = getContext(TREEGRID_APPLICATION);
   const closed_row_paths = application?.closed ?? legacy_closed_row_paths;
@@ -822,6 +823,7 @@
 
   function openOverflowMenu(e) {
     e.stopPropagation();
+    dismissAllTooltips();
     if (showOverflowMenu) {
       showOverflowMenu = false;
       return;
@@ -918,14 +920,15 @@
                     : "タスク追加"}
                   ariaLabel="タスク追加"
                   disabled={anchorIsArchived}
-                  activeColor={"var(--theme-color-Primary-dark)"}
-                  normalColor={"var(--theme-color-Primary-main)"}
+                  variant="text"
+                  activeColor={"var(--theme-color-Primary-main)"}
+                  normalColor={"var(--theme-color-Sub-main)"}
                   on:click={(e) => handleAdd(e, "insert_after")}
                 >
                   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
                     ><path
                       d="M12 5V19M5 12H19"
-                      stroke="var(--theme-color-Main-main)"
+                      stroke="currentColor"
                       stroke-width="2"
                       stroke-linecap="round"
                       stroke-linejoin="round"
@@ -938,9 +941,9 @@
                     : "子タスク追加"}
                   ariaLabel="子タスク追加"
                   disabled={anchorIsArchived}
-                  variant="outlined"
+                  variant="text"
                   activeColor={"var(--theme-color-Primary-main)"}
-                  normalColor={"var(--theme-color-Primary-main)"}
+                  normalColor={"var(--theme-color-Sub-main)"}
                   on:click={(e) => handleAdd(e, "append")}
                 >
                   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -965,6 +968,12 @@
                     />
                   </svg>
                 </IconButton>
+              </div>
+              <span class="TbSep" aria-hidden="true"></span>
+
+              <!-- Destructive actions live in their own group: archive / delete
+                   (and restore) must never sit flush against "add". -->
+              <div class="TbGroup">
                 <IconButton
                   tooltipContent={!hasRemoveTarget
                     ? "アーカイブするタスクを選択してください"
@@ -1303,9 +1312,9 @@
                         height="16"
                         rx="2"
                         stroke="currentColor"
-                        stroke-width="1.8"
+                        stroke-width="2"
                       />
-                      <path d="M15 4V20" stroke="currentColor" stroke-width="1.8" />
+                      <path d="M15 4V20" stroke="currentColor" stroke-width="2" />
                     </svg>
                   </IconButton>
                   <IconButton
@@ -1325,7 +1334,7 @@
                       <path
                         d="M3 7h18v3H3V7zM5 10v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-9M10 14h4"
                         stroke="currentColor"
-                        stroke-width="1.8"
+                        stroke-width="2"
                         stroke-linecap="round"
                         stroke-linejoin="round"
                       />

@@ -229,9 +229,14 @@
   }
   /* ステータス無しは「淡いダッシュ」にして、件数バッジの 0 件表示と流儀を
      揃える。丸を出すと色の無い状態がひとつ増えたようにしか見えない。 */
-  .s-chip[data-status=""] .s-dot,
-  .s-dot-static[data-status=""] {
+  .s-chip[data-status=""] .s-dot {
     display: none;
+  }
+  /* ドロップダウン内では場所だけ残す。display:none にすると「ステータスなし」
+     の行だけ文字の開始位置が左へずれ、いま選んでいる項目が他と揃わなかった。
+     行のチップ側（上の規則）はダッシュ表示なので消したままでよい。 */
+  .s-dot-static[data-status=""] {
+    visibility: hidden;
   }
   .s-chip[data-status=""] .s-label {
     color: color-mix(in srgb, var(--theme-color-Sub-main) 55%, transparent);

@@ -141,8 +141,11 @@
     background-color: color-mix(in srgb, var(--theme-color-Primary-main) 10%, transparent);
   }
   .OptionRow input[type="checkbox"] {
-    width: 0.7125rem;
-    height: 0.7125rem;
+    /* ツリー側のチェックボックスと同じ「本文と同寸」に揃える。ここだけ
+       11px で、同じ部品が 1 画面に 2 サイズ存在していた。
+       当たり判定は行全体 (.OptionRow が label) が持つ。 */
+    width: var(--font-body-md);
+    height: var(--font-body-md);
     margin: 0;
     accent-color: var(--theme-color-Primary-main);
   }

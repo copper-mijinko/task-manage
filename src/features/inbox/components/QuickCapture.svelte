@@ -132,7 +132,7 @@
         bind:this={inputEl}
         bind:value
         on:keydown={handleKeydown}
-        placeholder="思いついたタスクを入力 ... Enterで追加、Shift+Enterで追加して閉じる"
+        placeholder="思いついたタスクを入力"
         class="QuickCaptureInput"
         data-testid="quick-capture-input"
         data-modal-autofocus
@@ -142,13 +142,16 @@
       />
 
       <div class="capture-actions">
+        <!-- 繰り返し使う「追加」(Enter) が主ボタン。「追加して閉じる」
+             (Shift+Enter) は副次。以前は逆で、たまにしか使わないほうが
+             青い主ボタンだった。 -->
         <button
-          class="ui-action"
+          class="ui-action primary"
           disabled={busy || !workspaceReady || !value.trim()}
           on:click={() => handleAdd(false)}>追加</button
         >
         <button
-          class="ui-action primary"
+          class="ui-action"
           disabled={busy || !workspaceReady || !value.trim()}
           on:click={() => handleAdd(true)}>追加して閉じる</button
         >
