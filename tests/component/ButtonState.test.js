@@ -16,7 +16,12 @@ describe("button color reactivity", () => {
       },
     });
 
-    expect(container.querySelector("button").getAttribute("style")).toContain("--fontColor: gray");
+    // 無効時は「文字も背景も gray」でラベルが読めなくなっていたため、
+    // 読める前景色と薄い面に変えた。
+    const disabledStyle = container.querySelector("button").getAttribute("style");
+    expect(disabledStyle).toContain("--fontColor: var(--fg-muted)");
+    expect(disabledStyle).not.toContain("--fontColor: gray");
+    expect(disabledStyle).toContain("--backgroundColor: color-mix(in srgb, var(--fg-muted) 16%");
 
     await rerender({
       content: "rename",
