@@ -11,6 +11,7 @@
   export let style = "";
   export let inheritedDate = "";
   export let ariaLabel = "日付";
+  export let tabIndex = 0;
   export let displayOnly = false;
   let editing = false;
   let input;
@@ -65,6 +66,7 @@
   {#if displayOnly && !editing}
     <button
       class="DateValue"
+      tabindex={tabIndex}
       class:Inherited={isInherited}
       {disabled}
       title={inputTitle}

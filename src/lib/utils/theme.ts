@@ -83,6 +83,14 @@ export const THEME_DARK = {
       light: "#FBA9C7",
       main: "#FF2E63",
       dark: "#DA1E4E",
+      /**
+       * 文字に載せる用。理由は Primary.text / Error.text と同じ。メモ
+       * エディタ (CodeMirror) の背景は `Main-light` で、ダークテーマでは
+       * #394249。`main` (#FF2E63) はその上で 3.87:1 しかなく、強調や
+       * インラインコードの文字として AA (4.5:1) を満たせない。
+       * `light` (#FBA9C7) はこの背景なら 5.66:1 で足りる。
+       */
+      text: "#FBA9C7",
     },
     Theme: {
       light: "#2B52BC",
@@ -175,6 +183,13 @@ export const THEME_LIGHT = {
       light: "#FBA9C7",
       main: "#FF2E63",
       dark: "#DA1E4E",
+      /**
+       * 文字に載せる用。ライトテーマのメモエディタ背景 (`Main-light` =
+       * #F9F9F9) に対して `light` は 1.72:1、`main` は 3.43:1 しかなく、
+       * 強調した文字がいちばん読みにくいという逆転が起きていた。
+       * この値なら 5.66:1 で AA を満たす。
+       */
+      text: "#C2184A",
     },
     Theme: {
       light: "#2B52BC",

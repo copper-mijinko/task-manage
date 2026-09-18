@@ -39,6 +39,18 @@ async function run<T>(fn: () => Promise<T>): Promise<T> {
 
 export const workspace_graph = derived(state, ($state) => $state.graph);
 
+/**
+ * 元に戻す / やり直しが実際に効くか。main プロセスが graph に添えてくる
+ * 履歴の段数から導出する。`history` が来ない経路（古いキャッシュなど）では
+ * 判定できないので、従来どおり有効として扱う。
+ */
+export const can_undo_graph = derived(state, ($state) =>
+  $state.graph?.history ? $state.graph.history.undo > 0 : Boolean($state.graph)
+);
+export const can_redo_graph = derived(state, ($state) =>
+  $state.graph?.history ? $state.graph.history.redo > 0 : Boolean($state.graph)
+);
+
 export const workspace_graph_store = {
   subscribe: state.subscribe,
   async load(workspacePath: string) {

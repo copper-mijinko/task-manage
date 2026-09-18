@@ -24,6 +24,11 @@
   export let nodePath = "";
   /** この行が指すノードの id。作成直後の rename ハンドオフ照合に使う。 */
   export let nodeId = "";
+  /**
+   * この行のコントロールが Tab の停留点になるか。treegrid では「いま操作して
+   * いる行」だけが停留点で、他の行の中身は矢印キーで行を移ってから辿る。
+   */
+  export let cellTabIndex = 0;
   /** When >1, the menu acts on the whole multi-selection (label gets count prefix). */
   export let selectionCount = 1;
   /**
@@ -418,6 +423,7 @@
   <input
     type="text"
     bind:this={input}
+    tabindex={cellTabIndex}
     aria-label={`${text}のタスク名`}
     value={draftText}
     disabled={!isEditing}
@@ -474,6 +480,7 @@
 
   <button
     class="menu-button"
+    tabindex={cellTabIndex}
     aria-label="タスク操作を開く"
     data-task-menu-trigger={menuOwnerId}
     use:ripple={{ duration: 350, color: color }}

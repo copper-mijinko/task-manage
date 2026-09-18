@@ -1,5 +1,10 @@
 import { derived, get, writable } from "svelte/store";
-import { workspace_graph_store, workspace_graph } from "../stores/graph";
+import {
+  workspace_graph_store,
+  workspace_graph,
+  can_undo_graph,
+  can_redo_graph,
+} from "../stores/graph";
 import { createExpansionState } from "./expansion";
 import { projectTreeGrid, nodeChanges } from "./tree_projection";
 import { filter } from "@features/search/stores/search";
@@ -314,6 +319,8 @@ export function createTreeGridApplication(workspacePath) {
     move,
     dispatch,
     closed: closed_row_paths,
+    canUndo: can_undo_graph,
+    canRedo: can_redo_graph,
     dispose: closed_row_paths.dispose,
     workspacePath,
     openDetail: (nodeId, name, path = get(active_row_path)) =>

@@ -60,7 +60,16 @@
     pathLeafId,
   } from "@features/tasks/utils/tree_control";
   import { getDefaultNode } from "@features/tasks/utils/tree_control";
-  import { undoHistory, redoHistory } from "@features/tasks/stores/tree";
+  import {
+    undoHistory,
+    redoHistory,
+    canUndoLegacy,
+    canRedoLegacy,
+  } from "@features/tasks/stores/tree";
+  import {
+    can_undo_graph as canUndoGraph,
+    can_redo_graph as canRedoGraph,
+  } from "@features/workspace/stores/graph";
   import {
     selected_ids,
     clearSelection,
@@ -608,6 +617,17 @@
    * ので、無効化の基準がボタンごとにばらつき、「押せる＝実行できる」という
    * 手がかりが信用できなくなっていた。
    */
+  /**
+   * 元に戻す / やり直しが実際に効くか。
+   *
+   * graph 経路の履歴は main プロセスの `graph-v1.json` にあり、これまで
+   * レンダラーには渡っていなかったため、履歴が空でもボタンが有効なままで、
+   * 押しても何も起きなかった。read / execute / history の戻り値に段数を
+   * 添えるようにしたので、それを見る。legacy 経路は自前のスタックを見る。
+   */
+  $: undoAvailable = application ? $canUndoGraph : $canUndoLegacy;
+  $: redoAvailable = application ? $canRedoGraph : $canRedoLegacy;
+
   $: hasRemoveTarget = isMultiSelect || Boolean($table_selected_id);
   $: removeDisabled = anchorIsRoot || !hasRemoveTarget;
   // 選択中のどこかに archived が含まれているか（restore ボタン表示の判定に使う）
@@ -1149,11 +1169,14 @@
                  also relies on these being the canonical "edit" affordance. -->
               <div class="TbGroup">
                 <IconButton
-                  tooltipContent="元に戻す (Ctrl+Z)"
+                  tooltipContent={undoAvailable
+                    ? "元に戻す (Ctrl+Z)"
+                    : "元に戻せる操作がありません"}
                   ariaLabel="元に戻す"
                   variant="text"
                   normalColor={"var(--theme-color-Sub-main)"}
                   activeColor={"var(--theme-color-Primary-main)"}
+                  disabled={!undoAvailable}
                   on:click={() => (application ? application.history("undo") : undoHistory())}
                 >
                   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1167,11 +1190,14 @@
                   </svg>
                 </IconButton>
                 <IconButton
-                  tooltipContent="やり直し (Ctrl+Y)"
+                  tooltipContent={redoAvailable
+                    ? "やり直し (Ctrl+Y)"
+                    : "やり直せる操作がありません"}
                   ariaLabel="やり直し"
                   variant="text"
                   normalColor={"var(--theme-color-Sub-main)"}
                   activeColor={"var(--theme-color-Primary-main)"}
+                  disabled={!redoAvailable}
                   on:click={() => (application ? application.history("redo") : redoHistory())}
                 >
                   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">

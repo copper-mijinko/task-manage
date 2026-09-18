@@ -26,6 +26,12 @@ export interface WorkspaceGraph {
   revision: number;
   nodes: Record<string, WorkspaceGraphNode>;
   positions?: Record<string, { x: number; y: number }>;
+  /**
+   * 元に戻す / やり直しの残り段数。main プロセスが読み出し経路でだけ添える
+   * 非永続フィールドで、`graph-v1.json` には書かれない。ツールバーの
+   * 「元に戻す」「やり直し」を正しく無効化するために使う。
+   */
+  history?: { undo: number; redo: number };
 }
 
 export type GraphCommandOrigin = "graph" | "tree" | "finder";

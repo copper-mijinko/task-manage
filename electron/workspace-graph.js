@@ -254,8 +254,27 @@ async function readDocument(workspacePath) {
   }
 }
 
+/**
+ * レンダラーへ渡す graph に、永続化しない「元に戻す / やり直しの残り段数」を
+ * 添える。
+ *
+ * 履歴は `graph-v1.json` の `undo` / `redo` 配列にあり、これまでレンダラーには
+ * `graph` しか渡っていなかった。そのためツールバーの「元に戻す」「やり直し」は
+ * 履歴が空でも常に有効で、押しても何も起きなかった。
+ *
+ * `document.graph` 自体には足さない。足すとそのままディスクへ書かれてしまう。
+ * ここで作る浅いコピーは読み出し専用の経路（read / execute / history の戻り値と
+ * ブロードキャスト）にしか流れず、書き戻しには使われない。
+ */
+function withHistoryDepth(document) {
+  return {
+    ...document.graph,
+    history: { undo: document.undo.length, redo: document.redo.length },
+  };
+}
+
 async function readWorkspaceGraph(workspacePath) {
-  return enqueue(workspacePath, async () => (await readDocument(workspacePath)).graph);
+  return enqueue(workspacePath, async () => withHistoryDepth(await readDocument(workspacePath)));
 }
 
 async function mutate(workspacePath, expectedRevision, action) {
@@ -273,7 +292,7 @@ async function mutate(workspacePath, expectedRevision, action) {
     if (document.undo.length > HISTORY_LIMIT) document.undo.shift();
     document.redo = [];
     await atomicWriteJson(graphPath(workspacePath), document);
-    return { ...result, graph: document.graph };
+    return { ...result, graph: withHistoryDepth(document) };
   });
 }
 
@@ -311,14 +330,14 @@ async function changeHistory(workspacePath, direction, expectedRevision) {
       throw new Error("Workspace graph changed");
     const source = direction === "undo" ? document.undo : document.redo;
     const target = direction === "undo" ? document.redo : document.undo;
-    if (!source.length) return { graph: document.graph, changed: false };
+    if (!source.length) return { graph: withHistoryDepth(document), changed: false };
     const restored = source.pop();
     target.push(structuredClone(document.graph));
     restored.revision = document.graph.revision + 1;
     validateGraph(restored);
     document.graph = restored;
     await atomicWriteJson(graphPath(workspacePath), document);
-    return { graph: document.graph, changed: true };
+    return { graph: withHistoryDepth(document), changed: true };
   });
 }
 

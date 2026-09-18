@@ -5,6 +5,7 @@
   export let status = "";
   export let style = "";
   export let disabled = false;
+  export let tabIndex = 0;
   export let ariaLabel = "ステータス";
 
   const dispatch = createEventDispatcher();
@@ -106,6 +107,7 @@
   <button
     type="button"
     class="s-button"
+    tabindex={tabIndex}
     class:s-disabled={disabled}
     style="--status-color: {color_map[status]};"
     aria-label={ariaLabel}
