@@ -59,6 +59,7 @@
   import { sanitizeMarkdownHtml } from "@features/memos/utils/markdown_security";
   import * as platform from "@lib/ipc/platform";
   import { theme } from "@stores/theme";
+  import { saveStatus } from "@stores/ui";
   import "@features/memos/styles/hljs-theme.css";
 
   // Use a component-module parser so remounts and HMR cannot accumulate
@@ -109,6 +110,26 @@
   let markdownMode: MarkdownMemoMode = "preview";
   let hasChanges = false;
   let saveState: "clean" | "dirty" | "saved" | "saving" | "error" = "clean";
+
+  /**
+   * 保存表示はアプリで 1 つにする。
+   *
+   * これまではヘッダーの保存インジケータ（ワークスペースの書き込みしか見て
+   * いない）、メモ自身の保存表示、フロッピー図像の「今すぐ保存」ボタンの
+   * 3 つが同時に画面にあり、しかもヘッダーはメモ編集ではまったく動かなかった。
+   * 「保存されたか」を知りたい利用者にとって、どれを見ればよいか決められない。
+   *
+   * メモの保存状態をヘッダーと同じストアへ流し、メモ側の表示は落とす。
+   */
+  $: saveStatus.set(
+    saveState === "dirty"
+      ? "queued"
+      : saveState === "saving"
+        ? "writing"
+        : saveState === "error"
+          ? "error"
+          : "saved"
+  );
   let saveError = "";
   let pendingSave: Promise<boolean> | undefined;
   let saveVersion = 0;
@@ -2000,20 +2021,6 @@
   $: emptyPreviewIsEntry = !readOnly && !hasRenderedContent;
 
   $: normalizedContent = toMarkdown(content);
-  // ヘッダーの保存インジケータと同じ語彙に揃える。「保存要求中」「保存要求済み」は
-  // 実装側の言い方（保存要求を投げたかどうか）がそのまま UI に出ていたもので、
-  // 利用者が知りたい「保存されたか」を答えていなかった。しかもヘッダーが
-  // 「保存済み」と出している横で別の言葉を使っていた。
-  $: saveStatusLabel =
-    saveState === "dirty"
-      ? "未保存"
-      : saveState === "saving"
-        ? "保存中..."
-        : saveState === "error"
-          ? "保存失敗"
-          : saveState === "saved"
-            ? "保存済み"
-            : "";
   $: currentHeadingOption =
     headingOptions.find((option) => option.level === currentHeadingLevel) ?? headingOptions[0];
   $: currentHeadingLabel = currentHeadingOption.label;
@@ -2278,13 +2285,7 @@
           </div>
         </div>
         <div class="edit-bar-end">
-          <!-- 「保存要求済み」の 6 文字がツールバーの幅を食っていたので、
-               目で見るぶんは点だけにして、文言は title と読み上げに回す。 -->
-          {#if saveStatusLabel}
-            <span class="save-dot" data-state={saveState} title={saveStatusLabel} aria-hidden="true"
-            ></span>
-          {/if}
-          <span class="save-status-text" aria-live="polite">{saveStatusLabel}</span>
+          <!-- 保存状態はヘッダーのインジケータが唯一の表示。ここには出さない。 -->
           <!-- eslint-disable svelte/no-at-html-tags -->
           <div class="memo-mode-dropdown" bind:this={modeDropdownEl}>
             <button
@@ -2900,37 +2901,6 @@
 
   .memo-mode-option-label {
     white-space: nowrap;
-  }
-
-  /* 保存状態。文言は title と読み上げに任せ、見た目は 6px の点だけ。 */
-  .save-dot {
-    flex: 0 0 auto;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background-color: color-mix(in srgb, var(--theme-color-Sub-main) 45%, transparent);
-  }
-
-  .save-dot[data-state="dirty"],
-  .save-dot[data-state="saving"] {
-    background-color: var(--attention-fg, #d18616);
-  }
-
-  .save-dot[data-state="error"] {
-    background-color: var(--danger-fg, #d33);
-  }
-
-  /* 画面には出さないが読み上げには残す（保存状態はテキストで伝えたい）。 */
-  .save-status-text {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    padding: 0;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-    border: 0;
   }
 
   .edit-body {

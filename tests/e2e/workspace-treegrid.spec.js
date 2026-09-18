@@ -19,7 +19,7 @@ test("revision conflict preserves body input and retry keeps external changes", 
     document.graph.nodes.review.name = "External edit";
     fs.writeFileSync(file, JSON.stringify(document));
     await page.locator(".cm-content").fill("Keep input after conflict");
-    await page.getByRole("button", { name: "今すぐ保存", exact: true }).click();
+    // 手動保存ボタンは廃止。自動保存 (500ms debounce) がそのまま衝突する。
     await expect(
       page.getByRole("alert").filter({ hasText: "Workspace graph changed" })
     ).toBeVisible();
@@ -744,17 +744,37 @@ test("move and detach use the displayed parent; cyclic copy stays in TreeGrid", 
   }
 });
 
-test("sidebar overlays the tree and Back restores the same selected detail across scopes", async () => {
+test("sidebar rails beside the tree when wide, overlays it when narrow, and Back restores the same selected detail across scopes", async () => {
   const app = await launch(fixture());
   try {
     const page = app.window;
     await select(page, "root/alpha/shared");
+
+    // 既定の 1280px ではレール。本文と併置され、スクリムは出ない。
     const before = await page.getByRole("treegrid").boundingBox();
     await page.getByRole("button", { name: "サイドバーを表示", exact: true }).click();
     await expect(page.getByRole("complementary")).toBeVisible();
-    const after = await page.getByRole("treegrid").boundingBox();
-    expect(after.x).toBe(before.x);
-    expect(after.width).toBe(before.width);
+    const railed = await page.getByRole("treegrid").boundingBox();
+    expect(railed.x).toBeGreaterThan(before.x);
+    expect(railed.width).toBeLessThan(before.width);
+    await expect(page.getByRole("button", { name: "サイドバーを閉じる" })).toHaveCount(0);
+
+    // 1000px 未満に縮めるとオーバーレイに戻り、本文の幾何は動かずスクリムが出る。
+    await app.electronApp.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0].setSize(900, 800)
+    );
+    await expect(page.getByRole("button", { name: "サイドバーを閉じる" })).toBeVisible();
+    const narrowOpen = await page.getByRole("treegrid").boundingBox();
+    await page.getByRole("button", { name: "サイドバーを閉じる" }).click();
+    const narrowClosed = await page.getByRole("treegrid").boundingBox();
+    expect(narrowClosed.x).toBe(narrowOpen.x);
+    expect(narrowClosed.width).toBe(narrowOpen.width);
+
+    await app.electronApp.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0].setSize(1280, 860)
+    );
+    await page.getByRole("button", { name: "サイドバーを表示", exact: true }).click();
+    await expect(page.getByRole("complementary")).toBeVisible();
     await page
       .getByRole("complementary")
       .getByRole("button", { name: "alpha", exact: true })

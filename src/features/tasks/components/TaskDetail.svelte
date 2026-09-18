@@ -897,23 +897,10 @@
                 content={editingBody ? "プレビュー" : "編集"}
               />
             {/if}
-            <IconButton
-              variant="text"
-              normalColor="var(--fg-default)"
-              activeColor="var(--accent-fg)"
-              ariaLabel="今すぐ保存"
-              tooltipContent="今すぐ保存"
-              disabled={isArchived || bodyLoading}
-              style="margin:0; width:1.5rem; height:1.5rem;"
-              on:click={() => memoEditor?.flush()}
-              ><svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.6"
-                aria-hidden="true"><path d="M5 3h12l4 4v14H3V3h2Z M7 3v6h10V3M7 21v-8h10v8" /></svg
-              ></IconButton
-            >
+            <!-- 手動の「今すぐ保存」は置かない。自動保存を謳う UI にフロッピーの
+                 保存ボタンが併存すると「押さないと保存されないのでは」という疑いを
+                 生む。下書きを失いうる操作（形式変換・削除・ページ遷移など）の前は
+                 このコンポーネントが memoEditor.flush() を呼んでいる。 -->
           </div>
           <div class="body-editor">
             {#if bodyVisited}
@@ -1177,6 +1164,9 @@
     opacity: 0.45;
     cursor: default;
   }
+  /* 空状態にも .node-detail と同じ面を与える。以前はここだけ背景が透明で、
+     親の canvas がそのまま見えていたため、左のツリーが白い Card なのに
+     右半分だけ「抜けた穴」に見えていた。 */
   .empty-state {
     display: flex;
     flex-direction: column;
@@ -1186,8 +1176,15 @@
     width: 100%;
     height: 100%;
     padding: var(--sp6);
+    box-sizing: border-box;
+    border-radius: var(--shape-lg);
+    box-shadow: var(--elevation-1);
+    background: var(--canvas-default);
     color: color-mix(in srgb, var(--theme-color-Sub-main) 70%, transparent);
     text-align: center;
+  }
+  .empty-state-hint {
+    max-width: 24rem;
   }
   .empty-state-icon {
     width: 1.6875rem;
