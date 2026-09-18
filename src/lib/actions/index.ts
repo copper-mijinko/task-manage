@@ -48,6 +48,18 @@ function removeTooltipEntry(entry: TooltipEntry) {
   activeTooltips.delete(entry);
 }
 
+/**
+ * 表示中のツールチップをすべて閉じる。
+ *
+ * メニューやポップオーバーを開く側から呼ぶ。トリガーにホバーしたまま
+ * クリックするとツールチップが出たまま残り、開いたメニューの上に重なって
+ * 1 項目目が読めなくなることがある（行メニューの「名前を変更」が
+ * 「…変更」しか見えない状態）。
+ */
+export function dismissAllTooltips() {
+  for (const entry of [...activeTooltips]) removeTooltipEntry(entry);
+}
+
 function sweepTooltips() {
   if (activeTooltips.size === 0) return;
   for (const entry of [...activeTooltips]) {

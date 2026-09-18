@@ -201,9 +201,15 @@
 
           <div class="Field" aria-label="表示倍率">
             <span class="FieldLabel">表示倍率 {zoomPercent}%</span>
-            <button class="ui-action" on:click={() => changeZoom("out")}>縮小</button>
-            <button class="ui-action" on:click={() => changeZoom("reset")}>100%に戻す</button>
-            <button class="ui-action" on:click={() => changeZoom("in")}>拡大</button>
+            <!-- .Field は space-between なので、ボタンを直下に 3 つ置くと
+                 横いっぱいに散らばり、対になる「縮小」と「拡大」のあいだに
+                 「100%に戻す」が挟まる。1 つの群にまとめて、すぐ上の
+                 表示密度の行と同じ「ラベル左・操作右」の形にする。 -->
+            <div class="FieldControls">
+              <button class="ui-action" on:click={() => changeZoom("out")}>縮小</button>
+              <button class="ui-action" on:click={() => changeZoom("in")}>拡大</button>
+              <button class="ui-action" on:click={() => changeZoom("reset")}>100%に戻す</button>
+            </div>
           </div>
           <p class="Note">
             <strong>補足:</strong>
@@ -428,6 +434,12 @@
     line-height: 1.6;
   }
 
+  .FieldControls {
+    display: flex;
+    align-items: center;
+    gap: var(--sp2);
+    flex-shrink: 0;
+  }
   .Field {
     display: flex;
     align-items: center;

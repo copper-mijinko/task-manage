@@ -4,7 +4,7 @@
   import { TREEGRID_APPLICATION } from "@features/workspace/application/treegrid";
   const application = getContext(TREEGRID_APPLICATION);
   const applicationClipboard = application?.copied ?? writable([]);
-  import { ripple, tooltip } from "@lib/actions";
+  import { ripple, tooltip, dismissAllTooltips } from "@lib/actions";
   import TaskMenu from "@features/tasks/components/TaskMenu.svelte";
   import { pageSearchQuery } from "@features/search/stores/search";
   import { copied_task, copied_tasks, pending_rename_id } from "@stores/ui";
@@ -366,6 +366,9 @@
   }
 
   export async function openMenuAt(position) {
+    // ホバーしたままクリックすると、トリガーのツールチップが残ってメニューの
+    // 1 項目目に重なる。開く前に閉じておく。
+    dismissAllTooltips();
     activePanelId.set(menuOwnerId);
     menuPosition = getMenuPosition(position.x, position.y);
     setMenuVisibility(true);

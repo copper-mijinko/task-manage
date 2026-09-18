@@ -789,10 +789,12 @@
                       on:click={() => visitParent(parentId)}
                       >{nodeNameById[parentId] || parentId}</button
                     >
-                  {:else}<span>{nodeNameById[parentId] || parentId}</span>{/if}
-                  <small title={parentId}>{nodePathById[parentId] || "Workspace内の所属先"}</small>
-                  {#if ($active_row_path || "").split("/").at(-2) === parentId}<small
-                      >現在の表示経路</small
+                  {:else}<span class="parent-name">{nodeNameById[parentId] || parentId}</span>{/if}
+                  <small class="parent-path" title={parentId}
+                    >{nodePathById[parentId] || "Workspace内の所属先"}</small
+                  >
+                  {#if ($active_row_path || "").split("/").at(-2) === parentId}<span
+                      class="parent-chip">現在の表示経路</span
                     >{/if}
                   <IconButton
                     variant="text"
@@ -1100,19 +1102,69 @@
   .parent-context {
     margin-top: var(--sp6);
   }
+  /* text ボタンは枠を持たないのに Button primitive の左右 padding (16px) を
+     そのまま持つので、行頭が上の所属先の名前より内側にずれて見えていた。
+     この節の直下のボタンだけ左端を揃える。 */
+  .parent-context > :global(button) {
+    padding-left: 0;
+    padding-right: var(--sp2);
+  }
   h3 {
     font-size: var(--font-title-md);
     font-weight: 600;
   }
+  /* 1 行 = 1 つの所属先。以前はリンク・経路・状態・メニューが素の空白だけで
+     横一列に並び、どれが押せるのか・どこまでが 1 件なのかが読めなかった。
+     名前を先頭に置き、経路はその下、状態はチップ、メニューは右端に固定する。 */
   .parent-location {
-    display: flex;
+    display: grid;
+    /* 名前 / 状態チップ / メニュー。チップに列を与えないと暗黙の 3 列目が
+       生まれ、メニューが中央に、チップが右端に飛ぶ。 */
+    grid-template-columns: auto 1fr auto;
     align-items: center;
-    flex-wrap: wrap;
-    gap: var(--sp2);
+    column-gap: var(--sp2);
+    row-gap: 2px;
     padding: var(--sp2) 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--fg-muted) 18%, transparent);
+  }
+  .parent-location:last-of-type {
+    border-bottom: 0;
+  }
+  /* 名前は 1 行目の左、チップはその隣、メニューは 1 行目の右端、
+     経路は 2 行目に回す。 */
+  .parent-location :global(.parent-link),
+  .parent-location .parent-name {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .parent-location .parent-chip {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .parent-location .parent-path {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .parent-location :global(.IconButton) {
+    grid-column: 3;
+    grid-row: 1;
+  }
+  /* 状態を表す印。ラベルと同じ見た目だと名前の一部に見えるので背景を敷く。 */
+  .parent-chip {
+    justify-self: start;
+    font-size: var(--font-label-sm);
+    line-height: 1.6;
+    padding: 0 var(--sp1);
+    border-radius: var(--shape-xs);
+    background: color-mix(in srgb, var(--accent-fg) 16%, transparent);
+    color: var(--fg-default);
+    white-space: nowrap;
   }
   .parent-link {
     color: var(--accent-fg);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    text-decoration-color: color-mix(in srgb, var(--accent-fg) 45%, transparent);
     border: 0;
     background: transparent;
     /* 実測 57x16。上下に余白を足して 24px の当たり判定を確保する。 */
