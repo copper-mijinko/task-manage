@@ -64,6 +64,16 @@
   // ページ内検索ショートカットキー設定
   let searchBox;
   let isTaskDetailWindow = currentHash === "#task-detail-window";
+
+  /**
+   * サイドバーを本文と併置できる幅か。
+   *
+   * 狭いときはオーバーレイのドロワー、広いときは常時表示のレールにする。
+   * CSS 側の @media (min-width: 1000px) と同じ閾値。スクリムの有無は
+   * マークアップで決める必要があるので、こちらでも幅を見る。
+   */
+  let viewportWidth = typeof window !== "undefined" ? window.innerWidth : 1280;
+  $: wideLayout = viewportWidth >= 1000;
   let detailWindowReady = false;
   let detailWindowProjectId = currentSearch.get("projectId") || "";
   let detailWindowTaskId = currentSearch.get("taskId") || "";
@@ -469,6 +479,8 @@
   });
 </script>
 
+<svelte:window bind:innerWidth={viewportWidth} />
+
 <div class:Container={true}>
   <div class="notification-stack">
     {#if saveErrorMessage}
@@ -576,8 +588,9 @@
           {/if}
         {/if}
       {/if}
-      {#if !isTaskDetailWindow && !$sidebarCollapsed}
-        <!-- Overlay drawer keeps the content geometry stable. -->
+      {#if !isTaskDetailWindow && !$sidebarCollapsed && !wideLayout}
+        <!-- 狭いときだけオーバーレイ。広いときはレールとして併置するので
+             スクリムは出さない（出すと併置している意味がなくなる）。 -->
         <button
           type="button"
           class="SidebarMask"
@@ -683,6 +696,8 @@
   div.Body.DetailWindowBody {
     height: 100%;
   }
+  /* 狭い幅ではオーバーレイのドロワー。広い幅では下の media query で
+     本文と併置するレールになる。 */
   aside.Sidebar {
     position: absolute;
     inset: 0 auto 0 0;
@@ -703,6 +718,27 @@
     box-shadow: none;
     visibility: hidden;
     pointer-events: none;
+  }
+
+  /* 本文と併置できる幅では、サイドバーを常時表示のレールにする。
+     オーバーレイのままだと、1280px でも 216px のサイドバーを開くだけで
+     残り 1064px のツリーと詳細がスクリムで覆われて操作できなくなり、
+     ツリーを見ながらプロジェクトを切り替える・ドラッグする、ができなかった。
+     モバイル向けのパターンをデスクトップに持ち込んでいた形。 */
+  @media (min-width: 1000px) {
+    aside.Sidebar {
+      position: relative;
+      inset: auto;
+      z-index: auto;
+      flex: 0 0 13.5rem;
+      box-shadow: none;
+      border-right: 1px solid var(--border-muted);
+      transform: none;
+      transition: none;
+    }
+    aside.Sidebar.Collapsed {
+      display: none;
+    }
   }
   div.Main {
     display: flex;

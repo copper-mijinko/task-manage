@@ -1026,9 +1026,11 @@
   .TableHeader[data-column="tags"] {
     --col-min: var(--col-min-tags);
   }
+  /* 行側の .CheckboxCell と同じ幅にする。ここだけ 21px のままだと、
+     以降のすべての列が見出しに対して 3px ずれる。 */
   .CheckboxHeaderCell {
-    flex: 0 0 1.3125rem;
-    width: 1.3125rem;
+    flex: 0 0 var(--tap-min);
+    width: var(--tap-min);
     height: 2.25rem;
     display: flex;
     align-items: center;
@@ -1063,7 +1065,11 @@
     width: 100%;
     height: 1.3125rem;
     align-items: center;
-    justify-content: center;
+    /* 見出しは列の内容と同じ側に寄せる。中央寄せのままだと、幅の広い列ほど
+       見出しとセルの文字が離れ、どの列の見出しなのかを目で追えなくなる
+       （タスク名列では見出しが x≈173、セルの文字が x≈100 だった）。
+       セル側 (.TableData) と同じ横 padding を使って字下げも揃える。 */
+    justify-content: flex-start;
     gap: var(--sp1);
     padding: 0 var(--sp2);
     overflow: visible;
@@ -1080,7 +1086,7 @@
        行の内容より先に目に入らないようにする。 */
     font-size: var(--font-label-sm);
     color: var(--fg-muted);
-    text-align: center;
+    text-align: left;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
