@@ -263,14 +263,36 @@ export function createTreeGridApplication(workspacePath) {
   /**
    * その行を復元する。辺だけアーカイブされていたのか、ノードごとだったのかは
    * 画面からは同じに見えるので、立っている方を（両方なら両方を）まとめて外す。
+   *
+   * 経路上の祖先も一緒に外す。中間をアーカイブすると配下の行もまとめて消える
+   * 仕様なので、祖先が畳まれたままだと「復元したのに戻らない」行ができる。
+   * 外すのは押した行の経路だけなので、多親ノードの別の親側は巻き添えにしない
+   * （旧 JSON モードの restoreNode と同じ考え方）。
    */
   function restoreOccurrence(nodeId, path) {
-    const state = archiveStateOf(nodeId, path);
-    const parentId = (path || "").split("/").at(-2);
+    const graph = graphNow();
+    const parts = (path || "").split("/").filter(Boolean);
+    if (parts.at(-1) !== nodeId || parts.length < 2) {
+      // 経路が分からないときは、そのノードだけ戻す。
+      const state = archiveStateOf(nodeId, path);
+      return state.node
+        ? dispatch([{ type: "update-node", nodeId, changes: { archived: false } }])
+        : Promise.resolve();
+    }
     const commands = [];
-    if (state.edge && parentId)
-      commands.push({ type: "archive-edge", childId: nodeId, parentId, archived: false });
-    if (state.node) commands.push({ type: "update-node", nodeId, changes: { archived: false } });
+    const restoredNodes = new Set();
+    for (let index = 1; index < parts.length; index += 1) {
+      const childId = parts[index];
+      const parentId = parts[index - 1];
+      const node = graph?.nodes?.[childId];
+      if (!node) continue;
+      if (node.parents?.find((parent) => parent.id === parentId)?.archived)
+        commands.push({ type: "archive-edge", childId, parentId, archived: false });
+      if (node.archived && !restoredNodes.has(childId)) {
+        restoredNodes.add(childId);
+        commands.push({ type: "update-node", nodeId: childId, changes: { archived: false } });
+      }
+    }
     if (commands.length === 0) return Promise.resolve();
     return dispatch(commands);
   }
