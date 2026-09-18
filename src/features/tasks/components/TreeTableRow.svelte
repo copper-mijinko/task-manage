@@ -383,6 +383,61 @@
         <!-- 同じノードが複数の場所に出ていることを示す印。コピーで増えた別ノード
              とは、この印の有無で見分ける。印の有無で名前の位置がずれると比べに
              くいので、印が無い行でも同じ幅の枠を空けておく。 -->
+        <!-- 同じノードが複数の場所に出ているかを示す印。コピーで増えた別ノード
+             とは、この印で見分ける。ツリーは左上から右下へ伸びるので、複数の
+             ときは「1 つのノードが右へ分かれて現れる」形。1 か所だけのときも
+             同じ幅・同じ絵柄の点を置き、行ごとに名前の開始位置がずれないように
+             する（ずれると 1 段ぶんの字下げと紛らわしい）。 -->
+        {#if sharedPlaces.length > 1}
+          <span
+            class="SharedMark"
+            role="img"
+            aria-label={`同じノードが${sharedPlaces.length}か所にあります: ${sharedPlaces.join(" / ")}`}
+            title={`同じノードが${sharedPlaces.length}か所にあります: ${sharedPlaces.join(" / ")}`}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M7.5 12h3.5l5-5.5M11 12l5 5.5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <circle cx="5" cy="12" r="2.8" fill="currentColor" />
+              <circle cx="18" cy="6" r="2.4" fill="currentColor" />
+              <circle cx="18" cy="18" r="2.4" fill="currentColor" />
+            </svg>
+            <span class="SharedMarkCount">{sharedPlaces.length}</span>
+          </span>
+        {:else}
+          <span
+            class="SharedMarkSingle"
+            role="img"
+            aria-label="この場所にだけあります"
+            title="この場所にだけあります"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect
+                x="5.5"
+                y="3.5"
+                width="13"
+                height="17"
+                rx="2.5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+              />
+              <path
+                d="M9 9.5h6M9 14h4"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+              />
+            </svg>
+          </span>
+        {/if}
         {#if node.cycleReference}<span
             class="cycle-reference"
             role="img"
@@ -451,34 +506,6 @@
             dispatch("openTaskFolder", { id });
           }}
         />
-        {#if sharedPlaces.length > 1}
-          <!-- 同じノードが複数の場所に出ていることを示す印。コピーで増えた別ノード
-               とは、この印の有無で見分ける。ツリーは左上から右下へ伸びるので、
-               「1 つのノードが右へ 2 か所に分かれて現れる」形にしている。
-               名前の前に置くと、印の無い行と文字の開始位置がずれる（あるいは
-               全行にその幅を空けることになる）ので、名前の後ろに置く。 -->
-          <span
-            class="SharedMark"
-            role="img"
-            aria-label={`同じノードが${sharedPlaces.length}か所にあります: ${sharedPlaces.join(" / ")}`}
-            title={`同じノードが${sharedPlaces.length}か所にあります: ${sharedPlaces.join(" / ")}`}
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path
-                d="M7.5 12h3.5l5-5.5M11 12l5 5.5"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-              <circle cx="5" cy="12" r="2.8" fill="currentColor" />
-              <circle cx="18" cy="6" r="2.4" fill="currentColor" />
-              <circle cx="18" cy="18" r="2.4" fill="currentColor" />
-            </svg>
-            <span class="SharedMarkCount">{sharedPlaces.length}</span>
-          </span>
-        {/if}
       {:else if header.name == "status"}
         <StatusSelect
           status={data[header.name]}
@@ -915,9 +942,14 @@
     display: inline-flex;
     align-items: center;
     gap: 1px;
+    justify-content: center;
+    /* 1 か所だけの行の印と外寸を揃える。ここがずれると、行ごとに名前の
+       開始位置が数 px 動いて読みにくい。 */
+    box-sizing: border-box;
+    width: 1.3rem;
     height: 1.05rem;
-    padding: 0 3px 0 1px;
-    margin-left: var(--sp1);
+    padding: 0 1px;
+    margin-right: 2px;
     border-radius: var(--shape-pill);
     background-color: color-mix(in srgb, var(--accent-fg) 14%, transparent);
     color: var(--accent-fg);
@@ -927,6 +959,24 @@
   }
   .TableData .SharedMark svg {
     flex: 0 0 0.95rem;
+    width: 0.95rem;
+    height: 0.95rem;
+  }
+  /* 1 か所だけの行。名前の開始位置を揃える枠でもあるので、点だけだとゴミの
+     ように見えてしまう。ノートの絵にして「ふつうのノード」と読めるようにし、
+     色は本文より落として名前の邪魔をしない。 */
+  .TableData .SharedMarkSingle {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    width: 1.3rem;
+    height: 1.05rem;
+    margin-right: 2px;
+    color: color-mix(in srgb, var(--fg-muted) 58%, transparent);
+  }
+  .TableData .SharedMarkSingle svg {
     width: 0.95rem;
     height: 0.95rem;
   }
