@@ -207,6 +207,8 @@
     '<circle class="ql-fill" cx="19" cy="12" r="1.7"/></svg>';
   type MarkdownMemoMode = "preview" | "edit" | "split";
   type EditableMarkdownMemoMode = Exclude<MarkdownMemoMode, "preview">;
+  /** listbox の id。トリガーの aria-controls から参照する。 */
+  const modeMenuId = `memo-mode-menu-${Math.random().toString(36).slice(2)}`;
   const memoModeOptions = [
     { value: "preview", label: "プレビュー" },
     { value: "edit", label: "編集" },
@@ -1591,12 +1593,17 @@
     { tag: t.heading2, fontWeight: "700", fontSize: "1.25em" },
     { tag: t.heading3, fontWeight: "700", fontSize: "1.1em" },
     { tag: [t.heading4, t.heading5, t.heading6], fontWeight: "700" },
-    { tag: t.strong, fontWeight: "700", color: "var(--theme-color-Accent-light)" },
-    { tag: t.emphasis, fontStyle: "italic", color: "var(--theme-color-Accent-light)" },
-    { tag: [t.link, t.url], color: "var(--theme-color-Primary-main)", textDecoration: "underline" },
-    { tag: t.monospace, color: "var(--theme-color-Accent-main)" },
+    // 構文ハイライトの色は「文字として載せる」用途なので *-main / *-light では
+    // なく *-text トークンを使う。エディタ背景 (Main-light) に対し、ライト
+    // テーマで strong/emphasis が 1.72:1、monospace が 3.43:1、list/link が
+    // 4.37:1 と、いずれも AA (4.5:1) を割っていた。とくに強調した文字が
+    // いちばん読めないという逆転が起きていた。
+    { tag: t.strong, fontWeight: "700", color: "var(--theme-color-Accent-text)" },
+    { tag: t.emphasis, fontStyle: "italic", color: "var(--theme-color-Accent-text)" },
+    { tag: [t.link, t.url], color: "var(--theme-color-Primary-text)", textDecoration: "underline" },
+    { tag: t.monospace, color: "var(--theme-color-Accent-text)" },
     { tag: t.quote, color: "var(--theme-color-Sub-main)", fontStyle: "italic" },
-    { tag: t.list, color: "var(--theme-color-Primary-main)" },
+    { tag: t.list, color: "var(--theme-color-Primary-text)" },
     { tag: t.meta, opacity: "0.55" },
   ]);
 
@@ -1966,6 +1973,21 @@
       }
       return;
     }
+
+    // 本文が空のときは、プレビュー面そのものを「書き始める」入口にする。
+    //
+    // これまで空メモで見えるのは「内容なし」という文字だけで、クリックしても
+    // ダブルクリックしても何も起きなかった。編集に入る唯一の経路が、右上の
+    // 24px の表示モードドロップダウンを開いて「編集」を選ぶことだった。
+    // 画面でいちばん大きな面が不活性なまま、いちばん小さいコントロールが
+    // 唯一の入口になっていたことになる。
+    //
+    // 中身があるときは従来どおり何もしない。プレビュー内のテキスト選択や
+    // リンク・画像の操作を編集モードへの切り替えで奪わないため、モードの
+    // 切り替えはドロップダウンに任せる。
+    if (!readOnly && !hasRenderedContent) {
+      void startEdit("edit");
+    }
   }
 
   function handlePreviewKeydown(e: KeyboardEvent) {
@@ -1974,16 +1996,23 @@
     }
   }
 
+  /** 空のプレビュー面がキーボードからも「書き始める」入口になるようにする。 */
+  $: emptyPreviewIsEntry = !readOnly && !hasRenderedContent;
+
   $: normalizedContent = toMarkdown(content);
+  // ヘッダーの保存インジケータと同じ語彙に揃える。「保存要求中」「保存要求済み」は
+  // 実装側の言い方（保存要求を投げたかどうか）がそのまま UI に出ていたもので、
+  // 利用者が知りたい「保存されたか」を答えていなかった。しかもヘッダーが
+  // 「保存済み」と出している横で別の言葉を使っていた。
   $: saveStatusLabel =
     saveState === "dirty"
       ? "未保存"
       : saveState === "saving"
-        ? "保存要求中"
+        ? "保存中..."
         : saveState === "error"
           ? "保存失敗"
           : saveState === "saved"
-            ? "保存要求済み"
+            ? "保存済み"
             : "";
   $: currentHeadingOption =
     headingOptions.find((option) => option.level === currentHeadingLevel) ?? headingOptions[0];
@@ -2264,6 +2293,7 @@
               aria-label={`メモ表示モード：${currentModeLabel}`}
               aria-haspopup="listbox"
               aria-expanded={modeMenuOpen}
+              aria-controls={modeMenuId}
               title={currentModeLabel}
               on:click|stopPropagation={toggleModeMenu}
               on:keydown={handleModeTriggerKeydown}
@@ -2278,6 +2308,7 @@
             </button>
             {#if modeMenuOpen}
               <div
+                id={modeMenuId}
                 class="memo-mode-menu"
                 role="listbox"
                 aria-label="メモ表示モード"
@@ -2366,6 +2397,7 @@
               aria-label={`メモ表示モード：${currentModeLabel}`}
               aria-haspopup="listbox"
               aria-expanded={modeMenuOpen}
+              aria-controls={modeMenuId}
               title={currentModeLabel}
               on:click|stopPropagation={toggleModeMenu}
               on:keydown={handleModeTriggerKeydown}
@@ -2380,6 +2412,7 @@
             </button>
             {#if modeMenuOpen}
               <div
+                id={modeMenuId}
                 class="memo-mode-menu"
                 role="listbox"
                 aria-label="メモ表示モード"
@@ -2413,7 +2446,17 @@
         <!-- eslint-disable-next-line svelte/no-at-html-tags -->
         <div class="preview" bind:this={previewEl}>{@html renderedHtml}</div>
       {:else if !readOnly}
-        <div class="placeholder">内容なし</div>
+        <!-- 空のときはここが「書き始める」ボタンそのもの。クリックでも
+             Enter / Space でも編集モードに入る。 -->
+        <div
+          class="placeholder placeholder-entry"
+          role="button"
+          tabindex="0"
+          on:click={handlePreviewClick}
+          on:keydown={handlePreviewKeydown}
+        >
+          本文はまだありません。クリックまたは Enter で書き始めます。
+        </div>
       {/if}
     </div>
   {/if}
@@ -2939,8 +2982,12 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    flex: 0 0 5px;
-    min-width: 5px;
+    /* つかめる幅を 5px から 11px へ。ツリー／詳細の分割ハンドルと同じ扱い。
+       見た目の線は ::before 側が持つので、幅を広げても線は太くならない。
+       SC 2.5.8 の 24px には届かないが、両隣のペーンのクリックを食うため
+       ここは意図的に 11px で止めている。 */
+    flex: 0 0 11px;
+    min-width: 11px;
     padding: 0;
     cursor: col-resize;
     background-color: transparent;
@@ -3007,6 +3054,22 @@
     height: 100%;
     min-height: 0;
     overflow: auto;
+  }
+
+  /* 空の本文は「押せる面」。以前は不活性な「内容なし」という文字だけだった。 */
+  .placeholder-entry {
+    cursor: text;
+    border-radius: var(--shape-sm);
+    padding: var(--sp3);
+    border: 1px dashed color-mix(in srgb, var(--theme-color-Sub-dark) 45%, transparent);
+    transition: border-color 0.12s ease;
+  }
+  .placeholder-entry:hover {
+    border-color: var(--theme-color-Primary-text);
+  }
+  .placeholder-entry:focus-visible {
+    outline: 2px solid var(--theme-color-Primary-text);
+    outline-offset: 2px;
   }
 
   .preview-mode.emptyContent {
@@ -3312,8 +3375,12 @@
     align-items: flex-start;
   }
 
+  /* プレビューのチェックボックスは本文の `- [ ]` を書き換える実操作なので
+     飾りではない。実測 13x13 で SC 2.5.8 の 24px を割っていた。 */
   .preview :global(.task-list-item input[type="checkbox"]) {
-    margin-top: var(--sp1);
+    width: var(--tap-min);
+    height: var(--tap-min);
+    margin-top: 0;
     accent-color: var(--theme-color-Primary-main);
     cursor: pointer;
   }

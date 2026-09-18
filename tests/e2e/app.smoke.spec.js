@@ -154,7 +154,9 @@ test("collapses and restores detail from the tree-priority split boundary", asyn
     await expect(resizer).toBeVisible();
     await expect(resizer).toHaveAttribute("aria-valuenow", "100");
     await app.window.getByRole("button", { name: "表示と操作", exact: true }).click();
-    await expect(app.window.getByRole("menuitem", { name: "詳細欄を表示" })).toBeVisible();
+    await expect(
+      app.window.getByRole("menuitemcheckbox", { name: "詳細欄", checked: false })
+    ).toBeVisible();
     await app.window.keyboard.press("Escape");
 
     // Drag the retained edge left to restore the detail pane.
@@ -166,7 +168,9 @@ test("collapses and restores detail from the tree-priority split boundary", asyn
 
     await expect(panes.nth(1)).not.toHaveClass(/PaneCollapsed/);
     await app.window.getByRole("button", { name: "表示と操作", exact: true }).click();
-    await expect(app.window.getByRole("menuitem", { name: "詳細欄を隠す" })).toBeVisible();
+    await expect(
+      app.window.getByRole("menuitemcheckbox", { name: "詳細欄", checked: true })
+    ).toBeVisible();
     await app.window.keyboard.press("Escape");
 
     // Dragging hard left must not collapse the priority tree pane; it clamps

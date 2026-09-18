@@ -38,7 +38,7 @@ test("Gantt rows align at both densities and pointer edits persist their dates",
   try {
     const page = app.window;
     await page.getByRole("button", { name: "表示と操作", exact: true }).click();
-    await page.getByRole("menuitem", { name: "ガントチャートを表示", exact: true }).click();
+    await page.getByRole("menuitemcheckbox", { name: "ガントチャート", checked: false }).click();
     const ganttRow = page.locator('.GanttRow[data-row-path="root/alpha/review"]');
     const treeRow = page.locator('.TreeTable [data-row-path="root/alpha/review"]');
     for (const [label, height] of [
@@ -93,7 +93,7 @@ test("body conversion flushes edits and the replacement editor saves the new for
     await page.locator(".cm-content").fill("Pending before conversion");
     await page.getByRole("button", { name: "Node詳細の操作" }).click();
     await page.getByRole("menuitem", { name: "形式を変換", exact: true }).click();
-    await page.getByRole("button", { name: /^(アーカイブする|完全に削除|実行する)$/ }).click();
+    await page.getByRole("button", { name: "変換する", exact: true }).click();
     await expect(page.locator(".ql-editor")).toContainText("Pending before conversion");
     await page.locator(".body-toolbar").getByRole("button", { name: "編集", exact: true }).click();
     await page.locator(".ql-editor").fill("Edited after conversion");
@@ -334,9 +334,7 @@ test("Inbox is protected and notifications do not shift the tree", async () => {
   try {
     const page = app.window;
     await select(page, "root/inbox");
-    await expect(
-      page.getByRole("button", { name: "プロジェクトルートはアーカイブできません" })
-    ).toBeDisabled();
+    await expect(page.getByRole("button", { name: "アーカイブ", exact: true })).toBeDisabled();
     const before = await page.getByRole("treegrid").boundingBox();
     await app.electronApp.evaluate(({ BrowserWindow }) => {
       BrowserWindow.getAllWindows()[0].webContents.send("save-error", "Verification: save failed");
@@ -379,7 +377,9 @@ test("archiving a shared node asks whether to clear one place or the whole node"
 
     // アーカイブ表示から復元すると、その行が戻る。
     await page.getByRole("button", { name: "表示と操作", exact: true }).click();
-    await page.getByRole("menuitem", { name: "アーカイブ済みを表示", exact: true }).click();
+    await page
+      .getByRole("menuitemcheckbox", { name: "アーカイブ済みを表示", checked: false })
+      .click();
     await expect(row(page, "root/alpha/shared")).toBeVisible();
     await row(page, "root/alpha/shared").getByRole("button", { name: "タスク操作を開く" }).click();
     await page.getByRole("menuitem", { name: "復元", exact: true }).click();
@@ -387,7 +387,9 @@ test("archiving a shared node asks whether to clear one place or the whole node"
       .poll(() => graphOf(app).nodes.shared.parents.find((p) => p.id === "alpha").archived)
       .toBeUndefined();
     await page.getByRole("button", { name: "表示と操作", exact: true }).click();
-    await page.getByRole("menuitem", { name: "アーカイブ済みを隠す", exact: true }).click();
+    await page
+      .getByRole("menuitemcheckbox", { name: "アーカイブ済みを表示", checked: true })
+      .click();
 
     // ノード全体: どの親の下からも消える。
     await select(page, "root/alpha/shared");
@@ -411,7 +413,7 @@ test("archiving a branch hides everything under it and restoring a deep row brin
       .getByRole("button", { name: "タスク操作を開く" })
       .click();
     await page.getByRole("menuitem", { name: "アーカイブ", exact: true }).click();
-    await page.getByRole("button", { name: /^(アーカイブする|完全に削除|実行する)$/ }).click();
+    await page.getByRole("button", { name: "アーカイブする", exact: true }).click();
     await expect.poll(() => graphOf(app).nodes.cycle.archived).toBe(true);
 
     // 次に中間（alpha の下の shared）をこの場所だけアーカイブすると、その下の行も消える。
@@ -425,7 +427,9 @@ test("archiving a branch hides everything under it and restoring a deep row brin
 
     // 最下位の行を復元すると、経路上の中間（alpha→shared の辺）も外れて行が戻る。
     await page.getByRole("button", { name: "表示と操作", exact: true }).click();
-    await page.getByRole("menuitem", { name: "アーカイブ済みを表示", exact: true }).click();
+    await page
+      .getByRole("menuitemcheckbox", { name: "アーカイブ済みを表示", checked: false })
+      .click();
     await row(page, "root/alpha/shared/cycle")
       .getByRole("button", { name: "タスク操作を開く" })
       .click();
@@ -436,7 +440,9 @@ test("archiving a branch hides everything under it and restoring a deep row brin
       .poll(() => graphOf(app).nodes.shared.parents.find((p) => p.id === "alpha").archived)
       .toBeUndefined();
     await page.getByRole("button", { name: "表示と操作", exact: true }).click();
-    await page.getByRole("menuitem", { name: "アーカイブ済みを隠す", exact: true }).click();
+    await page
+      .getByRole("menuitemcheckbox", { name: "アーカイブ済みを表示", checked: true })
+      .click();
     await expect(row(page, "root/alpha/shared")).toBeVisible();
     await expect(row(page, "root/alpha/shared/cycle")).toBeVisible();
   } finally {

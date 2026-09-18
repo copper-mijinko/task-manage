@@ -290,6 +290,8 @@
 {/if}
 
 <style>
+  /* App.svelte 側と同じ 75%。`rem` が 0.75 倍で効く点と、最小寸法には
+     px トークン（--tap-min）を使う理由はそちらのコメントを参照。 */
   :global(html) {
     font-size: 75%;
     overflow: hidden;

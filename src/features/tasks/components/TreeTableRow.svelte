@@ -38,6 +38,22 @@
    */
   export let isTabStop = false;
   /**
+   * 行の中のコントロール（展開トグル・名前入力・行メニュー・ステータス・
+   * 日付）が Tab の停留点になるかどうか。
+   *
+   * 行自体には roving tabindex が入っていたのに、行の中の操作要素は素の
+   * まま（tabindex=0 相当）だったので、6 行のツリーで文書全体のタブ
+   * ストップが 90 個あった。行数に比例するので、実データ規模ではツリーを
+   * 通り過ぎるだけで数百回 Tab を押すことになる。
+   *
+   * いま操作している行のコントロールだけを停留点にする。矢印キーでの行移動
+   * は既に実装されているので（handleKeydown → TreeTable）、
+   *   Tab でツリーに入る → その行の操作要素を Tab で辿れる → Tab で抜ける
+   *   矢印キーで行を移ると、その行の操作要素が辿れるようになる
+   * となり、編集経路を一切変えずにタブストップが行数に依存しなくなる。
+   */
+  $: cellTabIndex = isTabStop ? 0 : -1;
+  /**
    * このノードの最初の出現か。多親ノードは親ごとに複数行に出るので、DOM の
    * `id` 属性は最初の行にだけ付ける（重複 id を作らないため）。他の行は
    * `data-node-id` で引ける。
@@ -342,7 +358,7 @@
         checked={bulkSelectionActive && selected}
         aria-label="一括操作の対象として選択"
         title="一括操作の対象として選択"
-        tabindex="-1"
+        tabindex={cellTabIndex}
         on:click={toggleCheckbox}
         on:keydown|stopPropagation
       />
@@ -364,6 +380,7 @@
           <button
             class:Expanded={expanded}
             class:ExpandButton={true}
+            tabindex={cellTabIndex}
             style="flex-shrink: 0"
             aria-label={expanded ? "タスクを折りたたむ" : "タスクを展開"}
             on:click={toggle}
@@ -458,6 +475,7 @@
           selectionCount={selectionCountForMenu}
           {nodePath}
           nodeId={id}
+          {cellTabIndex}
           archived={isArchived}
           on:commit={(e) => {
             commitData("name", e.detail.value);
@@ -510,6 +528,7 @@
       {:else if header.name == "status"}
         <StatusSelect
           status={data[header.name]}
+          tabIndex={cellTabIndex}
           ariaLabel={`${data.name}のステータス`}
           disabled={isArchived}
           on:change={(e) => {
@@ -519,6 +538,7 @@
       {:else if header.name == "start date"}
         <DateInput
           displayOnly={true}
+          tabIndex={cellTabIndex}
           is_dark={isDark}
           backgroundColor={"var(--backgroundColor)"}
           value={data[header.name]}
@@ -532,6 +552,7 @@
       {:else if header.name == "due date"}
         <DateInput
           displayOnly={true}
+          tabIndex={cellTabIndex}
           is_dark={isDark}
           backgroundColor={"var(--backgroundColor)"}
           value={data[header.name]}

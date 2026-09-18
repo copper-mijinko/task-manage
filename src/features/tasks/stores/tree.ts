@@ -53,6 +53,17 @@ interface PersistContext {
 const MAX_HISTORY = 50;
 let undoStack: ProjectData[] = [];
 let redoStack: ProjectData[] = [];
+/**
+ * 元に戻す / やり直しが実際に効くか。ツールバーのボタンを無効化するために
+ * 公開する。以前は履歴が空でもボタンが有効なままで、押しても何も起きなかった。
+ * スタックを触る場所はここに集約してあるので、その都度 sync する。
+ */
+export const canUndoLegacy = writable(false);
+export const canRedoLegacy = writable(false);
+function syncHistoryAvailability() {
+  canUndoLegacy.set(undoStack.length > 0);
+  canRedoLegacy.set(redoStack.length > 0);
+}
 let skipSnapshot = false;
 let pendingSkipSnapshot = false;
 const workspaceProjectRevisions = new Map<string, number>();
@@ -102,12 +113,14 @@ function captureSnapshot(data: ProjectData) {
     undoStack.shift();
   }
   redoStack = [];
+  syncHistoryAvailability();
 }
 
 export function clearHistory() {
   undoStack = [];
   redoStack = [];
   skipSnapshot = true;
+  syncHistoryAvailability();
 }
 
 function getWorkspaceRootTask(tasks: WorkspaceTask[]): WorkspaceTask | undefined {
@@ -617,6 +630,7 @@ export function undoHistory() {
   cancelPendingOperations.update((n) => n + 1);
   skipSnapshot = true;
   tree_data.set(previous);
+  syncHistoryAvailability();
 }
 
 export function redoHistory() {
@@ -632,4 +646,5 @@ export function redoHistory() {
   cancelPendingOperations.update((n) => n + 1);
   skipSnapshot = true;
   tree_data.set(next);
+  syncHistoryAvailability();
 }
