@@ -697,6 +697,8 @@
   toggle={toggle_confirm}
   header="プロジェクトの削除"
   content={`「${project_name_confirm}」を削除しますか？`}
+  ok="削除する"
+  danger={true}
   callback={callback_confirm}
 />
 <Dialog
@@ -704,6 +706,8 @@
   toggle={toggle_workspace_delete}
   header="Workspaceプロジェクトの削除"
   content={`「${workspace_delete_target?.name ?? ""}」のノードと接続を削除します。子ノードは残り、必要ならWorkspace Rootに接続されます。元に戻す操作で復元できます。`}
+  ok="削除する"
+  danger={true}
   callback={callback_workspace_delete}
 />
 
@@ -776,7 +780,7 @@
     gap: var(--sp1);
     flex: 1 1 auto;
     min-width: 0;
-    height: 1.75rem;
+    min-height: var(--tap-min);
     padding: 0 var(--sp1);
     border-radius: var(--shape-xs);
     color: inherit;
@@ -842,6 +846,13 @@
   .ProjectMenuTrigger {
     margin-left: auto;
     flex: 0 0 auto;
+    /* 実測 13x15。サイドバーで各プロジェクトの操作を開く唯一の入口なので、
+       ここが最も小さいのは致命的だった。 */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: var(--tap-min);
+    min-height: var(--tap-min);
   }
   .MenuRow {
     display: flex;
@@ -874,6 +885,7 @@
     align-items: center;
     align-self: stretch;
     min-width: 0;
+    min-height: var(--tap-min);
     color: inherit;
     cursor: pointer;
     text-align: left;
@@ -1001,12 +1013,14 @@
   }
   .WorkspaceIconBtn {
     justify-content: center;
-    width: 1.75rem;
-    height: 1.75rem;
+    /* 1.75rem は html が 75% なので実寸 21px。SC 2.5.8 の 24px を割る。 */
+    width: var(--tap-min);
+    height: var(--tap-min);
     padding: 0;
   }
   .WorkspaceManageBtn {
     gap: var(--sp1);
+    min-height: var(--tap-min);
     padding: 0.2rem var(--sp2);
   }
   .WorkspaceIconBtn:hover,

@@ -61,7 +61,13 @@
   } from "@features/tasks/utils/tree_control";
   import { getDefaultNode } from "@features/tasks/utils/tree_control";
   import { undoHistory, redoHistory } from "@features/tasks/stores/tree";
-  import { selected_ids, clearSelection, selectOnly, show_archived } from "@stores/ui";
+  import {
+    selected_ids,
+    clearSelection,
+    selectOnly,
+    show_archived,
+    pending_rename_id,
+  } from "@stores/ui";
 
   // ページ内検索はstoresから共有
 
@@ -161,6 +167,20 @@
     return confirm_mode === "permanent" ? "完全削除の確認" : "アーカイブの確認";
   })();
 
+  /** 確定ボタンのラベル。何が起きるかを動作で名指しする。 */
+  $: confirmDialogOk = (() => {
+    if (is_bulk_confirm) {
+      if (permanent_target_ids.length > 0 && archive_target_ids.length > 0) return "実行する";
+      return permanent_target_ids.length > 0 ? "完全に削除" : "アーカイブする";
+    }
+    return confirm_mode === "permanent" ? "完全に削除" : "アーカイブする";
+  })();
+
+  /** 取り消せない完全削除を含むかどうか。確定ボタンをエラー色にする。 */
+  $: confirmDialogDanger = is_bulk_confirm
+    ? permanent_target_ids.length > 0
+    : confirm_mode === "permanent";
+
   $: confirmDialogContent = (() => {
     if (is_bulk_confirm) {
       const lines = [];
@@ -246,7 +266,7 @@
   })();
 
   let show_alert = false;
-  let alert_content = "Cannot delete the root node.";
+  let alert_content = "プロジェクトルートはアーカイブできません。";
   const toggle_alert = () => {
     show_alert = !show_alert;
   };
@@ -466,6 +486,8 @@
 
       // 新しいノードを選択状態にしてDOMの更新を待つ
       selectOnly(new_node.id);
+      // 作った行をそのまま名前入力にする（graph 経路の add と同じ挙動）。
+      pending_rename_id.set(new_node.id);
       await tick();
 
       const newRow = document.getElementById(new_node.id);
@@ -577,6 +599,17 @@
     (application?.isProtected($table_selected_id) ||
       ($tree_data?.data && $table_selected_id === $tree_data.data.id))
   );
+  /**
+   * アーカイブ／削除ボタンを押せるか。
+   *
+   * 以前は `disabled={anchorIsRoot}` だけだったため、何も選択していない状態でも
+   * 押せてしまい、押しても何も起きなかった（handleRemove が table_selected_id
+   * 無しで素通りする）。同じツールバーの移動系ボタンは対象なしで無効化される
+   * ので、無効化の基準がボタンごとにばらつき、「押せる＝実行できる」という
+   * 手がかりが信用できなくなっていた。
+   */
+  $: hasRemoveTarget = isMultiSelect || Boolean($table_selected_id);
+  $: removeDisabled = anchorIsRoot || !hasRemoveTarget;
   // 選択中のどこかに archived が含まれているか（restore ボタン表示の判定に使う）
   $: selectionHasArchived = (() => {
     if (!$tree_data?.data) return false;
@@ -736,20 +769,26 @@
         action: "overflowAction",
         title: "列の設定",
       },
+      // 表示トグルは menuitemcheckbox + aria-checked で現在の状態を出す。
+      // ラベルの動詞が反転するだけでは、メニューを開いた時点でどちらの状態か
+      // を読み取れず、支援技術にも状態が渡らなかった。
       {
         id: "toggleGantt",
         action: "overflowAction",
-        title: $ganttVisible ? "ガントチャートを閉じる" : "ガントチャートを表示",
+        title: "ガントチャート",
+        checked: $ganttVisible,
       },
       {
         id: "toggleDetail",
         action: "overflowAction",
-        title: detailPaneVisible ? "詳細欄を隠す" : "詳細欄を表示",
+        title: "詳細欄",
+        checked: detailPaneVisible,
       },
       {
         id: "toggleArchived",
         action: "overflowAction",
-        title: $show_archived ? "アーカイブ済みを隠す" : "アーカイブ済みを表示",
+        title: "アーカイブ済みを表示",
+        checked: $show_archived,
       },
     ];
     const groups = [moveGroup, expandGroup, memoGroup, viewGroup];
@@ -907,22 +946,22 @@
                   </svg>
                 </IconButton>
                 <IconButton
-                  tooltipContent={anchorIsRoot
-                    ? "プロジェクトルートはアーカイブできません"
-                    : isMultiSelect
-                      ? `${selectionSize}件を削除（アーカイブ／完全削除を自動振り分け）`
-                      : anchorIsArchived
-                        ? "完全に削除"
-                        : "アーカイブ"}
-                  ariaLabel={anchorIsRoot
-                    ? "プロジェクトルートはアーカイブできません"
-                    : isMultiSelect
-                      ? `${selectionSize}件を削除`
-                      : anchorIsArchived
-                        ? "完全に削除"
-                        : "アーカイブ"}
+                  tooltipContent={!hasRemoveTarget
+                    ? "アーカイブするタスクを選択してください"
+                    : anchorIsRoot
+                      ? "プロジェクトルートはアーカイブできません"
+                      : isMultiSelect
+                        ? `${selectionSize}件を削除（アーカイブ／完全削除を自動振り分け）`
+                        : anchorIsArchived
+                          ? "完全に削除"
+                          : "アーカイブ"}
+                  ariaLabel={isMultiSelect
+                    ? `${selectionSize}件を削除`
+                    : anchorIsArchived
+                      ? "完全に削除"
+                      : "アーカイブ"}
                   variant="text"
-                  disabled={anchorIsRoot}
+                  disabled={removeDisabled}
                   activeColor={"var(--theme-color-Error-main)"}
                   normalColor={"var(--theme-color-Error-main)"}
                   on:click={(e) => handleRemove(e, anchorIsArchived ? "permanent" : "archive")}
@@ -1334,6 +1373,8 @@
     toggle={toggle_confirm}
     header={confirmDialogHeader}
     content={confirmDialogContent}
+    ok={confirmDialogOk}
+    danger={confirmDialogDanger}
     callback={callback_confirm}
   />
   <ArchiveScopeDialog
@@ -1353,10 +1394,10 @@
   <Dialog
     show={show_alert}
     toggle={toggle_alert}
-    header="Alert."
+    header="操作できません"
     content={alert_content}
     ok={false}
-    cancel={"close"}
+    cancel={"閉じる"}
   />
   <TaskMenu
     menuItems={overflowMenuItems}

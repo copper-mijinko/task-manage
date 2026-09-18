@@ -144,17 +144,27 @@
         {#if item.type === "separator"}
           <li class="menu-separator" role="separator" aria-hidden="true"></li>
         {:else}
-          <li class="menu-item-shell">
+          <!-- role="menu" が直接所有できるのは menuitem / menuitemcheckbox /
+               menuitemradio / group / separator だけ。role のない li を挟むと
+               所有関係が切れ、支援技術への項目数の伝達が壊れるので
+               role="none" で li を意味の無い容器にする。 -->
+          <li class="menu-item-shell" role="none">
             <button
               class="task-menu-item"
               class:disabled={item.disabled}
               class:has-children={item.children?.length > 0}
               disabled={item.disabled}
-              role="menuitem"
+              role={item.checked === undefined ? "menuitem" : "menuitemcheckbox"}
+              aria-checked={item.checked === undefined ? undefined : item.checked}
               aria-disabled={item.disabled ? "true" : undefined}
               on:click={(event) => triggerAction(item, event)}
             >
               <span class="menu-item-content">
+                {#if item.checked !== undefined}
+                  <!-- aria-checked と対になる視覚的な状態表示。これが無いと
+                       目で見たときに現在どちらの状態か分からなかった。 -->
+                  <span class="menu-check" aria-hidden="true">{item.checked ? "✓" : ""}</span>
+                {/if}
                 {#if item.icon}
                   <svg
                     viewBox={item.icon.viewBox}
@@ -175,10 +185,11 @@
               <div class={`submenu ${submenuSideClass}`}>
                 <ul class="task-menu" role="menu">
                   {#each item.children as child}
-                    <li class="menu-item-shell">
+                    <li class="menu-item-shell" role="none">
                       <button
                         class="task-menu-item"
-                        role="menuitem"
+                        role={child.checked === undefined ? "menuitem" : "menuitemcheckbox"}
+                        aria-checked={child.checked === undefined ? undefined : child.checked}
                         on:click={(event) => triggerAction(child, event)}
                       >
                         <span class="menu-item-content">
@@ -272,6 +283,16 @@
   .menu-label {
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  /* 視覚的にも現在の状態が分かるチェック。aria-checked と対で出す。 */
+  .menu-check {
+    display: inline-flex;
+    justify-content: center;
+    flex: 0 0 1em;
+    width: 1em;
+    color: var(--accent-fg);
+    font-weight: 700;
   }
 
   .menu-icon {

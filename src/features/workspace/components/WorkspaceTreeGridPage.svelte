@@ -8,7 +8,7 @@
   import { workspaceApplication, workspaceNavigation } from "../application/workspace";
   import { TREEGRID_APPLICATION, createTreeGridApplication } from "../application/treegrid";
   import { ganttVisible } from "@stores";
-  import { INBOX_SELECTED_ID } from "@features/inbox/stores/inbox";
+  import { INBOX_SELECTED_ID, resolveInboxNodeId } from "@features/inbox/stores/inbox";
   import { AGENDA_SELECTED_ID } from "@features/agenda/stores/agenda";
   import { tag_index } from "@features/memos/stores/tags";
   const workspacePath = get(workspace_store).activeWorkspacePath;
@@ -25,10 +25,9 @@
     $selected_id = navigation.rootId;
   }
   $: if (navigation && $selected_id === INBOX_SELECTED_ID) {
-    $selected_id =
-      navigation.inboxId ||
-      Object.entries(navigation.names).find(([, name]) => name.toLowerCase() === "inbox")?.[0] ||
-      navigation.rootId;
+    // 解決規則はヘッダーの Inbox ボタンと共有する。ここだけで解決していたため、
+    // ヘッダー側は「いま Inbox を開いているか」を判定できなかった。
+    $selected_id = resolveInboxNodeId(navigation) ?? navigation.rootId;
   }
   $: rootId = navigation?.names[$selected_id] !== undefined ? $selected_id : navigation?.rootId;
   $: if (rootId && previousScope !== rootId) {

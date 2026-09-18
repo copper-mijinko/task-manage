@@ -665,6 +665,18 @@ export const showPageSearch = writable(false);
  */
 export const showQuickCapture = writable(false);
 
+/**
+ * 「作った直後の行をそのまま名前入力にする」ためのハンドオフ。
+ *
+ * 追加ボタンを押しても名前欄にフォーカスが入らず、行は既定名の「新しいノード」
+ * のまま残っていた。連続で追加すると同名の行が並び、名前を付けるには毎回
+ * マウスへ持ち替えてダブルクリックする必要があった。
+ *
+ * 行を作った側がここに node id を書き、その行の TaskName が拾って編集モードへ
+ * 入り、フォーカスと全選択まで済ませたら undefined に戻す。
+ */
+export const pending_rename_id = writable<string | undefined>(undefined);
+
 /** 初期画面など、サイドバー外からWorkspace設定を開くための共有状態。 */
 export const showWorkspaceSetup = writable(false);
 

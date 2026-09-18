@@ -214,9 +214,9 @@ describe("ProjectPage", () => {
     table_selected_id.set("project-1");
     render(ProjectPage);
 
-    expect(
-      screen.getByRole("button", { name: "プロジェクトルートはアーカイブできません" })
-    ).toBeDisabled();
+    // aria-label は「なぜ押せないか」ではなくボタンの名前を持つ。
+    // 押せない理由は tooltip 側に出す。
+    expect(screen.getByRole("button", { name: "アーカイブ" })).toBeDisabled();
     expect(get(tree_data).data.children).toHaveLength(1);
   });
 
@@ -276,7 +276,7 @@ describe("ProjectPage", () => {
       screen.getByText((content) => content.includes("アーカイブしますか"))
     ).toBeInTheDocument();
 
-    await fireEvent.click(screen.getByRole("button", { name: "ok" }));
+    await fireEvent.click(screen.getByRole("button", { name: "アーカイブする" }));
     await tick();
 
     // タスクは物理削除されず archived フラグだけが立つ（論理削除）。
@@ -291,12 +291,12 @@ describe("ProjectPage", () => {
     expect(screen.getByTestId("task-detail-stub")).toBeInTheDocument();
 
     await fireEvent.click(screen.getByRole("button", { name: "表示と操作" }));
-    await fireEvent.click(screen.getByRole("menuitem", { name: "詳細欄を隠す" }));
+    await fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "詳細欄", checked: true }));
 
     expect(screen.queryByTestId("task-detail-stub")).not.toBeInTheDocument();
 
     await fireEvent.click(screen.getByRole("button", { name: "表示と操作" }));
-    await fireEvent.click(screen.getByRole("menuitem", { name: "詳細欄を表示" }));
+    await fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "詳細欄", checked: false }));
 
     expect(screen.getByTestId("task-detail-stub")).toBeInTheDocument();
   });
@@ -336,7 +336,7 @@ describe("ProjectPage", () => {
     expect(screen.getByTestId("gantt-panel-stub")).toBeInTheDocument();
 
     await fireEvent.click(screen.getByRole("button", { name: "表示と操作" }));
-    await fireEvent.click(screen.getByRole("menuitem", { name: "詳細欄を隠す" }));
+    await fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "詳細欄", checked: true }));
 
     expect(screen.queryByTestId("task-detail-stub")).not.toBeInTheDocument();
     expect(screen.getByTestId("gantt-panel-stub")).toBeInTheDocument();

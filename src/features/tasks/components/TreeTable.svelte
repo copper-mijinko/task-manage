@@ -1487,6 +1487,18 @@
     return deleteMode === "permanent" ? "完全削除の確認" : "アーカイブの確認";
   })();
 
+  $: deleteDialogOk = (() => {
+    if (bulkDeleteIsBulk) {
+      if (bulkPermanentTargetIds.length > 0 && bulkArchiveTargetIds.length > 0) return "実行する";
+      return bulkPermanentTargetIds.length > 0 ? "完全に削除" : "アーカイブする";
+    }
+    return deleteMode === "permanent" ? "完全に削除" : "アーカイブする";
+  })();
+
+  $: deleteDialogDanger = bulkDeleteIsBulk
+    ? bulkPermanentTargetIds.length > 0
+    : deleteMode === "permanent";
+
   $: deleteDialogContent = (() => {
     if (bulkDeleteIsBulk) {
       const lines = [];
@@ -1643,6 +1655,8 @@
   toggle={toggleDeleteConfirm}
   header={deleteDialogHeader}
   content={deleteDialogContent}
+  ok={deleteDialogOk}
+  danger={deleteDialogDanger}
   callback={confirmDelete}
 />
 

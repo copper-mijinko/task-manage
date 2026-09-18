@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, test } from "vitest";
 import { selected_id, selected_type, table_selected_id } from "@stores/ui";
 import { workspace_store } from "@features/workspace/stores/workspace";
 import { canGoBack, canGoForward, navigation_history } from "@stores/navigation_history";
+import { INBOX_SELECTED_ID } from "@features/inbox/stores/inbox";
+import { AGENDA_SELECTED_ID } from "@features/agenda/stores/agenda";
 
 /**
  * 履歴記録は selected_type / selected_id への subscribe を microtask で
@@ -246,7 +248,10 @@ describe("navigation_history store", () => {
 
   test("Inbox / Info / WorkspaceProject も同じ履歴に乗る", async () => {
     await navigateTo("Projects", "A");
-    await navigateTo("Inbox", "__inbox__");
+    // Inbox はセンチネルを経由して実ノード id に解決されてから着地する。
+    // 履歴に乗るのは解決後の 1 件だけ。
+    await navigateTo("Inbox", INBOX_SELECTED_ID);
+    await navigateTo("Inbox", "inbox-node-1");
     await navigateTo("Info", "1");
     await navigateTo("WorkspaceProject", "ws-1");
 
@@ -257,6 +262,54 @@ describe("navigation_history store", () => {
       "Info",
       "WorkspaceProject",
     ]);
+    expect(state.entries.map((e) => e.selectedId)).toEqual(["A", "inbox-node-1", "1", "ws-1"]);
+  });
+
+  test("selectedType だけ決まって selectedId が未定の途中経過は履歴に積まない", async () => {
+    // 起動直後やワークスペース読み込み中に必ず通る状態。ページではないので
+    // ここを 1 件目として積むと、一度も遷移していないのに戻るボタンが
+    // 有効になってしまう。
+    selected_type.set("WorkspaceProject");
+    await flushMicrotask();
+    expect(get(navigation_history).entries).toEqual([]);
+    expect(get(canGoBack)).toBe(false);
+
+    selected_id.set("root-1");
+    await flushMicrotask();
+    expect(get(navigation_history).entries).toHaveLength(1);
+    expect(get(canGoBack)).toBe(false);
+  });
+
+  test("Inbox / 予定のセンチネルは履歴に積まず、解決後の実 id で戻れる", async () => {
+    // 回帰: センチネルを 1 ページとして積むと [root, sentinel, 実id] となり、
+    // back がセンチネルへ着地 → ページ側が即座に実 id へ書き戻す → 別ページ
+    // 扱いで forward 履歴ごと切り捨て、という往復で「戻れない」状態になっていた。
+    await navigateTo("WorkspaceProject", "root-1");
+
+    for (const sentinel of [INBOX_SELECTED_ID, AGENDA_SELECTED_ID]) {
+      selected_type.set("WorkspaceProject");
+      selected_id.set(sentinel);
+      await flushMicrotask();
+      expect(get(navigation_history).entries).toHaveLength(1);
+    }
+
+    // ページ側が実ノード id へ解決した時点で 1 件だけ積まれる。
+    await navigateTo("WorkspaceProject", "inbox-node-1");
+    expect(get(navigation_history).entries.map((e) => e.selectedId)).toEqual([
+      "root-1",
+      "inbox-node-1",
+    ]);
+
+    navigation_history.back();
+    await flushMicrotask();
+    expect(get(selected_id)).toBe("root-1");
+    expect(get(canGoBack)).toBe(false);
+    expect(get(canGoForward)).toBe(true);
+
+    navigation_history.forward();
+    await flushMicrotask();
+    expect(get(selected_id)).toBe("inbox-node-1");
+    expect(get(canGoForward)).toBe(false);
   });
 
   test("ロード完了直後の table_selected_id fill-in は履歴を伸ばさず最後のエントリへ in-place で入る", async () => {

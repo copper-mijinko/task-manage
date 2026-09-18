@@ -292,7 +292,11 @@
   .search-button {
     height: 100%;
     padding: 0 var(--sp3);
-    background-color: var(--theme-color-Primary-main);
+    /* Primary-main を塗りにすると Main-main の文字との比が 4.09:1 で
+       AA (4.5:1) に届かない。theme.ts が同じ理由で用意している
+       「文字に載せる / その上に文字を載せる」用の Primary-text を使う
+       （Light 5.11:1 / Dark 7.98:1）。 */
+    background-color: var(--theme-color-Primary-text);
     color: var(--theme-color-Main-main);
     border: none;
     border-radius: 0 4px 4px 0;
@@ -302,6 +306,10 @@
 
   .search-button:hover {
     background-color: var(--theme-color-Primary-dark);
+  }
+  .search-button:focus-visible {
+    outline: 2px solid var(--accent-fg);
+    outline-offset: 2px;
   }
 
   .count-display {
@@ -317,7 +325,8 @@
   }
 
   .result-count {
-    color: var(--theme-color-Primary-main);
+    /* 同上。Primary-main は行背景に対して 4.09:1 しかない。 */
+    color: var(--theme-color-Primary-text);
     font-weight: bold;
   }
 

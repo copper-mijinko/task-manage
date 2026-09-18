@@ -213,7 +213,7 @@
     use_ripple={true}
     normalColor="var(--theme-color-Sub-main)"
     activeColor="var(--theme-color-Sub-main)"
-    style={"margin: 0; box-shadow: none; width: 1.75rem; height: 1.75rem; --backgroundColor: transparent; flex-shrink: 0;"}
+    style={"margin: 0; box-shadow: none; width: var(--tap-min); height: var(--tap-min); --backgroundColor: transparent; flex-shrink: 0;"}
   >
     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
       ><path
@@ -238,7 +238,7 @@
       ? "var(--theme-color-Primary-main)"
       : "var(--theme-color-Sub-main)"}
     tooltipContent={memoSearchEnabled ? "メモを検索対象から除外" : "メモも検索対象に含める"}
-    style={"margin: 0; box-shadow: none; width: 1.75rem; height: 1.75rem; --backgroundColor: transparent; flex-shrink: 0;"}
+    style={"margin: 0; box-shadow: none; width: var(--tap-min); height: var(--tap-min); --backgroundColor: transparent; flex-shrink: 0;"}
   >
     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
       ><path
@@ -354,7 +354,8 @@
     box-sizing: border-box;
     margin: 0;
     padding: 0 var(--sp2) 0 0;
-    height: 1.5rem;
+    /* 1.5rem = 実寸 18px。入力欄も SC 2.5.8 の対象なので 24px を下限にする。 */
+    min-height: var(--tap-min);
     flex: 1 1 auto;
     width: auto;
     min-width: 4rem;

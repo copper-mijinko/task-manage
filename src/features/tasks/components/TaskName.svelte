@@ -7,7 +7,7 @@
   import { ripple, tooltip } from "@lib/actions";
   import TaskMenu from "@features/tasks/components/TaskMenu.svelte";
   import { pageSearchQuery } from "@features/search/stores/search";
-  import { copied_task, copied_tasks } from "@stores/ui";
+  import { copied_task, copied_tasks, pending_rename_id } from "@stores/ui";
   import { activePanelId } from "@stores/panel_coordinator";
 
   export let text;
@@ -22,6 +22,8 @@
   export let canOutdent = false;
   export let canOpenTaskFolder = false;
   export let nodePath = "";
+  /** この行が指すノードの id。作成直後の rename ハンドオフ照合に使う。 */
+  export let nodeId = "";
   /** When >1, the menu acts on the whole multi-selection (label gets count prefix). */
   export let selectionCount = 1;
   /**
@@ -295,6 +297,20 @@
     }
   };
 
+  /**
+   * 作成直後の行なら、そのまま名前を入力できる状態にする。
+   * 同じノードが複数経路に現れる場合に多重発火しないよう、拾った側が
+   * すぐにストアを空に戻す。
+   */
+  $: if (nodeId && $pending_rename_id === nodeId && !archived && !isEditing) {
+    pending_rename_id.set(undefined);
+    isEditing = true;
+    void tick().then(() => {
+      input?.focus();
+      input?.select();
+    });
+  }
+
   const flushCommit = () => {
     if (!draftText.trim()) {
       draftText = text ?? "";
@@ -535,6 +551,9 @@
     padding: 0;
     margin: 0;
     width: 100%;
+    /* 行の高さ (32px) に収まる範囲で当たり判定を 24px 以上にする
+       (WCAG 2.2 SC 2.5.8)。セルの実高が 23px / 16px しかなかった。 */
+    min-height: var(--tap-min);
     position: relative;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -578,6 +597,14 @@
     width: 1.15rem;
     height: 1.15rem;
     fill: currentColor;
+  }
+  .menu-button {
+    /* 実測 21x21。行高 32px に収まる範囲で 24px 角まで広げる。 */
+    min-width: var(--tap-min);
+    min-height: var(--tap-min);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
   .menu-button svg {
     width: 1.25rem;

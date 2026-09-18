@@ -12,6 +12,7 @@ import {
   active_row_path,
   show_archived,
   selectOnly,
+  pending_rename_id,
 } from "@stores/ui";
 import * as platform from "@lib/ipc/platform";
 import { tick } from "svelte";
@@ -151,6 +152,9 @@ export function createTreeGridApplication(workspacePath) {
     if (result?.selectedNodeIds[0]) {
       closed_row_paths.expandNodeEverywhere(parentId);
       selectOnly(result.selectedNodeIds[0]);
+      // 作った行をそのまま名前入力にする。既定名「新しいノード」のまま
+      // 放置されて同名の行が並ぶのを防ぐ。
+      pending_rename_id.set(result.selectedNodeIds[0]);
       const parentPath = parentId === id ? path : path?.split("/").slice(0, -1).join("/");
       const visibleParent = parentPath || occurrenceOf(parentId);
       if (visibleParent) revealOccurrence(`${visibleParent}/${result.selectedNodeIds[0]}`);

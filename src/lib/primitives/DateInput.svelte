@@ -102,6 +102,11 @@
     text-overflow: ellipsis;
     width: 100%;
     height: 100%;
+    /* 行の高さ (32px) に収まる範囲で当たり判定を 24px 以上にする
+       (WCAG 2.2 SC 2.5.8)。セルの実高が 23px / 16px しかなかった。 */
+    min-height: var(--tap-min);
+    display: inline-flex;
+    align-items: center;
     text-align: left;
     border: 0;
     border-radius: var(--shape-xs);

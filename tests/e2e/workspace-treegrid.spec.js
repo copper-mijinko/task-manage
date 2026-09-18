@@ -93,7 +93,7 @@ test("body conversion flushes edits and the replacement editor saves the new for
     await page.locator(".cm-content").fill("Pending before conversion");
     await page.getByRole("button", { name: "Node詳細の操作" }).click();
     await page.getByRole("menuitem", { name: "形式を変換", exact: true }).click();
-    await page.getByRole("button", { name: "ok", exact: true }).click();
+    await page.getByRole("button", { name: /^(アーカイブする|完全に削除|実行する)$/ }).click();
     await expect(page.locator(".ql-editor")).toContainText("Pending before conversion");
     await page.locator(".body-toolbar").getByRole("button", { name: "編集", exact: true }).click();
     await page.locator(".ql-editor").fill("Edited after conversion");
@@ -411,7 +411,7 @@ test("archiving a branch hides everything under it and restoring a deep row brin
       .getByRole("button", { name: "タスク操作を開く" })
       .click();
     await page.getByRole("menuitem", { name: "アーカイブ", exact: true }).click();
-    await page.getByRole("button", { name: "ok", exact: true }).click();
+    await page.getByRole("button", { name: /^(アーカイブする|完全に削除|実行する)$/ }).click();
     await expect.poll(() => graphOf(app).nodes.cycle.archived).toBe(true);
 
     // 次に中間（alpha の下の shared）をこの場所だけアーカイブすると、その下の行も消える。

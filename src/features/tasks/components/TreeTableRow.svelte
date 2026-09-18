@@ -457,6 +457,7 @@
           {canOpenTaskFolder}
           selectionCount={selectionCountForMenu}
           {nodePath}
+          nodeId={id}
           archived={isArchived}
           on:commit={(e) => {
             commitData("name", e.detail.value);
@@ -764,8 +765,10 @@
     );
   }
   .CheckboxCell {
-    flex: 0 0 1.75rem;
-    width: 1.75rem;
+    /* 行番号 / 一括選択チェックボックスが入る先頭セル。1.75rem = 実寸 21px
+       だったので、中のチェックボックスが 24px に広げられなかった。 */
+    flex: 0 0 var(--tap-min);
+    width: var(--tap-min);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -784,8 +787,10 @@
   }
   .RowCheckbox {
     display: none;
-    width: 0.95rem;
-    height: 0.95rem;
+    /* 一括選択のチェックボックス。実測 11x11 で SC 2.5.8 を大きく割っていた。
+       ヘッダーの全選択チェックボックスと同じ下限に合わせる。 */
+    width: var(--tap-min);
+    height: var(--tap-min);
     margin: 0;
     cursor: pointer;
     accent-color: var(--theme-color-Primary-dark);
@@ -1041,8 +1046,15 @@
   }
   .ExpandButton {
     cursor: pointer;
-    width: 1rem;
-    height: 1rem;
+    /* ツリーで最も反復操作されるコントロール。1rem は html が 75% のため
+       実寸 12px にしかならず、SC 2.5.8 の 24px を大きく割っていた。
+       見た目のシェブロンは小さいままで、当たり判定だけ 24px 角に広げる。 */
+    width: var(--tap-min);
+    height: var(--tap-min);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
     border-radius: 50%;
     transform: rotate(0deg);
     /* Smooth chevron rotation while the rows themselves fade-in (see RowEnter
@@ -1053,8 +1065,8 @@
       background-color 0.12s ease;
   }
   .ExpandButton svg {
-    width: 100%;
-    height: 100%;
+    width: 0.75rem;
+    height: 0.75rem;
     fill: var(--theme-color-Sub-light);
   }
   .ExpandButton.Expanded {

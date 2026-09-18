@@ -1,6 +1,8 @@
 import { derived, get, writable, type Readable } from "svelte/store";
 import type { SelectedType } from "@app-types/app";
 import { workspace_store } from "@features/workspace/stores/workspace";
+import { INBOX_SELECTED_ID } from "@features/inbox/stores/inbox";
+import { AGENDA_SELECTED_ID } from "@features/agenda/stores/agenda";
 import {
   selected_id,
   selected_type,
@@ -82,8 +84,65 @@ function pageEqual(a: NavigationEntry, b: NavigationEntry): boolean {
   );
 }
 
+/**
+ * 履歴に積める「ページ」として成立していないエントリか。
+ *
+ * ページはすべて `selectedId` を持つ（プロジェクト root の id、info ページの
+ * id など）。`selectedType` だけが先に決まり `selectedId` がまだ undefined の
+ * 状態は、起動直後やワークスペース読み込み中に必ず 1 度は通る途中経過であって
+ * ページではない。以前は「type と id の両方が undefined」のときだけ弾いていた
+ * ため、この途中経過が 1 件目のエントリとして積まれ、一度も遷移していないのに
+ * `canGoBack` が true になっていた。
+ */
 function isEmptyEntry(entry: NavigationEntry): boolean {
-  return entry.selectedType === undefined && entry.selectedId === undefined;
+  return entry.selectedType === undefined || entry.selectedId === undefined;
+}
+
+/**
+ * Inbox / 予定の `selected_id` は「そのビューを開け」という一回限りの
+ * リダイレクト指示で、ページ側が受け取った直後に実ノードの id へ書き換える。
+ *
+ * これを 1 ページとして履歴に積むと、Inbox を開くだけで
+ * `[... , sentinel, 実id]` の 2 件が積まれる。戻るとセンチネルへ着地 →
+ * ページが即座に実 id へ書き戻す → commitRecord が「別ページへ遷移した」と
+ * 解釈して forward 履歴を切り捨て index を進める、という往復になり、
+ * 「戻るボタンは有効なのに何度押しても戻らない」状態を作っていた。
+ * ページではないので記録しない。
+ */
+function isTransientRedirect(entry: NavigationEntry): boolean {
+  return entry.selectedId === INBOX_SELECTED_ID || entry.selectedId === AGENDA_SELECTED_ID;
+}
+
+/**
+ * 「同じページの、保存先がまだ解決していなかった版」かどうか。
+ *
+ * 起動直後やワークスペース切替の途中では `selected_type` / `selected_id` が
+ * 先に決まり、`workspace_store` の `activeWorkspacePath` / `activeProjectDir`
+ * は async な読み込みの後で埋まる。`pageEqual` はこの 2 つも同一性に含めるので、
+ * 素直に記録すると「保存先 null 版」と「保存先あり版」が別ページとして 2 件
+ * 積まれてしまう。
+ *
+ * その結果、一度も遷移していないのに `canGoBack` が true になり、しかも
+ * 戻った先が現在と同じページなので `navigateTo` が何のストアも動かせず、
+ * 後続の commitRecord が「別ページへ移動した」と誤認して index を戻し、
+ * forward 履歴まで捨てていた。
+ *
+ * ロード途中の版は独立したページではないので、新規 push ではなく
+ * その場での埋め直しとして扱う。
+ */
+function isLocationFillIn(current: NavigationEntry, next: NavigationEntry): boolean {
+  if (current.selectedType !== next.selectedType) return false;
+  if (current.selectedId !== next.selectedId) return false;
+
+  const workspaceFilled = current.workspacePath === null && next.workspacePath !== null;
+  const projectFilled = current.projectDir === null && next.projectDir !== null;
+  if (!workspaceFilled && !projectFilled) return false;
+
+  // 埋まった側以外は一致している必要がある。別ワークスペース・別プロジェクトへの
+  // 移動を「埋め直し」と誤判定しないため。
+  const workspaceConsistent = workspaceFilled || current.workspacePath === next.workspacePath;
+  const projectConsistent = projectFilled || current.projectDir === next.projectDir;
+  return workspaceConsistent && projectConsistent;
 }
 
 function createNavigationHistory(): NavigationHistoryStore {
@@ -137,6 +196,11 @@ function createNavigationHistory(): NavigationHistoryStore {
       return;
     }
 
+    if (isTransientRedirect(entry)) {
+      // センチネルは着地点ではない。実 id に解決された次の commitRecord で積む。
+      return;
+    }
+
     internal.update((state) => {
       const current = state.entries[state.index];
       if (current && pageEqual(current, entry)) {
@@ -154,6 +218,16 @@ function createNavigationHistory(): NavigationHistoryStore {
           return { ...state, entries: updated };
         }
         return state;
+      }
+      if (current && isLocationFillIn(current, entry)) {
+        // ロード完了で保存先が埋まっただけ。新しいページではないので
+        // その場で更新する。tableSelectedId は既に定まっている側を残す。
+        const updated = state.entries.slice();
+        updated[state.index] = {
+          ...entry,
+          tableSelectedId: current.tableSelectedId ?? entry.tableSelectedId,
+        };
+        return { ...state, entries: updated };
       }
       // 新しいページへの遷移。index より先（forward 履歴）は失う。
       // ページ切替時点の table_selected_id は旧ページの値が残っているのが
@@ -253,7 +327,7 @@ function createNavigationHistory(): NavigationHistoryStore {
 
   function pushSelection() {
     const entry = currentEntry();
-    if (isEmptyEntry(entry)) return;
+    if (isEmptyEntry(entry) || isTransientRedirect(entry)) return;
 
     internal.update((state) => {
       const current = state.entries[state.index];
