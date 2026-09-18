@@ -380,25 +380,35 @@
                階層が読みにくくなる。 -->
           <div class:Space={true} aria-hidden="true"></div>
         {/if}
+        <!-- 同じノードが複数の場所に出ていることを示す印。コピーで増えた別ノード
+             とは、この印の有無で見分ける。印の有無で名前の位置がずれると比べに
+             くいので、印が無い行でも同じ幅の枠を空けておく。 -->
         {#if sharedPlaces.length > 1}
-          <!-- 同じノードが複数の場所に出ていることを示す印。コピーで増えた
-               別ノードとは、この印の有無で見分けられる。 -->
+          <!-- 主体（原本）を決めていないモデルなので、どこかを指し示す「鎖」の
+               記号は使わない。2 つの親から 1 つのノードへ線が集まる形＝「この行の
+               ノードは複数の親にぶら下がっている」を、そのまま絵にする。 -->
           <span
             class="SharedMark"
             role="img"
-            aria-label={`${sharedPlaces.length} か所に配置: ${sharedPlaces.join(" / ")}`}
-            title={`${sharedPlaces.length} か所に配置: ${sharedPlaces.join(" / ")}`}
+            aria-label={`同じノードが${sharedPlaces.length}か所にあります: ${sharedPlaces.join(" / ")}`}
+            title={`同じノードが${sharedPlaces.length}か所にあります: ${sharedPlaces.join(" / ")}`}
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path
-                d="M9.5 14.5 14.5 9.5M10.5 6.5 12 5a4 4 0 0 1 5.7 5.7l-1.5 1.5M13.5 17.5 12 19a4 4 0 0 1-5.7-5.7l1.5-1.5"
+                d="M6.5 7.5 12 16.5M17.5 7.5 12 16.5"
                 fill="none"
                 stroke="currentColor"
-                stroke-width="1.8"
+                stroke-width="2"
                 stroke-linecap="round"
               />
+              <circle cx="6.5" cy="5.5" r="2.4" fill="currentColor" />
+              <circle cx="17.5" cy="5.5" r="2.4" fill="currentColor" />
+              <circle cx="12" cy="18.5" r="2.8" fill="currentColor" />
             </svg>
+            <span class="SharedMarkCount">{sharedPlaces.length}</span>
           </span>
+        {:else}
+          <span class="SharedMarkSpacer" aria-hidden="true"></span>
         {/if}
         {#if node.cycleReference}<span
             class="cycle-reference"
@@ -897,21 +907,40 @@
     justify-content: center;
     align-items: center;
   }
-  /* 共有の印。名前より先に目に入ってはいけないので、本文より薄い色の
-     小さなリンク記号にとどめる。`.TableData span`（flex:1 / 中央寄せ）の
-     共通ルールより強く指定しないと、セルの半分を占めて名前を押し出す。 */
+  /* 共有の印。`.TableData span`（flex:1 / 中央寄せ）の共通ルールより強く
+     指定しないと、セルの半分を占めて名前を押し出してしまう。 */
   .TableData .SharedMark {
-    flex: 0 0 0.85rem;
+    flex: 0 0 auto;
     display: inline-flex;
     align-items: center;
-    width: 0.85rem;
-    height: 0.85rem;
-    margin-right: 2px;
-    color: color-mix(in srgb, var(--fg-muted) 75%, transparent);
+    gap: 1px;
+    height: 1.05rem;
+    padding: 0 3px 0 1px;
+    margin-right: var(--sp1);
+    border-radius: var(--shape-pill);
+    background-color: color-mix(in srgb, var(--accent-fg) 14%, transparent);
+    color: var(--accent-fg);
+    line-height: 1;
+    white-space: nowrap;
+    user-select: none;
   }
   .TableData .SharedMark svg {
-    width: 100%;
-    height: 100%;
+    flex: 0 0 0.95rem;
+    width: 0.95rem;
+    height: 0.95rem;
+  }
+  .SharedMarkCount {
+    font-size: var(--font-label-sm);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  /* 印が無い行の同じ幅の空き。行ごとに名前の開始位置がずれないようにする。 */
+  .TableData .SharedMarkSpacer {
+    flex: 0 0 auto;
+    display: inline-block;
+    width: 1.95rem;
+    height: 1px;
+    margin-right: var(--sp1);
   }
   .TableData .cycle-reference {
     flex: 0 0 1.2rem;
