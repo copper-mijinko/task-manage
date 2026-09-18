@@ -944,7 +944,9 @@
     --header-hover: color-mix(in srgb, var(--theme-color-Sub-main) 12%, transparent);
     --header-active: var(--theme-color-Primary-main);
     --header-button-border: color-mix(in srgb, var(--theme-color-Sub-main) 24%, transparent);
-    --header-icon-size: 1.5rem;
+    /* 1.5rem は html が 75% なので実寸 18px にしかならず、WCAG 2.2 SC 2.5.8
+       の 24px を割っていた。px のトークンで最低線を固定する。 */
+    --header-icon-size: var(--tap-min);
     --header-action-icon-size: 1.1rem;
 
     position: sticky;
@@ -1038,9 +1040,11 @@
   }
   .HeaderCheckbox {
     display: block;
-    flex: 0 0 0.95rem;
-    width: 0.95rem;
-    height: 0.95rem;
+    /* チェックボックス自体の見た目は据え置きつつ、クリック領域を 24px 角まで
+       広げる。実測 11x11 は SC 2.5.8 を大きく割っていた。 */
+    flex: 0 0 var(--tap-min);
+    width: var(--tap-min);
+    height: var(--tap-min);
     margin: 0;
     line-height: 1;
     cursor: pointer;
@@ -1114,7 +1118,9 @@
     align-items: center;
     width: 100%;
     min-width: 0;
-    height: 1.25rem;
+    /* 高さ 1.25rem = 実寸 15px だった。列ヘッダーは 1 行しかないので、
+       ここを 24px にしてもコストは行数に比例しない。 */
+    min-height: var(--tap-min);
     margin: 0;
     padding: 0 var(--sp1);
     box-sizing: border-box;

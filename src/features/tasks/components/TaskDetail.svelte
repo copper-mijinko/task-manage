@@ -948,6 +948,8 @@
     toggle={() => (dangerTarget = null)}
     header={dangerTarget?.permanent ? "完全削除の確認" : "アーカイブの確認"}
     content={`「${dangerTarget?.name || ""}」を${dangerTarget?.permanent ? "完全削除" : "アーカイブ"}しますか？\n${dangerTarget?.permanent ? "Workspaceの履歴に残っている間は「元に戻す」で復元できます。" : "後でアーカイブ表示から復元できます。"}`}
+    ok={dangerTarget?.permanent ? "完全に削除" : "アーカイブする"}
+    danger={Boolean(dangerTarget?.permanent)}
     callback={confirmDanger}
   />
   <Dialog
@@ -955,6 +957,7 @@
     toggle={toggle_format_confirm}
     header="本文形式の変換"
     content={`Markdown と Quill の変換では、装飾や埋め込みなど一部の情報が損なわれる可能性があります。\n変換後は元に戻す / やり直しで取り消しできます。\n\nこのノードの本文を ${pendingBodyFormat === "markdown" ? "Markdown" : "Quill"} に変換しますか？`}
+    ok="変換する"
     callback={callback_format_confirm}
   />
 {:else}
@@ -1125,6 +1128,10 @@
     color: var(--accent-fg);
     border: 0;
     background: transparent;
+    /* 実測 57x16。上下に余白を足して 24px の当たり判定を確保する。 */
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--tap-min);
     padding: 0;
     cursor: pointer;
     text-align: left;

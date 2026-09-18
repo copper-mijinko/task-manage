@@ -16,6 +16,27 @@ import type { WorkspaceTask } from "@app-types/workspace";
  */
 export const INBOX_SELECTED_ID = "__inbox__";
 
+/**
+ * Inbox ビューが実際に開いているノード id を解決する。
+ *
+ * `INBOX_SELECTED_ID` は「Inbox を開け」という一回限りの指示で、ページ側
+ * (`WorkspaceTreeGridPage` / `NodeWorkspacePage`) が受け取った直後に実ノードの
+ * id へ書き換える。したがって「いま Inbox を表示しているか」を知りたい側は、
+ * ページと同じ解決規則を使う必要がある。ヘッダーの Inbox ボタンが
+ * `selected_type === "Inbox"` と比較していて常に false だったのは、この
+ * 解決結果を見ていなかったことが原因。
+ */
+export function resolveInboxNodeId(
+  navigation: { inboxId?: string; names?: Record<string, string>; rootId?: string } | null
+): string | undefined {
+  if (!navigation) return undefined;
+  if (navigation.inboxId) return navigation.inboxId;
+  const named = Object.entries(navigation.names ?? {}).find(
+    ([, name]) => name?.toLowerCase() === "inbox"
+  );
+  return named?.[0] ?? navigation.rootId;
+}
+
 export interface InboxState {
   /** Absolute path of the active workspace. `null` while no workspace is loaded. */
   workspacePath: string | null;

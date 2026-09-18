@@ -6,8 +6,19 @@
   export let header;
   export let content;
   export let callback = undefined;
-  export let ok = "ok";
-  export let cancel = "cancel";
+  /**
+   * 確定ボタンのラベル。既定は英語の "ok" だったが、UI 全体が日本語なので
+   * 言語が混ざるうえ、"ok" は「何が起きるか」を述べない。呼び出し側は
+   * 「アーカイブする」「完全に削除」のように動作を名指しするのが望ましい。
+   */
+  export let ok = "実行";
+  export let cancel = "キャンセル";
+  /**
+   * 取り消せない操作（完全削除など）の確認かどうか。true のとき確定ボタンを
+   * エラー色にして、通常の確認と見分けられるようにする。既定のプライマリ青の
+   * ままだと、削除の確認と保存の確認が同じ見た目になる。
+   */
+  export let danger = false;
   export let width = "28rem";
   export let height = "auto";
 
@@ -28,6 +39,8 @@
             use_ripple={false}
             variant="filled"
             content={ok}
+            normalColor={danger ? "var(--theme-color-Error-main)" : "var(--theme-color-Info-main)"}
+            activeColor={danger ? "var(--theme-color-Error-dark)" : "var(--theme-color-Info-dark)"}
             on:click={() => {
               callback();
               toggle();

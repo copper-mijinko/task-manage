@@ -16,7 +16,7 @@
     canGoForward,
   } from "@stores";
   import { workspace_store } from "@features/workspace/stores/workspace";
-  import { inbox_count, INBOX_SELECTED_ID } from "@features/inbox/stores/inbox";
+  import { inbox_count, INBOX_SELECTED_ID, resolveInboxNodeId } from "@features/inbox/stores/inbox";
   import { AGENDA_SELECTED_ID } from "@features/agenda/stores/agenda";
   import { pageSearchQuery } from "@features/search/stores/search";
   import * as platform from "@lib/ipc/platform";
@@ -120,6 +120,18 @@
     $selected_id = INBOX_SELECTED_ID;
   }
 
+  // Inbox ボタンの選択状態。
+  //
+  // 以前は `selected_type === "Inbox"` と比較していたが、openInboxView は
+  // selected_type に "WorkspaceProject" を入れるため永久に false だった。
+  // さらに `selected_id` のセンチネルはページ側が受け取った直後に実ノードの
+  // id へ書き換えるので、センチネルとの比較だけでも 1 microtask しか当たらない。
+  // ページと同じ解決規則 (resolveInboxNodeId) を使って実 id と突き合わせる。
+  $: resolvedInboxId = resolveInboxNodeId($workspaceNavigation);
+  $: inboxActive =
+    $selected_id === INBOX_SELECTED_ID ||
+    (resolvedInboxId !== undefined && $selected_id === resolvedInboxId);
+
   function openAgendaView() {
     if (!$workspace_store.activeWorkspacePath) return;
     $selected_type = "WorkspaceProject";
@@ -127,9 +139,15 @@
   }
 
   const isElectronRuntime = typeof window !== "undefined" && Boolean(window.electronAPI);
+
+  /* 880px を切ったら保存状態のラベルを視覚的にだけ畳み、ドットだけ残す。
+     display:none にすると aria-live の読み上げまで消えるので、
+     .visually-hidden-narrow で視覚的にだけ隠す。 */
+  let headerWidth = typeof window !== "undefined" ? window.innerWidth : 1280;
+  $: compactHeader = headerWidth <= 880;
 </script>
 
-<svelte:window on:keydown={handleGlobalKeydown} />
+<svelte:window on:keydown={handleGlobalKeydown} bind:innerWidth={headerWidth} />
 
 <div class="Container" class:webRuntime={!isElectronRuntime} data-page-search-skip>
   <IconButton
@@ -301,16 +319,19 @@
   </label>
 
   {#if !$workspaceNavigation}
+    <!-- 「予定」は開くと gantt 表示 + root スコープへ飛ばすだけの一回限りの
+         操作で、「予定ビューを開いている」という持続状態がアプリのどこにも
+         存在しない。表現できない状態を aria-pressed="false" で常時主張すると
+         支援技術に嘘をつくことになるので、トグルではなく通常のコマンド
+         ボタンとして扱う。 -->
     <button
       type="button"
       class="InboxBtn"
-      class:Active={$selected_type === "Agenda"}
       class:Disabled={!$workspace_store.activeWorkspacePath}
       disabled={!$workspace_store.activeWorkspacePath}
       data-testid="open-agenda"
       on:click={openAgendaView}
       aria-label="予定を開く"
-      aria-pressed={$selected_type === "Agenda"}
       title={$workspace_store.activeWorkspacePath
         ? "予定を開く（全プロジェクトの期限）"
         : "Workspaceを設定すると予定が使えます"}
@@ -338,13 +359,13 @@
   <button
     type="button"
     class="InboxBtn"
-    class:Active={$selected_type === "Inbox"}
+    class:Active={inboxActive}
     class:Disabled={!$workspace_store.activeWorkspacePath}
     disabled={!$workspace_store.activeWorkspacePath}
     data-testid="open-inbox"
     on:click={openInboxView}
     aria-label="Inboxを開く"
-    aria-pressed={$selected_type === "Inbox"}
+    aria-pressed={inboxActive}
     title={$workspace_store.activeWorkspacePath
       ? "Inboxを開く"
       : "Workspaceを設定するとInboxが使えます"}
@@ -391,7 +412,9 @@
       data-status={$saveStatus}
     >
       <span class="SaveDot" aria-hidden="true"></span>
-      <span class="SaveLabel">{saveStatusLabel($saveStatus)}</span>
+      <span class="SaveLabel" class:visually-hidden-narrow={compactHeader}
+        >{saveStatusLabel($saveStatus)}</span
+      >
     </div>
 
     <div class="ToggleSwitchContainer">
@@ -527,8 +550,10 @@
     padding-left: var(--sp1);
     background-color: var(--theme-color-Theme-main);
     --fg-default: var(--on-theme-text);
-    --fg-muted: var(--on-theme-text);
-    --hover-bg: rgba(255, 255, 255, 0.14);
+    /* muted を default と同値にすると、プレースホルダーが入力値と同じ色に
+       なり「空欄かどうか」が判別できなくなる。濃紺用の専用 muted を使う。 */
+    --fg-muted: var(--on-theme-text-muted);
+    --hover-bg: var(--on-theme-surface-hover);
     color: var(--fg-default);
     position: sticky;
     top: 0;
@@ -576,13 +601,13 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 1.75rem;
-    height: 1.75rem;
+    width: var(--tap-min);
+    height: var(--tap-min);
     padding: 0;
     margin: 0;
-    border: 1px solid var(--hover-bg);
+    border: 1px solid transparent;
     border-radius: var(--shape-sm);
-    background-color: var(--hover-bg);
+    background-color: var(--on-theme-surface);
     color: var(--fg-default);
     cursor: pointer;
     transition:
@@ -591,7 +616,7 @@
       opacity 0.12s ease;
   }
   .NavHistoryBtn:hover:not(:disabled) {
-    background-color: var(--hover-bg);
+    background-color: var(--on-theme-surface-hover);
     border-color: var(--fg-muted);
   }
   .NavHistoryBtn:focus-visible {
@@ -618,20 +643,23 @@
     gap: var(--sp1);
     flex: 1 1 auto;
     max-width: 25rem;
-    min-width: 8rem;
+    min-width: 5rem;
     padding: 2px var(--sp2);
-    border: 1px solid var(--hover-bg);
+    border: 1px solid transparent;
     border-radius: var(--shape-sm);
-    background-color: var(--hover-bg);
+    background-color: var(--on-theme-surface);
     color: var(--fg-muted);
     transition:
       background-color 0.12s ease,
       border-color 0.12s ease;
     cursor: text;
   }
+  .SearchField:hover {
+    background-color: var(--on-theme-surface-hover);
+  }
   .SearchField:focus-within {
-    background-color: var(--hover-bg);
-    border-color: var(--fg-muted);
+    background-color: var(--on-theme-surface-hover);
+    border-color: var(--accent-fg);
   }
   .SearchIcon {
     width: 1rem;
@@ -647,6 +675,8 @@
   .SearchInput {
     flex: 1 1 auto;
     min-width: 0;
+    /* 入力欄も SC 2.5.8 の対象。実測 15px だった。 */
+    min-height: var(--tap-min);
     border: none;
     outline: none;
     background: transparent;
@@ -665,7 +695,7 @@
     font-size: var(--font-label-sm);
     color: var(--fg-muted);
     padding: 1px var(--sp1);
-    border: 1px solid var(--hover-bg);
+    border: 1px solid var(--on-theme-surface-hover);
     border-radius: var(--shape-xs);
     font-family: "Consolas", "Courier New", monospace;
     flex-shrink: 0;
@@ -683,8 +713,8 @@
   }
   .SearchNavBtn {
     flex-shrink: 0;
-    width: 1.5rem;
-    height: 1.5rem;
+    width: var(--tap-min);
+    height: var(--tap-min);
     padding: 2px;
     margin: 0;
     border-radius: var(--shape-xs);
@@ -716,12 +746,12 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 1.75rem;
-    height: 1.75rem;
+    width: var(--tap-min);
+    height: var(--tap-min);
     flex-shrink: 0;
-    border: 1px solid var(--hover-bg);
+    border: 1px solid transparent;
     border-radius: var(--shape-sm);
-    background-color: var(--hover-bg);
+    background-color: var(--on-theme-surface);
     color: var(--fg-default);
     cursor: pointer;
     transition:
@@ -729,13 +759,16 @@
       border-color 0.12s ease;
   }
   .InboxBtn:hover {
-    background-color: var(--hover-bg);
+    background-color: var(--on-theme-surface-hover);
     border-color: var(--fg-muted);
   }
+  /* 選択中はホバーより一段強い塗り + アクセント色の枠で、ホバーと区別する。
+     以前は塗り・枠・内側 shadow がすべて --hover-bg で、静止/ホバー/選択が
+     同じ見た目だった。 */
   .InboxBtn.Active {
-    background-color: var(--hover-bg);
-    border-color: var(--fg-muted);
-    box-shadow: inset 0 0 0 1px var(--hover-bg);
+    background-color: var(--on-theme-surface-active);
+    border-color: var(--accent-fg);
+    box-shadow: inset 0 0 0 1px var(--accent-fg);
   }
   .InboxBtn.Disabled {
     opacity: 0.45;
@@ -814,14 +847,14 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 1.75rem;
-    height: 1.75rem;
+    width: var(--tap-min);
+    height: var(--tap-min);
     flex-shrink: 0;
     padding: 0;
     margin: 0;
-    border: 1px solid var(--hover-bg);
+    border: 1px solid transparent;
     border-radius: var(--shape-sm);
-    background-color: var(--hover-bg);
+    background-color: var(--on-theme-surface);
     color: var(--fg-default);
     cursor: pointer;
     transition:
@@ -829,7 +862,7 @@
       border-color 0.12s ease;
   }
   .SettingsBtn:hover {
-    background-color: var(--hover-bg);
+    background-color: var(--on-theme-surface-hover);
     border-color: var(--fg-muted);
   }
   .SettingsBtn svg {
@@ -880,11 +913,38 @@
     height: 1.15rem;
     fill: none;
   }
-  @media (max-width: 700px) {
+  /* ウィンドウは frame:false なので、最小化/最大化/閉じるはここにある自前の
+     ボタンだけが提供する。minWidth は 700 なのでユーザーは普通に 700px まで
+     縮められるが、以前はヘッダーが縮まず、820px を切ると設定ボタンと
+     ウィンドウ操作ボタンがビューポート外へ押し出されて「閉じられない」状態に
+     なっていた。情報量の少ないものから順に畳んで幅を作る。 */
+  @media (max-width: 1000px) {
+    /* 常に "Task Manage" と出るだけで現在地を示さないので、最初に落とす。 */
+    .Title {
+      display: none;
+    }
     .SearchField {
       max-width: 14rem;
     }
     .SearchShortcut {
+      display: none;
+    }
+  }
+  @media (max-width: 880px) {
+    /* ドットだけ残す。ラベルは .visually-hidden-narrow で読み上げには残る。 */
+    .SaveIndicator {
+      padding: 0;
+    }
+    .SearchField {
+      max-width: 10rem;
+    }
+  }
+  @media (max-width: 800px) {
+    .Container {
+      gap: var(--sp1);
+    }
+    /* Dark / Light の文字ラベルを落としてスイッチ本体だけ残す。 */
+    .ToggleSwitchContainer :global(span) {
       display: none;
     }
   }

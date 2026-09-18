@@ -645,7 +645,13 @@
     top: 0;
     bottom: 0;
     height: 100%;
-    width: 5px;
+    /* つかめる幅を 5px から 11px へ。left は JS が算出するので、負の margin で
+       見た目の位置を保ったまま当たり判定だけ左右へ広げる（::before / ::after
+       の left も合わせてずらす）。
+       SC 2.5.8 の 24px には届かないが、分割線の当たり判定を 24px にすると
+       両隣のペーンのクリックを食うため、ここは意図的に 11px で止めている。 */
+    width: 11px;
+    margin-left: -3px;
     cursor: col-resize;
     user-select: none;
     z-index: 999;
@@ -655,14 +661,16 @@
     left: 0;
     right: 0;
     width: 100%;
-    height: 5px;
+    height: 11px;
+    margin-left: 0;
+    margin-top: -3px;
     cursor: row-resize;
   }
   .SplitPaneRoot > :global(.Resizer::before) {
     content: "";
     position: absolute;
     top: 0;
-    left: 1px;
+    left: 4px;
     width: 3px;
     height: 100%;
     background-color: color-mix(in srgb, var(--theme-color-Sub-dark) 48%, transparent);
@@ -674,7 +682,7 @@
       opacity 0.15s ease;
   }
   .SplitPaneRoot.Vertical > :global(.Resizer::before) {
-    top: 1px;
+    top: 4px;
     left: 0;
     width: 100%;
     height: 3px;
@@ -684,7 +692,7 @@
     content: "";
     position: absolute;
     top: 50%;
-    left: 1px;
+    left: 4px;
     width: 3px;
     height: 1.5rem;
     transform: translateY(-50%);
@@ -695,7 +703,7 @@
     pointer-events: none;
   }
   .SplitPaneRoot.Vertical > :global(.Resizer::after) {
-    top: 1px;
+    top: 4px;
     left: 50%;
     width: 1.5rem;
     height: 3px;

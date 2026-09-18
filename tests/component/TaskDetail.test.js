@@ -440,7 +440,7 @@ describe("TaskDetail", () => {
     await fireEvent.click(screen.getByRole("menuitem", { name: "形式を変換" }));
 
     expect(screen.getByText(/情報が損なわれる可能性/)).toBeInTheDocument();
-    await fireEvent.click(screen.getByRole("button", { name: "ok" }));
+    await fireEvent.click(screen.getByRole("button", { name: "変換する" }));
     await tick();
 
     const data = get(tree_data).data.children[0].data;
@@ -482,7 +482,7 @@ describe("TaskDetail", () => {
 
     await fireEvent.click(screen.getByRole("button", { name: "Node詳細の操作" }));
     await fireEvent.click(screen.getByRole("menuitem", { name: "形式を変換" }));
-    await fireEvent.click(screen.getByRole("button", { name: "ok" }));
+    await fireEvent.click(screen.getByRole("button", { name: "変換する" }));
     await tick();
 
     const data = get(tree_data).data.children[0].data;
