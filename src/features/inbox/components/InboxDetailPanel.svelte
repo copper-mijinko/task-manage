@@ -19,7 +19,7 @@
   export let item = null;
 
   const DETAIL_DATE_STYLE =
-    "border: 0; padding: 0 var(--sp7) 0 var(--sp2); font-size: 1rem; background-color: transparent;";
+    "border: 0; padding: 0 var(--sp7) 0 var(--sp2); font-size: 0.75rem; background-color: transparent;";
   // Inbox is workspace-backed, so memos default to markdown.
   const DEFAULT_MEMO_FORMAT = "markdown";
 
@@ -238,9 +238,9 @@
     background-color: color-mix(in srgb, var(--theme-color-Sub-main) 12%, transparent);
     border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 25%, transparent);
     border-radius: var(--shape-xs);
-    padding: 0 0.3rem;
+    padding: 0 0.225rem;
     font-family: "Consolas", "Courier New", monospace;
-    font-size: 0.85rem;
+    font-size: 0.6375rem;
   }
 
   .detail-body {
@@ -303,7 +303,7 @@
     background-color: var(--theme-color-Main-light);
     color: var(--theme-color-Sub-main);
     font-size: var(--font-body-md);
-    padding: 0.3rem var(--sp2);
+    padding: 0.225rem var(--sp2);
     outline: none;
   }
 

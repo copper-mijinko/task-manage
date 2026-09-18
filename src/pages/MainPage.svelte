@@ -899,7 +899,7 @@
       persistenceKey="layout.project.tree-detail"
       bind:collapsedPane={outerCollapsedPane}
     >
-      <Pane style={"min-width: 10rem;"}>
+      <Pane style={"min-width: 7.5rem;"}>
         <section class="tree-workspace" aria-label="ノード一覧">
           <header class="tree-heading">
             <strong>{projectName}</strong><span class="storage-badge">{projectStorageLabel}</span>
@@ -1370,7 +1370,7 @@
                 separatorLabel="ツリーとガントチャートの幅を変更"
                 persistenceKey="layout.project.tree-gantt"
               >
-                <Pane style={"height: 100%; min-width: 6rem;"}>
+                <Pane style={"height: 100%; min-width: 4.5rem;"}>
                   <div class="TreeTable">
                     <TreeTable bind:this={treeComponent} />
                   </div>
@@ -1387,7 +1387,7 @@
           </div>
         </section>
       </Pane>
-      <Pane style={"min-width: 10rem;"}>
+      <Pane style={"min-width: 7.5rem;"}>
         {#if detailPaneVisible}
           <TaskDetail />
         {/if}
@@ -1435,7 +1435,7 @@
   <Modal
     show={show_memo_format_confirm}
     toggle={closeBulkMemoFormatConfirm}
-    width="44rem"
+    width="33rem"
     height="auto"
     label="メモ形式の一括変換"
   >
@@ -1576,8 +1576,8 @@
     flex: 0 0 auto;
   }
   .TbGroup :global(button) {
-    width: 2.25rem;
-    height: 2.25rem;
+    width: 1.6875rem;
+    height: 1.6875rem;
     margin: 0;
   }
   .TaskListToolbar {
@@ -1623,10 +1623,10 @@
   }
   .TbSearchRow {
     /* SearchBox sits alone on the second row; let it use its natural
-       2rem height (defined in SearchBox.svelte). This adds the row
+       1.5rem height (defined in SearchBox.svelte). This adds the row
        height that brings the toolbar in line with the memo tab strip
        on the TaskDetail side. */
-    min-height: 2rem;
+    min-height: 1.5rem;
   }
   .TbSearchRow :global(> *) {
     flex: 1 1 auto;
@@ -1635,7 +1635,7 @@
   .storage-badge {
     color: var(--fg-muted);
     flex: 0 0 auto;
-    padding: 0.15rem var(--sp2);
+    padding: 0.1125rem var(--sp2);
     border-radius: var(--shape-xs);
     background-color: color-mix(in srgb, var(--fg-muted) 12%, transparent);
     font-size: var(--font-label-md);
@@ -1645,7 +1645,7 @@
   .TbSep {
     display: inline-block;
     width: 1px;
-    height: 1.5rem;
+    height: 1.125rem;
     background-color: color-mix(in srgb, var(--theme-color-Sub-main) 30%, transparent);
     flex: 0 0 auto;
     align-self: center;
@@ -1673,8 +1673,8 @@
     flex: 1;
   }
   :global(::-webkit-scrollbar) {
-    width: 0.75rem;
-    height: 0.75rem;
+    width: 0.5625rem;
+    height: 0.5625rem;
   }
   :global(::-webkit-scrollbar-track) {
     border-radius: var(--shape-sm);
@@ -1696,7 +1696,7 @@
   .bulk-convert-header {
     padding: var(--sp3) var(--sp4);
     font-weight: bold;
-    font-size: 1.4rem;
+    font-size: 1.05rem;
     color: var(--theme-color-Sub-main);
     background-color: var(--theme-color-Main-main);
     border-bottom: 1px solid var(--theme-color-Sub-dark);

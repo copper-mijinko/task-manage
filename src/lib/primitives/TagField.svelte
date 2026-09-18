@@ -181,8 +181,8 @@
 
   .tag-row-label {
     flex: 0 0 auto;
-    width: 2.75rem;
-    min-width: 2.75rem;
+    width: 2.0625rem;
+    min-width: 2.0625rem;
     color: var(--theme-color-Sub-main);
     font-size: var(--font-label-md);
     font-weight: 600;
@@ -192,7 +192,7 @@
 
   .tag-chips {
     box-sizing: border-box;
-    min-height: var(--detail-control-height, 1.75rem);
+    min-height: var(--detail-control-height, 1.3125rem);
     display: flex;
     flex: 1 1 auto;
     flex-wrap: wrap;
@@ -227,8 +227,8 @@
     align-items: center;
     gap: var(--sp1);
     min-width: 0;
-    max-width: min(14rem, 100%);
-    min-height: 1.25rem;
+    max-width: min(10.5rem, 100%);
+    min-height: 0.9375rem;
     padding: 0 var(--sp1);
     border-radius: var(--shape-pill);
     border: 1px solid var(--theme-color-Primary-main);
@@ -250,8 +250,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 1rem;
-    height: 1rem;
+    width: 0.75rem;
+    height: 0.75rem;
     padding: 0;
     margin: 0;
     border: none;
@@ -268,8 +268,8 @@
   }
 
   .tag-chip-x svg {
-    width: 0.7rem;
-    height: 0.7rem;
+    width: 0.525rem;
+    height: 0.525rem;
     fill: none;
     stroke: currentColor;
     stroke-width: 2.5;
@@ -287,8 +287,8 @@
     min-width: 0;
     max-width: 100%;
     width: auto;
-    height: 1.25rem;
-    flex: 1 1 4rem;
+    height: 0.9375rem;
+    flex: 1 1 3rem;
     outline: 0;
     padding: 0;
     margin-left: var(--sp1);
@@ -303,7 +303,7 @@
     align-items: center;
     gap: 2px var(--sp1);
     min-width: 0;
-    min-height: 1.5rem;
+    min-height: 1.125rem;
     padding: 1px var(--sp1);
     background-color: color-mix(in srgb, var(--theme-color-Sub-main) 6%, transparent);
     border-radius: var(--shape-sm);
@@ -312,8 +312,8 @@
   .tag-pill {
     display: inline-flex;
     align-items: center;
-    gap: 0.2rem;
-    min-height: 1.25rem;
+    gap: 0.15rem;
+    min-height: 0.9375rem;
     padding: 0 var(--sp1);
     border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 35%, transparent);
     border-radius: var(--shape-pill);
@@ -343,10 +343,10 @@
     font-size: var(--font-label-sm);
   }
 
-  @container (max-width: 22rem) {
+  @container (max-width: 16.5rem) {
     .tag-row-label {
-      width: 2.25rem;
-      min-width: 2.25rem;
+      width: 1.6875rem;
+      min-width: 1.6875rem;
       font-size: var(--font-label-sm);
     }
   }

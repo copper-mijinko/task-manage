@@ -126,7 +126,7 @@
     const panes = [...split_pane_root.querySelectorAll(":scope > .Pane")];
     const canPreserveWidths = preserveWidths && panes.length === paneCount;
     paneCount = panes.length;
-    minWidth = isVertical ? "0" : `${4 * panes.length}rem`; // magic number 4rem.
+    minWidth = isVertical ? "0" : `${4 * panes.length}rem`; // magic number 3rem.
     minHeight = isVertical ? `${4 * panes.length}rem` : "0";
 
     if (!panes.length) {
@@ -694,7 +694,7 @@
     top: 50%;
     left: 4px;
     width: 3px;
-    height: 1.5rem;
+    height: 1.125rem;
     transform: translateY(-50%);
     background-image: radial-gradient(circle, var(--theme-color-Main-main) 1px, transparent 1.2px);
     background-size: 3px 4px;
@@ -705,7 +705,7 @@
   .SplitPaneRoot.Vertical > :global(.Resizer::after) {
     top: 4px;
     left: 50%;
-    width: 1.5rem;
+    width: 1.125rem;
     height: 3px;
     transform: translateX(-50%);
     background-image: radial-gradient(circle, var(--theme-color-Main-main) 1px, transparent 1.2px);

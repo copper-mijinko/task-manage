@@ -189,7 +189,7 @@
     align-items: center;
     flex-wrap: wrap;
     gap: var(--sp1);
-    min-height: var(--detail-control-height, 1.75rem);
+    min-height: var(--detail-control-height, 1.3125rem);
     box-sizing: border-box;
     padding: 1px var(--sp1);
     border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 28%, transparent);
@@ -239,15 +239,15 @@
     cursor: not-allowed;
   }
   .Input {
-    flex: 1 1 4rem;
-    min-width: 4rem;
+    flex: 1 1 3rem;
+    min-width: 3rem;
     border: none;
     outline: none;
     background: transparent;
     color: var(--theme-color-Sub-main);
     font-size: var(--font-label-md);
-    height: 1.25rem;
-    line-height: 1.25rem;
+    height: 0.9375rem;
+    line-height: 0.9375rem;
     padding: 0;
   }
 
@@ -260,7 +260,7 @@
     margin: 2px 0 0;
     padding: 0;
     list-style: none;
-    max-height: 13rem;
+    max-height: 9.75rem;
     overflow-y: auto;
     border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 20%, transparent);
     border-radius: var(--shape-sm);

@@ -3,21 +3,22 @@
    These bridge the M3-aligned mock with the existing theme.ts color tokens.
    ============================================================ */
 :root {
-  /* Spacing — 4pt grid */
+  /* Spacing — 4pt グリッド。rem で持つのでコンポーネント側の rem 指定と
+     同じスケールに乗る（1rem = 16px）。 */
   --sp0: 0px;
-  --sp1: 4px;
-  --sp2: 8px;
-  --sp3: 12px;
-  --sp4: 16px;
-  --sp5: 20px;
-  --sp6: 24px;
-  --sp7: 32px;
-  --sp8: 48px;
+  --sp1: 0.25rem;
+  --sp2: 0.5rem;
+  --sp3: 0.75rem;
+  --sp4: 1rem;
+  --sp5: 1.25rem;
+  --sp6: 1.5rem;
+  --sp7: 2rem;
+  --sp8: 3rem;
 
   /* 最小タップ/クリックターゲット (WCAG 2.2 SC 2.5.8)。
-     rem ではなく px で持つ。App.svelte が html を 75% に縮めているため、
-     rem で 1.5rem と書くと実寸 18px になり基準を割る。 */
-  --tap-min: 24px;
+     基準は CSS px で定義されているので、利用者が既定フォントを小さくしても
+     24px を割らないよう px の下限を併記する。上に振れる分は rem 側が拾う。 */
+  --tap-min: max(1.5rem, 24px);
 
   /* Shape */
   --shape-xs: 4px;
@@ -31,17 +32,17 @@
   --elevation-2: 0 2px 6px rgba(0, 0, 0, 0.15), 0 1px 4px rgba(0, 0, 0, 0.1);
   --elevation-3: 0 4px 12px rgba(0, 0, 0, 0.2), 0 2px 6px rgba(0, 0, 0, 0.12);
 
-  /* Typography scale */
-  --font-display: 28px;
-  --font-headline: 24px;
-  --font-title-lg: 20px;
-  --font-title-md: 16px;
-  --font-title-sm: 14px;
-  --font-body-md: 14px;
-  --font-body-sm: 13px;
-  --font-label-lg: 14px;
-  --font-label-md: 12px;
-  --font-label-sm: 11px;
+  /* Typography scale — 同じく rem。利用者のフォントサイズ設定に追従する。 */
+  --font-display: 1.75rem;
+  --font-headline: 1.5rem;
+  --font-title-lg: 1.25rem;
+  --font-title-md: 1rem;
+  --font-title-sm: 0.875rem;
+  --font-body-md: 0.875rem;
+  --font-body-sm: 0.8125rem;
+  --font-label-lg: 0.875rem;
+  --font-label-md: 0.75rem;
+  --font-label-sm: 0.6875rem;
 
   /* Header/Sidebar の濃紺背景上で使う固定色（テーマ非依存）
      Theme-main (#143693) は Dark/Light どちらでも同じため、その上に
@@ -78,16 +79,16 @@
      absorbs whatever space is left (see fitNameColumn in TreeTable). */
   /* Tree/Name が主役の列。ここだけは十分な最小幅を取り、余った幅も
      すべて Name が吸う（TreeTable の fitNameColumn）。 */
-  --col-min-name: 15rem;
+  --col-min-name: 11.25rem;
   /* ステータスは「ステータス」5 文字 + 並べ替えボタンが並ぶので、日付列
-     （3 文字）より少し広く要る。7rem では見出しが「ステー...」に切れていた。 */
-  --col-min-status: 8rem;
-  --col-min-date: 8rem;
-  --col-min-count: 5rem;
+     （3 文字）より少し広く要る。5.25rem では見出しが「ステー...」に切れていた。 */
+  --col-min-status: 6rem;
+  --col-min-date: 6rem;
+  --col-min-count: 3.75rem;
   /* タグ列は中身が短いチップ 1〜2 個。ヘッダーの「タグ」表示が
      読める幅だけ確保する。 */
-  --col-min-tags: 4rem;
-  --col-min-default: 8rem;
+  --col-min-tags: 3rem;
+  --col-min-default: 6rem;
 
   /* Card body padding — overridable by density mode so we don't squash
      every other --sp3 consumer. Defaults to the comfortable 12px. */
@@ -102,7 +103,7 @@
   /* CardHeader chrome — slim height + tinted strip + 14px title is the
      comfortable default. Compact collapses to a content-sized strip with
      a 12px title and no tint so it reads as a hairline label, not a bar. */
-  --card-header-min-h: 2.25rem;
+  --card-header-min-h: 1.6875rem;
   --card-header-pad-y: var(--sp1);
   --card-header-font: var(--font-title-sm);
   --card-header-bg: color-mix(
@@ -152,13 +153,13 @@
   --card-pad: var(--sp1);
   --card-border-alpha: 28%;
 
-  /* Slim the CardHeader: pin min-height to the IconButton size (2rem) so
+  /* Slim the CardHeader: pin min-height to the IconButton size (1.5rem) so
      left/right Card headers stay the same height regardless of slot
      content (text-only vs IconButton-filled), zero vertical pad to drop
      the 8px of unused padding, smaller 12px label.
      NOTE: --card-header-bg is intentionally NOT overridden — the Primary
      12% tint stays so the title strip reads as a header in either mode. */
-  --card-header-min-h: 2rem;
+  --card-header-min-h: 1.5rem;
   --card-header-pad-y: 0px;
   --card-header-font: var(--font-label-md);
 
@@ -233,7 +234,7 @@ input:disabled {
 .PaneTitle {
   display: flex;
   align-items: center;
-  min-height: 2rem;
+  min-height: 1.5rem;
   padding: 0 var(--sp3);
   border-left: 3px solid var(--theme-color-Primary-main);
 
@@ -376,10 +377,10 @@ body {
 :root {
   /* 一覧なので、1 行に本文 14px が収まる範囲でできるだけ詰める。36px では
      画面に入る行数が少なかった。 */
-  --tree-row-height: 32px;
+  --tree-row-height: 2rem;
 }
 .density-compact {
-  --tree-row-height: 28px;
+  --tree-row-height: 1.75rem;
 }
 
 /* 幅が足りないときにラベルを視覚的にだけ隠す。display:none と違い、

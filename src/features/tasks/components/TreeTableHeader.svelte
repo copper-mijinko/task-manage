@@ -556,7 +556,7 @@
             </button>
             {#if filterActive[header.name]}
               <IconButton
-                style={"margin: 0rem; padding: var(--sp1); margin-left: auto; width: 1.5rem; height: 1.5rem; flex-shrink: 0;"}
+                style={"margin: 0rem; padding: var(--sp1); margin-left: auto; width: 1.125rem; height: 1.125rem; flex-shrink: 0;"}
                 ariaLabel="ステータスフィルターをクリア"
                 on:click={(e) => {
                   clearColumnFilter(header.name);
@@ -602,7 +602,7 @@
                 variant="text"
                 normalColor="var(--fg-muted)"
                 activeColor="var(--accent-fg)"
-                style="margin:0; width:1.5rem; height:1.5rem;"
+                style="margin:0; width:1.125rem; height:1.125rem;"
                 ariaLabel="タグフィルターをクリア"
                 on:click={(e) => {
                   e.stopPropagation();
@@ -640,7 +640,7 @@
             </button>
             {#if filterActive[header.name]}
               <IconButton
-                style={"margin: 0rem; padding: var(--sp1); margin-left: auto; width: 1.5rem; height: 1.5rem; flex-shrink: 0;"}
+                style={"margin: 0rem; padding: var(--sp1); margin-left: auto; width: 1.125rem; height: 1.125rem; flex-shrink: 0;"}
                 ariaLabel="タスク名フィルターをクリア"
                 on:click={(e) => {
                   clearColumnFilter(header.name);
@@ -681,7 +681,7 @@
             </button>
             {#if filterActive[header.name]}
               <IconButton
-                style={"margin: 0rem; padding: var(--sp1); margin-left: auto; width: 1.5rem; height: 1.5rem; flex-shrink: 0;"}
+                style={"margin: 0rem; padding: var(--sp1); margin-left: auto; width: 1.125rem; height: 1.125rem; flex-shrink: 0;"}
                 ariaLabel={`${COUNT_COLUMN_LABELS[header.name]}フィルターをクリア`}
                 on:click={(e) => {
                   clearColumnFilter(header.name);
@@ -722,7 +722,7 @@
             </button>
             {#if filterActive[header.name]}
               <IconButton
-                style={"margin: 0rem; padding: var(--sp1); margin-left: auto; width: 1.5rem; height: 1.5rem; flex-shrink: 0;"}
+                style={"margin: 0rem; padding: var(--sp1); margin-left: auto; width: 1.125rem; height: 1.125rem; flex-shrink: 0;"}
                 ariaLabel={`${getColumnLabel(header.name)}フィルターをクリア`}
                 on:click={(e) => {
                   clearColumnFilter(header.name);
@@ -762,7 +762,7 @@
             {/if}
             {#if filterActive[header.name]}
               <IconButton
-                style={"margin: 0rem; padding: var(--sp1); margin-left: auto; width: 1.5rem; height: 1.5rem; flex-shrink: 0;"}
+                style={"margin: 0rem; padding: var(--sp1); margin-left: auto; width: 1.125rem; height: 1.125rem; flex-shrink: 0;"}
                 ariaLabel={`${getColumnLabel(header.name)}フィルターをクリア`}
                 on:click={(e) => {
                   clearColumnFilter(header.name);
@@ -862,7 +862,7 @@
             aria-label={setting.label + "の幅"}
             value={widths[setting.id] || ""}
             placeholder="自動"
-            style="width:5rem"
+            style="width:3.75rem"
             on:change={(event) => setWidth(setting.id, event)}
           />
         </div>
@@ -944,17 +944,17 @@
     --header-hover: color-mix(in srgb, var(--theme-color-Sub-main) 12%, transparent);
     --header-active: var(--theme-color-Primary-main);
     --header-button-border: color-mix(in srgb, var(--theme-color-Sub-main) 24%, transparent);
-    /* 1.5rem は html が 75% なので実寸 18px にしかならず、WCAG 2.2 SC 2.5.8
+    /* 1.125rem は html が 75% なので実寸 18px にしかならず、WCAG 2.2 SC 2.5.8
        の 24px を割っていた。px のトークンで最低線を固定する。 */
     --header-icon-size: var(--tap-min);
-    --header-action-icon-size: 1.1rem;
+    --header-action-icon-size: 0.825rem;
 
     position: sticky;
     top: 0;
     display: flex;
     flex-shrink: 0;
     box-sizing: border-box;
-    height: 3rem;
+    height: 2.25rem;
     padding: 0;
     width: 100%;
     z-index: 9999;
@@ -962,7 +962,7 @@
   .TableHeader {
     flex-shrink: 0;
     position: relative;
-    height: 3rem;
+    height: 2.25rem;
     box-sizing: border-box;
     --col-min: var(--col-min-default);
     min-width: var(--col-min);
@@ -994,7 +994,7 @@
   }
   /* タスク名の列だけは右端に「すべて展開 / 折りたたみ」が並ぶので、その手前。 */
   .TableHeader[data-column="name"] .HeaderSortButton {
-    right: 2.75rem;
+    right: 2.0625rem;
   }
   .TableHeader:hover .HeaderSortButton,
   .TableHeader:focus-within .HeaderSortButton,
@@ -1027,9 +1027,9 @@
     --col-min: var(--col-min-tags);
   }
   .CheckboxHeaderCell {
-    flex: 0 0 1.75rem;
-    width: 1.75rem;
-    height: 3rem;
+    flex: 0 0 1.3125rem;
+    width: 1.3125rem;
+    height: 2.25rem;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1059,9 +1059,9 @@
   .HeaderLabelRow {
     position: relative;
     display: flex;
-    flex: 0 0 1.75rem;
+    flex: 0 0 1.3125rem;
     width: 100%;
-    height: 1.75rem;
+    height: 1.3125rem;
     align-items: center;
     justify-content: center;
     gap: var(--sp1);
@@ -1095,9 +1095,9 @@
 
   .HeaderControlRow {
     display: flex;
-    flex: 0 0 1.25rem;
+    flex: 0 0 0.9375rem;
     width: 100%;
-    height: 1.25rem;
+    height: 0.9375rem;
     align-items: center;
     justify-content: center;
     gap: var(--sp1);
@@ -1110,7 +1110,7 @@
     align-items: center;
     width: 100%;
     min-width: 0;
-    height: 1.25rem;
+    height: 0.9375rem;
   }
 
   .HeaderFilterControl {
@@ -1118,7 +1118,7 @@
     align-items: center;
     width: 100%;
     min-width: 0;
-    /* 高さ 1.25rem = 実寸 15px だった。列ヘッダーは 1 行しかないので、
+    /* 高さ 0.9375rem = 実寸 15px だった。列ヘッダーは 1 行しかないので、
        ここを 24px にしてもコストは行数に比例しない。 */
     min-height: var(--tap-min);
     margin: 0;
@@ -1150,8 +1150,8 @@
     cursor: default;
   }
   .FilterIcon {
-    width: 1.1rem;
-    height: 1.1rem;
+    width: 0.825rem;
+    height: 0.825rem;
     margin: 0;
     padding: 2px;
     box-sizing: content-box;
@@ -1182,7 +1182,7 @@
     border-radius: var(--shape-sm);
     box-shadow: var(--elevation-3);
     padding: var(--sp2) 0;
-    min-width: 13rem;
+    min-width: 9.75rem;
     color: var(--theme-color-Sub-main);
   }
   .PanelTitle {
@@ -1205,8 +1205,8 @@
     background-color: color-mix(in srgb, var(--theme-color-Primary-main) 10%, transparent);
   }
   .LockIcon {
-    width: 0.9rem;
-    height: 0.9rem;
+    width: 0.675rem;
+    height: 0.675rem;
     flex-shrink: 0;
     opacity: 0.4;
     display: flex;
@@ -1223,28 +1223,28 @@
     user-select: none;
   }
   .SettingsRow input[type="checkbox"] {
-    width: 0.9rem;
-    height: 0.9rem;
+    width: 0.675rem;
+    height: 0.675rem;
     flex-shrink: 0;
     cursor: pointer;
     accent-color: var(--theme-color-Primary-dark);
   }
   .MoveButtons {
     display: flex;
-    gap: 0.1rem;
+    gap: 0.075rem;
     flex-shrink: 0;
   }
   .MoveBtn {
-    width: 1.2rem;
-    height: 1.2rem;
+    width: 0.9rem;
+    height: 0.9rem;
     display: flex;
     align-items: center;
     justify-content: center;
     background: transparent;
     border: none;
     cursor: pointer;
-    border-radius: 0.2rem;
-    padding: 0.1rem;
+    border-radius: 0.15rem;
+    padding: 0.075rem;
     color: var(--theme-color-Sub-main);
     opacity: 0.6;
   }

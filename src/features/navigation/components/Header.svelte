@@ -160,7 +160,7 @@
     use_ripple={false}
     activeColor={"transparent"}
     normalColor={"transparent"}
-    style={"box-shadow: none; height:2.5rem; width: 2.5rem; margin: 0;"}
+    style={"box-shadow: none; height:1.875rem; width: 1.875rem; margin: 0;"}
   >
     {#if $sidebarCollapsed}
       <!-- Hamburger when the sidebar is hidden — clicking opens it. -->
@@ -628,8 +628,8 @@
     cursor: not-allowed;
   }
   .NavHistoryBtn svg {
-    width: 1.1rem;
-    height: 1.1rem;
+    width: 0.825rem;
+    height: 0.825rem;
     fill: none;
   }
   svg {
@@ -642,8 +642,8 @@
     align-items: center;
     gap: var(--sp1);
     flex: 1 1 auto;
-    max-width: 25rem;
-    min-width: 5rem;
+    max-width: 18.75rem;
+    min-width: 3.75rem;
     padding: 2px var(--sp2);
     border: 1px solid transparent;
     border-radius: var(--shape-sm);
@@ -662,8 +662,8 @@
     border-color: var(--accent-fg);
   }
   .SearchIcon {
-    width: 1rem;
-    height: 1rem;
+    width: 0.75rem;
+    height: 0.75rem;
     fill: none;
     stroke: currentColor;
     stroke-width: 2;
@@ -734,8 +734,8 @@
     cursor: not-allowed;
   }
   .SearchNavBtn svg {
-    width: 1rem;
-    height: 1rem;
+    width: 0.75rem;
+    height: 0.75rem;
     fill: none;
   }
 
@@ -775,29 +775,29 @@
     cursor: not-allowed;
   }
   .InboxBtn svg {
-    width: 1.1rem;
-    height: 1.1rem;
+    width: 0.825rem;
+    height: 0.825rem;
     fill: none;
   }
   /* 未処理件数のバッジ。濃紺ヘッダーの上に載る明るいチップなので、文字は
      白ではなく暗色にする。白文字だと 2.65:1 しかなく AA (4.5:1) を満たせず、
      かといって背景を濃くするとヘッダーの濃紺に埋もれる（3:1 を割る）。
      暗色文字なら 7:1 で、チップ自体もヘッダーに対して 4:1 で浮く。
-     文字サイズも 0.65rem（7.8px）ではトークン最小の 11px を下回っていて
+     文字サイズも 0.4875rem（7.8px）ではトークン最小の 11px を下回っていて
      読めなかったので --font-label-sm に揃える。 */
   .InboxBtnBadge {
     position: absolute;
     top: -4px;
     right: -4px;
-    min-width: 1.25rem;
-    height: 1.25rem;
-    padding: 0 0.3rem;
+    min-width: 0.9375rem;
+    height: 0.9375rem;
+    padding: 0 0.225rem;
     border-radius: var(--shape-pill);
     background-color: var(--accent-fg);
     color: #101315;
     font-size: var(--font-label-sm);
     font-weight: 700;
-    line-height: 1.25rem;
+    line-height: 0.9375rem;
     text-align: center;
   }
 
@@ -866,8 +866,8 @@
     border-color: var(--fg-muted);
   }
   .SettingsBtn svg {
-    width: 1.1rem;
-    height: 1.1rem;
+    width: 0.825rem;
+    height: 0.825rem;
     fill: none;
   }
 
@@ -881,9 +881,9 @@
     -webkit-app-region: no-drag;
   }
   .WinCtrlBtn {
-    width: 2.5rem;
+    width: 1.875rem;
     height: 100%;
-    min-height: 2.25rem;
+    min-height: 1.6875rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -909,8 +909,8 @@
     background-color: #c4101f;
   }
   .WinCtrlBtn svg {
-    width: 1.15rem;
-    height: 1.15rem;
+    width: 0.8625rem;
+    height: 0.8625rem;
     fill: none;
   }
   /* ウィンドウは frame:false なので、最小化/最大化/閉じるはここにある自前の
@@ -924,7 +924,7 @@
       display: none;
     }
     .SearchField {
-      max-width: 14rem;
+      max-width: 10.5rem;
     }
     .SearchShortcut {
       display: none;
@@ -936,7 +936,7 @@
       padding: 0;
     }
     .SearchField {
-      max-width: 10rem;
+      max-width: 7.5rem;
     }
   }
   @media (max-width: 800px) {

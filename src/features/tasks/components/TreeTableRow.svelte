@@ -632,7 +632,7 @@
   }
   :global(.NameTag) {
     position: absolute;
-    top: -1000rem;
+    top: -750rem;
     display: inline;
     background-color: var(--theme-color-Primary-dark);
     border: 1px solid var(--theme-color-Primary-dark);
@@ -644,7 +644,7 @@
   }
   .TableRow.DragOverTop:before {
     /* Insert as elder sibling: blue line on top edge */
-    border-top: 0.2rem solid var(--theme-color-Primary-dark);
+    border-top: 0.15rem solid var(--theme-color-Primary-dark);
     position: absolute;
     top: 0;
     left: 0;
@@ -658,7 +658,7 @@
   }
   .TableRow.DragOverBottom:before {
     /* Append as child: outline around the entire row */
-    border: 0.2rem solid var(--theme-color-Primary-dark);
+    border: 0.15rem solid var(--theme-color-Primary-dark);
     position: absolute;
     top: 0;
     left: 0;
@@ -672,7 +672,7 @@
   }
   .TableRow.DragOverBelow:before {
     /* Insert as younger sibling: blue line on bottom edge */
-    border-bottom: 0.2rem solid var(--theme-color-Primary-dark);
+    border-bottom: 0.15rem solid var(--theme-color-Primary-dark);
     position: absolute;
     top: 0;
     left: 0;
@@ -755,7 +755,7 @@
     position: absolute;
     top: 0;
     left: 0;
-    width: 0.2rem;
+    width: 0.15rem;
     height: 100%;
     background-color: var(--theme-color-Primary-main);
     z-index: 999;
@@ -763,7 +763,7 @@
   }
   .TableRow.Anchor::after {
     background-color: var(--theme-color-Primary-dark);
-    width: 0.3rem;
+    width: 0.225rem;
   }
   /*
    * 同じノードを指す別の行（別の親の下の出現）。ノード単位の選択なので色は
@@ -786,7 +786,7 @@
     );
   }
   .CheckboxCell {
-    /* 行番号 / 一括選択チェックボックスが入る先頭セル。1.75rem = 実寸 21px
+    /* 行番号 / 一括選択チェックボックスが入る先頭セル。1.3125rem = 実寸 21px
        だったので、中のチェックボックスが 24px に広げられなかった。 */
     flex: 0 0 var(--tap-min);
     width: var(--tap-min);
@@ -798,7 +798,7 @@
     background-color: var(--backgroundColor);
   }
   .RowNumber {
-    font-size: 0.7rem;
+    font-size: 0.525rem;
     line-height: 1;
     color: var(--theme-color-Sub-dark);
     opacity: 0.55;
@@ -923,9 +923,9 @@
     white-space: nowrap;
   }
   .TagChip {
-    max-width: 8rem;
+    max-width: 6rem;
     min-width: 0;
-    height: 1.25rem;
+    height: 0.9375rem;
     /* 詳細ペインの .tag-chip と同じ詰め方。8px だと 2〜3 文字のタグでも
        文字より余白のほうが広くなり、列の最小幅を無駄に押し上げていた。 */
     padding: 0 var(--sp1);
@@ -935,7 +935,7 @@
     color: var(--theme-color-Sub-main);
     font-size: var(--font-label-sm);
     font-weight: 500;
-    line-height: 1.25rem;
+    line-height: 0.9375rem;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -972,8 +972,8 @@
     /* 1 か所だけの行の印と外寸を揃える。ここがずれると、行ごとに名前の
        開始位置が数 px 動いて読みにくい。 */
     box-sizing: border-box;
-    width: 1.3rem;
-    height: 1.05rem;
+    width: 0.975rem;
+    height: 0.7875rem;
     padding: 0 1px;
     margin-right: 2px;
     border-radius: var(--shape-pill);
@@ -984,9 +984,9 @@
     user-select: none;
   }
   .TableData .SharedMark svg {
-    flex: 0 0 0.95rem;
-    width: 0.95rem;
-    height: 0.95rem;
+    flex: 0 0 0.7125rem;
+    width: 0.7125rem;
+    height: 0.7125rem;
   }
   /* 1 か所だけの行。名前の開始位置を揃える枠でもあるので、点だけだとゴミの
      ように見えてしまう。ノートの絵にして「ふつうのノード」と読めるようにし、
@@ -997,14 +997,14 @@
     align-items: center;
     justify-content: center;
     box-sizing: border-box;
-    width: 1.3rem;
-    height: 1.05rem;
+    width: 0.975rem;
+    height: 0.7875rem;
     margin-right: 2px;
     color: color-mix(in srgb, var(--fg-muted) 58%, transparent);
   }
   .TableData .SharedMarkSingle svg {
-    width: 0.95rem;
-    height: 0.95rem;
+    width: 0.7125rem;
+    height: 0.7125rem;
   }
   .SharedMarkCount {
     font-size: var(--font-label-sm);
@@ -1012,7 +1012,7 @@
     font-variant-numeric: tabular-nums;
   }
   .TableData .cycle-reference {
-    flex: 0 0 1.2rem;
+    flex: 0 0 0.9rem;
     white-space: nowrap;
     line-height: 1;
   }
@@ -1024,7 +1024,7 @@
     align-self: stretch;
     /* 1 段ぶんの字下げ（ガイド線 + 余白でおよそ 17px）。階層は主にこの
        字下げで読ませる。 */
-    width: 1.1rem;
+    width: 0.825rem;
     margin-top: calc(-1 * var(--sp1));
     margin-bottom: calc(-1 * var(--sp1) - 1px);
     margin-left: var(--sp1);
@@ -1067,7 +1067,7 @@
   }
   .ExpandButton {
     cursor: pointer;
-    /* ツリーで最も反復操作されるコントロール。1rem は html が 75% のため
+    /* ツリーで最も反復操作されるコントロール。0.75rem は html が 75% のため
        実寸 12px にしかならず、SC 2.5.8 の 24px を大きく割っていた。
        見た目のシェブロンは小さいままで、当たり判定だけ 24px 角に広げる。 */
     width: var(--tap-min);
@@ -1086,16 +1086,16 @@
       background-color 0.12s ease;
   }
   .ExpandButton svg {
-    width: 0.75rem;
-    height: 0.75rem;
+    width: 0.5625rem;
+    height: 0.5625rem;
     fill: var(--theme-color-Sub-light);
   }
   .ExpandButton.Expanded {
     transform: rotate(90deg);
   }
   .Space {
-    width: 1rem;
-    height: 1rem;
+    width: 0.75rem;
+    height: 0.75rem;
     flex-shrink: 0;
   }
   /* 親（子を持つ行）は「少しだけ強い」程度に差を付ける。太い枠や濃い塗りは

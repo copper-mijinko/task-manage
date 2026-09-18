@@ -21,7 +21,7 @@
   let fcolor = "gray";
   let bgcolor = "gray";
   let bdcolor = "gray";
-  let shadow = "0 .2rem .5rem rgba(0,0,0,0.25), 0 .1em .25rem rgba(0,0,0,0);";
+  let shadow = "0 0.15rem 0.375rem rgba(0,0,0,0.25), 0 .1em 0.1875rem rgba(0,0,0,0);";
 
   $: {
     // Defaults for "filled" variant (used when no variant set)
@@ -31,7 +31,7 @@
     fcolor = "var(--theme-color-Main-light)";
     bgcolor = normalColor;
     bdcolor = "none";
-    shadow = "0 .2rem .5rem rgba(0,0,0,0.25), 0 .1em .25rem rgba(0,0,0,0);";
+    shadow = "0 0.15rem 0.375rem rgba(0,0,0,0.25), 0 .1em 0.1875rem rgba(0,0,0,0);";
 
     switch (variant) {
       case "outlined":
@@ -93,8 +93,8 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    height: var(--icon-button-size, 2rem);
-    width: var(--icon-button-size, 2rem);
+    height: var(--icon-button-size, 1.5rem);
+    width: var(--icon-button-size, 1.5rem);
     padding: var(--icon-button-padding, 2px);
     border-radius: var(--icon-button-radius, var(--shape-sm));
     border: 1px solid var(--borderColor);

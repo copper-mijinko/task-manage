@@ -227,12 +227,12 @@
   .task-menu {
     background: var(--theme-color-Main-main);
     border-radius: var(--shape-sm);
-    box-shadow: 0 0.2rem 0.5rem rgba(0, 0, 0, 0.25);
+    box-shadow: 0 0.15rem 0.375rem rgba(0, 0, 0, 0.25);
     white-space: nowrap;
     margin: 0;
     padding: 4px 0;
     list-style: none;
-    min-width: 14rem;
+    min-width: 10.5rem;
     display: flex;
     flex-direction: column;
     overflow: visible;
@@ -296,8 +296,8 @@
   }
 
   .menu-icon {
-    width: 0.95rem;
-    height: 0.95rem;
+    width: 0.7125rem;
+    height: 0.7125rem;
     flex-shrink: 0;
     fill: var(--theme-color-Sub-light);
     stroke: var(--theme-color-Sub-light);
@@ -305,7 +305,7 @@
   }
 
   .submenu-arrow {
-    font-size: 1rem;
+    font-size: 0.75rem;
     line-height: 1;
     flex-shrink: 0;
   }
@@ -314,7 +314,7 @@
     position: absolute;
     top: 0;
     display: none;
-    padding-inline: 0.35rem;
+    padding-inline: 0.2625rem;
   }
 
   .submenu-position-right {

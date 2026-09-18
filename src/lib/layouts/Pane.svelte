@@ -16,7 +16,7 @@
     align-items: center;
     justify-content: center;
     overflow: auto;
-    min-width: 2rem;
+    min-width: 1.5rem;
     padding: 0;
   }
 

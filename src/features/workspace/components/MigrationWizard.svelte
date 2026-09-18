@@ -77,7 +77,7 @@
   $: if (show && phase === "idle") handleOpen();
 </script>
 
-<Modal {show} toggle={handleClose} width="44rem" height="auto">
+<Modal {show} toggle={handleClose} width="33rem" height="auto">
   <div class="container">
     <div class="header">Export db.json projects</div>
 
@@ -195,7 +195,7 @@
   .header {
     padding: var(--sp3) var(--sp4);
     font-weight: bold;
-    font-size: 1.4rem;
+    font-size: 1.05rem;
     color: var(--theme-color-Sub-main);
     background-color: var(--theme-color-Main-main);
     border-bottom: 1px solid var(--theme-color-Sub-dark);
@@ -308,7 +308,7 @@
 
   .custom-path {
     flex: 1;
-    min-width: 12rem;
+    min-width: 9rem;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

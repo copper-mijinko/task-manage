@@ -1057,7 +1057,7 @@
     display: flex;
     flex-direction: column;
     flex-shrink: 0;
-    height: 3rem;
+    height: 2.25rem;
     box-sizing: border-box;
     border-bottom: 1px solid var(--gantt-header-border);
     background: var(--gantt-header-bg);
@@ -1074,7 +1074,7 @@
     top: 2px;
     right: 2px;
     display: flex;
-    height: calc(3rem - 4px);
+    height: calc(2.25rem - 4px);
     align-items: center;
     justify-content: flex-end;
     gap: 2px;
@@ -1112,9 +1112,9 @@
     line-height: 1;
     padding: 0;
     margin: 0;
-    width: 1.8rem;
-    min-width: 1.8rem;
-    height: 1.6rem;
+    width: 1.35rem;
+    min-width: 1.35rem;
+    height: 1.2rem;
     border-radius: var(--shape-xs);
     cursor: pointer;
     transition:
@@ -1299,7 +1299,7 @@
     position: absolute;
     top: 20%;
     height: 60%;
-    min-width: 0.5rem;
+    min-width: 0.375rem;
     border: 1px solid var(--theme-color-Primary-main);
     border-radius: var(--shape-xs);
     background-color: color-mix(in srgb, var(--theme-color-Primary-main) 44%, transparent);
@@ -1307,13 +1307,13 @@
     z-index: 6;
     box-shadow:
       0 0 0 2px color-mix(in srgb, var(--theme-color-Main-main) 72%, transparent),
-      0 0.2rem 0.45rem rgba(0, 0, 0, 0.22);
+      0 0.15rem 0.3375rem rgba(0, 0, 0, 0.22);
   }
 
   .PreviewEdge {
     position: absolute;
-    top: -0.25rem;
-    bottom: -0.25rem;
+    top: -0.1875rem;
+    bottom: -0.1875rem;
     width: 2px;
     background-color: var(--theme-color-Primary-main);
     box-shadow: 0 0 0 1px color-mix(in srgb, var(--theme-color-Main-main) 65%, transparent);
@@ -1347,7 +1347,7 @@
   .Bar.DraggingBar {
     box-shadow:
       0 0 0 2px color-mix(in srgb, var(--theme-color-Main-main) 72%, transparent),
-      0 0.2rem 0.45rem rgba(0, 0, 0, 0.25);
+      0 0.15rem 0.3375rem rgba(0, 0, 0, 0.25);
     z-index: 5;
   }
 

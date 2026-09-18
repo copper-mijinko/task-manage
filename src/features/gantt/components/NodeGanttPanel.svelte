@@ -202,14 +202,14 @@
   }
   .NodeGanttScroll {
     overflow: auto;
-    min-height: 8rem;
+    min-height: 6rem;
   }
   .NodeGanttRows {
-    min-width: 52rem;
+    min-width: 39rem;
   }
   .NodeGanttAxis {
     display: grid;
-    grid-template-columns: minmax(12rem, 18rem) 17rem minmax(24rem, 1fr);
+    grid-template-columns: minmax(9rem, 13.5rem) 12.75rem minmax(18rem, 1fr);
     gap: var(--sp3);
     padding: var(--sp2) var(--sp4) 0;
     color: var(--theme-color-Sub-main);
@@ -234,10 +234,10 @@
   }
   .NodeGanttRow {
     display: grid;
-    grid-template-columns: minmax(12rem, 18rem) 17rem minmax(24rem, 1fr);
+    grid-template-columns: minmax(9rem, 13.5rem) 12.75rem minmax(18rem, 1fr);
     align-items: center;
     gap: var(--sp3);
-    min-height: 3.25rem;
+    min-height: 2.4375rem;
     padding: var(--sp2) var(--sp4);
     border-bottom: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 10%, transparent);
   }
@@ -270,11 +270,11 @@
     opacity: 0.8;
   }
   input {
-    width: 7.25rem;
+    width: 5.4375rem;
   }
   .NodeGanttTrack {
     position: relative;
-    height: 1.5rem;
+    height: 1.125rem;
     border-radius: var(--shape-xs);
     background: color-mix(in srgb, var(--theme-color-Sub-main) 8%, transparent);
   }
@@ -288,8 +288,8 @@
   .NodeGanttPoint {
     position: absolute;
     top: 15%;
-    width: 0.8rem;
-    height: 0.8rem;
+    width: 0.6rem;
+    height: 0.6rem;
     transform: translateX(-50%);
     border-radius: 50%;
     background: var(--theme-color-Info-main);

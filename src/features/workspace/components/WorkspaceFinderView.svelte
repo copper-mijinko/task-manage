@@ -64,10 +64,10 @@
     overflow: hidden;
   }
   .column {
-    width: 16rem;
+    width: 12rem;
     overflow: auto;
     border-right: 1px solid var(--theme-color-Sub-dark);
-    padding: 0.35rem;
+    padding: 0.2625rem;
   }
   .column:last-child {
     border-right: 0;
@@ -80,7 +80,7 @@
     border-radius: var(--shape-sm);
     background: transparent;
     color: inherit;
-    padding: 0.55rem;
+    padding: 0.4125rem;
     text-align: left;
   }
   .column button.selected {
@@ -91,8 +91,8 @@
     font-style: italic;
   }
   .empty {
-    padding: 0.6rem;
+    padding: 0.45rem;
     color: var(--theme-color-Sub-main);
-    font-size: 0.8rem;
+    font-size: 0.6rem;
   }
 </style>

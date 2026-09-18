@@ -34,9 +34,9 @@
     display: flex;
     align-items: center;
     position: relative;
-    width: 4rem;
-    height: 2rem;
-    border-radius: 2rem;
+    width: 3rem;
+    height: 1.5rem;
+    border-radius: 1.5rem;
     box-sizing: content-box;
     background-color: var(--leftColorBack);
     cursor: pointer;
@@ -49,8 +49,8 @@
 
   .ToggleButton::before {
     position: absolute;
-    width: 2rem;
-    height: 2rem;
+    width: 1.5rem;
+    height: 1.5rem;
     border-radius: 50%;
     background-color: var(--leftColor);
     content: "";
@@ -59,7 +59,7 @@
   }
 
   .ToggleButton:has(:checked)::before {
-    left: 2rem;
+    left: 1.5rem;
     background-color: var(--rightColor);
   }
 

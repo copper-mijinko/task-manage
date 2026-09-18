@@ -68,8 +68,8 @@
     display: flex;
     width: var(--width);
     height: var(--height);
-    max-width: calc(100vw - 2rem);
-    max-height: calc(100vh - 2rem);
+    max-width: calc(100vw - 1.5rem);
+    max-height: calc(100vh - 1.5rem);
     overflow: auto;
     z-index: 1;
   }

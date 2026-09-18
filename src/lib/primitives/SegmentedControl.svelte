@@ -107,12 +107,12 @@
   }
 
   .SegmentedControl.sm {
-    --segment-height: 1.8rem;
-    --segment-min-width: 2.85rem;
+    --segment-height: 1.35rem;
+    --segment-min-width: 2.1375rem;
   }
 
   .SegmentedControl.md {
-    --segment-height: 1.9rem;
-    --segment-min-width: 4.8rem;
+    --segment-height: 1.425rem;
+    --segment-min-width: 3.6rem;
   }
 </style>

@@ -258,13 +258,13 @@
     background: var(--canvas-default);
     border: 1px solid var(--border-muted);
     border-radius: var(--shape-sm);
-    height: 2rem;
+    height: 1.5rem;
     font: inherit;
   }
   .SearchBoxRoot {
-    width: clamp(9rem, 100%, 22rem);
+    width: clamp(6.75rem, 100%, 16.5rem);
     max-width: 100%;
-    min-height: 2rem;
+    min-height: 1.5rem;
     height: auto;
     margin: 0;
     display: flex;
@@ -292,7 +292,7 @@
     align-items: center;
     gap: 2px var(--sp1);
     min-width: 0;
-    min-height: 2rem;
+    min-height: 1.5rem;
     padding: 1px 0 1px var(--sp1);
     box-sizing: border-box;
     cursor: text;
@@ -305,8 +305,8 @@
     align-items: center;
     gap: var(--sp1);
     min-width: 0;
-    max-width: min(10rem, 100%);
-    min-height: 1.25rem;
+    max-width: min(7.5rem, 100%);
+    min-height: 0.9375rem;
     padding: 0 var(--sp1);
     border-radius: var(--shape-pill);
     border: 1px solid var(--theme-color-Primary-main);
@@ -326,8 +326,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 1rem;
-    height: 1rem;
+    width: 0.75rem;
+    height: 0.75rem;
     padding: 0;
     margin: 0;
     border: none;
@@ -342,8 +342,8 @@
     color: var(--theme-color-Main-light);
   }
   .SearchChipX svg {
-    width: 0.7rem;
-    height: 0.7rem;
+    width: 0.525rem;
+    height: 0.525rem;
     fill: none;
     stroke: currentColor;
     stroke-width: 2.5;
@@ -354,11 +354,11 @@
     box-sizing: border-box;
     margin: 0;
     padding: 0 var(--sp2) 0 0;
-    /* 1.5rem = 実寸 18px。入力欄も SC 2.5.8 の対象なので 24px を下限にする。 */
+    /* 1.125rem = 実寸 18px。入力欄も SC 2.5.8 の対象なので 24px を下限にする。 */
     min-height: var(--tap-min);
     flex: 1 1 auto;
     width: auto;
-    min-width: 4rem;
+    min-width: 3rem;
     border: none;
     background: transparent;
     color: var(--theme-color-Sub-main);

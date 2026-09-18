@@ -290,10 +290,7 @@
 {/if}
 
 <style>
-  /* App.svelte 側と同じ 75%。`rem` が 0.75 倍で効く点と、最小寸法には
-     px トークン（--tap-min）を使う理由はそちらのコメントを参照。 */
   :global(html) {
-    font-size: 75%;
     overflow: hidden;
   }
   :global(body) {
@@ -358,7 +355,7 @@
     display: flex;
     align-items: center;
     gap: var(--sp3);
-    min-width: 22rem;
+    min-width: 16.5rem;
     padding: var(--sp4);
     border-radius: var(--shape-sm);
     background: var(--theme-color-Theme-main);
@@ -366,8 +363,8 @@
     box-shadow: var(--elevation-2);
   }
   .spinner {
-    width: 2rem;
-    height: 2rem;
+    width: 1.5rem;
+    height: 1.5rem;
     flex-shrink: 0;
     border: 3px solid rgba(255, 255, 255, 0.25);
     border-top-color: #fff;

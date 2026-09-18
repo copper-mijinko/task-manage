@@ -102,8 +102,8 @@
     display: inline-flex;
     align-items: center;
     gap: var(--sp1);
-    max-width: min(20rem, 100%);
-    padding: 0.1rem var(--sp1) 0.1rem var(--sp2);
+    max-width: min(15rem, 100%);
+    padding: 0.075rem var(--sp1) 0.075rem var(--sp2);
     border-radius: var(--shape-pill);
     border: 1px solid var(--theme-color-Primary-main);
     background-color: color-mix(in srgb, var(--theme-color-Primary-main) 18%, transparent);
@@ -126,8 +126,8 @@
     font-weight: 600;
   }
   .ChipClear {
-    width: 1.1rem;
-    height: 1.1rem;
+    width: 0.825rem;
+    height: 0.825rem;
     flex-shrink: 0;
     display: inline-flex;
     align-items: center;
@@ -149,12 +149,12 @@
     outline-offset: 1px;
   }
   .ChipClear svg {
-    width: 0.75rem;
-    height: 0.75rem;
+    width: 0.5625rem;
+    height: 0.5625rem;
   }
   .ClearAll {
     margin-left: auto;
-    padding: 0.15rem var(--sp2);
+    padding: 0.1125rem var(--sp2);
     border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 30%, transparent);
     border-radius: var(--shape-xs);
     background-color: transparent;

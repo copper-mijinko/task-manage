@@ -452,7 +452,7 @@
     user-select: none;
   }
   .attachment-count {
-    min-width: 1.5rem;
+    min-width: 1.125rem;
     color: var(--theme-color-Sub-main);
     font-size: var(--font-body-sm);
     font-weight: 600;
@@ -481,18 +481,18 @@
     display: flex;
     align-items: center;
     min-width: 0;
-    min-height: 2rem;
+    min-height: 1.5rem;
     border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 22%, transparent);
     border-radius: var(--shape-sm);
     background-color: var(--theme-color-Main-light);
   }
   .attachment-open {
     display: grid;
-    grid-template-columns: 1.1rem minmax(0, 1fr) auto;
+    grid-template-columns: 0.825rem minmax(0, 1fr) auto;
     align-items: center;
     flex: 1 1 auto;
     min-width: 0;
-    height: 2rem;
+    height: 1.5rem;
     gap: var(--sp2);
     padding: 0 var(--sp2);
     border: 0;
@@ -506,8 +506,8 @@
   }
   .file-icon {
     display: flex;
-    width: 1.1rem;
-    height: 1.1rem;
+    width: 0.825rem;
+    height: 0.825rem;
     color: var(--theme-color-Primary-main);
   }
   .file-icon svg {
@@ -548,7 +548,7 @@
   .attachment-empty {
     display: flex;
     align-items: center;
-    min-height: 2rem;
+    min-height: 1.5rem;
     padding: 0 var(--sp2);
     border: 1px dashed color-mix(in srgb, var(--theme-color-Sub-main) 26%, transparent);
     border-radius: var(--shape-sm);

@@ -2640,7 +2640,7 @@
     align-items: center;
     gap: 2px;
     height: var(--memo-quill-button-height);
-    max-width: 7rem;
+    max-width: 5.25rem;
     padding: 0 var(--sp1);
     border: 0;
     border-radius: var(--shape-xs);
@@ -2672,8 +2672,8 @@
   .tool-chevron {
     display: inline-flex;
     flex: 0 0 auto;
-    width: 0.85rem;
-    height: 0.85rem;
+    width: 0.6375rem;
+    height: 0.6375rem;
   }
 
   .tool-chevron :global(svg) {
@@ -2693,8 +2693,8 @@
     z-index: 25;
     display: flex;
     flex-direction: column;
-    min-width: 8rem;
-    max-height: 18rem;
+    min-width: 6rem;
+    max-height: 13.5rem;
     padding: 4px;
     overflow-y: auto;
     border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 28%, transparent);
@@ -2707,7 +2707,7 @@
   .tool-menu-list-wide {
     left: auto;
     right: 0;
-    min-width: 11rem;
+    min-width: 8.25rem;
   }
 
   .tool-menu-group {
@@ -2723,7 +2723,7 @@
     display: flex;
     align-items: center;
     width: 100%;
-    min-height: 1.65rem;
+    min-height: 1.2375rem;
     padding: 0 var(--sp2);
     border: 0;
     border-radius: var(--shape-xs);
@@ -2746,7 +2746,7 @@
 
   .tool-sep {
     width: 1px;
-    height: 0.9rem;
+    height: 0.675rem;
     background-color: color-mix(in srgb, var(--theme-color-Sub-main) 20%, transparent);
     margin: 0 var(--sp1);
     flex-shrink: 0;
@@ -2771,7 +2771,7 @@
     align-items: center;
     justify-content: center;
     gap: 4px;
-    width: 3.05rem;
+    width: 2.2875rem;
     height: var(--memo-quill-button-height);
     padding: 0 7px;
     margin: 0;
@@ -2864,7 +2864,7 @@
     z-index: 25;
     display: flex;
     flex-direction: column;
-    min-width: 8rem;
+    min-width: 6rem;
     padding: 4px;
     border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 28%, transparent);
     border-radius: var(--shape-xs);
@@ -2877,7 +2877,7 @@
     align-items: center;
     gap: var(--sp1);
     width: 100%;
-    min-height: 1.65rem;
+    min-height: 1.2375rem;
     padding: 0 var(--sp3);
     border: 0;
     border-radius: var(--shape-xs);
@@ -3017,7 +3017,7 @@
     top: 50%;
     left: 1px;
     width: 3px;
-    height: 1.5rem;
+    height: 1.125rem;
     transform: translateY(-50%);
     background-image: radial-gradient(circle, var(--theme-color-Main-main) 1px, transparent 1.2px);
     background-size: 3px 4px;
@@ -3158,23 +3158,23 @@
   }
 
   .preview :global(h1) {
-    font-size: 1.75rem;
+    font-size: 1.3125rem;
     padding-bottom: var(--sp1);
     border-bottom: 1px solid color-mix(in srgb, var(--theme-color-Sub-dark) 50%, transparent);
   }
 
   .preview :global(h2) {
-    font-size: 1.4rem;
+    font-size: 1.05rem;
     padding-bottom: var(--sp1);
     border-bottom: 1px solid color-mix(in srgb, var(--theme-color-Sub-dark) 30%, transparent);
   }
 
   .preview :global(h3) {
-    font-size: 1.15rem;
+    font-size: 0.8625rem;
   }
 
   .preview :global(h4) {
-    font-size: 1.05rem;
+    font-size: 0.7875rem;
   }
 
   .preview :global(p) {
@@ -3184,14 +3184,14 @@
   .preview :global(img) {
     display: block;
     box-sizing: border-box;
-    /* Fixed cap (32rem) keeps the rendered size identical between
+    /* Fixed cap (24rem) keeps the rendered size identical between
        Preview-only and Split modes for any image wider than the cap,
        so the layout doesn't visually jump when the user toggles the
        view. Smaller images still display at their natural size in
        both modes. Click opens the image in a dedicated window for
        a full-resolution look. */
     width: auto;
-    max-width: min(100%, 32rem);
+    max-width: min(100%, 24rem);
     height: auto;
     margin: var(--sp3) 0;
     border-radius: var(--shape-md);
@@ -3202,7 +3202,7 @@
   }
 
   .preview :global(img[data-missing-image="true"]) {
-    min-height: 6rem;
+    min-height: 4.5rem;
     object-fit: contain;
     opacity: 0.65;
   }

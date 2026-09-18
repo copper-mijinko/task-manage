@@ -1665,7 +1665,7 @@
   toggle={() => {
     if (!dropBusy) pendingDrop = null;
   }}
-  width="28rem"
+  width="21rem"
   height="auto"
   label="ドロップ操作を選択"
 >
@@ -1736,7 +1736,7 @@
     width: 100%;
     height: 100%;
     /* 列の最小幅は各セルが持っていて、はみ出した分はこの要素が横スクロール
-       する。ここに「列数 × 4rem」の下限を置くと、ガント表示などでペインが
+       する。ここに「列数 × 3rem」の下限を置くと、ガント表示などでペインが
        狭いときにペイン（overflow:hidden）からはみ出して右端が切れる。 */
     min-width: 0;
     overflow-y: auto;
@@ -1751,11 +1751,11 @@
     z-index: 0;
   }
   .StickyTrail {
-    /* Pinned breadcrumb sits flush under the 3rem tree header. No margin,
+    /* Pinned breadcrumb sits flush under the 2.25rem tree header. No margin,
        no rounded corners, no shadow — it's a regular tree row that just
        happens to follow the scroll. */
     position: sticky;
-    top: 3rem;
+    top: 2.25rem;
     z-index: 9998;
     height: 0;
     overflow: visible;
@@ -1817,7 +1817,7 @@
     top: var(--sp2);
     right: var(--sp2);
     z-index: 10001;
-    max-width: min(28rem, calc(100% - var(--sp4)));
+    max-width: min(21rem, calc(100% - var(--sp4)));
     padding: var(--sp1) var(--sp2);
     border-radius: var(--shape-xs);
     background-color: var(--theme-color-Error-main);
@@ -1831,19 +1831,19 @@
     align-items: center;
     justify-content: center;
     gap: var(--sp2);
-    padding: 4rem var(--sp7);
+    padding: 3rem var(--sp7);
     color: var(--theme-color-Sub-dark);
     user-select: none;
   }
   .EmptyIcon {
-    width: 3rem;
-    height: 3rem;
+    width: 2.25rem;
+    height: 2.25rem;
     opacity: 0.35;
     stroke: var(--theme-color-Sub-dark);
   }
   .EmptyTitle {
     margin: 0;
-    font-size: 1rem;
+    font-size: 0.75rem;
     font-weight: 600;
     opacity: 0.6;
   }
