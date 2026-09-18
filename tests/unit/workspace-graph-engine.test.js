@@ -302,7 +302,11 @@ it("copy preserves its source and inserts the new root at the requested order", 
     order: 3,
   }).graph;
   expect(result.nodes.source).toEqual(input.nodes.source);
-  const copy = Object.values(result.nodes).find((n) => n.id !== "source" && n.name === "source");
+  // 複製の先頭ノードは「… のコピー」に改名される（同名だと、同じノードが
+  // 2 か所に出ているのか別ノードが増えたのか行から判別できないため）。
+  const copy = Object.values(result.nodes).find(
+    (n) => n.id !== "source" && n.name === "source のコピー"
+  );
   expect(copy.parents).toEqual([{ id: "target", order: 3 }]);
   expect(
     Object.values(result.nodes).some(
@@ -358,5 +362,45 @@ describe("edge archive", () => {
         archived: true,
       })
     ).toThrow("The workspace root is protected");
+  });
+});
+
+describe("copy naming", () => {
+  it("marks a copy so it is not confused with the original occurrence", () => {
+    const input = graph([node("root"), node("target", ["root"]), node("source", ["root"])]);
+    const once = executeGraphCommand(input, {
+      type: "copy",
+      nodeId: "source",
+      targetParentId: "target",
+      mode: "node",
+    }).graph;
+    const first = Object.values(once.nodes).find(
+      (n) => !["root", "source", "target"].includes(n.id)
+    );
+    expect(first.name).toBe("source のコピー");
+    expect(once.nodes.source.name).toBe("source");
+
+    const twice = executeGraphCommand(once, {
+      type: "copy",
+      nodeId: "source",
+      targetParentId: "target",
+      mode: "node",
+    }).graph;
+    const names = Object.values(twice.nodes)
+      .filter((n) => (n.parents || []).some((p) => p.id === "target"))
+      .map((n) => n.name)
+      .sort();
+    expect(names).toEqual(["source のコピー", "source のコピー (2)"]);
+  });
+
+  it("keeps the name when a node is only linked into another place", () => {
+    const input = graph([node("root"), node("target", ["root"]), node("source", ["root"])]);
+    const linked = executeGraphCommand(input, {
+      type: "link",
+      childId: "source",
+      parentId: "target",
+    }).graph;
+    expect(linked.nodes.source.name).toBe("source");
+    expect(linked.nodes.source.parents.map((p) => p.id).sort()).toEqual(["root", "target"]);
   });
 });

@@ -312,6 +312,16 @@ function executeGraphCommand(input, command, origin = "graph") {
       copiedFrom[copyId] = sourceId;
     }
     const newRootId = idMap.get(command.nodeId);
+    // 複製はもとと同じ名前になるので、行だけを見ても「同じノードが 2 か所に
+    // 出ている」のか「別のノードが増えた」のか区別が付かない。作った直後から
+    // 見分けが付くよう、複製の先頭ノードだけ名前に印を付ける（リンクで置き場所
+    // を増やしただけのときは同じノードなので、当然変えない）。
+    graph.nodes[newRootId].name = copyName(
+      graph,
+      graph.nodes[command.nodeId].name,
+      command.targetParentId,
+      newRootId
+    );
     graph.nodes[newRootId].parents = [
       {
         id: command.targetParentId,
@@ -345,6 +355,21 @@ function executeGraphCommand(input, command, origin = "graph") {
   validateGraph(graph);
   graph.revision = (input.revision || 0) + 1;
   return { graph, selectedNodeIds, copiedFrom };
+}
+
+/** 同じ親の下で衝突しない「… のコピー」を作る。 */
+function copyName(graph, baseName, parentId, exceptId) {
+  const taken = new Set(
+    Object.values(graph.nodes)
+      .filter((node) => node.id !== exceptId && (node.parents || []).some((p) => p.id === parentId))
+      .map((node) => node.name)
+  );
+  const base = `${baseName} のコピー`;
+  if (!taken.has(base)) return base;
+  for (let index = 2; ; index += 1) {
+    const candidate = `${base} (${index})`;
+    if (!taken.has(candidate)) return candidate;
+  }
 }
 
 function validateGraph(graph) {

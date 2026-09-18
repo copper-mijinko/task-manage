@@ -743,12 +743,15 @@ test("drop copy preserves source edges and creates an independently editable sub
     await expect(page.getByRole("dialog", { name: "ドロップ操作を選択" })).toBeVisible();
     expect(graphOf(app).nodes.shared).toEqual(original);
     await page.getByRole("button", { name: "子孫もコピー", exact: true }).click();
+    // 複製は「… のコピー」に改名される（同名だと、同じノードの 2 つ目の
+    // 出現なのか別ノードなのか行から判別できないため）。
     await expect
-      .poll(() => Object.values(graphOf(app).nodes).filter((n) => n.name === "shared").length)
-      .toBe(2);
-    const copy = Object.values(graphOf(app).nodes).find(
-      (n) => n.name === "shared" && n.id !== "shared"
-    );
+      .poll(
+        () => Object.values(graphOf(app).nodes).filter((n) => n.name === "shared のコピー").length
+      )
+      .toBe(1);
+    expect(graphOf(app).nodes.shared.name).toBe("shared");
+    const copy = Object.values(graphOf(app).nodes).find((n) => n.name === "shared のコピー");
     expect(copy.parents.some((p) => p.id === "beta")).toBe(true);
     expect(graphOf(app).nodes.shared).toEqual(original);
     await select(page, `root/beta/${copy.id}`);
