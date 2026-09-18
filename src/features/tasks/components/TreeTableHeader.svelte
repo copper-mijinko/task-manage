@@ -2,7 +2,6 @@
   import { getContext } from "svelte";
   import { TREEGRID_APPLICATION } from "@features/workspace/application/treegrid";
   const application = getContext(TREEGRID_APPLICATION);
-  const closed_row_paths = application?.closed ?? legacy_closed_row_paths;
   import { filter } from "@stores";
   import { tag_index } from "@features/memos/stores/tags";
   import { viewportPopover } from "@lib/actions/viewport_popover";
@@ -24,7 +23,6 @@
     showPanel = false;
     panelTrigger?.focus();
   }
-  import { closed_row_paths as legacy_closed_row_paths } from "@stores/ui";
   import { sort_state, SORTABLE_COLUMNS } from "@features/tasks/stores/sort";
   import { activePanelId, newPanelId } from "@stores/panel_coordinator";
 
@@ -413,7 +411,7 @@
               variant="text"
               normalColor={sortDirections[header.name]
                 ? "var(--theme-color-Primary-main)"
-                : "var(--theme-color-Sub-main)"}
+                : "var(--fg-muted)"}
               activeColor={"var(--theme-color-Primary-main)"}
               ariaLabel={getSortButtonLabel(header.name)}
               tooltipContent={getSortButtonLabel(header.name)}
@@ -452,66 +450,6 @@
               </svg>
             </IconButton>
           </span>
-        {/if}
-        {#if header.name == "name"}
-          <div class="HeaderUtilityButtons">
-            <IconButton
-              variant="text"
-              normalColor="var(--theme-color-Sub-main)"
-              activeColor="var(--theme-color-Primary-main)"
-              ariaLabel="すべて展開"
-              tooltipContent="すべて展開"
-              on:click={() => closed_row_paths.expandAll()}
-              style="margin: 0; width: var(--header-icon-size); height: var(--header-icon-size); box-shadow: none;"
-            >
-              <!-- 行の開閉トグルと同じシェブロンを二重にしたもの。
-                   もとは四隅のブラケット（＝全画面表示の図像）で、ツリーの
-                   全展開という意味と結びついていなかった。 -->
-              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path
-                  d="m7 6 5 5 5-5"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-                <path
-                  d="m7 13 5 5 5-5"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-              </svg>
-            </IconButton>
-            <IconButton
-              variant="text"
-              normalColor="var(--theme-color-Sub-main)"
-              activeColor="var(--theme-color-Primary-main)"
-              ariaLabel="すべて折り畳み"
-              tooltipContent="すべて折り畳み"
-              on:click={() => closed_row_paths.collapseAll()}
-              style="margin: 0; width: var(--header-icon-size); height: var(--header-icon-size); box-shadow: none;"
-            >
-              <!-- 全展開と対になる、二重シェブロンの上向き。 -->
-              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path
-                  d="m17 11-5-5-5 5"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-                <path
-                  d="m17 18-5-5-5 5"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-              </svg>
-            </IconButton>
-          </div>
         {/if}
       </div>
       <div class="HeaderControlRow">
@@ -960,22 +898,27 @@
     font-size: var(--font-label-md);
     letter-spacing: 0.02em;
   }
-  /* 並べ替え・絞り込みは副次的な操作。使っていない列では控えめにして、
-     hover / focus か、実際に効いているときだけはっきり出す。
-     見出しの幅を食わないよう、並べ替えボタンは浮かせて置く（出入りで
-     見出しの文字がずれないようにするため）。 */
+  /* 並べ替えは列見出しでいちばんよく使う操作なので、常に見えているようにする。
+     以前は opacity: 0 で、ホバーするまで存在が分からなかった。その一方で
+     たまにしか使わない「すべて展開 / 折りたたみ」が最も濃い色・20px で常時
+     並んでおり、優先順位が逆になっていた（あの 2 つは ⋯ メニューにもある
+     重複なので、ヘッダーからは外した）。
+     見出しより出しゃばらないよう普段は控えめにし、触れたときと実際に効いて
+     いるときは明瞭にする。見出しの幅を食わないよう浮かせて置くのは従来どおり。 */
   .HeaderSortButton {
     position: absolute;
     right: 2px;
     top: 50%;
     transform: translateY(-50%);
     display: inline-flex;
-    opacity: 0;
+    opacity: 0.55;
     transition: opacity 0.12s ease;
   }
-  /* タスク名の列だけは右端に「すべて展開 / 折りたたみ」が並ぶので、その手前。 */
-  .TableHeader[data-column="name"] .HeaderSortButton {
-    right: 2.0625rem;
+  /* 図像は見出し（11px）に対して控えめに。ボタン自体は 24px のまま
+     （SC 2.5.8 の当たり判定）で、中の絵だけ小さくする。 */
+  .HeaderSortButton :global(svg) {
+    width: var(--font-title-md);
+    height: var(--font-title-md);
   }
   .TableHeader:hover .HeaderSortButton,
   .TableHeader:focus-within .HeaderSortButton,
@@ -1087,13 +1030,6 @@
     white-space: nowrap;
     text-transform: capitalize;
   }
-  .HeaderUtilityButtons {
-    display: flex;
-    align-items: center;
-    gap: var(--sp1);
-    flex-shrink: 0;
-  }
-
   .HeaderControlRow {
     display: flex;
     flex: 0 0 0.9375rem;
