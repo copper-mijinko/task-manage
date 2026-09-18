@@ -401,6 +401,49 @@ test("archiving a shared node asks whether to clear one place or the whole node"
     await cleanup(app);
   }
 });
+test("archiving a branch hides everything under it and restoring a deep row brings the path back", async () => {
+  const app = await launch(fixture());
+  try {
+    const page = app.window;
+    // まず配下（alpha / shared / cycle）だけをアーカイブしておく。
+    await select(page, "root/alpha/shared/cycle");
+    await row(page, "root/alpha/shared/cycle")
+      .getByRole("button", { name: "タスク操作を開く" })
+      .click();
+    await page.getByRole("menuitem", { name: "アーカイブ", exact: true }).click();
+    await page.getByRole("button", { name: "ok", exact: true }).click();
+    await expect.poll(() => graphOf(app).nodes.cycle.archived).toBe(true);
+
+    // 次に中間（alpha の下の shared）をこの場所だけアーカイブすると、その下の行も消える。
+    await select(page, "root/alpha/shared");
+    await row(page, "root/alpha/shared").getByRole("button", { name: "タスク操作を開く" }).click();
+    await page.getByRole("menuitem", { name: "アーカイブ", exact: true }).click();
+    await page.getByRole("button", { name: "この場所だけ", exact: true }).click();
+    await expect(row(page, "root/alpha/shared")).toHaveCount(0);
+    await expect(row(page, "root/alpha/shared/cycle")).toHaveCount(0);
+    await expect(row(page, "root/beta/shared")).toBeVisible();
+
+    // 最下位の行を復元すると、経路上の中間（alpha→shared の辺）も外れて行が戻る。
+    await page.getByRole("button", { name: "表示と操作", exact: true }).click();
+    await page.getByRole("menuitem", { name: "アーカイブ済みを表示", exact: true }).click();
+    await row(page, "root/alpha/shared/cycle")
+      .getByRole("button", { name: "タスク操作を開く" })
+      .click();
+    await page.getByRole("menuitem", { name: "復元", exact: true }).click();
+    // ノード側の復元は archived を false にする（キーは残る）。辺側はキーごと消す。
+    await expect.poll(() => graphOf(app).nodes.cycle.archived).toBeFalsy();
+    await expect
+      .poll(() => graphOf(app).nodes.shared.parents.find((p) => p.id === "alpha").archived)
+      .toBeUndefined();
+    await page.getByRole("button", { name: "表示と操作", exact: true }).click();
+    await page.getByRole("menuitem", { name: "アーカイブ済みを隠す", exact: true }).click();
+    await expect(row(page, "root/alpha/shared")).toBeVisible();
+    await expect(row(page, "root/alpha/shared/cycle")).toBeVisible();
+  } finally {
+    await cleanup(app);
+  }
+});
+
 function fixture() {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "tm-treegrid-"));
   const workspacePath = path.join(tempDir, "workspace");
