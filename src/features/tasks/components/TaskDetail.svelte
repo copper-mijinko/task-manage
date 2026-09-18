@@ -1237,6 +1237,27 @@
     overflow: auto;
     container-type: inline-size;
   }
+  /* アーカイブ済みの告知帯。スタイルが当たっておらず、寸法指定の無い
+     インライン SVG が幅いっぱい（viewBox 比で高さも）に伸びて、詳細欄の
+     大半を箱の絵が占めていた。 */
+  .archived-banner {
+    display: flex;
+    align-items: center;
+    gap: var(--sp2);
+    box-sizing: border-box;
+    margin-bottom: var(--sp3);
+    padding: var(--sp2) var(--sp3);
+    border-radius: var(--shape-sm);
+    background-color: color-mix(in srgb, var(--fg-muted) 10%, transparent);
+    color: var(--fg-muted);
+    font-size: var(--font-body-sm);
+    line-height: 1.5;
+  }
+  .archived-banner svg {
+    flex: 0 0 1.15rem;
+    width: 1.15rem;
+    height: 1.15rem;
+  }
   .detail-fields {
     display: grid;
     grid-template-columns: 1fr;
