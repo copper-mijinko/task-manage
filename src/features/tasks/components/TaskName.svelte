@@ -520,7 +520,9 @@
   div {
     width: 100%;
     height: 100%;
-    padding: 0 var(--sp2);
+    /* 左は直前のアイコンとの間なので 4px で足りる。8px だとアイコンと
+       名前が離れすぎ、字下げの段差より大きく見えてしまう。 */
+    padding: 0 var(--sp2) 0 var(--sp1);
     margin: 0;
     display: flex;
     align-items: center;
