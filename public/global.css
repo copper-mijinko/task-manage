@@ -362,7 +362,8 @@ body {
   font: inherit;
   cursor: pointer;
 }
-.ui-action:hover {
+/* 無効なボタンがホバーで明るくなると、薄いだけで押せるように見えてしまう。 */
+.ui-action:hover:not(:disabled) {
   background: var(--hover-bg);
 }
 .ui-action:disabled {

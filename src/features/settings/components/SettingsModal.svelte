@@ -208,7 +208,13 @@
             <div class="FieldControls">
               <button class="ui-action" on:click={() => changeZoom("out")}>縮小</button>
               <button class="ui-action" on:click={() => changeZoom("in")}>拡大</button>
-              <button class="ui-action" on:click={() => changeZoom("reset")}>100%に戻す</button>
+              <!-- 100% のときの「100%に戻す」は押しても何も起きない。押せる見た目の
+                   ままだと、効かなかったのか操作を間違えたのか区別できない。 -->
+              <button
+                class="ui-action"
+                disabled={zoomPercent === 100}
+                on:click={() => changeZoom("reset")}>100%に戻す</button
+              >
             </div>
           </div>
           <p class="Note">
