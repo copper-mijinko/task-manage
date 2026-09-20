@@ -1040,11 +1040,12 @@
     position: relative;
     display: inline-block;
     align-self: stretch;
-    /* 1 段ぶんの字下げは開閉トグルの幅ちょうど。ここが一致していないと、
-       子の開閉トグルが親の開閉トグルの内側にめり込む（13px 字下げに対して
-       トグルが 24px だったため、親 44..68 の中に子のトグル 57..81 が
-       重なっていた）。1 段下がるごとにトグル 1 個ぶん右へ、が正しい。 */
-    width: var(--tap-min);
+    /* 1 段ぶんの字下げ。ここと開閉トグルの枠が一致していないと、子の開閉
+       トグルが親の開閉トグルの内側にめり込む（13px 字下げに対してトグルが
+       24px だったため、親 44..68 の中に子のトグル 57..81 が重なっていた）。
+       1 段下がるごとにトグル 1 枠ぶん右へ、が正しい。トグルの当たり判定は
+       枠からはみ出して 24px を保つので、ここを狭めても押しやすさは変わらない。 */
+    width: var(--tree-indent);
     margin-top: calc(-1 * var(--sp1));
     margin-bottom: calc(-1 * var(--sp1) - 1px);
     flex-shrink: 0;
@@ -1091,9 +1092,12 @@
     cursor: pointer;
     /* ツリーで最も反復操作されるコントロール。0.75rem は html が 75% のため
        実寸 12px にしかならず、SC 2.5.8 の 24px を大きく割っていた。
-       見た目のシェブロンは小さいままで、当たり判定だけ 24px 角に広げる。 */
+       見た目のシェブロンは小さいままで、当たり判定だけ 24px 角に広げる。
+       占める枠は 1 段ぶん (--tree-indent) で、足りない分は左右へはみ出す。
+       同じ行に隣り合う操作対象は無いので、はみ出しても重ならない。 */
     width: var(--tap-min);
     height: var(--tap-min);
+    margin-inline: calc((var(--tree-indent) - var(--tap-min)) / 2);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1122,7 +1126,7 @@
      ボタンを 24px (--tap-min) に広げたとき、ここが 12px のまま取り残されて
      実測で depth=2 の行が 103px と 115px に分かれていた。 */
   .Space {
-    width: var(--tap-min);
+    width: var(--tree-indent);
     height: var(--tap-min);
     flex-shrink: 0;
   }

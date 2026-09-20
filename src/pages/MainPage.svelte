@@ -283,6 +283,31 @@
 
   let outerCollapsedPane = null;
   $: detailPaneVisible = outerCollapsedPane !== "end";
+
+  /**
+   * 狭い幅では「タスクを選択してください」だけの詳細欄に 283px を払う余裕が
+   * ない（760px の実測で、名前列が 180px まで潰れて「新…」になっていた）。
+   * 何も選んでいない間だけ自動でたたみ、選んだ時と広げた時に元へ戻す。
+   *
+   * たたむのは「利用者が開いていた」ときだけなので、戻す先は常に展開状態で
+   * よい。自分でたたんでいる人の設定を勝手に開くことはない。
+   */
+  const DETAIL_AUTO_COLLAPSE_WIDTH = 900;
+  let viewportWidth = 0;
+  let detailAutoCollapsed = false;
+  $: {
+    const shouldAutoCollapse =
+      viewportWidth > 0 && viewportWidth < DETAIL_AUTO_COLLAPSE_WIDTH && !$table_selected_id;
+    if (shouldAutoCollapse) {
+      if (!detailAutoCollapsed && outerCollapsedPane !== "end") {
+        detailAutoCollapsed = true;
+        outerCollapsedPane = "end";
+      }
+    } else if (detailAutoCollapsed) {
+      detailAutoCollapsed = false;
+      outerCollapsedPane = null;
+    }
+  }
   let show_memo_format_confirm = false;
   let bulkMemoTargetFormat = "markdown";
   let bulkMemoPhase = "ready";
@@ -890,6 +915,8 @@
     }
   }
 </script>
+
+<svelte:window bind:innerWidth={viewportWidth} />
 
 {#if $tree_data}
   <div class:Content={true}>
