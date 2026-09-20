@@ -17,12 +17,12 @@ export interface ColumnSettingsStore extends Writable<ColumnSetting[]> {
 const META_KEY = "column_settings";
 
 export const DEFAULT_COLUMN_SETTINGS: ColumnSetting[] = [
-  { id: "name", label: "タスク名", visible: true },
+  { id: "name", label: "ノード名", visible: true },
   { id: "status", label: "ステータス", visible: true },
   { id: "start date", label: "開始日", visible: true },
   { id: "due date", label: "期限日", visible: true },
   { id: "attachments", label: "添付数", visible: true },
-  // タグ列は既定で非表示。タスク名の可読幅を削ってまで常時出す情報ではなく、
+  // タグ列は既定で非表示。ノード名の可読幅を削ってまで常時出す情報ではなく、
   // 必要な人が列設定から出す想定（タグ自体はサイドバーと詳細ペインで見える）。
   { id: "tags", label: "タグ", visible: false },
 ];

@@ -285,7 +285,7 @@
   $: detailPaneVisible = outerCollapsedPane !== "end";
 
   /**
-   * 狭い幅では「タスクを選択してください」だけの詳細欄に 283px を払う余裕が
+   * 狭い幅では「ノードを選択してください」だけの詳細欄に 283px を払う余裕が
    * ない（760px の実測で、名前列が 180px まで潰れて「新…」になっていた）。
    * 何も選んでいない間だけ自動でたたみ、選んだ時と広げた時に元へ戻す。
    *
@@ -330,7 +330,7 @@
 
   /**
    * 一括変換の対象は「本文を持つノード」。メモがノードになったので、
-   * タスク 1 つにつき本文 1 つを見ればよい。
+   * ノード 1 つにつき本文 1 つを見ればよい。
    */
   function collectProjectMemosForFormat(node, targetFormat, fallbackFormat, seen = new Set()) {
     if (!node || seen.has(node.id)) return [];
@@ -855,7 +855,7 @@
     }
     const rect = e.currentTarget.getBoundingClientRect();
     overflowMenuPosition = { x: rect.right, y: rect.bottom, position: "left" };
-    // カラム表示設定はこのメニューから開くので、吹き出しの位置合わせ用に
+    // 列の設定はこのメニューから開くので、吹き出しの位置合わせ用に
     // トリガーを覚えておく（メニューを閉じたあとに開くため）。
     overflowTrigger = { rect, element: e.currentTarget };
     showOverflowMenu = true;
@@ -943,9 +943,9 @@
               <div class="TbGroup">
                 <IconButton
                   tooltipContent={anchorIsArchived
-                    ? "アーカイブ済みタスクには追加できません"
-                    : "タスク追加"}
-                  ariaLabel="タスク追加"
+                    ? "アーカイブ済みノードには追加できません"
+                    : "ノード追加"}
+                  ariaLabel="ノード追加"
                   disabled={anchorIsArchived}
                   variant="text"
                   activeColor={"var(--theme-color-Primary-main)"}
@@ -964,9 +964,9 @@
                 </IconButton>
                 <IconButton
                   tooltipContent={anchorIsArchived
-                    ? "アーカイブ済みタスクには追加できません"
-                    : "子タスク追加"}
-                  ariaLabel="子タスク追加"
+                    ? "アーカイブ済みノードには追加できません"
+                    : "子ノード追加"}
+                  ariaLabel="子ノード追加"
                   disabled={anchorIsArchived}
                   variant="text"
                   activeColor={"var(--theme-color-Primary-main)"}
@@ -1003,7 +1003,7 @@
               <div class="TbGroup">
                 <IconButton
                   tooltipContent={!hasRemoveTarget
-                    ? "アーカイブするタスクを選択してください"
+                    ? "アーカイブするノードを選択してください"
                     : anchorIsRoot
                       ? "プロジェクトルートはアーカイブできません"
                       : isMultiSelect
@@ -1034,7 +1034,7 @@
                 </IconButton>
                 {#if selectionHasArchived}
                   <IconButton
-                    tooltipContent={isMultiSelect ? "選択中のアーカイブ済みタスクを復元" : "復元"}
+                    tooltipContent={isMultiSelect ? "選択中のアーカイブ済みノードを復元" : "復元"}
                     ariaLabel="アーカイブから復元"
                     variant="text"
                     activeColor={"var(--theme-color-Primary-main)"}
@@ -1346,8 +1346,8 @@
                   </IconButton>
                   <IconButton
                     tooltipContent={$show_archived
-                      ? "アーカイブ済みタスクを隠す"
-                      : "アーカイブ済みタスクを表示"}
+                      ? "アーカイブ済みノードを隠す"
+                      : "アーカイブ済みノードを表示"}
                     ariaLabel="アーカイブ表示の切替"
                     ariaPressed={$show_archived ? "true" : "false"}
                     variant="text"

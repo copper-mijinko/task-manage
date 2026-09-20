@@ -3,7 +3,7 @@ import { marked, type Tokens } from "marked";
 // Syntax highlighting is configured lazily in MarkdownMemo so highlight.js
 // stays out of the startup bundle.
 // marked 設定:
-//  - gfm: GitHub Flavored Markdown (タスクリスト、打消し線、テーブル等)
+//  - gfm: GitHub Flavored Markdown (ノードリスト、打消し線、テーブル等)
 //  - breaks: false (Markdown 標準仕様)。行末スペース2個+\n のみ hard break、単純 \n は同段落内空白扱い
 //  - tokenizer.code: 行頭4-space インデントを code block 扱いしない (インデント保持目的)
 marked.use({

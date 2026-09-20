@@ -126,13 +126,13 @@
         <div class="detail-pane">
           <div class="detail-container">
             <label class="detail-field">
-              <span class="detail-label">タスク名</span>
+              <span class="detail-label">ノード名</span>
               <div class="detail-control">
                 <input
                   class="detail-input"
                   type="text"
                   value={item.name}
-                  aria-label="タスク名"
+                  aria-label="ノード名"
                   on:input={handleNameInput}
                 />
               </div>

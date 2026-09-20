@@ -132,12 +132,12 @@
         bind:this={inputEl}
         bind:value
         on:keydown={handleKeydown}
-        placeholder="思いついたタスクを入力"
+        placeholder="思いついたノードを入力"
         class="QuickCaptureInput"
         data-testid="quick-capture-input"
         data-modal-autofocus
         type="text"
-        aria-label="追加するタスク名"
+        aria-label="追加するノード名"
         disabled={!workspaceReady}
       />
 

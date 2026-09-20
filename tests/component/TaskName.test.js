@@ -5,7 +5,7 @@ import TaskNameClickHarness from "../mocks/TaskNameClickHarness.svelte";
 import TaskNameCommitHarness from "../mocks/TaskNameCommitHarness.svelte";
 
 async function openRenameEditor() {
-  const menuButton = screen.getByRole("button", { name: "タスク操作を開く" });
+  const menuButton = screen.getByRole("button", { name: "ノード操作を開く" });
   await fireEvent.click(menuButton);
   const renameItem = await screen.findByRole("menuitem", { name: "名前を変更" });
   await fireEvent.click(renameItem);
@@ -39,7 +39,7 @@ describe("TaskName", () => {
     async function enterEditingMode() {
       // Rename now lives only inside the actions menu (the inline edit-pencil
       // button was removed). Open the menu and click "rename" to start editing.
-      const menuButton = screen.getByRole("button", { name: "タスク操作を開く" });
+      const menuButton = screen.getByRole("button", { name: "ノード操作を開く" });
       await fireEvent.click(menuButton);
       const renameItem = await screen.findByRole("menuitem", { name: "名前を変更" });
       await fireEvent.click(renameItem);
@@ -140,7 +140,7 @@ describe("TaskName", () => {
     test("dispatches open folder from the task actions menu", async () => {
       render(TaskNameCommitHarness, { initialText: "Original", canOpenTaskFolder: true });
 
-      const menuButton = screen.getByRole("button", { name: "タスク操作を開く" });
+      const menuButton = screen.getByRole("button", { name: "ノード操作を開く" });
       await fireEvent.click(menuButton);
       await fireEvent.click(await screen.findByRole("menuitem", { name: "フォルダーを開く" }));
 
@@ -155,7 +155,7 @@ describe("TaskName", () => {
       // openMenu toggles directly on re-click.
       render(TaskNameCommitHarness, { initialText: "Original" });
 
-      const menuButton = screen.getByRole("button", { name: "タスク操作を開く" });
+      const menuButton = screen.getByRole("button", { name: "ノード操作を開く" });
 
       // First click opens.
       await fireEvent.click(menuButton);
@@ -172,7 +172,7 @@ describe("TaskName", () => {
       // pointerdown at capture phase precisely for this case.
       render(TaskNameCommitHarness, { initialText: "Original" });
 
-      const menuButton = screen.getByRole("button", { name: "タスク操作を開く" });
+      const menuButton = screen.getByRole("button", { name: "ノード操作を開く" });
       await fireEvent.click(menuButton);
       expect(await screen.findByRole("menuitem", { name: "名前を変更" })).toBeInTheDocument();
 

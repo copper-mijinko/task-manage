@@ -24,10 +24,10 @@
   /**
    * true のときだけ期限としての差し迫り具合を枠線と文字色に出す。
    * 開始日のような「期限ではない日付」は false にする。過ぎた開始日は
-   * 進行中タスクのごく普通の状態で、警告色にすると本当の期限切れが埋もれる。
+   * 進行中ノードのごく普通の状態で、警告色にすると本当の期限切れが埋もれる。
    */
   export let showUrgency = true;
-  /** 期限の色付けを抑えるためのタスクステータス（完了 / 中止なら急かさない）。 */
+  /** 期限の色付けを抑えるためのノードステータス（完了 / 中止なら急かさない）。 */
   export let status = undefined;
 
   $: displayDate = value || inheritedDate || "";
@@ -48,7 +48,7 @@
         ? "var(--theme-color-Warning-text)"
         : color;
   $: inputTitle = isInherited
-    ? `親タスクの期限: ${inheritedDate}`
+    ? `親ノードの期限: ${inheritedDate}`
     : showUrgency
       ? dueDateUrgencyLabel(displayDate, status)
       : undefined;

@@ -357,7 +357,7 @@ describe("file system operations", () => {
     expect(tasks.get("root-id").body).toContain("Stored here");
   });
 
-  // 旧メモはタスクの属性ではなくノードになる。ルート直下に置かれていた
+  // 旧メモはノードの属性ではなくノードになる。ルート直下に置かれていた
   // メモファイルも、ルートの子ノードとして現れる。
   it("ルート直下の旧メモファイルは、ルートの子ノードとして読まれる", () => {
     const { projectDir } = createProject(tmpDir, "Proj", "root-id");
@@ -577,7 +577,7 @@ describe("file system operations", () => {
     expect(loaded.parents).toEqual([{ id: "root-id", order: 2 }]);
   });
 
-  it("writeTask + readProject: 旧形式（id の配列 + タスク直下の order）も読める", () => {
+  it("writeTask + readProject: 旧形式（id の配列 + ノード直下の order）も読める", () => {
     const { projectDir } = createProject(tmpDir, "Proj", "root-id");
     const taskDir = path.join(projectDir, "legacy-task");
     fs.mkdirSync(taskDir, { recursive: true });
@@ -599,7 +599,7 @@ describe("file system operations", () => {
 
     const { tasks } = readProject(projectDir);
     const loaded = tasks.get("legacy-task");
-    // 旧形式のタスク直下 order は、全ての辺に配られる。
+    // 旧形式のノード直下 order は、全ての辺に配られる。
     expect(loaded.parents).toEqual([{ id: "root-id", order: 3 }]);
   });
 

@@ -4,7 +4,7 @@
   import { tokenizeFullTextQuery } from "@features/tasks/utils/tree_control";
   const labels: Record<string, string> = {
     full_text: "検索",
-    name: "タスク名",
+    name: "ノード名",
     status: "ステータス",
     tags: "タグ",
     "start date": "開始日",

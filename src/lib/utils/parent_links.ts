@@ -7,7 +7,7 @@ import type { WorkspaceParentLink } from "@app-types/workspace";
  *   - `parents: [{ id, order }]`  … 現行。順序は辺の属性
  *   - `parents: [id, id]`         … 旧形式・手書きの短縮形。順序は未指定
  *   - `parents: id`               … 単一のスカラー
- * 旧形式にはタスク直下の `order` が 1 つあるだけなので、その値を全ての辺に
+ * 旧形式にはノード直下の `order` が 1 つあるだけなので、その値を全ての辺に
  * 配る（＝旧来の「どの親の下でも同じ位置」という意味をそのまま保つ）。
  */
 export function normalizeParentLinks(raw: unknown, fallbackOrder?: number): WorkspaceParentLink[] {

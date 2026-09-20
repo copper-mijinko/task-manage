@@ -295,7 +295,7 @@
           <path d="M3 12H8L9.5 14H14.5L16 12H21" />
         </svg>
         <h2>Inboxは空です</h2>
-        <p class="EmptySub">まだ整理先を決めていないタスクを、ここに一時保存できます。</p>
+        <p class="EmptySub">まだ整理先を決めていないノードを、ここに一時保存できます。</p>
         <button
           type="button"
           class="AddBtn EmptyAddBtn"

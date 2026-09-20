@@ -73,7 +73,7 @@ describe("TreeTableRow", () => {
     expect(screen.getByLabelText("添付 なし")).toBeInTheDocument();
   });
 
-  // プロジェクトのルートと子タスクの差が、これまでインデントとアイコンだけ
+  // プロジェクトのルートと子ノードの差が、これまでインデントとアイコンだけ
   // だった。木の頂点がどこかを一目で分かるようにする。
   test("marks the project root row so it can be emphasised", () => {
     const props = createProps();

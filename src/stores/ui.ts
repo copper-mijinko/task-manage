@@ -43,7 +43,7 @@ export function clearPendingTaskDetailSelection() {
  * `pendingTaskDetailSelection` をセットする。`setTaskDetailWindowTarget`
  * と違い `selected_type` / `selected_id` の store には触らない。
  * 主にページ遷移履歴の back/forward 用：load 完了後に loader 内で消費される
- * 「このプロジェクトのこのタスクを選択しろ」というヒントだけを与える。
+ * 「このプロジェクトのこのノードを選択しろ」というヒントだけを与える。
  */
 export function setPendingTaskDetailSelection(value: PendingTaskDetailSelection | undefined) {
   pendingTaskDetailSelection = value;

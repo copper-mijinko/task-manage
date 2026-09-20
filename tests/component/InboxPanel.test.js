@@ -110,12 +110,12 @@ describe("InboxPanel", () => {
   });
 
   test("items use the triage layout and reveal actions only after selection", async () => {
-    await prepareInbox([{ id: "item-1", name: "整理するタスク" }]);
+    await prepareInbox([{ id: "item-1", name: "整理するノード" }]);
     render(InboxPanel);
     await tick();
 
     expect(screen.getByTestId("inbox-list")).toBeInTheDocument();
-    expect(screen.getByTestId("inbox-detail-stub")).toHaveTextContent("整理するタスク");
+    expect(screen.getByTestId("inbox-detail-stub")).toHaveTextContent("整理するノード");
     expect(screen.queryByRole("button", { name: "プロジェクトへ整理" })).toBeNull();
 
     await fireEvent.click(screen.getByRole("option"));
@@ -125,7 +125,7 @@ describe("InboxPanel", () => {
     expect(screen.queryByRole("button", { name: "プロジェクトへ整理" })).toBeNull();
 
     await fireEvent.click(
-      screen.getByRole("checkbox", { name: "整理するタスクを一括操作の対象にする" })
+      screen.getByRole("checkbox", { name: "整理するノードを一括操作の対象にする" })
     );
     await tick();
 

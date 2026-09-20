@@ -75,7 +75,7 @@
       ...(!isRoot
         ? [
             {
-              title: "下にタスクを追加",
+              title: "下にノードを追加",
               action: "addBelow",
               disabled: isMulti || archived,
               icon: {
@@ -86,7 +86,7 @@
           ]
         : []),
       {
-        title: "子タスクを追加",
+        title: "子ノードを追加",
         action: "addChild",
         disabled: isMulti || archived,
         icon: {
@@ -108,7 +108,7 @@
       },
 
       {
-        title: "子タスクとして貼り付け",
+        title: "子ノードとして貼り付け",
         action: "pasteTask",
         disabled:
           archived ||
@@ -427,7 +427,7 @@
     type="text"
     bind:this={input}
     tabindex={cellTabIndex}
-    aria-label={`${text}のタスク名`}
+    aria-label={`${text}のノード名`}
     value={draftText}
     disabled={!isEditing}
     draggable="true"
@@ -484,7 +484,7 @@
   <button
     class="menu-button"
     tabindex={cellTabIndex}
-    aria-label="タスク操作を開く"
+    aria-label="ノード操作を開く"
     data-task-menu-trigger={menuOwnerId}
     use:ripple={{ duration: 350, color: color }}
     on:click={openMenu}

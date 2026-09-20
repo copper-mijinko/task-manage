@@ -17,7 +17,7 @@ import {
  *
  * 「ページ」は本アプリでは `(selected_type, selected_id)` を主軸に、
  * Workspace 側の `activeWorkspacePath` / `activeProjectDir` を含めて
- * 一意に同定する。さらに「ページ内で選択していたタスク行」も
+ * 一意に同定する。さらに「ページ内で選択していたノード行」も
  * `tableSelectedId` として併せて保持し、戻ったときの TaskDetail / Memo の
  * コンテキストを復元する。
  *
@@ -26,7 +26,7 @@ import {
  * - `Info` の `selectedId` は info ページ id
  * - `projectDir` は `WorkspaceProject` のときのみ意味があり、それ以外では null
  * - `workspacePath` は `WorkspaceProject` / `Projects` 系で意味があり、Inbox/Info でも参考値として持つ（復元時は WorkspaceProject のときだけ反映）
- * - `tableSelectedId` は `Projects` / `WorkspaceProject` のときのみ意味があり、ページ内のタスク行選択を表す
+ * - `tableSelectedId` は `Projects` / `WorkspaceProject` のときのみ意味があり、ページ内のノード行選択を表す
  */
 export interface NavigationEntry {
   selectedType: SelectedType;
@@ -44,15 +44,15 @@ export interface NavigationHistoryState {
 }
 
 export interface NavigationHistoryStore extends Readable<NavigationHistoryState> {
-  /** メインウィンドウでのみ呼ぶ。タスク詳細サブウィンドウでは呼ばない。 */
+  /** メインウィンドウでのみ呼ぶ。ノード詳細サブウィンドウでは呼ばない。 */
   init: () => void;
   /** 1 つ前の履歴へ戻る。先頭にいるときは何もしない。 */
   back: () => void;
   /** 1 つ先の履歴へ進む。末尾にいるときは何もしない。 */
   forward: () => void;
   /**
-   * 「ユーザがタスク行を能動的に選択した」と分かっている呼び出し元から
-   * 同ページ内のタスク行切替を 1 エントリとして履歴に積むためのフック。
+   * 「ユーザがノード行を能動的に選択した」と分かっている呼び出し元から
+   * 同ページ内のノード行切替を 1 エントリとして履歴に積むためのフック。
    *
    * 通常の subscriber 経路では同ページ内の `table_selected_id` 変更は
    * in-place 更新（履歴を伸ばさない）として扱う。これは load 完了直後の
@@ -73,7 +73,7 @@ const MAX_HISTORY = 100;
 
 /**
  * ページとしての同一性を判定する。`tableSelectedId` はページ内選択なので
- * 含めない（同じページ内のタスク選択切替で履歴を増やさない）。
+ * 含めない（同じページ内のノード選択切替で履歴を増やさない）。
  */
 function pageEqual(a: NavigationEntry, b: NavigationEntry): boolean {
   return (
@@ -281,7 +281,7 @@ function createNavigationHistory(): NavigationHistoryStore {
       return;
     }
 
-    // ページ自体が変わるナビゲーション。ページ内のタスク行も復元したい場合、
+    // ページ自体が変わるナビゲーション。ページ内のノード行も復元したい場合、
     // loader が読みに行く pendingTaskDetailSelection にヒントを置く。
     // `tableSelectedId` が未定義のときは触らない（loader は
     // selectOnly(undefined) に倒す）。
@@ -314,7 +314,7 @@ function createNavigationHistory(): NavigationHistoryStore {
     // WorkspaceProject の場合は activeProjectDir を選択 store より先に戻す。
     // MenuList.selectWorkspaceProject() と同じ順序にしておかないと
     // selected_id の subscriber (loadWorkspaceData) が古い activeProjectDir
-    // を読んで、他プロジェクトのタスクから unknown ノードを作ってしまう。
+    // を読んで、他プロジェクトのノードから unknown ノードを作ってしまう。
     if (target.selectedType === "WorkspaceProject" && target.projectDir) {
       workspace_store.setActiveProject(target.projectDir);
     }

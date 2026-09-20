@@ -3,9 +3,9 @@ import type { WorkspaceTaskStatus } from "@app-types/workspace";
 /**
  * 期限日の「差し迫り具合」を 1 か所で決めるユーティリティ。
  *
- * これまで DateInput と TreeTableRow がそれぞれ別の計算を持っていて、同じタスクでも
- * 表示が食い違っていた（完了タスクの行は無色なのに、その行の日付入力だけ赤い、など）。
- * タスク一覧・タスク詳細・Inbox の判定はここに集約する。予定ビューは 7 日単位の
+ * これまで DateInput と TreeTableRow がそれぞれ別の計算を持っていて、同じノードでも
+ * 表示が食い違っていた（完了ノードの行は無色なのに、その行の日付入力だけ赤い、など）。
+ * ノード一覧・ノード詳細・Inbox の判定はここに集約する。予定ビューは 7 日単位の
  * 別のまとめ方をするので、独自のバケット分けを持つ。
  *
  * 日付は `YYYY-MM-DD` のカレンダー日として扱い、暦日の差だけを見る。
@@ -40,7 +40,7 @@ export function daysBetweenIsoDates(from: string, to: string): number | null {
   return Math.round((toUtc - fromUtc) / (24 * 60 * 60 * 1000));
 }
 
-/** 期限の色付けを止めるステータス。終わったタスクは急かさない。 */
+/** 期限の色付けを止めるステータス。終わったノードは急かさない。 */
 export function isSettledStatus(status?: string | WorkspaceTaskStatus | null): boolean {
   return status === "Completed" || status === "Canceled";
 }
@@ -48,7 +48,7 @@ export function isSettledStatus(status?: string | WorkspaceTaskStatus | null): b
 /**
  * 期限日の状態を返す。
  *
- * - 完了 / 中止のタスクは常に "none"（もう間に合わせる余地がない）
+ * - 完了 / 中止のノードは常に "none"（もう間に合わせる余地がない）
  * - 開始日など「期限ではない日付」にはそもそも使わない
  */
 export function dueDateUrgency(

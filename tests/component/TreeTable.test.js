@@ -124,7 +124,7 @@ describe("TreeTable", () => {
     closed_row_paths.set(new Set());
     active_row_path.set(undefined);
     column_settings.set([
-      { id: "name", label: "タスク名", visible: true },
+      { id: "name", label: "ノード名", visible: true },
       { id: "status", label: "ステータス", visible: true },
       { id: "start date", label: "開始日", visible: true },
       { id: "due date", label: "期限日", visible: true },

@@ -75,8 +75,8 @@
       id="name-filter-input"
       type="text"
       bind:value
-      placeholder="タスク名を絞り込み"
-      aria-label="タスク名を絞り込み"
+      placeholder="ノード名を絞り込み"
+      aria-label="ノード名を絞り込み"
       on:input={handleChange}
     />
   </label>

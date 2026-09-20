@@ -11,7 +11,7 @@
   const dispatch = createEventDispatcher();
 
   // 「無し」は既定値ではなく状態のひとつ。メモから育ったノードは進み具合を
-  // 持たないので、そこに「未着手」を出すと未完了タスクの山に埋もれる。
+  // 持たないので、そこに「未着手」を出すと未完了ノードの山に埋もれる。
   // 選ぶだけで追跡が始まるよう、専用の操作は作らずここに並べる。
   const NO_STATUS = "";
   const UNDEFINED_STATUS = "Undefined";
@@ -248,7 +248,7 @@
   .s-chip[data-status="Canceled"] .s-label {
     text-decoration: line-through;
   }
-  /* 終わったタスクは一段落とす。急ぐものだけが目に入るようにする方針は
+  /* 終わったノードは一段落とす。急ぐものだけが目に入るようにする方針は
      期限日の色付けと揃える。 */
   .s-chip[data-status="Canceled"] .s-label,
   .s-chip[data-status="Completed"] .s-label {

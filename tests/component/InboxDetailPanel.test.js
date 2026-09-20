@@ -34,14 +34,14 @@ describe("InboxDetailPanel", () => {
     ui_density.set("compact");
     render(InboxDetailPanel, { props: { item } });
 
-    expect(screen.queryByRole("textbox", { name: "タスク名" })).toBeNull();
+    expect(screen.queryByRole("textbox", { name: "ノード名" })).toBeNull();
     const showDetail = screen.getByRole("button", { name: "詳細欄を表示" });
     expect(showDetail).toHaveAttribute("aria-pressed", "true");
 
     await fireEvent.click(showDetail);
     await tick();
 
-    expect(screen.getByRole("textbox", { name: "タスク名" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "ノード名" })).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "詳細欄をたたんでメモを広げる" })
     ).toBeInTheDocument();
@@ -51,6 +51,6 @@ describe("InboxDetailPanel", () => {
     ui_density.set("comfortable");
     render(InboxDetailPanel, { props: { item } });
 
-    expect(screen.getByRole("textbox", { name: "タスク名" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "ノード名" })).toBeInTheDocument();
   });
 });

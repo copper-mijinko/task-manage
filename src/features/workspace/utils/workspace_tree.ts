@@ -164,14 +164,14 @@ export function workspaceToProjectData(
   const root = buildNode(resolvedRootId, new Set<string>()).node;
 
   /*
-   * ルートから辿れないタスクをルート直下に付け直す。
+   * ルートから辿れないノードをルート直下に付け直す。
    *
    * 親が存在しない id を指している、親をたどると自分に戻る、といった形で
-   * ルートに繋がらないタスクは、木に現れない＝保存時に書き出されないので、
+   * ルートに繋がらないノードは、木に現れない＝保存時に書き出されないので、
    * ファイルごと消える。アプリの外（エディタ・CLI・同期）で壊れることは
    * あるので、読み込み時に必ず拾う。孤児を作らない設計の受け皿。
    *
-   * 走査はタスク数に比例する 1 パスで、共有のおかげで部分木は作り直さない。
+   * 走査はノード数に比例する 1 パスで、共有のおかげで部分木は作り直さない。
    */
   const reachable = new Set<string>();
   const mark = (node: TreeData) => {
@@ -296,8 +296,8 @@ export function projectDataToWorkspaceTasks(
         ? node.data.attachments
         : (existing?.attachments ?? []),
       createdAt: existing?.createdAt || today,
-      // タスク直下の order はルート（＝プロジェクトの並び順）だけが持つ。
-      // 通常タスクの並び順は parents[].order にある。
+      // ノード直下の order はルート（＝プロジェクトの並び順）だけが持つ。
+      // 通常ノードの並び順は parents[].order にある。
       order: resolvedParents.length === 0 ? existing?.order : undefined,
     };
     if (node.archived) {
