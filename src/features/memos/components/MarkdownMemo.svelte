@@ -1770,7 +1770,14 @@
     ];
   }
 
-  async function startEdit(nextMode: EditableMarkdownMemoMode) {
+  /**
+   * `focus` は「利用者がこの編集モードを選んだ」ときだけ true にする。
+   * 保存済みの表示モードを復元するだけの起動では false を渡すこと。行を
+   * 選び直すたびにこのコンポーネントは作り直されるので、復元でフォーカスを
+   * 取ると、ツリーで ↓ を押した瞬間にキャレットがメモ本文へ移ってしまい、
+   * 続けて押した矢印も打った文字もメモに入る。
+   */
+  async function startEdit(nextMode: EditableMarkdownMemoMode, focus = true) {
     if (readOnly) return;
     modeMenuOpen = false;
     markdownMode = nextMode;
@@ -1784,7 +1791,7 @@
       syncHeadingLevel(view);
     }
     view.requestMeasure();
-    view.focus();
+    if (focus) view.focus();
   }
 
   function stopEdit() {
@@ -1837,7 +1844,8 @@
         applyMarkdownSplitPercent(savedPercent);
       }
       if (savedMode === "edit" || savedMode === "split") {
-        void startEdit(savedMode);
+        // 復元なのでフォーカスは取らない。ツリーの矢印移動を奪わないため。
+        void startEdit(savedMode, false);
       }
     });
   });
