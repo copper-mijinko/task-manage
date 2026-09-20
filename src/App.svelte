@@ -36,13 +36,13 @@
   let flushingOnShutdown = false;
   let unregisterDateTimeShortcuts = null;
   let ProjectPageComponent = null;
-  let NodeWorkspacePageComponent = null;
+  let WorkspaceTreeGridPageComponent = null;
   let InboxPanelComponent = null;
   let AgendaPanelComponent = null;
   let QuickCaptureComponent = null;
   let TaskDetailWindowComponent = null;
   let projectPageLoading = null;
-  let nodeWorkspacePageLoading = null;
+  let workspaceTreeGridPageLoading = null;
   let inboxPanelLoading = null;
   let agendaPanelLoading = null;
   let quickCaptureLoading = null;
@@ -90,13 +90,14 @@
     return projectPageLoading;
   }
 
-  function loadNodeWorkspacePage() {
-    if (NodeWorkspacePageComponent || nodeWorkspacePageLoading) return nodeWorkspacePageLoading;
-    nodeWorkspacePageLoading =
+  function loadWorkspaceTreeGridPage() {
+    if (WorkspaceTreeGridPageComponent || workspaceTreeGridPageLoading)
+      return workspaceTreeGridPageLoading;
+    workspaceTreeGridPageLoading =
       import("@features/workspace/components/WorkspaceTreeGridPage.svelte").then((module) => {
-        NodeWorkspacePageComponent = module.default;
+        WorkspaceTreeGridPageComponent = module.default;
       });
-    return nodeWorkspacePageLoading;
+    return workspaceTreeGridPageLoading;
   }
 
   function loadInboxPanel() {
@@ -143,7 +144,7 @@
     void loadProjectPage();
   }
   $: if (!isTaskDetailWindow && $selected_type === "WorkspaceProject") {
-    void loadNodeWorkspacePage();
+    void loadWorkspaceTreeGridPage();
   }
   $: if (!isTaskDetailWindow && $selected_type === "Inbox") {
     void loadInboxPanel();
@@ -242,7 +243,7 @@
 
   // capture-phase で window keydown を捕まえているため、CodeMirror や Quill、
   // ネイティブの input / textarea / contenteditable にフォーカスがある状態で
-  // Ctrl+Z / Ctrl+Y を叩くと、エディタの undo/redo より先にタスクツリー側の
+  // Ctrl+Z / Ctrl+Y を叩くと、エディタの undo/redo より先にノードツリー側の
   // 履歴が動いてしまう。フォーカスがそれらの編集面の中にある間はグローバルの
   // undo/redo をスキップし、エディタ自身のキーマップに処理を委ねる。
   function isInsideEditableTarget(target) {
@@ -403,7 +404,7 @@
     } else {
       detailWindowReady = true;
       // 起動時の自動選択: Workspace を優先、なければ InApp の先頭プロジェクト。
-      // 既に何か選択されている (例: タスク詳細ウィンドウ) 場合は no-op。
+      // 既に何か選択されている (例: ノード詳細ウィンドウ) 場合は no-op。
       void autoSelectInitialProject().then(
         () => reportInitialWorkspaceVisible(),
         () => reportInitialWorkspaceVisible()
@@ -561,8 +562,8 @@
           </section>
         {/if}
         {#if $selected_type == "WorkspaceProject"}
-          {#if NodeWorkspacePageComponent}
-            {#key $workspace_store.activeWorkspacePath}<NodeWorkspacePageComponent />{/key}
+          {#if WorkspaceTreeGridPageComponent}
+            {#key $workspace_store.activeWorkspacePath}<WorkspaceTreeGridPageComponent />{/key}
           {:else}
             <Loading variant="h1" />
           {/if}

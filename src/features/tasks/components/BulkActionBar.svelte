@@ -22,6 +22,11 @@
   let statusOpen = false;
   let statusPopupStyle = "";
 
+  let dateMenuButtonEl;
+  let dateMenuEl;
+  let dateMenuOpen = false;
+  let dateMenuStyle = "";
+
   let datePopupEl;
   let dateOpen = null; // "start date" | "due date" | null
   let dateAnchorEl = null;
@@ -47,18 +52,39 @@
     dispatch("bulkStatus", { value });
   }
 
+  /**
+   * 日付の操作は 開始日/期限日 × 設定/クリア の 4 つ。素のボタンで 4 つ並べると
+   * 「ステータス変更」と同格に見えるうえ、バーが折り返していた。1 つのメニューに
+   * 畳んで、ステータスと同じ「ボタン＋▾」の形に揃える。
+   */
+  async function toggleDateMenu(e) {
+    e.stopPropagation();
+    if (dateMenuOpen) {
+      dateMenuOpen = false;
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    dateMenuStyle = `bottom: ${window.innerHeight - rect.top + 6}px; left: ${rect.left}px;`;
+    dateMenuOpen = true;
+    statusOpen = false;
+    closeDate();
+    await tick();
+    dateMenuEl?.querySelector("button")?.focus();
+  }
+
   async function toggleDate(e, which) {
     e.stopPropagation();
     if (dateOpen === which) {
       closeDate();
       return;
     }
-    const rect = e.currentTarget.getBoundingClientRect();
+    const rect = (dateMenuButtonEl ?? e.currentTarget).getBoundingClientRect();
     datePopupStyle = `bottom: ${window.innerHeight - rect.top + 6}px; left: ${rect.left}px;`;
-    dateAnchorEl = e.currentTarget;
+    dateAnchorEl = dateMenuButtonEl ?? e.currentTarget;
     pendingDateValue = "";
     dateOpen = which;
     statusOpen = false;
+    dateMenuOpen = false;
     await tick();
     datePopupEl?.querySelector("input[type=date]")?.focus();
   }
@@ -78,6 +104,7 @@
   }
 
   function clearDate(key) {
+    dateMenuOpen = false;
     dispatch("bulkClearDate", { key });
   }
 
@@ -92,6 +119,11 @@
         closeDate();
       }
     }
+    if (dateMenuOpen) {
+      if (!dateMenuButtonEl?.contains(e.target) && !dateMenuEl?.contains(e.target)) {
+        dateMenuOpen = false;
+      }
+    }
   }
 
   function handleKeydown(e) {
@@ -101,6 +133,9 @@
         e.stopPropagation();
       } else if (dateOpen) {
         closeDate();
+        e.stopPropagation();
+      } else if (dateMenuOpen) {
+        dateMenuOpen = false;
         e.stopPropagation();
       }
     }
@@ -148,17 +183,25 @@
         />
       </svg>
     </button>
-    <button type="button" class="TextButton" on:click={(e) => toggleDate(e, "start date")}>
-      開始日設定
-    </button>
-    <button type="button" class="TextButton" on:click={(e) => toggleDate(e, "due date")}>
-      期日設定
-    </button>
-    <button type="button" class="TextButton" on:click={() => clearDate("start date")}>
-      開始日クリア
-    </button>
-    <button type="button" class="TextButton" on:click={() => clearDate("due date")}>
-      期日クリア
+    <button
+      type="button"
+      class="TextButton"
+      bind:this={dateMenuButtonEl}
+      aria-haspopup="menu"
+      aria-expanded={dateMenuOpen}
+      on:click={toggleDateMenu}
+    >
+      日付
+      <svg viewBox="0 0 12 12" aria-hidden="true" class="Caret">
+        <path
+          d="M3 4.5L6 7.5L9 4.5"
+          stroke="currentColor"
+          stroke-width="1.5"
+          fill="none"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </svg>
     </button>
     <span class="Divider" aria-hidden="true"></span>
     <IconButton
@@ -223,12 +266,37 @@
   </ul>
 {/if}
 
+{#if dateMenuOpen}
+  <div
+    bind:this={dateMenuEl}
+    class="DateMenu"
+    role="menu"
+    aria-label="日付の一括操作"
+    style={dateMenuStyle}
+    use:portal
+  >
+    <button type="button" role="menuitem" on:click={(e) => toggleDate(e, "start date")}>
+      開始日を設定
+    </button>
+    <button type="button" role="menuitem" on:click={(e) => toggleDate(e, "due date")}>
+      期限日を設定
+    </button>
+    <span class="DateMenuSep" aria-hidden="true"></span>
+    <button type="button" role="menuitem" on:click={() => clearDate("start date")}>
+      開始日をクリア
+    </button>
+    <button type="button" role="menuitem" on:click={() => clearDate("due date")}>
+      期限日をクリア
+    </button>
+  </div>
+{/if}
+
 {#if dateOpen}
   <div
     bind:this={datePopupEl}
     class="DatePopup"
     role="dialog"
-    aria-label={dateOpen === "start date" ? "開始日を設定" : "期日を設定"}
+    aria-label={dateOpen === "start date" ? "開始日を設定" : "期限日を設定"}
     style={datePopupStyle}
     use:portal
   >
@@ -246,6 +314,39 @@
 {/if}
 
 <style>
+  .DateMenu {
+    position: fixed;
+    z-index: 10001;
+    display: flex;
+    flex-direction: column;
+    min-width: 9rem;
+    padding: var(--sp1) 0;
+    background-color: var(--theme-color-Main-light);
+    border: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 22%, transparent);
+    border-radius: var(--shape-sm);
+    box-shadow: var(--elevation-3);
+    color: var(--theme-color-Sub-main);
+    font-size: var(--font-label-md);
+  }
+  .DateMenu button {
+    display: flex;
+    align-items: center;
+    min-height: var(--tap-min);
+    padding: 0 var(--sp3);
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .DateMenu button:hover {
+    background-color: color-mix(in srgb, var(--theme-color-Primary-main) 12%, transparent);
+  }
+  .DateMenuSep {
+    margin: var(--sp1) 0;
+    border-top: 1px solid color-mix(in srgb, var(--theme-color-Sub-main) 16%, transparent);
+  }
   .BulkBar {
     position: fixed;
     bottom: var(--sp4);

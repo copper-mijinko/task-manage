@@ -91,7 +91,7 @@ test("body conversion flushes edits and the replacement editor saves the new for
     await page.getByRole("button", { name: /^メモ表示モード：/ }).click();
     await page.getByRole("option", { name: "編集", exact: true }).click();
     await page.locator(".cm-content").fill("Pending before conversion");
-    await page.getByRole("button", { name: "Node詳細の操作" }).click();
+    await page.getByRole("button", { name: "ノード詳細の操作" }).click();
     await page.getByRole("menuitem", { name: "形式を変換", exact: true }).click();
     await page.getByRole("button", { name: "変換する", exact: true }).click();
     await expect(page.locator(".ql-editor")).toContainText("Pending before conversion");
@@ -214,10 +214,10 @@ test("detail view state leaves records unchanged and pending body saves keep the
     await page.getByRole("option", { name: "プレビュー", exact: true }).click();
     await expect(page.locator(".node-detail .preview")).toContainText("Pending shared body");
     await page.getByRole("button", { name: "クイック追加", exact: true }).click();
-    await page.getByRole("textbox", { name: "追加するタスク名" }).fill("Captured by button");
+    await page.getByRole("textbox", { name: "追加するノード名" }).fill("Captured by button");
     await page.getByRole("button", { name: "追加", exact: true }).click();
-    await expect(page.getByRole("textbox", { name: "追加するタスク名" })).toHaveValue("");
-    await page.getByRole("textbox", { name: "追加するタスク名" }).fill("Captured and closed");
+    await expect(page.getByRole("textbox", { name: "追加するノード名" })).toHaveValue("");
+    await page.getByRole("textbox", { name: "追加するノード名" }).fill("Captured and closed");
     await page.getByRole("button", { name: "追加して閉じる", exact: true }).click();
     await expect(page.getByRole("dialog", { name: "Inboxへクイック追加" })).toHaveCount(0);
     const graph = graphOf(app);
@@ -364,7 +364,7 @@ test("archiving a shared node asks whether to clear one place or the whole node"
 
     // この場所だけ: alpha の下の行だけが消え、beta の下は現役のまま。
     await select(page, "root/alpha/shared");
-    await row(page, "root/alpha/shared").getByRole("button", { name: "タスク操作を開く" }).click();
+    await row(page, "root/alpha/shared").getByRole("button", { name: "ノード操作を開く" }).click();
     await page.getByRole("menuitem", { name: "アーカイブ", exact: true }).click();
     await page.getByRole("button", { name: "この場所だけ", exact: true }).click();
     await expect(row(page, "root/alpha/shared")).toHaveCount(0);
@@ -381,7 +381,7 @@ test("archiving a shared node asks whether to clear one place or the whole node"
       .getByRole("menuitemcheckbox", { name: "アーカイブ済みを表示", checked: false })
       .click();
     await expect(row(page, "root/alpha/shared")).toBeVisible();
-    await row(page, "root/alpha/shared").getByRole("button", { name: "タスク操作を開く" }).click();
+    await row(page, "root/alpha/shared").getByRole("button", { name: "ノード操作を開く" }).click();
     await page.getByRole("menuitem", { name: "復元", exact: true }).click();
     await expect
       .poll(() => graphOf(app).nodes.shared.parents.find((p) => p.id === "alpha").archived)
@@ -393,7 +393,7 @@ test("archiving a shared node asks whether to clear one place or the whole node"
 
     // ノード全体: どの親の下からも消える。
     await select(page, "root/alpha/shared");
-    await row(page, "root/alpha/shared").getByRole("button", { name: "タスク操作を開く" }).click();
+    await row(page, "root/alpha/shared").getByRole("button", { name: "ノード操作を開く" }).click();
     await page.getByRole("menuitem", { name: "アーカイブ", exact: true }).click();
     await page.getByRole("button", { name: "ノード全体", exact: true }).click();
     await expect(row(page, "root/alpha/shared")).toHaveCount(0);
@@ -410,7 +410,7 @@ test("archiving a branch hides everything under it and restoring a deep row brin
     // まず配下（alpha / shared / cycle）だけをアーカイブしておく。
     await select(page, "root/alpha/shared/cycle");
     await row(page, "root/alpha/shared/cycle")
-      .getByRole("button", { name: "タスク操作を開く" })
+      .getByRole("button", { name: "ノード操作を開く" })
       .click();
     await page.getByRole("menuitem", { name: "アーカイブ", exact: true }).click();
     await page.getByRole("button", { name: "アーカイブする", exact: true }).click();
@@ -418,7 +418,7 @@ test("archiving a branch hides everything under it and restoring a deep row brin
 
     // 次に中間（alpha の下の shared）をこの場所だけアーカイブすると、その下の行も消える。
     await select(page, "root/alpha/shared");
-    await row(page, "root/alpha/shared").getByRole("button", { name: "タスク操作を開く" }).click();
+    await row(page, "root/alpha/shared").getByRole("button", { name: "ノード操作を開く" }).click();
     await page.getByRole("menuitem", { name: "アーカイブ", exact: true }).click();
     await page.getByRole("button", { name: "この場所だけ", exact: true }).click();
     await expect(row(page, "root/alpha/shared")).toHaveCount(0);
@@ -431,7 +431,7 @@ test("archiving a branch hides everything under it and restoring a deep row brin
       .getByRole("menuitemcheckbox", { name: "アーカイブ済みを表示", checked: false })
       .click();
     await row(page, "root/alpha/shared/cycle")
-      .getByRole("button", { name: "タスク操作を開く" })
+      .getByRole("button", { name: "ノード操作を開く" })
       .click();
     await page.getByRole("menuitem", { name: "復元", exact: true }).click();
     // ノード側の復元は archived を false にする（キーは残る）。辺側はキーごと消す。
@@ -538,10 +538,10 @@ test("TreeGrid scope, search, filter, columns and terminal cycles", async () => 
     await page.getByRole("button", { name: "alpha", exact: true }).click();
     await expect(row(page, "alpha/shared")).toBeVisible();
     await expect(row(page, "root/beta")).toHaveCount(0);
-    await page.getByRole("textbox", { name: "タスク一覧を絞り込み" }).fill("review");
+    await page.getByRole("textbox", { name: "ノード一覧を絞り込み" }).fill("review");
     await expect(row(page, "alpha/review")).toBeVisible();
     await expect(row(page, "alpha/implementation")).toHaveCount(0);
-    await page.getByRole("textbox", { name: "タスク一覧を絞り込み" }).fill("");
+    await page.getByRole("textbox", { name: "ノード一覧を絞り込み" }).fill("");
     await page.getByRole("button", { name: "ステータスフィルター", exact: true }).click();
     await page.getByText("未着手", { exact: true }).last().click();
     await page.keyboard.press("Escape");
@@ -552,7 +552,7 @@ test("TreeGrid scope, search, filter, columns and terminal cycles", async () => 
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "表示と操作", exact: true }).click();
     await page.getByRole("menuitem", { name: "列の設定", exact: true }).click();
-    const dialog = page.getByRole("dialog", { name: "カラム表示設定" });
+    const dialog = page.getByRole("dialog", { name: "列の設定" });
     await dialog.getByRole("checkbox", { name: "タグ", exact: true }).check();
     await dialog.getByRole("checkbox", { name: "開始日", exact: true }).uncheck();
     await page.keyboard.press("Escape");
@@ -609,7 +609,7 @@ test("detail windows share canonical edits and history", async () => {
   try {
     await select(page, "root/beta/shared");
     const opened = app.electronApp.waitForEvent("window");
-    await page.getByRole("button", { name: "Node詳細の操作" }).click();
+    await page.getByRole("button", { name: "ノード詳細の操作" }).click();
     await page.getByRole("menuitem", { name: "別Windowで開く", exact: true }).click();
     const detail = await opened;
     for (const light of [true, false]) {
@@ -631,10 +631,10 @@ test("detail windows share canonical edits and history", async () => {
       )
       .toBe(true);
     await detail.getByRole("button", { name: "編集", exact: true }).click();
-    await detail.getByRole("textbox", { name: "タスク名", exact: true }).fill("window edit");
-    await detail.getByRole("textbox", { name: "タスク名", exact: true }).blur();
+    await detail.getByRole("textbox", { name: "ノード名", exact: true }).fill("window edit");
+    await detail.getByRole("textbox", { name: "ノード名", exact: true }).blur();
     await expect(
-      page.getByRole("textbox", { name: "window editのタスク名", exact: true })
+      page.getByRole("textbox", { name: "window editのノード名", exact: true })
     ).toHaveCount(4);
     await detail.close();
     await page.bringToFront();
@@ -651,11 +651,11 @@ test("shared node edits, atomic bulk undo and graph persistence across restart",
     const page = app.window;
     await select(page, "root/beta/shared");
     await page.getByRole("button", { name: "編集", exact: true }).click();
-    await page.getByRole("textbox", { name: "タスク名", exact: true }).fill("updated shared");
-    await page.getByRole("textbox", { name: "タスク名", exact: true }).blur();
+    await page.getByRole("textbox", { name: "ノード名", exact: true }).fill("updated shared");
+    await page.getByRole("textbox", { name: "ノード名", exact: true }).blur();
     await expect.poll(() => graphOf(app).nodes.shared.name).toBe("updated shared");
     await expect(
-      page.getByRole("textbox", { name: "updated sharedのタスク名", exact: true })
+      page.getByRole("textbox", { name: "updated sharedのノード名", exact: true })
     ).toHaveCount(4);
     await page.getByRole("button", { name: "元に戻す", exact: true }).click();
     await expect.poll(() => graphOf(app).nodes.shared.name).toBe("shared");
@@ -677,7 +677,7 @@ test("shared node edits, atomic bulk undo and graph persistence across restart",
     await app.electronApp.close();
     app = await launch(context);
     await expect(
-      app.window.getByRole("textbox", { name: "updated sharedのタスク名", exact: true })
+      app.window.getByRole("textbox", { name: "updated sharedのノード名", exact: true })
     ).toHaveCount(4);
     expect(graphOf(app).nodes.shared.parents.map((p) => p.id)).toEqual(["alpha", "beta", "cycle"]);
   } finally {
@@ -690,7 +690,7 @@ test("move and detach use the displayed parent; cyclic copy stays in TreeGrid", 
     page = app.window;
   try {
     await select(page, "root/beta/shared");
-    await page.getByRole("button", { name: "Node詳細の操作" }).click();
+    await page.getByRole("button", { name: "ノード詳細の操作" }).click();
     await page.getByRole("menuitem", { name: "配置を変更", exact: true }).click();
     await page.getByRole("combobox", { name: "配置先の親" }).selectOption("review");
     await page.getByRole("button", { name: "移動", exact: true }).click();
@@ -704,7 +704,7 @@ test("move and detach use the displayed parent; cyclic copy stays in TreeGrid", 
     await expect(row(page, "root/alpha/review/shared")).toHaveAttribute("tabindex", "0");
     // The next edge command must address the occurrence that was just moved,
     // without asking the user to find and select it again.
-    await page.getByRole("button", { name: "Node詳細の操作" }).click();
+    await page.getByRole("button", { name: "ノード詳細の操作" }).click();
     await page.getByRole("menuitem", { name: "配置を変更", exact: true }).click();
     await page.getByRole("dialog").getByRole("combobox").first().selectOption("detach");
     await page.getByRole("button", { name: "配置を外す", exact: true }).click();
@@ -719,7 +719,7 @@ test("move and detach use the displayed parent; cyclic copy stays in TreeGrid", 
     await page.getByRole("button", { name: "元に戻す", exact: true }).click();
     await expect(row(page, "root/beta/shared")).toBeVisible();
     await select(page, "root/beta/shared");
-    await page.getByRole("button", { name: "Node詳細の操作" }).click();
+    await page.getByRole("button", { name: "ノード詳細の操作" }).click();
     await page.getByRole("menuitem", { name: "配置を変更", exact: true }).click();
     await page.getByRole("dialog").getByRole("combobox").first().selectOption("detach");
     await page.getByRole("button", { name: "配置を外す", exact: true }).click();
@@ -731,7 +731,7 @@ test("move and detach use the displayed parent; cyclic copy stays in TreeGrid", 
       )
       .toEqual(["alpha", "cycle"]);
     await select(page, "root/alpha/shared");
-    await page.getByRole("button", { name: "Node詳細の操作" }).click();
+    await page.getByRole("button", { name: "ノード詳細の操作" }).click();
     await page.getByRole("menuitem", { name: "コピー先を指定", exact: true }).click();
     await page.getByRole("combobox", { name: "配置先の親" }).selectOption("beta");
     await page.getByRole("combobox", { name: "コピー範囲" }).selectOption("subgraph");
@@ -825,8 +825,8 @@ test("drop copy preserves source edges and creates an independently editable sub
     expect(graphOf(app).nodes.shared).toEqual(original);
     await select(page, `root/beta/${copy.id}`);
     await page.getByRole("button", { name: "編集", exact: true }).click();
-    await page.getByRole("textbox", { name: "タスク名", exact: true }).fill("Independent copy");
-    await page.getByRole("textbox", { name: "タスク名", exact: true }).blur();
+    await page.getByRole("textbox", { name: "ノード名", exact: true }).fill("Independent copy");
+    await page.getByRole("textbox", { name: "ノード名", exact: true }).blur();
     await expect.poll(() => graphOf(app).nodes[copy.id].name).toBe("Independent copy");
     expect(graphOf(app).nodes.shared.name).toBe("shared");
   } finally {

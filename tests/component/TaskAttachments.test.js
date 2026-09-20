@@ -28,8 +28,10 @@ describe("TaskAttachments", () => {
       },
     });
 
-    expect(screen.getByLabelText("添付なし")).toBeInTheDocument();
+    // 0 件のときは件数を繰り返さず、受け口だけを出す。
     expect(screen.queryByRole("list", { name: "添付ファイル" })).not.toBeInTheDocument();
+    expect(screen.getByText("この欄にファイルをドロップ")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "ファイルを選択" })).toBeInTheDocument();
   });
 
   test("renders every attachment in the grid list and keeps the count in sync", () => {

@@ -1,3 +1,18 @@
+<!--
+  グラフ / ツリー / ファインダー / ガントを切り替えるページ。
+
+  いまはどこからも import されていない。App.svelte が読み込むのは
+  WorkspaceTreeGridPage で、以前はその受け皿の変数名が
+  NodeWorkspacePageComponent だったため「配線済み」に見えていた。
+  ビューを実際に出すときは、ここから繋ぐ。
+
+  繋ぐときの宿題:
+  - ガントが 2 実装ある。GanttPanel（MainPage 経由で実働・E2E で担保済み）と
+    ここで使う NodeGanttPanel。どちらを正とするか決めること。
+  - このページは独自のヘッダ（h1・タブ・ルートに作成・元に戻す/やり直す）を
+    持っていて、現在のツールバーと二重になる。タブだけを現ツールバーへ
+    移すほうが自然。
+-->
 <script>
   import { selected_id } from "@stores";
   import { INBOX_SELECTED_ID } from "@features/inbox/stores/inbox";
@@ -158,7 +173,7 @@
       <p>一つのノードを複数の見方で整理します。</p>
     </div>
     <nav aria-label="表示形式">
-      {#each [["graph", "グラフ"], ["tree", "ツリー"], ["finder", "Finder"], ["gantt", "ガント"]] as tab}<button
+      {#each [["graph", "グラフ"], ["tree", "ツリー"], ["finder", "ファインダー"], ["gantt", "ガント"]] as tab}<button
           class:active={view === tab[0]}
           aria-pressed={view === tab[0]}
           on:click={() => (view = tab[0])}>{tab[1]}</button

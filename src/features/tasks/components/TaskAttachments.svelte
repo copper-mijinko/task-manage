@@ -288,7 +288,9 @@
   on:dragleave={handleDragLeave}
   on:drop={handleDrop}
 >
-  <div class="attachments-header">
+  <!-- 0 件のときはタブが「添付 (0)」と言っていて、入口は下の領域の
+       「ファイルを選択」がある。件数とクリップ記号をここで繰り返さない。 -->
+  <div class="attachments-header" class:attachments-header-hidden={attachmentList.length === 0}>
     <span class="attachment-label" id="lbl-attachment-count">添付</span>
     <output class="attachment-count" aria-labelledby="lbl-attachment-count"
       >{attachmentList.length}</output
@@ -391,13 +393,38 @@
         </li>
       {/each}
     </ul>
-  {:else}
-    <div class="attachment-empty" aria-label="添付なし">添付なし</div>
   {/if}
 
-  {#if canUseAttachments && !readOnly}<p class="attachment-drop-hint">
-      ここにファイルをドロップして添付
-    </p>{/if}
+  <!-- 0 件のとき「添付 (0)」(タブ)・「添付 0」(見出し)・「添付なし」(枠) で
+       同じことを 3 回言っていた。枠は入力欄のようにも見えるのに押せず、
+       すぐ下のドロップ領域と点線の箱が 2 つ縦に並んでいた。件数はタブが
+       言っているので、ここは受け口だけを出す。
+       ドロップを受けるのは実際にはこの帯ではなく添付欄ぜんたい
+       (.attachments-field の on:drop) なので、文言もそう書く。 -->
+  {#if canUseAttachments && !readOnly}
+    <div
+      class="attachment-drop-hint"
+      class:attachment-drop-hint-empty={attachmentList.length === 0}
+    >
+      {#if attachmentList.length === 0}
+        <svg class="drop-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path
+            d="M21.4 11.6L12.2 20.8C9.7 23.3 5.6 23.3 3.1 20.8C0.6 18.3 0.6 14.2 3.1 11.7L12.7 2.1C14.5 0.4 17.3 0.4 19.1 2.1C20.8 3.9 20.8 6.7 19.1 8.5L9.8 17.8C8.8 18.8 7.2 18.8 6.2 17.8C5.2 16.8 5.2 15.2 6.2 14.2L14.8 5.6"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+        <span>この欄にファイルをドロップ</span>
+        <button type="button" class="ui-action" disabled={isBusy} on:click={chooseFiles}
+          >ファイルを選択</button
+        >
+      {:else}
+        <span>この欄にファイルをドロップして添付</span>
+      {/if}
+    </div>
+  {/if}
   {#if errorMessage}
     <div class="attachment-error" role="alert">{errorMessage}</div>
   {/if}
@@ -422,6 +449,21 @@
     text-align: center;
     font-size: var(--font-body-sm);
   }
+  /* 添付が無いときは、画面でいちばん大きな面を受け口そのものにする。
+     44px の帯と 24px のクリップ記号しか入口が無い状態をやめる。 */
+  .attachment-drop-hint-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp3);
+    min-height: 11.5rem;
+  }
+  .attachment-drop-hint-empty .drop-icon {
+    width: 1.75rem;
+    height: 1.75rem;
+    opacity: 0.5;
+  }
   .attachments-field {
     display: flex;
     flex-direction: column;
@@ -441,6 +483,9 @@
     align-items: center;
     min-width: 0;
     gap: var(--sp1);
+  }
+  .attachments-header-hidden {
+    display: none;
   }
   .attachment-label {
     flex: 0 0 auto;
@@ -544,16 +589,6 @@
     color: color-mix(in srgb, var(--theme-color-Sub-main) 68%, transparent);
     font-size: var(--font-label-md);
     white-space: nowrap;
-  }
-  .attachment-empty {
-    display: flex;
-    align-items: center;
-    min-height: 1.5rem;
-    padding: 0 var(--sp2);
-    border: 1px dashed color-mix(in srgb, var(--theme-color-Sub-main) 26%, transparent);
-    border-radius: var(--shape-sm);
-    color: color-mix(in srgb, var(--theme-color-Sub-main) 68%, transparent);
-    font-size: var(--font-body-sm);
   }
   .attachment-error {
     color: var(--theme-color-Error-main);
