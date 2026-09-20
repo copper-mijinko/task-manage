@@ -285,27 +285,49 @@
   $: detailPaneVisible = outerCollapsedPane !== "end";
 
   /**
-   * 狭い幅では「ノードを選択してください」だけの詳細欄に 283px を払う余裕が
-   * ない（760px の実測で、名前列が 180px まで潰れて「新…」になっていた）。
-   * 何も選んでいない間だけ自動でたたみ、選んだ時と広げた時に元へ戻す。
+   * 狭い幅では、詰まるのは列ではなく脇のペインのほう。760px の実測:
    *
-   * たたむのは「利用者が開いていた」ときだけなので、戻す先は常に展開状態で
-   * よい。自分でたたんでいる人の設定を勝手に開くことはない。
+   *   詳細欄あり  ツリー 429px / 名前列 180px / 名前の文字  86px / 横スクロール 123px
+   *   詳細欄なし  ツリー 728px / 名前列 356px / 名前の文字 262px / 横スクロール   0px
+   *
+   * 列を自動で隠す案も考えたが、列は `列の設定` で利用者が選んで出している
+   * ものなので、見たくて出した列が幅の都合で消えるほうが困る。畳むのは
+   * 詳細欄とガントだけにする。
+   *
+   * 畳むのは幅が狭くなった一度きり。広げたら畳んだものを戻す。そして
+   * 利用者が自分で開閉したら、その時点で自動管理をやめる（フラグを落とす）。
+   * 明示的に出したものを幅の都合で引っ込めない、が優先。
    */
-  const DETAIL_AUTO_COLLAPSE_WIDTH = 900;
+  const NARROW_LAYOUT_WIDTH = 900;
   let viewportWidth = 0;
+  /** 幅がしきい値をまたいだ一度きりだけ動かすための掛け金。 */
+  let narrowLayoutApplied = false;
   let detailAutoCollapsed = false;
+  let ganttAutoHidden = false;
   $: {
-    const shouldAutoCollapse =
-      viewportWidth > 0 && viewportWidth < DETAIL_AUTO_COLLAPSE_WIDTH && !$table_selected_id;
-    if (shouldAutoCollapse) {
-      if (!detailAutoCollapsed && outerCollapsedPane !== "end") {
+    const narrow = viewportWidth > 0 && viewportWidth < NARROW_LAYOUT_WIDTH;
+    if (narrow && !narrowLayoutApplied) {
+      narrowLayoutApplied = true;
+      if (outerCollapsedPane !== "end") {
         detailAutoCollapsed = true;
         outerCollapsedPane = "end";
       }
-    } else if (detailAutoCollapsed) {
-      detailAutoCollapsed = false;
-      outerCollapsedPane = null;
+      if ($ganttVisible) {
+        ganttAutoHidden = true;
+        $ganttVisible = false;
+      }
+    } else if (!narrow && narrowLayoutApplied) {
+      narrowLayoutApplied = false;
+      // 戻すのは「こちらが引っ込めたもの」だけ。利用者が自分で開閉したものは
+      // toggle 側でフラグが落ちているので触らない。
+      if (detailAutoCollapsed) {
+        detailAutoCollapsed = false;
+        outerCollapsedPane = null;
+      }
+      if (ganttAutoHidden) {
+        ganttAutoHidden = false;
+        $ganttVisible = true;
+      }
     }
   }
   let show_memo_format_confirm = false;
@@ -325,7 +347,14 @@
   }
 
   function toggleDetailPane() {
+    // 自分で開閉した時点で、幅による自動管理からは手を引く。
+    detailAutoCollapsed = false;
     outerCollapsedPane = detailPaneVisible ? "end" : null;
+  }
+
+  function toggleGanttPane() {
+    ganttAutoHidden = false;
+    $ganttVisible = !$ganttVisible;
   }
 
   /**
@@ -904,7 +933,7 @@
         treeComponent?.openColumns(overflowTrigger);
         break;
       case "toggleGantt":
-        $ganttVisible = !$ganttVisible;
+        toggleGanttPane();
         break;
       case "toggleDetail":
         toggleDetailPane();
@@ -1312,7 +1341,7 @@
                       ? "var(--theme-color-Primary-main)"
                       : "var(--theme-color-Sub-main)"}
                     activeColor={"var(--theme-color-Primary-main)"}
-                    on:click={() => ($ganttVisible = !$ganttVisible)}
+                    on:click={toggleGanttPane}
                   >
                     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <rect x="3" y="4" width="4" height="3" rx="0.5" fill="currentColor" />
