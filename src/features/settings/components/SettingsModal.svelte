@@ -42,13 +42,13 @@
       ],
     },
     {
-      title: "タスクツリー",
+      title: "ノードツリー",
       items: [
-        { keys: ["Ctrl", "A"], description: "表示中のタスクをすべて選択" },
+        { keys: ["Ctrl", "A"], description: "表示中のノードをすべて選択" },
         { keys: ["Esc"], description: "選択を解除" },
-        { keys: ["Delete"], description: "選択したタスクをアーカイブ / 削除" },
-        { keys: ["Ctrl", "C"], description: "選択したタスクをコピー" },
-        { keys: ["Ctrl", "V"], description: "コピーしたタスクを子として貼り付け" },
+        { keys: ["Delete"], description: "選択したノードをアーカイブ / 削除" },
+        { keys: ["Ctrl", "C"], description: "選択したノードをコピー" },
+        { keys: ["Ctrl", "V"], description: "コピーしたノードを子として貼り付け" },
         { keys: ["Ctrl", "Z"], description: "元に戻す" },
         { keys: ["Ctrl", "Y"], description: "やり直す（Ctrl+Shift+Z も同じ）" },
       ],
@@ -68,7 +68,7 @@
       items: [
         { keys: ["Ctrl", "+"], description: "拡大（Ctrl+マウスホイールも同じ）" },
         { keys: ["Ctrl", "-"], description: "縮小" },
-        { keys: ["Ctrl", "0"], description: "拡大率をリセット" },
+        { keys: ["Ctrl", "0"], description: "100%に戻す" },
       ],
     },
   ];
@@ -84,7 +84,7 @@
     {
       id: "appearance",
       label: "外観",
-      description: "表示密度・フラットモード",
+      description: "表示密度・表示倍率",
     },
     {
       id: "datetime-format",

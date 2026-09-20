@@ -174,17 +174,23 @@
         ></path></svg
       >
     {:else}
-      <!-- Plain chevron-left "＜" while the sidebar is open — clicking closes it. -->
-      <svg class="Menu" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"
-        ><path
-          d="M15 6L9 12L15 18"
+      <!-- 閉じる側にも「＜」を使っていたが、8px 右隣の「戻る」が
+           まったく同じ path (M15 6L9 12L15 18) で、同じ字形が並んでいた。
+           サイドバーの開閉は方向ではなく面の操作なので、パネルの絵にする。
+           隠している間のハンバーガーとも意味がつながる。 -->
+      <svg class="Menu" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <rect
+          x="3.5"
+          y="5"
+          width="17"
+          height="14"
+          rx="2"
           stroke="var(--fg-default)"
           stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
           fill="none"
-        ></path></svg
-      >
+        ></rect>
+        <path d="M9.5 5V19" stroke="var(--fg-default)" stroke-width="2"></path>
+      </svg>
     {/if}
   </IconButton>
 

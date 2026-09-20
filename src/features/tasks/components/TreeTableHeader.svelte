@@ -1,5 +1,5 @@
 ﻿<script>
-  import { getContext } from "svelte";
+  import { getContext, tick } from "svelte";
   import { TREEGRID_APPLICATION } from "@features/workspace/application/treegrid";
   const application = getContext(TREEGRID_APPLICATION);
   import { filter } from "@stores";
@@ -166,7 +166,7 @@
   }
 
   /**
-   * カラム表示設定を開く。トリガーはツールバーの「…」メニュー項目なので、
+   * 列の設定を開く。トリガーはツールバーの「…」メニュー項目なので、
    * クリックイベントそのものが渡ってくるとは限らない。要素を持たない
    * 呼び出し側のために、位置だけ（DOMRect）でも開けるようにしておく。
    */
@@ -187,6 +187,13 @@
       activePanelId.set(columnSettingsPanelId);
     }
     showPanel = !showPanel;
+    // role="dialog" を開いてもフォーカスが body のままで、キーボードだけだと
+    // 文書の先頭から Tab で辿り直すことになっていた。
+    if (showPanel) {
+      void tick().then(() => {
+        panelElement?.querySelector("input, button")?.focus();
+      });
+    }
   }
 
   function handleSortClick(e, headerName) {
@@ -543,9 +550,9 @@
               class="HeaderFilterControl"
               class:active={filterActive[header.name]}
               on:click|stopPropagation={toggleNamePanel}
-              aria-label="タスク名フィルター"
+              aria-label="ノード名フィルター"
               aria-expanded={openNamePanel}
-              title="タスク名フィルター"
+              title="ノード名フィルター"
               use:ripple
             >
               <span class="FilterIcon" aria-hidden="true">
@@ -560,7 +567,7 @@
             {#if filterActive[header.name]}
               <IconButton
                 style={"margin: 0rem; padding: var(--sp1); margin-left: auto; width: 1.125rem; height: 1.125rem; flex-shrink: 0;"}
-                ariaLabel="タスク名フィルターをクリア"
+                ariaLabel="ノード名フィルターをクリア"
                 on:click={(e) => {
                   clearColumnFilter(header.name);
                   e.stopPropagation();
@@ -712,13 +719,18 @@
     class="ColumnSettingsPanel"
     style={panelStyle}
     role="dialog"
-    aria-label="カラム表示設定"
+    aria-label="列の設定"
     use:portal
     use:viewportPopover
     use:globalDismiss={closePanel}
   >
-    <div class="PanelTitle">カラム表示設定</div>
-    {#each $column_settings as setting}
+    <div class="PanelTitle">
+      <span>列の設定</span>
+      <!-- 無地の入力欄が並ぶだけで、何の数字を入れる欄なのか画面から読めなかった
+           （aria-label にはあった）。 -->
+      <span class="PanelTitleUnit">幅 (px)</span>
+    </div>
+    {#each $column_settings as setting, index}
       {#if availableIds.has(setting.id)}
         <div class="SettingsRow">
           {#if setting.id === "name"}
@@ -753,9 +765,13 @@
             />
             <label for={`col-vis-${setting.id}`} class="ColumnLabel">{setting.label}</label>
             <div class="MoveButtons">
+              <!-- 端の矢印は押しても並びが変わらない（moveUp は index<=1、
+                   moveDown は末尾で何もしない）。押せる見た目のままだと、
+                   効かなかったのか押し損ねたのか区別できない。 -->
               <button
                 class="MoveBtn"
-                aria-label="Move {setting.label} up"
+                aria-label="{setting.label}を上へ"
+                disabled={index <= 1}
                 on:click|stopPropagation={() => column_settings.moveUp(setting.id)}
               >
                 <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
@@ -764,7 +780,8 @@
               </button>
               <button
                 class="MoveBtn"
-                aria-label="Move {setting.label} down"
+                aria-label="{setting.label}を下へ"
+                disabled={index >= $column_settings.length - 1}
                 on:click|stopPropagation={() => column_settings.moveDown(setting.id)}
               >
                 <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
@@ -981,7 +998,7 @@
     display: block;
     flex: 0 0 auto;
     /* グリフは本文と同寸にする。選択の目印が本文より目立つと、行の主役が
-       タスク名ではなくチェックボックスになってしまう。当たり判定は
+       ノード名ではなくチェックボックスになってしまう。当たり判定は
        .CheckboxHit 側が 24px を担保するので、ここを大きくする必要はない。 */
     width: var(--font-body-md);
     height: var(--font-body-md);
@@ -1005,7 +1022,7 @@
     align-items: center;
     /* 見出しは列の内容と同じ側に寄せる。中央寄せのままだと、幅の広い列ほど
        見出しとセルの文字が離れ、どの列の見出しなのかを目で追えなくなる
-       （タスク名列では見出しが x≈173、セルの文字が x≈100 だった）。
+       （ノード名列では見出しが x≈173、セルの文字が x≈100 だった）。
        セル側 (.TableData) と同じ横 padding を使って字下げも揃える。 */
     justify-content: flex-start;
     gap: var(--sp1);
@@ -1123,12 +1140,20 @@
     color: var(--theme-color-Sub-main);
   }
   .PanelTitle {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--sp3);
     font-size: var(--font-label-md);
     font-weight: 700;
     color: var(--theme-color-Sub-main);
     padding: var(--sp1) var(--sp3) var(--sp2);
     border-bottom: 1px solid var(--theme-color-Shadow-main);
     margin-bottom: var(--sp1);
+  }
+  .PanelTitleUnit {
+    font-weight: 400;
+    opacity: 0.65;
   }
   .SettingsRow {
     display: flex;
@@ -1172,8 +1197,10 @@
     flex-shrink: 0;
   }
   .MoveBtn {
-    width: 0.9rem;
-    height: 0.9rem;
+    /* 実測 14x14 で SC 2.5.8 の 24px を割っていた。グリフは小さいままで
+       当たり判定だけ広げる。 */
+    width: var(--tap-min);
+    height: var(--tap-min);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1181,13 +1208,21 @@
     border: none;
     cursor: pointer;
     border-radius: 0.15rem;
-    padding: 0.075rem;
+    padding: 0;
     color: var(--theme-color-Sub-main);
     opacity: 0.6;
   }
-  .MoveBtn:hover {
+  .MoveBtn:hover:not(:disabled) {
     background-color: color-mix(in srgb, var(--theme-color-Primary-main) 14%, transparent);
     opacity: 1;
+  }
+  .MoveBtn:disabled {
+    opacity: 0.22;
+    cursor: default;
+  }
+  .MoveBtn svg {
+    width: 0.9rem;
+    height: 0.9rem;
   }
   .MoveBtn svg {
     width: 100%;
