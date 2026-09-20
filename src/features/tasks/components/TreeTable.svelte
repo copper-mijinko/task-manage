@@ -1525,7 +1525,7 @@
   bind:this={table_root}
   class:TableRoot={true}
   role="treegrid"
-  aria-label="Task tree"
+  aria-label="ノードツリー"
   aria-multiselectable="true"
   tabindex="-1"
   on:scroll={handleScroll}
