@@ -82,7 +82,7 @@ export function init_store(): Promise<void> {
   ui_density.init();
 
   // 履歴記録は selected_type / selected_id への subscribe を張る。
-  // タスク詳細サブウィンドウ (`#task-detail-window`) では戻る/進むの概念が
+  // ノード詳細サブウィンドウ (`#task-detail-window`) では戻る/進むの概念が
   // 不要なため、メインウィンドウのときだけ初期化する。
   if (!isTaskDetailWindow) {
     navigation_history.init();

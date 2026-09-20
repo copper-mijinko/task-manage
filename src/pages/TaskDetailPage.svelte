@@ -59,7 +59,7 @@
       </div>
     {:else if isTaskDeleted}
       <div class="empty-state">
-        <h2>タスクが見つかりません。</h2>
+        <h2>ノードが見つかりません。</h2>
         <p>The target task was deleted. Rename is still tracked by task ID.</p>
       </div>
     {:else}

@@ -71,8 +71,8 @@ export interface WorkspaceTask {
   attachments?: WorkspaceAttachment[];
   createdAt: string; // YYYY-MM-DD
   /**
-   * ルートタスク（プロジェクト自身）の、ワークスペース内での並び順。
-   * 通常タスクの並び順は `parents[].order` に持つ。
+   * ルートノード（プロジェクト自身）の、ワークスペース内での並び順。
+   * 通常ノードの並び順は `parents[].order` に持つ。
    */
   order?: number;
   /** Archived (soft-deleted) flag. Persisted in `_task.md` frontmatter. */

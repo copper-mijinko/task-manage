@@ -96,7 +96,7 @@ describe("column_settings store", () => {
 
   test("init loads saved settings from metaData", async () => {
     const savedSettings = [
-      { id: "name", label: "タスク名", visible: true },
+      { id: "name", label: "ノード名", visible: true },
       { id: "due date", label: "期限日", visible: true },
       { id: "status", label: "ステータス", visible: false },
       { id: "memo", label: "メモ数", visible: true },
@@ -115,7 +115,7 @@ describe("column_settings store", () => {
 
   test("init preserves saved column ordering", async () => {
     const savedSettings = [
-      { id: "name", label: "タスク名", visible: true },
+      { id: "name", label: "ノード名", visible: true },
       { id: "attachments", label: "添付数", visible: false },
       { id: "status", label: "ステータス", visible: true },
       { id: "due date", label: "期限日", visible: true },
@@ -134,7 +134,7 @@ describe("column_settings store", () => {
   // ことを確かめる。既存ユーザの meta.json には必ず入っている。
   test("撤去した memo 列は、保存済み設定に残っていても復活しない", async () => {
     const savedSettings = [
-      { id: "name", label: "タスク名", visible: true },
+      { id: "name", label: "ノード名", visible: true },
       { id: "memo", label: "メモ数", visible: true },
       { id: "status", label: "ステータス", visible: true },
     ];

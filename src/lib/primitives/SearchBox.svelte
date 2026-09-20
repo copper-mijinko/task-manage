@@ -127,7 +127,7 @@
     backgroundColor: "var(--theme-color-Sub-main)",
     wrapped: true,
     force: true,
-    content: "タスクをフィルタ（行を絞り込む）",
+    content: "ノードをフィルタ（行を絞り込む）",
   };
 </script>
 
@@ -179,9 +179,9 @@
       placeholder={terms.length === 0
         ? searchMode === "tags"
           ? "タグ名で絞り込み"
-          : "タスクを絞り込み"
+          : "ノードを絞り込み"
         : ""}
-      aria-label="タスク一覧を絞り込み"
+      aria-label="ノード一覧を絞り込み"
       on:input={() => {
         applyFilter();
       }}

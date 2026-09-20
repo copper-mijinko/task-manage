@@ -174,7 +174,7 @@ describe("ProjectPage", () => {
     expect(document.body.textContent).not.toMatch(/Cannot insert a sibling/);
   });
 
-  test("adds a task under the project root via 子タスク追加 when the root is selected", async () => {
+  test("adds a task under the project root via 子ノード追加 when the root is selected", async () => {
     const data = createProjectData();
     data.data.children = [];
     tree_data.set(data);
@@ -183,7 +183,7 @@ describe("ProjectPage", () => {
     const { container } = render(ProjectPage);
     const buttons = container.querySelectorAll(".TbGroup button");
 
-    // buttons[1] is "子タスク追加" (append as child) which is the correct
+    // buttons[1] is "子ノード追加" (append as child) which is the correct
     // way to add a child task to the root.
     await fireEvent.click(buttons[1]);
     await vi.runAllTimersAsync();
@@ -279,7 +279,7 @@ describe("ProjectPage", () => {
     await fireEvent.click(screen.getByRole("button", { name: "アーカイブする" }));
     await tick();
 
-    // タスクは物理削除されず archived フラグだけが立つ（論理削除）。
+    // ノードは物理削除されず archived フラグだけが立つ（論理削除）。
     expect(get(tree_data).data.children).toHaveLength(1);
     expect(get(tree_data).data.children[0].archived).toBe(true);
     expect(get(table_selected_id)).toBeUndefined();

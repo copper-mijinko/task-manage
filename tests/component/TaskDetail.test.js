@@ -77,7 +77,7 @@ describe("TaskDetail", () => {
   test("shows a placeholder when no task is selected", () => {
     render(TaskDetail);
 
-    expect(screen.getByText("タスクを選択してください")).toBeInTheDocument();
+    expect(screen.getByText("ノードを選択してください")).toBeInTheDocument();
   });
 
   test("starts with a reading overview and loads the body on demand", async () => {
@@ -102,7 +102,7 @@ describe("TaskDetail", () => {
 
     render(TaskDetail);
 
-    await fireEvent.click(screen.getByRole("button", { name: "Node詳細の操作" }));
+    await fireEvent.click(screen.getByRole("button", { name: "ノード詳細の操作" }));
     await fireEvent.click(screen.getByRole("menuitem", { name: "別Windowで開く" }));
     await tick();
 
@@ -138,7 +138,7 @@ describe("TaskDetail", () => {
     expect(
       screen.getByRole("heading", { name: "Sample Project / First Task" })
     ).toBeInTheDocument();
-    await fireEvent.click(screen.getByRole("button", { name: "Node詳細の操作" }));
+    await fireEvent.click(screen.getByRole("button", { name: "ノード詳細の操作" }));
     expect(screen.queryByRole("menuitem", { name: "別Windowで開く" })).toBeNull();
   });
 
@@ -382,10 +382,10 @@ describe("TaskDetail", () => {
     render(TaskDetail);
     await fireEvent.click(screen.getByRole("button", { name: "編集", exact: true }));
 
-    await fireEvent.input(screen.getByLabelText("タスク名"), {
+    await fireEvent.input(screen.getByLabelText("ノード名"), {
       target: { value: "Updated Task" },
     });
-    await fireEvent.blur(screen.getByLabelText("タスク名"));
+    await fireEvent.blur(screen.getByLabelText("ノード名"));
     await tick();
 
     await fireEvent.click(screen.getByLabelText("ステータス"));
@@ -436,7 +436,7 @@ describe("TaskDetail", () => {
     render(TaskDetail);
     await fireEvent.click(screen.getByRole("tab", { name: "本文" }));
 
-    await fireEvent.click(screen.getByRole("button", { name: "Node詳細の操作" }));
+    await fireEvent.click(screen.getByRole("button", { name: "ノード詳細の操作" }));
     await fireEvent.click(screen.getByRole("menuitem", { name: "形式を変換" }));
 
     expect(screen.getByText(/情報が損なわれる可能性/)).toBeInTheDocument();
@@ -459,7 +459,7 @@ describe("TaskDetail", () => {
     render(TaskDetail);
     await fireEvent.click(screen.getByRole("tab", { name: "本文" }));
 
-    await fireEvent.click(screen.getByRole("button", { name: "Node詳細の操作" }));
+    await fireEvent.click(screen.getByRole("button", { name: "ノード詳細の操作" }));
     await fireEvent.click(screen.getByRole("menuitem", { name: "形式を変換" }));
     await tick();
 
@@ -480,7 +480,7 @@ describe("TaskDetail", () => {
     render(TaskDetail);
     await fireEvent.click(screen.getByRole("tab", { name: "本文" }));
 
-    await fireEvent.click(screen.getByRole("button", { name: "Node詳細の操作" }));
+    await fireEvent.click(screen.getByRole("button", { name: "ノード詳細の操作" }));
     await fireEvent.click(screen.getByRole("menuitem", { name: "形式を変換" }));
     await fireEvent.click(screen.getByRole("button", { name: "変換する" }));
     await tick();

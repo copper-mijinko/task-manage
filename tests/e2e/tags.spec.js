@@ -13,7 +13,7 @@ const graphNode = (window, name) =>
   window
     .getByRole("treegrid")
     .getByRole("row")
-    .filter({ has: window.getByRole("textbox", { name: `${name}のタスク名`, exact: true }) })
+    .filter({ has: window.getByRole("textbox", { name: `${name}のノード名`, exact: true }) })
     .first();
 
 /** Build workspace fixture files directly without importing the CommonJS workspace.js */
@@ -105,8 +105,8 @@ test("search tag mode and column filters share removable conditions", async () =
     const page = app.window;
     await expect(page.locator(".TagContents")).toHaveCount(0);
     await page.getByRole("combobox", { name: "絞り込みの対象" }).selectOption("tags");
-    await page.getByLabel("タスク一覧を絞り込み").fill("design");
-    await page.getByLabel("タスク一覧を絞り込み").press("Enter");
+    await page.getByLabel("ノード一覧を絞り込み").fill("design");
+    await page.getByLabel("ノード一覧を絞り込み").press("Enter");
     await expect(graphNode(page, "Design Notes")).toBeVisible();
     await expect(page.locator(".ActiveFilterBar")).toContainText("design");
     await page.getByRole("button", { name: "タグフィルタ「design」を削除" }).click();

@@ -71,7 +71,7 @@
 
   /**
    * 行を開く。プロジェクトを切り替えたうえで、読み込み完了後に
-   * そのタスクを選択させる（読み込みは非同期なので pending 経由で渡す）。
+   * そのノードを選択させる（読み込みは非同期なので pending 経由で渡す）。
    */
   function openItem(item) {
     setPendingTaskDetailSelection({
@@ -137,7 +137,7 @@
           class="AgendaSearch"
           type="search"
           bind:value={query}
-          placeholder="タスク・プロジェクト・タグで絞り込み"
+          placeholder="ノード・プロジェクト・タグで絞り込み"
           aria-label="予定を絞り込み"
         />
         <span class="ToolbarCount">{visibleItems.length}件 / {projectCount}プロジェクト</span>
@@ -160,9 +160,9 @@
           <h2>表示する予定はありません</h2>
           <p>
             {#if scope === "due"}
-              期限の付いた未完了タスクがありません。「すべて」に切り替えると期限なしのタスクも表示します。
+              期限の付いた未完了ノードがありません。「すべて」に切り替えると期限なしのノードも表示します。
             {:else}
-              未完了のタスクがありません。
+              未完了のノードがありません。
             {/if}
           </p>
         </div>

@@ -222,7 +222,7 @@
 
     const name_tag = document.createElement("div");
     name_tag.classList.add("NameTag");
-    name_tag.innerText = dragged_ids.length > 1 ? `${dragged_ids.length}件のタスク` : data.name;
+    name_tag.innerText = dragged_ids.length > 1 ? `${dragged_ids.length}件のノード` : data.name;
     document.body.appendChild(name_tag);
 
     const rem = parseFloat(window.getComputedStyle(document.documentElement).fontSize);
@@ -385,7 +385,7 @@
             class:ExpandButton={true}
             tabindex={cellTabIndex}
             style="flex-shrink: 0"
-            aria-label={expanded ? "タスクを折りたたむ" : "タスクを展開"}
+            aria-label={expanded ? "ノードを折りたたむ" : "ノードを展開"}
             on:click={toggle}
           >
             <svg viewBox="-12 0 32 32" xmlns="http://www.w3.org/2000/svg"
@@ -824,7 +824,7 @@
   }
   .RowCheckbox {
     /* グリフは本文と同寸にする。選択の目印が本文より目立つと、行の主役が
-       タスク名ではなくチェックボックスになってしまう。当たり判定は
+       ノード名ではなくチェックボックスになってしまう。当たり判定は
        .CheckboxHit 側が 24px を担保するので、ここを大きくする必要はない。 */
     width: var(--font-body-md);
     height: var(--font-body-md);
@@ -877,7 +877,7 @@
        チップの文字が先に消えないようにする。 */
     padding-inline: var(--sp1);
   }
-  /* プロジェクトのルート行。これまで子タスクとの差はインデントとアイコン
+  /* プロジェクトのルート行。これまで子ノードとの差はインデントとアイコン
      だけで、木の頂点がどこか一目で分からなかった。名前を太くし、下辺を
      はっきりさせて「ここから下がこのプロジェクト」と読めるようにする。
      色は足さない（色は期限の緊急度に予約してある）。 */

@@ -7,7 +7,7 @@ import type { WorkspaceTask, WorkspaceTaskStatus } from "@app-types/workspace";
 /**
  * 予定ビュー（ワークスペース横断）の状態。
  *
- * これまでタスクは「選択中のプロジェクト 1 つ」の中でしか見えず、
+ * これまでノードは「選択中のプロジェクト 1 つ」の中でしか見えず、
  * 期限が近いものを把握するにはプロジェクトを 1 つずつ開いて回るしかなかった。
  * このストアはワークスペース配下の全プロジェクトを読み、期限でまとめた
  * 1 本のリストとして提供する。
@@ -32,7 +32,7 @@ export interface AgendaItem {
   projectName: string;
   projectDir: string;
   projectRootId: string;
-  /** ルートからの親タスク名。どの文脈のタスクか分かるように出す。 */
+  /** ルートからの親ノード名。どの文脈のノードか分かるように出す。 */
   parentPath: string;
   bucket: AgendaBucket;
   /** 期限までの日数。過ぎていれば負。期限なしは undefined。 */
@@ -88,8 +88,8 @@ export const BUCKET_LABELS: Record<AgendaBucket, string> = {
 };
 
 /**
- * 1 プロジェクト分のタスク集合を予定アイテムへ変換する。
- * 完了 / 中止と、アーカイブされたタスク（およびその配下）は落とす。
+ * 1 プロジェクト分のノード集合を予定アイテムへ変換する。
+ * 完了 / 中止と、アーカイブされたノード（およびその配下）は落とす。
  */
 export function buildAgendaItemsForProject(
   tasks: Record<string, WorkspaceTask>,
@@ -113,7 +113,7 @@ export function buildAgendaItemsForProject(
     changed = false;
     for (const task of Object.values(tasks)) {
       if (archived.has(task.id)) continue;
-      // 親が全てアーカイブされて初めて、そのタスクも辿れなくなる。多親では
+      // 親が全てアーカイブされて初めて、そのノードも辿れなくなる。多親では
       // 片方がアーカイブでも、もう片方から生きて辿れる（ツリーの
       // isNodeEffectivelyArchived と同じ規則）。
       const parents = task.parents ?? [];
@@ -128,7 +128,7 @@ export function buildAgendaItemsForProject(
   for (const task of Object.values(tasks)) {
     if (archived.has(task.id)) continue;
     if (DONE_STATUSES.has(task.status)) continue;
-    // ルートタスク（プロジェクトそのもの）は行として出さない。
+    // ルートノード（プロジェクトそのもの）は行として出さない。
     if ((task.parents ?? []).length === 0) continue;
 
     const parentNames = (task.parents ?? [])
@@ -153,7 +153,7 @@ export function buildAgendaItemsForProject(
   return items;
 }
 
-/** 期限の早い順。期限なしは最後、同じ日ならプロジェクト名→タスク名で安定させる。 */
+/** 期限の早い順。期限なしは最後、同じ日ならプロジェクト名→ノード名で安定させる。 */
 export function sortAgendaItems(items: AgendaItem[]): AgendaItem[] {
   return [...items].sort((a, b) => {
     if (a.dueDate && b.dueDate && a.dueDate !== b.dueDate) return a.dueDate < b.dueDate ? -1 : 1;

@@ -670,7 +670,7 @@
     } else {
       selectOnly(id, path);
     }
-    // ユーザの能動的なタスク行選択は、ページ遷移と同等の navigation event として
+    // ユーザの能動的なノード行選択は、ページ遷移と同等の navigation event として
     // 履歴に積む。subscriber 経路で同ページ内の table_selected_id 変更を in-place
     // 更新に倒しているため、ここで明示的に呼ばないとクリック履歴が残らない。
     navigation_history.pushSelection();
@@ -723,7 +723,7 @@
    * treegrid のキーボード操作（WAI-ARIA の treegrid パターン）。
    *
    * これまで行には Enter / Space しか無く、矢印キーが一切効かなかった。
-   * ツリーを辿るには行内のコントロールを Tab で全部踏むしかなく、タスクが
+   * ツリーを辿るには行内のコントロールを Tab で全部踏むしかなく、ノードが
    * 増えるほど現実的でなくなる。移動に必要な「表示中の行の並び」と親子関係は
    * ここ（rows）にしかないので、判定もここに置く。
    */
@@ -1624,8 +1624,8 @@
             stroke-linejoin="round"
           />
         </svg>
-        <p class="EmptyTitle">タスクがありません</p>
-        <p class="EmptyHint">ヘッダーの + ボタンか、右クリックメニューからタスクを追加できます</p>
+        <p class="EmptyTitle">ノードがありません</p>
+        <p class="EmptyHint">ヘッダーの + ボタンか、右クリックメニューからノードを追加できます</p>
       {:else}
         <svg class="EmptyIcon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <circle
@@ -1643,7 +1643,7 @@
             stroke-linejoin="round"
           />
         </svg>
-        <p class="EmptyTitle">一致するタスクがありません</p>
+        <p class="EmptyTitle">一致するノードがありません</p>
         <p class="EmptyHint">フィルターの条件を変更してください</p>
       {/if}
     </div>

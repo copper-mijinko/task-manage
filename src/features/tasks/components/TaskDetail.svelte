@@ -98,7 +98,7 @@
   $: cardTitle = titleOverride || name;
   $: nodeBody = node ? (node.data["body"] ?? "") : "";
   $: bodyFormat = normalizeMemoFormat(node?.data?.["format"], defaultMemoFormat);
-  // `[[…]]` の補完候補。統一後は「同じタスクのメモ」ではなく、自分の子ノードが
+  // `[[…]]` の補完候補。統一後は「同じノードのメモ」ではなく、自分の子ノードが
   // それにあたる（旧メモは子ノードになる）。
   $: siblingNodeNames = (node?.children ?? [])
     .map((child) => child?.data?.name)
@@ -579,7 +579,7 @@
 </script>
 
 {#if is_selected && node}
-  <section class="node-detail" aria-label="Node詳細">
+  <section class="node-detail" aria-label="ノード詳細">
     <header class="detail-header">
       <h2>{cardTitle}</h2>
       <div class="task-detail-actions">
@@ -612,7 +612,7 @@
           variant="text"
           normalColor="var(--fg-default)"
           activeColor="var(--accent-fg)"
-          ariaLabel="Node詳細の操作"
+          ariaLabel="ノード詳細の操作"
           aria-haspopup="menu"
           aria-expanded={detailMenu}
           data-task-menu-trigger
@@ -640,7 +640,7 @@
       on:window={openTaskDetailInWindow}
       on:format={() => requestBodyFormat(bodyFormat === "markdown" ? "quill" : "markdown")}
     />
-    <div class="detail-tabs" role="tablist" aria-label="Nodeの内容">
+    <div class="detail-tabs" role="tablist" aria-label="ノードの内容">
       {#each [{ id: "overview", label: "概要" }, { id: "attachments", label: "添付 (" + attachments.length + ")" }, { id: "body", label: "本文" }] as tab}
         <button
           role="tab"
@@ -690,20 +690,20 @@
                 fill="none"
               />
             </svg>
-            <span>このタスクはアーカイブ済みです。編集するには復元してください。</span>
+            <span>このノードはアーカイブ済みです。編集するには復元してください。</span>
           </div>
         {/if}
         <div class="detail-container">
           <div class="detail-fields">
             <label class="detail-field">
-              <span class="detail-label">タスク名</span>
+              <span class="detail-label">ノード名</span>
               <div class="detail-control" class:reading={!editingProperties || isArchived}>
                 {#if editingProperties && !isArchived}
                   <input
                     class="detail-input"
                     type="text"
                     value={name}
-                    aria-label="タスク名"
+                    aria-label="ノード名"
                     on:input={handleNameInput}
                     on:blur={flushNameChange}
                   />
@@ -772,7 +772,7 @@
                   suggestions={allTags}
                   disabled={isArchived}
                   showLabels={false}
-                  ariaLabel="タスクのタグ"
+                  ariaLabel="ノードのタグ"
                   on:change={(event) => saveTaskTags(event.detail.tags)}
                 />{:else}<div class="detail-control reading">
                   <span class="detail-value">{taskTags.join(" · ") || "未設定"}</span>
@@ -960,8 +960,8 @@
       />
       <circle cx="18" cy="7" r="3" stroke="currentColor" stroke-width="1.6" />
     </svg>
-    <p class="empty-state-title">タスクを選択してください</p>
-    <p class="empty-state-hint">左のツリーでタスクを選ぶと、ここに詳細とメモを表示します。</p>
+    <p class="empty-state-title">ノードを選択してください</p>
+    <p class="empty-state-hint">左のツリーでノードを選ぶと、ここに詳細とメモを表示します。</p>
   </div>
 {/if}
 

@@ -192,7 +192,7 @@ test("filters the visible task rows from the project search box", async () => {
   const app = await launchSeededApp();
 
   try {
-    const filterInput = app.window.getByLabel("タスク一覧を絞り込み");
+    const filterInput = app.window.getByLabel("ノード一覧を絞り込み");
 
     await filterInput.fill("missing");
     await expect(app.window.locator("#task-1")).toHaveCount(0);
@@ -241,7 +241,7 @@ test("adds a sibling task from the project toolbar and persists it", async () =>
     await app.window.locator("#task-1").dispatchEvent("click");
     // Toolbar was renamed from `.TableButtons` to `.TbGroup` (one group per
     // logical button cluster — Add/Move/Expand/Undo/View). The first group's
-    // first button is still タスク追加 (insert sibling).
+    // first button is still ノード追加 (insert sibling).
     await app.window.locator(".TbGroup button").nth(0).click();
 
     await app.window.waitForTimeout(1200);
@@ -314,7 +314,7 @@ test("shows a missing-task state when the selected task is deleted", async () =>
       window.electronAPI.setTreeData(project);
     });
 
-    await expect(detailWindow.getByText("タスクが見つかりません。")).toBeVisible();
+    await expect(detailWindow.getByText("ノードが見つかりません。")).toBeVisible();
     await expect(
       detailWindow.getByText("The target task was deleted. Rename is still tracked by task ID.")
     ).toBeVisible();

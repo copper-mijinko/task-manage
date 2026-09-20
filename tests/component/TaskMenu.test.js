@@ -4,7 +4,7 @@ import { tick } from "svelte";
 import TaskMenuHarness from "../mocks/TaskMenuHarness.svelte";
 
 async function openMenu() {
-  await fireEvent.click(screen.getByRole("button", { name: "タスクメニューを開く" }));
+  await fireEvent.click(screen.getByRole("button", { name: "ノードメニューを開く" }));
   await tick();
   expect(screen.getByRole("menu", { name: "Task actions" })).toBeInTheDocument();
 }

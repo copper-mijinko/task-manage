@@ -5,5 +5,5 @@
   const menuItems = [{ title: "名前を変更", action: "rename" }];
 </script>
 
-<button type="button" on:click={() => (show = true)}>タスクメニューを開く</button>
+<button type="button" on:click={() => (show = true)}>ノードメニューを開く</button>
 <TaskMenu {show} {menuItems} on:close={() => (show = false)} />

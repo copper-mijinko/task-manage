@@ -13,7 +13,7 @@ export type TaskStatus = "Open" | "Pending" | "In Progress" | "Completed" | "Can
  *
  * メモがノードになったので、ノードには「期限やステータスで追跡するもの」と
  * 「ただ書いてあるもの」の両方が実在する。後者に既定のステータスを与えると、
- * ノート 1 つ 1 つが「未着手のタスク」として積み上がり、ステータス列と
+ * ノート 1 つ 1 つが「未着手のノード」として積み上がり、ステータス列と
  * 絞り込みが意味を失う。だから「無し」は既定値ではなく**状態のひとつ**。
  *
  * 空文字を使うのは、ステータスが選択コントロールの値として往復するため。
@@ -343,7 +343,7 @@ export function promoteLegacyMemosToNodes(project: ProjectData | undefined) {
 
     changed = true;
     const { memo: _memo, ...data } = node.data as Record<string, unknown>;
-    // メモから生まれたノードは実タスクの子の後ろに並べる。
+    // メモから生まれたノードは実ノードの子の後ろに並べる。
     const memoNodes = legacyMemos.map((memo, index) => ({
       id: typeof memo.id === "string" && memo.id ? memo.id : `${uuidV4()}`,
       data: {
