@@ -132,7 +132,7 @@
         bind:this={inputEl}
         bind:value
         on:keydown={handleKeydown}
-        placeholder="思いついたノードを入力"
+        placeholder="思いついたことを入力"
         class="QuickCaptureInput"
         data-testid="quick-capture-input"
         data-modal-autofocus

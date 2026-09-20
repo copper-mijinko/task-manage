@@ -507,7 +507,7 @@ async function launch(context) {
   const errors = [];
   window.on("pageerror", (e) => errors.push(e.message));
   try {
-    await expect(window.getByRole("main", { name: "Workspace TreeGrid" })).toBeVisible();
+    await expect(window.getByRole("main", { name: "ノード一覧と詳細" })).toBeVisible();
     await expect(window.getByRole("treegrid")).toBeVisible();
   } catch (e) {
     const diagnostics = JSON.stringify({ errors, body: await window.locator("body").innerText() });

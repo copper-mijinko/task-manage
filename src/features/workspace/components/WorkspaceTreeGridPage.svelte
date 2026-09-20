@@ -62,7 +62,7 @@
   });
 </script>
 
-<main class="workspace-treegrid" aria-label="Workspace TreeGrid">
+<main class="workspace-treegrid" aria-label="ノード一覧と詳細">
   {#if $error}<div class="operation-error" role="alert">
       <span>{$error}</span><button aria-label="通知を閉じる" on:click={() => error.set("")}
         >×</button
