@@ -216,6 +216,54 @@ describe("workspace graph persistence", () => {
     expect(fs.existsSync(graphStore.graphPath(tempDir))).toBe(false);
   });
 
+  it("imports two legacy projects that share task ids by renumbering the later copy", async () => {
+    // v0.40 のエクスポートはルート以外の id を db.json から引き継いだので、
+    // 同じプロジェクトを 2 回エクスポートすると別プロジェクトに同じ id が並ぶ。
+    projectFixture(tempDir);
+    const betaDir = path.join(tempDir, "beta");
+    const betaTask = path.join(betaDir, "task-a");
+    const betaChild = path.join(betaDir, "task-b");
+    fs.mkdirSync(path.join(betaTask, "assets"), { recursive: true });
+    fs.mkdirSync(betaChild, { recursive: true });
+    fs.writeFileSync(
+      path.join(betaDir, "_project.md"),
+      "---\nid: project-b\nname: Beta\norder: 1\n---\n"
+    );
+    fs.writeFileSync(
+      path.join(betaTask, "_index.md"),
+      "---\nid: task-a\nname: Beta Task A\nparents:\n  - id: project-b\n    order: 0\n---\n![img](./assets/beta.png)\n"
+    );
+    fs.writeFileSync(path.join(betaTask, "assets", "beta.png"), "beta-image");
+    fs.writeFileSync(
+      path.join(betaTask, "memo.md"),
+      "---\nid: memo-b\ntitle: Beta memo\n---\nMemo body\n"
+    );
+    fs.writeFileSync(
+      path.join(betaChild, "_index.md"),
+      "---\nid: task-b\nname: Beta Task B\nparents:\n  - id: task-a\n    order: 0\n---\n"
+    );
+
+    const graph = await graphStore.readWorkspaceGraph(tempDir);
+
+    expect(graph.nodes["task-a"].name).toBe("Task A");
+    expect(graph.nodes["task-a"].parents).toEqual([{ id: "project-a", order: 0 }]);
+    const renamed = Object.values(graph.nodes).filter((node) => node.name === "Beta Task A");
+    expect(renamed).toHaveLength(1);
+    const betaTaskId = renamed[0].id;
+    expect(betaTaskId).not.toBe("task-a");
+    expect(renamed[0].parents).toEqual([{ id: "project-b", order: 0 }]);
+    expect(renamed[0].assetOwnerId).toBe(betaTaskId);
+    expect(renamed[0].body).toContain(`assets/${betaTaskId}/assets/beta.png`);
+    expect(graph.nodes["task-b"].parents).toEqual([{ id: betaTaskId, order: 0 }]);
+    expect(graph.nodes["memo-b"].parents[0].id).toBe(betaTaskId);
+    await expect(
+      graphStore.resolveNodeAsset(tempDir, betaTaskId, `assets/${betaTaskId}/assets/beta.png`)
+    ).resolves.toMatch(/beta\.png$/);
+    await expect(
+      graphStore.resolveNodeAsset(tempDir, "task-a", "assets/task-a/assets/legacy.png")
+    ).resolves.toMatch(/legacy\.png$/);
+  });
+
   it("fails migration when a legacy memo id collides with a task id", async () => {
     projectFixture(tempDir);
     fs.writeFileSync(
