@@ -189,13 +189,31 @@ async function importLegacyGraph(workspacePath) {
       [...loaded.tasks.values()],
       loaded.taskDirs
     );
-    for (const task of tasks) {
+    // 旧形式はプロジェクトごとに独立して読んでいたので、id が一意なのは
+    // プロジェクトの中だけだった。v0.40 までのエクスポートはルート以外の id を
+    // db.json から引き継いだため、同じプロジェクトを 2 回エクスポートすると
+    // 別プロジェクトに同じ id が並ぶ。1 つのグラフに入れるときは、後から来た
+    // 側に新しい id を振り、同じプロジェクト内の親参照もそれに合わせる。
+    const renamed = new Map();
+    for (const task of tasks) if (nodes[task.id]) renamed.set(task.id, crypto.randomUUID());
+    const importedId = (id) => renamed.get(id) ?? id;
+    project.importedRootId = importedId(project.rootId);
+    for (const legacyTask of tasks) {
+      const legacyId = legacyTask.id;
+      const task = {
+        ...legacyTask,
+        id: importedId(legacyId),
+        parents: (legacyTask.parents || []).map((parent) => ({
+          ...parent,
+          id: importedId(parent.id),
+        })),
+      };
       if (nodes[task.id]) throw new Error(`Duplicate node id in legacy workspace: ${task.id}`);
       const canonicalNodeDir = assetDir(workspacePath, task.id);
       const legacyTaskDir =
-        loaded.taskDirs.get(task.id) === "_project"
+        loaded.taskDirs.get(legacyId) === "_project"
           ? project.projectDir
-          : path.join(project.projectDir, loaded.taskDirs.get(task.id));
+          : path.join(project.projectDir, loaded.taskDirs.get(legacyId));
       await copyDirectoryStrict(
         path.join(legacyTaskDir, "assets"),
         path.join(canonicalNodeDir, "assets"),
@@ -223,7 +241,7 @@ async function importLegacyGraph(workspacePath) {
         createdAt: /^\d{4}-\d{2}-\d{2}$/.test(task.createdAt || "") ? task.createdAt : today,
         assetOwnerId: task.id,
         parents:
-          task.id === project.rootId
+          legacyId === project.rootId
             ? [{ id: rootId, order: Number.isFinite(project.order) ? project.order : projectIndex }]
             : task.parents,
       };
@@ -231,7 +249,7 @@ async function importLegacyGraph(workspacePath) {
   }
   const graph = { schemaVersion: 1, workspaceId, rootId, revision: 0, nodes };
   const inboxProject = projects.find((project) => project.inbox);
-  if (inboxProject) graph.inboxId = inboxProject.rootId;
+  if (inboxProject) graph.inboxId = inboxProject.importedRootId;
   identifyInbox(graph);
   repairRootReachability(graph);
   validateGraph(graph);
