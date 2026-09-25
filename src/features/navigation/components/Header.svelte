@@ -18,7 +18,11 @@
   import { workspace_store } from "@features/workspace/stores/workspace";
   import { inbox_count, INBOX_SELECTED_ID, resolveInboxNodeId } from "@features/inbox/stores/inbox";
   import { AGENDA_SELECTED_ID } from "@features/agenda/stores/agenda";
-  import { pageSearchCountIsPartial, pageSearchQuery } from "@features/search/stores/search";
+  import {
+    PAGE_SEARCH_PIN_LIMIT,
+    pageSearchCountIsPartial,
+    pageSearchQuery,
+  } from "@features/search/stores/search";
   import * as platform from "@lib/ipc/platform";
   import {
     setQuery,
@@ -261,7 +265,9 @@
       <span class="SearchCount" aria-live="polite">
         {$pageSearchMatchCount === 0
           ? "0件"
-          : `${$pageSearchCurrentIndex + 1} / ${$pageSearchMatchCount}${$pageSearchCountIsPartial ? "+" : ""}`}
+          : $pageSearchCountIsPartial
+            ? `${PAGE_SEARCH_PIN_LIMIT}+ 件`
+            : `${$pageSearchCurrentIndex + 1} / ${$pageSearchMatchCount}`}
       </span>
       <button
         type="button"

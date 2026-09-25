@@ -35,7 +35,11 @@
     scrollTopToReveal,
     visibleRowRange,
   } from "@features/tasks/utils/virtual_rows";
-  import { pageSearchCountIsPartial, pageSearchQuery } from "@features/search/stores/search";
+  import {
+    PAGE_SEARCH_PIN_LIMIT,
+    pageSearchCountIsPartial,
+    pageSearchQuery,
+  } from "@features/search/stores/search";
   import {
     flattenVisibleTree,
     buildInheritedDueDateMap,
@@ -240,11 +244,6 @@
   /** レイアウトが測れないとき（jsdom、畳まれたペイン）に全部描く上限。 */
   const FALLBACK_ALL_ROWS = 200;
   const FALLBACK_WINDOW_ROWS = 60;
-  /**
-   * ページ内検索の一致のうち、画面外でも描いておく行の上限。よくある語では
-   * 全行が一致するので、全部描くと仮想化前と同じ重さになる。
-   */
-  const SEARCH_PIN_LIMIT = 100;
 
   let rowHeightProbe;
   let rowsTopMarker;
@@ -277,7 +276,7 @@
   /**
    * ページ内検索（ヘッダーの検索ボックス）は描かれている文字を探す。
    * 画面外の行も見つけられるよう、名前かタグが一致する行を、表示位置に
-   * 近いものから SEARCH_PIN_LIMIT 行まで描いておく。次の一致へ進んで
+   * 近いものから PAGE_SEARCH_PIN_LIMIT 行まで描いておく。次の一致へ進んで
    * 表示位置が動けば、その周りの一致が描かれる。
    */
   function collectSearchMatchIndices(currentRows, query) {
@@ -316,7 +315,7 @@
   $: pinnedSearchIndices = nearestIndices(
     searchMatchIndices,
     Math.floor((rowRange.start + rowRange.end) / 2),
-    SEARCH_PIN_LIMIT
+    PAGE_SEARCH_PIN_LIMIT
   );
   // 描いていない一致があれば、ヘッダーの件数に「+」を付けてもらう。
   $: pageSearchCountIsPartial.set(searchMatchIndices.length > pinnedSearchIndices.length);
