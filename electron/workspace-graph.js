@@ -327,20 +327,156 @@ async function importLegacyGraph(workspacePath) {
   return graph;
 }
 
+/**
+ * 履歴の 1 段は「グラフ全体の写し」ではなく「戻すのに要るノードと欄だけ」を持つ。
+ *
+ * 以前は 1 段ごとにグラフ全体を `undo` に積んでいたので、`graph-v1.json` は
+ * グラフの最大 51 倍になった（本文の多い旧ワークスペースで数百 MB）。
+ * 名前の変更 1 回ごとにそれを丸ごと読み直して書き直すため、操作のたびに
+ * 数秒止まっていた。
+ *
+ * パッチの形: `{ nodes: { [id]: node | null }, fields: { [key]: { value } | null } }`。
+ * `null` は「その時点では無かった」を表す。`revision` は戻しても巻き戻さない
+ * （古いリビジョンを持つ画面が上書きしないよう、常に増やす）。
+ */
+/** ディスクに書いたものと同じ形の写し（`undefined` の欄は消える）。 */
+function jsonCopy(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+/** `from` と `to` で中身が違うノード id と、ノード以外の欄の名前。 */
+function changedParts(from, to) {
+  const nodeIds = [];
+  for (const id of new Set([...Object.keys(from.nodes), ...Object.keys(to.nodes)])) {
+    const before = from.nodes[id];
+    const after = to.nodes[id];
+    if (before === after) continue;
+    if (!before || !after || JSON.stringify(before) !== JSON.stringify(after)) nodeIds.push(id);
+  }
+  const fieldKeys = [...new Set([...Object.keys(from), ...Object.keys(to)])].filter(
+    (key) =>
+      key !== "nodes" && key !== "revision" && JSON.stringify(from[key]) !== JSON.stringify(to[key])
+  );
+  return { nodeIds, fieldKeys };
+}
+
+/** `parts` に挙がった部分を `source` の値にするパッチ。 */
+function patchFrom(source, { nodeIds, fieldKeys }) {
+  const patch = { nodes: {}, fields: {} };
+  for (const id of nodeIds)
+    patch.nodes[id] = source.nodes[id] === undefined ? null : jsonCopy(source.nodes[id]);
+  for (const key of fieldKeys)
+    patch.fields[key] = source[key] === undefined ? null : { value: jsonCopy(source[key]) };
+  return patch;
+}
+
+/** `from` を `to` にするパッチ。 */
+function diffGraphs(from, to) {
+  return patchFrom(to, changedParts(from, to));
+}
+
+/** `patch` を `graph` にその場で当て、当てる前へ戻すパッチを返す。 */
+function applyGraphPatch(graph, patch) {
+  const inverse = { nodes: {}, fields: {} };
+  for (const [id, node] of Object.entries(patch.nodes)) {
+    inverse.nodes[id] = graph.nodes[id] ?? null;
+    if (node === null) delete graph.nodes[id];
+    else graph.nodes[id] = jsonCopy(node);
+  }
+  for (const [key, entry] of Object.entries(patch.fields)) {
+    inverse.fields[key] = key in graph ? { value: graph[key] } : null;
+    if (entry === null) delete graph[key];
+    else graph[key] = jsonCopy(entry.value);
+  }
+  return inverse;
+}
+
+function isGraphPatch(entry) {
+  return Boolean(entry && entry.nodes && entry.fields && !("rootId" in entry));
+}
+
+/**
+ * 以前の形式（1 段 = グラフ全体）の履歴をパッチに置き換える。
+ * `undo` の末尾が直前の状態、`redo` の末尾が次の状態。どちらも隣の段
+ * （末尾は現在のグラフ）からの差分にする。
+ */
+function migrateSnapshotHistory(document) {
+  const convert = (stack) => {
+    if (stack.every(isGraphPatch)) return stack;
+    const patches = new Array(stack.length);
+    let next = document.graph;
+    for (let index = stack.length - 1; index >= 0; index -= 1) {
+      const entry = stack[index];
+      if (isGraphPatch(entry)) {
+        // 形式が混ざることはないはずだが、混ざっていても段を落とさない。
+        const state = structuredClone(next);
+        applyGraphPatch(state, entry);
+        patches[index] = entry;
+        next = state;
+      } else {
+        patches[index] = diffGraphs(next, entry);
+        next = entry;
+      }
+    }
+    return patches;
+  };
+  const undo = document.undo || [];
+  const redo = document.redo || [];
+  document.undo = convert(undo);
+  document.redo = convert(redo);
+  return document.undo !== undo || document.redo !== redo;
+}
+
+/**
+ * ワークスペースごとの読み出し結果。ファイルの更新時刻と大きさが変わって
+ * いなければ、読み直さずにこれを使う（別プロセスや同期ソフトが書き換えたら
+ * 読み直す）。書き込みに失敗したときは捨てる。
+ */
+const documentCache = new Map();
+
 async function readDocument(workspacePath) {
   const filePath = graphPath(workspacePath);
+  const key = workspaceQueueKey(workspacePath);
+  let stat;
   try {
-    const document = JSON.parse(await fs.promises.readFile(filePath, "utf8"));
-    identifyInbox(document.graph);
-    validateGraph(document.graph);
-    return document;
+    stat = await fs.promises.stat(filePath);
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
+    documentCache.delete(key);
     const graph = await importLegacyGraph(workspacePath);
     const document = { schemaVersion: 1, graph, undo: [], redo: [] };
-    await atomicWriteJson(filePath, document);
+    await writeDocument(workspacePath, document);
     return document;
   }
+  const cached = documentCache.get(key);
+  if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size)
+    return cached.document;
+  documentCache.delete(key);
+  const document = JSON.parse(await fs.promises.readFile(filePath, "utf8"));
+  identifyInbox(document.graph);
+  validateGraph(document.graph);
+  if (migrateSnapshotHistory(document)) {
+    // 変換した結果をすぐ書き戻す。書かないと、次に編集するまで起動のたびに
+    // 大きな旧形式のファイルを読み直すことになる。書けなくても読み出しは
+    // 成功させる（次の編集で改めて書く）。
+    try {
+      await writeDocument(workspacePath, document);
+    } catch {
+      documentCache.delete(key);
+    }
+    return document;
+  }
+  documentCache.set(key, { mtimeMs: stat.mtimeMs, size: stat.size, document });
+  return document;
+}
+
+async function writeDocument(workspacePath, document) {
+  const filePath = graphPath(workspacePath);
+  const key = workspaceQueueKey(workspacePath);
+  documentCache.delete(key);
+  await atomicWriteJson(filePath, document);
+  const stat = await fs.promises.stat(filePath);
+  documentCache.set(key, { mtimeMs: stat.mtimeMs, size: stat.size, document });
 }
 
 /**
@@ -374,14 +510,28 @@ async function mutate(workspacePath, expectedRevision, action) {
         `Workspace graph changed (expected revision ${expectedRevision}, found ${document.graph.revision})`
       );
     }
-    const before = structuredClone(document.graph);
-    const result = await action(document);
-    validateGraph(document.graph);
-    document.undo.push(before);
-    if (document.undo.length > HISTORY_LIMIT) document.undo.shift();
-    document.redo = [];
-    await atomicWriteJson(graphPath(workspacePath), document);
-    return { ...result, graph: withHistoryDepth(document) };
+    // エンジンは渡したグラフを書き換えず、新しいグラフを返す。
+    const before = document.graph;
+    const history = { undo: document.undo, redo: document.redo };
+    try {
+      const result = await action(document);
+      validateGraph(document.graph);
+      // 変わったノードだけ JSON を通した写しに差し替え、読み出し結果を
+      // ディスク上の内容と同じ形に保つ。
+      const changed = changedParts(before, document.graph);
+      applyGraphPatch(document.graph, patchFrom(document.graph, changed));
+      document.undo = [...document.undo, patchFrom(before, changed)].slice(-HISTORY_LIMIT);
+      document.redo = [];
+      await writeDocument(workspacePath, document);
+      return { ...result, graph: withHistoryDepth(document) };
+    } catch (error) {
+      // 読み出し結果を共有しているので、失敗したら手元の変更も戻す。
+      document.graph = before;
+      document.undo = history.undo;
+      document.redo = history.redo;
+      documentCache.delete(workspaceQueueKey(workspacePath));
+      throw error;
+    }
   });
 }
 
@@ -420,13 +570,31 @@ async function changeHistory(workspacePath, direction, expectedRevision) {
     const source = direction === "undo" ? document.undo : document.redo;
     const target = direction === "undo" ? document.redo : document.undo;
     if (!source.length) return { graph: withHistoryDepth(document), changed: false };
-    const restored = source.pop();
-    target.push(structuredClone(document.graph));
-    restored.revision = document.graph.revision + 1;
-    validateGraph(restored);
-    document.graph = restored;
-    await atomicWriteJson(graphPath(workspacePath), document);
-    return { graph: withHistoryDepth(document), changed: true };
+    const before = document.graph;
+    const history = { undo: document.undo, redo: document.redo };
+    try {
+      const restored = structuredClone(before);
+      const patch = source[source.length - 1];
+      const inverse = applyGraphPatch(restored, patch);
+      restored.revision = before.revision + 1;
+      validateGraph(restored);
+      document.graph = restored;
+      if (direction === "undo") {
+        document.undo = source.slice(0, -1);
+        document.redo = [...target, inverse];
+      } else {
+        document.redo = source.slice(0, -1);
+        document.undo = [...target, inverse];
+      }
+      await writeDocument(workspacePath, document);
+      return { graph: withHistoryDepth(document), changed: true };
+    } catch (error) {
+      document.graph = before;
+      document.undo = history.undo;
+      document.redo = history.redo;
+      documentCache.delete(workspaceQueueKey(workspacePath));
+      throw error;
+    }
   });
 }
 
