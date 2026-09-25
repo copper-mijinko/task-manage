@@ -4,7 +4,11 @@ import { tick } from "svelte";
 
 import Header from "@features/navigation/components/Header.svelte";
 import { sidebarCollapsed, saveStatus } from "@stores";
-import { pageSearchQuery } from "@features/search/stores/search";
+import {
+  PAGE_SEARCH_PIN_LIMIT,
+  pageSearchCountIsPartial,
+  pageSearchQuery,
+} from "@features/search/stores/search";
 
 // The highlighter writes into CSS.highlights / window.Highlight which jsdom
 // doesn't provide. The Header still works fine as long as we shim those —
@@ -87,6 +91,57 @@ describe("Header", () => {
 
     expect(get(pageSearchQuery)).toBe("");
     expect(input.value).toBe("");
+  });
+
+  describe("match count", () => {
+    let originalGetBCR;
+
+    beforeEach(() => {
+      // jsdom の要素は大きさ 0 なので、検索の「見えている」判定を通すために
+      // 大きさを持たせる。
+      originalGetBCR = Element.prototype.getBoundingClientRect;
+      Element.prototype.getBoundingClientRect = () => ({
+        top: 0,
+        left: 0,
+        right: 100,
+        bottom: 20,
+        width: 100,
+        height: 20,
+        x: 0,
+        y: 0,
+      });
+    });
+
+    afterEach(() => {
+      Element.prototype.getBoundingClientRect = originalGetBCR;
+      pageSearchCountIsPartial.set(false);
+    });
+
+    async function searchFor(query) {
+      render(Header);
+      for (let index = 0; index < 3; index += 1) {
+        const div = document.createElement("div");
+        div.textContent = "hit";
+        document.body.appendChild(div);
+      }
+      const input = screen.getByPlaceholderText("画面内をハイライト検索…");
+      await fireEvent.input(input, { target: { value: query } });
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      await tick();
+      return document.querySelector(".SearchCount");
+    }
+
+    test("shows the position and the total when every match is on screen", async () => {
+      const count = await searchFor("hit");
+      expect(count.textContent.trim()).toBe("1 / 3");
+    });
+
+    test("shows only 100+ without a position when the tree has unrendered matches", async () => {
+      // 描いていない一致があると、画面から数えた順番は全体の何番目かと合わない。
+      pageSearchCountIsPartial.set(true);
+      const count = await searchFor("hit");
+      expect(count.textContent.trim()).toBe(`${PAGE_SEARCH_PIN_LIMIT}+ 件`);
+    });
   });
 
   test("hamburger toggle flips sidebarCollapsed", async () => {
