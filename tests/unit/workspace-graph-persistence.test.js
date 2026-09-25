@@ -112,6 +112,94 @@ describe("workspace graph persistence", () => {
     expect(redone.graph.nodes["task-a"].name).toBe("Changed");
   });
 
+  it("keeps only the changed nodes in each history step", async () => {
+    projectFixture(tempDir);
+    const bigDir = path.join(tempDir, "alpha", "big-task");
+    fs.mkdirSync(bigDir);
+    fs.writeFileSync(
+      path.join(bigDir, "_index.md"),
+      `---\nid: big-task\nname: Big\nparents:\n  - id: project-a\n    order: 1\n---\n${"x".repeat(200_000)}\n`
+    );
+    let graph = await graphStore.readWorkspaceGraph(tempDir);
+    const sizeAfterImport = fs.statSync(graphStore.graphPath(tempDir)).size;
+    for (let index = 0; index < 20; index += 1) {
+      graph = (
+        await graphStore.executeWorkspaceGraphCommand(
+          tempDir,
+          { type: "update-node", nodeId: "task-a", changes: { name: `Rename ${index}` } },
+          "tree",
+          graph.revision
+        )
+      ).graph;
+    }
+    // 1 段ごとにグラフ全体を積むと 20 倍を超える。
+    expect(fs.statSync(graphStore.graphPath(tempDir)).size).toBeLessThan(sizeAfterImport * 1.5);
+    const stored = JSON.parse(fs.readFileSync(graphStore.graphPath(tempDir), "utf8"));
+    expect(stored.undo).toHaveLength(20);
+    expect(Object.keys(stored.undo[19].nodes)).toEqual(["task-a"]);
+
+    const undone = await graphStore.undoWorkspaceGraph(tempDir, graph.revision);
+    expect(undone.graph.nodes["task-a"].name).toBe("Rename 18");
+    expect(undone.graph.revision).toBe(graph.revision + 1);
+    expect(undone.graph.nodes["big-task"].body).toHaveLength(200_000);
+  });
+
+  it("converts full-graph history written by older versions", async () => {
+    projectFixture(tempDir);
+    const initial = await graphStore.readWorkspaceGraph(tempDir);
+    const named = (name, revision) => ({
+      ...structuredClone(initial),
+      revision,
+      nodes: {
+        ...structuredClone(initial.nodes),
+        "task-a": { ...structuredClone(initial.nodes["task-a"]), name },
+      },
+    });
+    const { history: _history, ...current } = named("Two", 2);
+    fs.writeFileSync(
+      graphStore.graphPath(tempDir),
+      JSON.stringify({
+        schemaVersion: 1,
+        graph: current,
+        undo: [named("Zero", 0), named("One", 1)],
+        redo: [named("Three", 3)],
+      })
+    );
+
+    const loaded = await graphStore.readWorkspaceGraph(tempDir);
+    expect(loaded.nodes["task-a"].name).toBe("Two");
+    expect(loaded.history).toEqual({ undo: 2, redo: 1 });
+    // 読んだだけで新しい形式に書き戻されている。
+    const converted = JSON.parse(fs.readFileSync(graphStore.graphPath(tempDir), "utf8"));
+    expect(converted.undo.every((entry) => !("rootId" in entry))).toBe(true);
+    expect(Object.keys(converted.undo[1].nodes)).toEqual(["task-a"]);
+    const redone = await graphStore.redoWorkspaceGraph(tempDir, loaded.revision);
+    expect(redone.graph.nodes["task-a"].name).toBe("Three");
+    let state = redone.graph;
+    for (const expected of ["Two", "One", "Zero"]) {
+      state = (await graphStore.undoWorkspaceGraph(tempDir, state.revision)).graph;
+      expect(state.nodes["task-a"].name).toBe(expected);
+    }
+    expect((await graphStore.undoWorkspaceGraph(tempDir, state.revision)).changed).toBe(false);
+    const stored = JSON.parse(fs.readFileSync(graphStore.graphPath(tempDir), "utf8"));
+    expect(stored.redo.every((entry) => !("rootId" in entry))).toBe(true);
+  });
+
+  it("reads the graph again when another process rewrites the file", async () => {
+    projectFixture(tempDir);
+    await graphStore.readWorkspaceGraph(tempDir);
+    const filePath = graphStore.graphPath(tempDir);
+    const stored = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    stored.graph.nodes["task-a"].name = "Edited elsewhere";
+    stored.graph.revision += 1;
+    fs.writeFileSync(filePath, JSON.stringify(stored, null, 2));
+    const later = new Date(Date.now() + 5000);
+    fs.utimesSync(filePath, later, later);
+    expect((await graphStore.readWorkspaceGraph(tempDir)).nodes["task-a"].name).toBe(
+      "Edited elsewhere"
+    );
+  });
+
   it("preserves explicit Undefined separately from an omitted status in JSON", async () => {
     projectFixture(tempDir);
     let current = await graphStore.readWorkspaceGraph(tempDir);
