@@ -37,6 +37,7 @@ import {
   selected_ids,
 } from "@stores/ui";
 import { workspace_store } from "@features/workspace/stores/workspace";
+import { pageSearchCountIsPartial, pageSearchQuery } from "@features/search/stores/search";
 
 function createProjectData() {
   return {
@@ -656,6 +657,21 @@ describe("TreeTable", () => {
         "502"
       );
       expect(container.querySelector(".RowGap")).not.toBeNull();
+    });
+
+    test("marks the page-search count as partial only when matches are left unrendered", async () => {
+      render(TreeTable);
+      await tick();
+
+      pageSearchQuery.set("Bulk");
+      await tick();
+      expect(get(pageSearchCountIsPartial)).toBe(true);
+
+      pageSearchQuery.set("Bulk 499");
+      await tick();
+      expect(get(pageSearchCountIsPartial)).toBe(false);
+
+      pageSearchQuery.set("");
     });
 
     test("End moves to the last row even though it was not rendered", async () => {
