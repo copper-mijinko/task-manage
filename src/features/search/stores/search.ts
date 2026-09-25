@@ -243,3 +243,10 @@ function createFilter(initialValue: FilterState): FilterStore {
 export let filter: FilterStore = createFilter({});
 export const filtered_data = writable<TreeData | null | undefined>(undefined);
 export const pageSearchQuery = writable<string>("");
+
+/**
+ * ページ内検索の件数が「一部だけ」かどうか。ツリーは見えている行の周りしか
+ * 描かないので、一致する行が多いと描いていない一致が残り、画面の文字から
+ * 数えた件数は全体より少なくなる。そのときは件数を「102+」のように出す。
+ */
+export const pageSearchCountIsPartial = writable<boolean>(false);

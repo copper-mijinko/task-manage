@@ -35,7 +35,7 @@
     scrollTopToReveal,
     visibleRowRange,
   } from "@features/tasks/utils/virtual_rows";
-  import { pageSearchQuery } from "@features/search/stores/search";
+  import { pageSearchCountIsPartial, pageSearchQuery } from "@features/search/stores/search";
   import {
     flattenVisibleTree,
     buildInheritedDueDateMap,
@@ -318,6 +318,9 @@
     Math.floor((rowRange.start + rowRange.end) / 2),
     SEARCH_PIN_LIMIT
   );
+  // 描いていない一致があれば、ヘッダーの件数に「+」を付けてもらう。
+  $: pageSearchCountIsPartial.set(searchMatchIndices.length > pinnedSearchIndices.length);
+  onDestroy(() => pageSearchCountIsPartial.set(false));
   // いま操作している行は、キーボード操作と Tab の停留点なので常に描く。
   $: pinnedRowIndices = [
     rowIndexByPath.get($active_row_path),
