@@ -605,4 +605,73 @@ describe("TreeTable", () => {
       expect(tabStops()[0]).toBe(rowOf("task-1-1"));
     });
   });
+
+  describe("virtual rows", () => {
+    // 数千ノードでも起動と更新が重くならないよう、見えている行だけを描く。
+    // jsdom にはレイアウトが無いので、表示の高さと行の高さを与える。
+    let restoreLayout;
+
+    beforeEach(() => {
+      const define = (name, get) => {
+        const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, name);
+        Object.defineProperty(HTMLElement.prototype, name, { configurable: true, get });
+        return () => {
+          if (original) Object.defineProperty(HTMLElement.prototype, name, original);
+          else delete HTMLElement.prototype[name];
+        };
+      };
+      const restores = [
+        define("clientHeight", function () {
+          return this.classList.contains("TableRoot") ? 240 : 0;
+        }),
+        define("offsetHeight", function () {
+          return this.classList.contains("RowHeightProbe") ? 24 : 0;
+        }),
+      ];
+      restoreLayout = () => restores.forEach((restore) => restore());
+
+      const projectData = createProjectData();
+      projectData.data.children = Array.from({ length: 500 }, (_, index) => ({
+        id: `bulk-${index}`,
+        data: { name: `Bulk ${index}`, status: "Open", memo: [], attachments: [] },
+        children: [],
+      }));
+      tree_data.set(projectData);
+      filtered_data.set(projectData.data);
+    });
+
+    afterEach(() => restoreLayout());
+
+    const renderedRows = (container) =>
+      container.querySelectorAll('[role="row"][data-row-path]').length;
+
+    test("renders only the rows around the viewport, but counts every row", async () => {
+      const { container } = render(TreeTable);
+      await tick();
+      await tick();
+
+      expect(renderedRows(container)).toBeGreaterThan(0);
+      expect(renderedRows(container)).toBeLessThan(40);
+      expect(container.querySelector('[role="treegrid"]').getAttribute("aria-rowcount")).toBe(
+        "502"
+      );
+      expect(container.querySelector(".RowGap")).not.toBeNull();
+    });
+
+    test("End moves to the last row even though it was not rendered", async () => {
+      const { container } = render(TreeTable);
+      await tick();
+      await tick();
+      expect(container.querySelector('[data-node-id="bulk-499"]')).toBeNull();
+
+      await fireEvent.keyDown(screen.getByTestId("row-project-1"), { key: "End" });
+      await tick();
+      await tick();
+
+      expect(get(table_selected_id)).toBe("bulk-499");
+      const last = container.querySelector('[data-node-id="bulk-499"]');
+      expect(last).not.toBeNull();
+      expect(document.activeElement).toBe(last);
+    });
+  });
 });
