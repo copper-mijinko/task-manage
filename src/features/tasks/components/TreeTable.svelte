@@ -103,7 +103,7 @@
     const result = createResizers(visibleHeaders, [], true, resize_observer);
     resizers = result[0];
     resize_observer = result[3];
-    handlers = setResizersEvents(resizers, result[1], result[2]);
+    handlers = setResizersEvents(resizers, result[1]);
   }
 
   // Resize
@@ -320,44 +320,97 @@
   }
 
   onMount(() => {
-    let domHeaders, data_rows;
-    [resizers, domHeaders, data_rows, resize_observer] = createResizers(visibleHeaders);
-    handlers = setResizersEvents(resizers, domHeaders, data_rows);
+    let domHeaders;
+    [resizers, domHeaders, , resize_observer] = createResizers(visibleHeaders);
+    handlers = setResizersEvents(resizers, domHeaders);
 
-    let mutation_observer = new MutationObserver(() => {
-      const currentDomHeaderCount = Array.from(
-        table_root.querySelectorAll(".TableRow")[0]?.querySelectorAll(".TableHeader") ?? []
-      ).length;
+    let pendingBoundsFrame = 0;
+    const scheduleResizerBoundsSync = () => {
+      if (pendingBoundsFrame) return;
+      pendingBoundsFrame = requestAnimationFrame(() => {
+        pendingBoundsFrame = 0;
+        syncResizerBounds(resizers);
+      });
+    };
+
+    let mutation_observer = new MutationObserver((records) => {
+      const headerRow = table_root.querySelector(".TableRow");
+      const currentDomHeaders = Array.from(headerRow?.querySelectorAll(".TableHeader") ?? []);
+      const currentDomHeaderCount = currentDomHeaders.length;
       const columnCountChanged = currentDomHeaderCount !== resizers.length + 1;
 
-      let newDomHeaders, newDataRows;
+      let newDomHeaders;
 
       if (columnCountChanged && currentDomHeaderCount > 0) {
         // Column was added or removed — full reinit
         unsetResizerEvents(resizers, handlers);
         resizers.forEach((r) => r.parentNode?.removeChild(r));
         resizers = [];
-        [resizers, newDomHeaders, newDataRows, resize_observer] = createResizers(
+        [resizers, newDomHeaders, , resize_observer] = createResizers(
           visibleHeaders,
           [],
           true,
           resize_observer
         );
-      } else {
-        [resizers, newDomHeaders, newDataRows] = createResizers(
+        handlers = setResizersEvents(resizers, newDomHeaders);
+        return;
+      }
+
+      // 行の追加・並び替え・行内の描き直しでは、変わった行にだけ幅を配る。
+      // 以前はそのたびに全行の全セルへ幅を書き、レイアウトを読み直して
+      // いたので、行数が多いと起動や移動のたびに全行のレイアウトが何度も
+      // やり直しになっていた。
+      const changedRows = new Set();
+      let headerChanged = false;
+      let rowsAddedOrRemoved = false;
+      for (const record of records) {
+        for (const node of record.removedNodes) {
+          if (node.nodeType === 1 && (node.matches(".TableRow") || node.querySelector(".TableRow")))
+            rowsAddedOrRemoved = true;
+        }
+        for (const node of record.addedNodes) {
+          if (node.nodeType !== 1) {
+            const row = record.target.closest?.(".TableRow");
+            if (row) changedRows.add(row);
+            continue;
+          }
+          if (node.matches(".TableHeader") || node.querySelector(".TableHeader"))
+            headerChanged = true;
+          const row = node.closest(".TableRow");
+          if (row) changedRows.add(row);
+          node.querySelectorAll(".TableRow").forEach((inner) => changedRows.add(inner));
+          if (node.matches(".TableRow") || node.querySelector(".TableRow"))
+            rowsAddedOrRemoved = true;
+        }
+      }
+      // 見出し行の中の文字の変化（選択数など）では幅は変わらない。
+      if (headerRow) changedRows.delete(headerRow);
+
+      if (headerChanged) {
+        // 見出しが描き直されたときは、これまでどおり全行に配り直す。
+        [resizers, newDomHeaders] = createResizers(
           visibleHeaders,
           resizers,
           false,
           resize_observer
         );
         unsetResizerEvents(resizers, handlers);
+        handlers = setResizersEvents(resizers, newDomHeaders);
+        return;
       }
 
-      handlers = setResizersEvents(resizers, newDomHeaders, newDataRows);
+      if (changedRows.size) {
+        const widths = currentDomHeaders.map(
+          (header) => header.style.width || `${header.getBoundingClientRect().width}px`
+        );
+        changedRows.forEach((row) => applyWidthsToRow(row, widths));
+      }
+      if (rowsAddedOrRemoved) scheduleResizerBoundsSync();
     });
     mutation_observer.observe(table_root, { subtree: true, childList: true });
 
     return () => {
+      if (pendingBoundsFrame) cancelAnimationFrame(pendingBoundsFrame);
       mutation_observer.disconnect();
       resize_observer?.disconnect();
       unsetResizerEvents(resizers, handlers ?? []);
@@ -404,11 +457,31 @@
     });
   };
 
+  /** 見出しの幅（`style.width` の文字列）を 1 行ぶんのセルに配る。 */
+  const applyWidthsToRow = (row, widths) => {
+    const cells = row.querySelectorAll(".TableData");
+    widths.forEach((width, index) => {
+      const cell = cells[index];
+      if (cell && cell.style.width !== width) cell.style.width = width;
+    });
+  };
+
+  const currentDataRows = () =>
+    Array.from(table_root?.querySelectorAll(".TableRow") ?? [])
+      .slice(1)
+      .map((row) => row.querySelectorAll(".TableData"));
+
   const getLeadingColumnWidth = () =>
     table_root?.querySelector(".CheckboxHeaderCell")?.getBoundingClientRect().width ?? 0;
 
-  const positionResizers = (targetResizers, widths) => {
-    let left = getLeadingColumnWidth();
+  // 幅を書き換えた直後にレイアウトを読むと、そのたびに全行のレイアウトが
+  // やり直しになる。書く前に読んだ値を `leadingColumnWidth` で渡す。
+  const positionResizers = (
+    targetResizers,
+    widths,
+    leadingColumnWidth = getLeadingColumnWidth()
+  ) => {
+    let left = leadingColumnWidth;
     targetResizers.forEach((resizer, index) => {
       left += widths[index] ?? 0;
       resizer.style.left = `${left - 3}px`;
@@ -443,10 +516,22 @@
         (table_root.clientWidth || tableRows[0].getBoundingClientRect().width) - leadingColumnWidth
       );
       const savedWidths = readColumnWidths();
-      const default_data_widths = currentHeaders.map(
-        (header) =>
+      const minWidths = domHeaders.map(
+        (header) => parseFloat(window.getComputedStyle(header).minWidth) || 0
+      );
+      const default_data_widths = currentHeaders.map((header, index) =>
+        Math.max(
+          minWidths[index] ?? 0,
           savedWidths[header.name] ??
-          (default_root_width * header.default_ratio) / default_ratio_sum
+            (default_root_width * header.default_ratio) / default_ratio_sum
+        )
+      );
+      // 名前列は残りの幅を受け持つ（fitNameColumn と同じ式）。ここで先に
+      // 合わせておけば、直後の ResizeObserver が全行の名前セルを書き換えずに
+      // 済む。
+      default_data_widths[0] = Math.max(
+        minWidths[0] ?? 0,
+        default_root_width - default_data_widths.slice(1).reduce((sum, width) => sum + width, 0)
       );
       domHeaders.forEach((header, index) => {
         header.style.width = `calc(${default_data_widths[index]}px)`;
@@ -463,7 +548,7 @@
         table_root.insertBefore(resizer, tableRows[0]);
         existingResizers.push(resizer);
       });
-      positionResizers(existingResizers, default_data_widths);
+      positionResizers(existingResizers, default_data_widths, leadingColumnWidth);
     } else {
       domHeaders.forEach((header, index) => {
         // Read the inline style — not getBoundingClientRect, which rounds
@@ -511,15 +596,18 @@
       const fixedTotal = widths.slice(1).reduce((s, w) => s + w, 0);
       const nameMin = parseFloat(window.getComputedStyle(domHeaders[0]).minWidth) || 0;
       const nameWidth = Math.max(nameMin, tableWidth - leadingColumnWidth - fixedTotal);
+      // 変わらないなら書かない。書くと全行のレイアウトがやり直しになる。
+      if (Math.abs(nameWidth - widths[0]) < 0.5) return;
 
       domHeaders[0].style.width = `${nameWidth}px`;
-      data_rows.forEach((data_row) => {
+      // 作った時点の行ではなく今の行へ。後から足された行も合わせる。
+      currentDataRows().forEach((data_row) => {
         const cell = data_row[0];
         if (cell) cell.style.width = `${nameWidth}px`;
       });
       // Every resizer sits between two columns; since column 0 changed,
       // ALL resizer left positions shift by the delta.
-      positionResizers(existingResizers, [nameWidth, ...widths.slice(1)]);
+      positionResizers(existingResizers, [nameWidth, ...widths.slice(1)], leadingColumnWidth);
     }
 
     const newResizeObserver = new ResizeObserver(() => {
@@ -531,10 +619,14 @@
     return [existingResizers, domHeaders, data_rows, newResizeObserver];
   };
 
-  const setResizersEvents = (resizers, headers, data_rows) => {
+  const setResizersEvents = (resizers, headers) => {
     const handlers = [];
+    // ドラッグを始めた時点の行。作った時点の行を覚えておくと、後から
+    // 足された行に幅が届かない。
+    let data_rows = [];
 
     const applyColumnWidths = (widths) => {
+      const leadingColumnWidth = getLeadingColumnWidth();
       headers.forEach((columnHeader, index) => {
         columnHeader.style.width = `${widths[index]}px`;
         data_rows.forEach((data_row) => {
@@ -542,7 +634,7 @@
         });
       });
 
-      positionResizers(resizers, widths);
+      positionResizers(resizers, widths, leadingColumnWidth);
     };
 
     // Create resizers and their events
@@ -568,6 +660,7 @@
 
         // Calculate the current width of column
         initialWidths = headers.map((columnHeader) => columnHeader.getBoundingClientRect().width);
+        data_rows = currentDataRows();
 
         // Attach listeners for document's events
         document.addEventListener("mousemove", mouseMoveHandler);
