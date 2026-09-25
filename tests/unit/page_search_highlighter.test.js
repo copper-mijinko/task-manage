@@ -149,6 +149,25 @@ describe("page_search_highlighter", () => {
     expect(get(pageSearchMatchCount)).toBe(2);
   });
 
+  test("rescan() keeps the same current match when earlier matches leave the DOM", async () => {
+    // ツリーは見えている行の周りしか描かないので、スクロールすると上の
+    // 一致が DOM から消える。番号のまま残すと別の一致を指してしまう。
+    document.body.innerHTML = `<div id="a">hit</div><div id="b">hit</div><div id="c">hit</div>`;
+    setQuery("hit");
+    await flushDebounce();
+    next();
+    next();
+    expect(get(pageSearchCurrentIndex)).toBe(2);
+
+    document.getElementById("a").remove();
+    rescan();
+
+    expect(get(pageSearchMatchCount)).toBe(2);
+    expect(get(pageSearchCurrentIndex)).toBe(1);
+    const current = highlightsStore.get("page-search-current").ranges[0];
+    expect(current.startContainer.parentElement.id).toBe("c");
+  });
+
   test("registers a separate 'page-search-current' highlight for the active match", async () => {
     document.body.innerHTML = `<div>cc</div><div>cc</div>`;
     setQuery("cc");

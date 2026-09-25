@@ -30,6 +30,13 @@
   import { DEFAULT_COLUMN_SETTINGS } from "@features/tasks/stores/column_settings";
   import { readColumnWidths, saveColumnWidths } from "@features/tasks/stores/column_layout";
   import {
+    buildRenderItems,
+    nearestIndices,
+    scrollTopToReveal,
+    visibleRowRange,
+  } from "@features/tasks/utils/virtual_rows";
+  import { pageSearchQuery } from "@features/search/stores/search";
+  import {
     flattenVisibleTree,
     buildInheritedDueDateMap,
     buildLineNumberMap,
@@ -217,31 +224,160 @@
   $: visibleHeaders = computeVisibleHeaders($tree_data?.headers, $column_settings);
   $: allHeaders = mergeBuiltInHeaders($tree_data?.headers);
 
-  const getRowHeightPx = () => {
-    if (typeof window === "undefined") {
-      return 0;
-    }
-
-    return (
-      parseFloat(
-        window.getComputedStyle(document.documentElement).getPropertyValue("--tree-row-height")
-      ) || 36
-    );
-  };
-
   // Memoize the id→row map against `rows` so scrolling (which only changes
-  // scrollTop) does not rebuild it for every frame. Likewise cache the row
-  // height and only recompute it when theme or density changes, avoiding a forced
-  // style recalc (getComputedStyle) on every scroll event.
+  // scrollTop) does not rebuild it for every frame.
   // 祖先を辿るキーは経路。多親ノードは同じ id の行が複数あるので id では引けない。
   $: rowByPath = new Map(rows.map((row) => [row.path, row]));
-  let stickyRowHeightPx = 0;
+  $: stickyTrail = buildStickyTrail(rows, scrollTop, rowHeightPx, rowByPath);
+
+  // ---- 見えている行だけを描く（仮想スクロール） ----
+  //
+  // 全行を DOM にすると、ノードが数千あるワークスペースでは起動のたびに
+  // 全行を作ってレイアウトし、変更のたびに全行を更新することになる。
+  // 行の高さは `--tree-row-height` で固定なので、スクロール位置から描く範囲を
+  // 割り算で出し、残りは同じ高さの空白で置き換える。
+  const OVERSCAN_ROWS = 8;
+  /** レイアウトが測れないとき（jsdom、畳まれたペイン）に全部描く上限。 */
+  const FALLBACK_ALL_ROWS = 200;
+  const FALLBACK_WINDOW_ROWS = 60;
+  /**
+   * ページ内検索の一致のうち、画面外でも描いておく行の上限。よくある語では
+   * 全行が一致するので、全部描くと仮想化前と同じ重さになる。
+   */
+  const SEARCH_PIN_LIMIT = 100;
+
+  let rowHeightProbe;
+  let rowsTopMarker;
+  /**
+   * 1 行の高さ（px）。`--tree-row-height` は rem で書かれているので、
+   * 変数の値を parseFloat しても px にはならない。実際に描いた要素で測る。
+   */
+  let rowHeightPx = 0;
+  /** スクロール内容の先頭から最初の行までの距離（見出しの高さ）。 */
+  let rowsOffset = 0;
+  let viewportHeight = 0;
+
+  function measureVirtualLayout() {
+    if (!table_root) return;
+    rowHeightPx = rowHeightProbe?.offsetHeight || 0;
+    rowsOffset = rowsTopMarker?.offsetTop ?? 0;
+    viewportHeight = table_root.clientHeight;
+    scrollTop = table_root.scrollTop;
+  }
   $: {
+    // 密度とテーマで行の高さが変わる。見出しの高さは通知の有無で変わる。
     void $theme;
     void $ui_density;
-    stickyRowHeightPx = getRowHeightPx();
+    void taskFolderOpenError;
+    tick().then(measureVirtualLayout);
   }
-  $: stickyTrail = buildStickyTrail(rows, scrollTop, stickyRowHeightPx, rowByPath);
+
+  $: rowIndexByPath = new Map(rows.map((row, index) => [row.path, index]));
+
+  /**
+   * ページ内検索（ヘッダーの検索ボックス）は描かれている文字を探す。
+   * 画面外の行も見つけられるよう、名前かタグが一致する行を、表示位置に
+   * 近いものから SEARCH_PIN_LIMIT 行まで描いておく。次の一致へ進んで
+   * 表示位置が動けば、その周りの一致が描かれる。
+   */
+  function collectSearchMatchIndices(currentRows, query) {
+    const needle = String(query ?? "").toLowerCase();
+    if (!needle) return [];
+    const indices = [];
+    currentRows.forEach((row, index) => {
+      const data = row.node?.data ?? {};
+      const name = String(data.name ?? "").toLowerCase();
+      const tags = Array.isArray(data.tags) ? data.tags.join(" ").toLowerCase() : "";
+      if (name.includes(needle) || tags.includes(needle)) indices.push(index);
+    });
+    return indices;
+  }
+  $: searchMatchIndices = collectSearchMatchIndices(rows, $pageSearchQuery);
+
+  /** ドラッグ中の行。消すと dragend が届かないので、画面外でも描いておく。 */
+  let draggingRowPath;
+  function handleTableDragStart(event) {
+    draggingRowPath = event.target?.closest?.('[role="row"][data-row-path]')?.dataset.rowPath;
+  }
+  function handleTableDragEnd() {
+    draggingRowPath = undefined;
+  }
+
+  $: rowRange = visibleRowRange({
+    rowCount: rows.length,
+    scrollTop,
+    viewportHeight,
+    rowHeight: rowHeightPx,
+    rowsOffset,
+    overscan: OVERSCAN_ROWS,
+    fallbackAllRows: FALLBACK_ALL_ROWS,
+    fallbackWindowRows: FALLBACK_WINDOW_ROWS,
+  });
+  $: pinnedSearchIndices = nearestIndices(
+    searchMatchIndices,
+    Math.floor((rowRange.start + rowRange.end) / 2),
+    SEARCH_PIN_LIMIT
+  );
+  // いま操作している行は、キーボード操作と Tab の停留点なので常に描く。
+  $: pinnedRowIndices = [
+    rowIndexByPath.get($active_row_path),
+    rowIndexByPath.get(draggingRowPath),
+    ...pinnedSearchIndices,
+  ].filter((index) => index !== undefined);
+  $: renderItems = buildRenderItems(rows.length, rowRange, pinnedRowIndices);
+
+  /**
+   * 出現アニメーションは本当に増えた行だけに流す。スクロールで描き始めた
+   * 行にも流すと、スクロールのたびに行がちらつく。
+   */
+  let previousRowPaths = null;
+  let enteringRowPaths = new Set();
+  let enteringTimer;
+  $: {
+    const current = new Set(rows.map((row) => row.path));
+    enteringRowPaths =
+      previousRowPaths === null
+        ? current
+        : new Set([...current].filter((path) => !previousRowPaths.has(path)));
+    previousRowPaths = current;
+    clearTimeout(enteringTimer);
+    if (enteringRowPaths.size > 0) {
+      // アニメーション（0.16s）が終わってから外す。
+      enteringTimer = setTimeout(() => (enteringRowPaths = new Set()), 250);
+    }
+  }
+
+  /** 行が見える位置までスクロールする（見えていれば何もしない）。 */
+  function revealRow(path) {
+    const index = rowIndexByPath.get(path);
+    if (index === undefined || !table_root) return;
+    measureVirtualLayout();
+    const next = scrollTopToReveal({
+      index,
+      scrollTop,
+      viewportHeight,
+      rowHeight: rowHeightPx,
+      rowsOffset,
+      // 経路表示が出ているときは、見出しの下の 1 行ぶんがそれに隠れる。
+      // 出ていないときに余白を取ると、見出し直下の行をクリックしただけで
+      // 1 行ずれる。
+      topInset: stickyTrail.length > 0 ? rowHeightPx : 0,
+    });
+    if (next === null) return;
+    table_root.scrollTop = next;
+    scrollTop = table_root.scrollTop;
+    $ganttScrollTop = scrollTop;
+  }
+
+  // 現在行が変わったら見える位置へ。追加・貼り付け・キー操作・戻る/進むなど、
+  // どこから変わっても同じ。描かれていない行は DOM から探せないので、
+  // スクロールで行を描かせるのはここに寄せる。
+  let lastRevealedRowPath;
+  $: if ($active_row_path !== lastRevealedRowPath) {
+    lastRevealedRowPath = $active_row_path;
+    const path = $active_row_path;
+    if (path) tick().then(() => revealRow(path));
+  }
 
   let showDeleteConfirm = false;
   let deleteTargetId;
@@ -320,6 +456,10 @@
   }
 
   onMount(() => {
+    measureVirtualLayout();
+    const viewportObserver = new ResizeObserver(() => measureVirtualLayout());
+    viewportObserver.observe(table_root);
+
     let domHeaders;
     [resizers, domHeaders, , resize_observer] = createResizers(visibleHeaders);
     handlers = setResizersEvents(resizers, domHeaders);
@@ -410,6 +550,8 @@
     mutation_observer.observe(table_root, { subtree: true, childList: true });
 
     return () => {
+      viewportObserver.disconnect();
+      clearTimeout(enteringTimer);
       if (pendingBoundsFrame) cancelAnimationFrame(pendingBoundsFrame);
       mutation_observer.disconnect();
       resize_observer?.disconnect();
@@ -430,11 +572,9 @@
 
   const measureResizerContentHeight = () => {
     if (!table_root) return 0;
-    const tableRows = Array.from(table_root.querySelectorAll(".TableRow"));
-    cachedResizerContentHeight = tableRows.reduce(
-      (height, row) => height + row.getBoundingClientRect().height,
-      0
-    );
+    // 行は見えている分しか描かないので、数えずに行数から出す。
+    cachedResizerContentHeight =
+      rowHeightPx > 0 ? rowsOffset + rows.length * rowHeightPx : table_root.scrollHeight;
     return cachedResizerContentHeight;
   };
 
@@ -821,12 +961,14 @@
    * ここ（rows）にしかないので、判定もここに置く。
    */
   /** 経路で行を引く。多親ノードは複数行に出るので、ノード id では足りない。 */
-  function focusRowByPath(path) {
+  async function focusRowByPath(path) {
     if (!path) return;
+    // 画面外の行は描かれていないので、先にスクロールして描かせる。
+    revealRow(path);
+    await tick();
     const target = table_root?.querySelector(`[role="row"][data-row-path="${CSS.escape(path)}"]`);
     if (!target) return;
-    target.focus();
-    target.scrollIntoView({ block: "nearest" });
+    target.focus({ preventScroll: true });
   }
 
   /** 行へ移動する。選択もクリックと同じように動かし、詳細ペインを追従させる。 */
@@ -1119,12 +1261,9 @@
       if (newNodePath) $active_row_path = newNodePath;
 
       setTimeout(() => {
-        const newRow = newNodePath
-          ? table_root?.querySelector(`[role="row"][data-row-path="${CSS.escape(newNodePath)}"]`)
-          : document.getElementById(newNodeId);
-        if (newRow) {
-          newRow.scrollIntoView({ behavior: "smooth", block: "nearest" });
-        }
+        // 画面外の行は描かれていないので、DOM ではなく行の並びから探す。
+        const path = newNodePath ?? rows.find((row) => row.id === newNodeId)?.path;
+        if (path) revealRow(path);
       }, 50);
     }, 0);
   }
@@ -1620,8 +1759,11 @@
   role="treegrid"
   aria-label="ノードツリー"
   aria-multiselectable="true"
+  aria-rowcount={rows.length + 1}
   tabindex="-1"
   on:scroll={handleScroll}
+  on:dragstart={handleTableDragStart}
+  on:dragend={handleTableDragEnd}
   on:click|self={handleBackgroundClick}
   on:keydown|self={(e) => {
     if (e.key === "Escape") handleBackgroundClick();
@@ -1657,54 +1799,68 @@
       </div>
     </div>
   {/if}
+  <div class="RowHeightProbe" aria-hidden="true" bind:this={rowHeightProbe}></div>
+  <div class="RowsTop" aria-hidden="true" bind:this={rowsTopMarker}></div>
   {#if rows.length > 0}
-    <!-- key は経路。多親ノードは親ごとに複数行に出るので id では重複する。 -->
-    {#each rows as row (row.path)}
-      <TreeTableRow
-        {row}
-        isPrimaryOccurrence={row.isPrimaryOccurrence}
-        headers={visibleHeaders}
-        selected={$selected_ids.has(row.id)}
-        bulkSelectionActive={$bulk_selection_active}
-        isAnchor={$selection_anchor_id === row.id}
-        anyMultiSelected={selectionSize > 1}
-        {isDark}
-        canDrop={canDropTarget}
-        canMoveUp={row.canMoveUp}
-        canMoveDown={row.canMoveDown}
-        canIndent={row.canIndent}
-        canOutdent={row.canOutdent}
-        canOpenTaskFolder={!application &&
-          $selected_type === "WorkspaceProject" &&
-          Boolean($workspace_store.activeProjectDir)}
-        bulkCanMove={canSiblingMove}
-        bulkCanTreeOp={canTreeOp}
-        bulkCanOutdent={canBulkOutdent}
-        inheritedDueDate={inheritedDueDateMap.get(row.path) ?? ""}
-        nodePath={nodePathMap.get(row.path) ?? ""}
-        sharedPlaces={occurrenceIndex.get(row.id) ?? []}
-        lineNumber={lineNumberMap.get(row.path) ?? 0}
-        isTabStop={row.path === tabStopRowPath}
-        isEchoRow={row.id === activeRowId && row.path !== $active_row_path}
-        on:select={handleSelectRow}
-        on:navigate={handleRowNavigate}
-        on:toggleCheckbox={handleToggleCheckbox}
-        on:toggle={handleToggleRow}
-        on:commit={handleCommit}
-        on:reorder={handleReorder}
-        on:moveUp={handleMoveUp}
-        on:moveDown={handleMoveDown}
-        on:indentTask={handleIndentTask}
-        on:outdentTask={handleOutdentTask}
-        on:addBelow={handleAddBelow}
-        on:addChild={handleAddChild}
-        on:deleteTask={requestDelete}
-        on:restoreTask={requestRestore}
-        on:permanentDeleteTask={requestPermanentDelete}
-        on:copyTask={handleCopyTask}
-        on:pasteTask={handlePasteTask}
-        on:openTaskFolder={handleOpenTaskFolder}
-      />
+    <!-- key は経路。多親ノードは親ごとに複数行に出るので id では重複する。
+         描かない行は、同じ高さの空白（RowGap）で置き換える。 -->
+    {#each renderItems as item (item.kind === "row" ? rows[item.index].path : `gap:${item.start}`)}
+      {#if item.kind === "gap"}
+        <div
+          class="RowGap"
+          aria-hidden="true"
+          style:height={`calc(var(--tree-row-height, 36px) * ${item.count})`}
+        ></div>
+      {:else}
+        {@const row = rows[item.index]}
+        <TreeTableRow
+          {row}
+          animateEnter={enteringRowPaths.has(row.path)}
+          ariaRowIndex={item.index + 2}
+          isPrimaryOccurrence={row.isPrimaryOccurrence}
+          headers={visibleHeaders}
+          selected={$selected_ids.has(row.id)}
+          bulkSelectionActive={$bulk_selection_active}
+          isAnchor={$selection_anchor_id === row.id}
+          anyMultiSelected={selectionSize > 1}
+          {isDark}
+          canDrop={canDropTarget}
+          canMoveUp={row.canMoveUp}
+          canMoveDown={row.canMoveDown}
+          canIndent={row.canIndent}
+          canOutdent={row.canOutdent}
+          canOpenTaskFolder={!application &&
+            $selected_type === "WorkspaceProject" &&
+            Boolean($workspace_store.activeProjectDir)}
+          bulkCanMove={canSiblingMove}
+          bulkCanTreeOp={canTreeOp}
+          bulkCanOutdent={canBulkOutdent}
+          inheritedDueDate={inheritedDueDateMap.get(row.path) ?? ""}
+          nodePath={nodePathMap.get(row.path) ?? ""}
+          sharedPlaces={occurrenceIndex.get(row.id) ?? []}
+          lineNumber={lineNumberMap.get(row.path) ?? 0}
+          isTabStop={row.path === tabStopRowPath}
+          isEchoRow={row.id === activeRowId && row.path !== $active_row_path}
+          on:select={handleSelectRow}
+          on:navigate={handleRowNavigate}
+          on:toggleCheckbox={handleToggleCheckbox}
+          on:toggle={handleToggleRow}
+          on:commit={handleCommit}
+          on:reorder={handleReorder}
+          on:moveUp={handleMoveUp}
+          on:moveDown={handleMoveDown}
+          on:indentTask={handleIndentTask}
+          on:outdentTask={handleOutdentTask}
+          on:addBelow={handleAddBelow}
+          on:addChild={handleAddChild}
+          on:deleteTask={requestDelete}
+          on:restoreTask={requestRestore}
+          on:permanentDeleteTask={requestPermanentDelete}
+          on:copyTask={handleCopyTask}
+          on:pasteTask={handlePasteTask}
+          on:openTaskFolder={handleOpenTaskFolder}
+        />
+      {/if}
     {/each}
   {:else}
     <div class="EmptyState">
@@ -1842,6 +1998,20 @@
        keeps the whole tree below modals/overlays while preserving the
        internal ordering of header > resizer > rows. */
     z-index: 0;
+  }
+  .RowHeightProbe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 0;
+    height: var(--tree-row-height, 36px);
+    visibility: hidden;
+    pointer-events: none;
+  }
+  .RowsTop,
+  .RowGap {
+    /* 縦並びの flex なので、既定では中身の無い空白が縮められてしまう。 */
+    flex-shrink: 0;
   }
   .StickyTrail {
     /* Pinned breadcrumb sits flush under the 2.25rem tree header. No margin,

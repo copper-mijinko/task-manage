@@ -78,6 +78,14 @@
   export let inheritedDueDate = "";
   export let nodePath = "";
   export let lineNumber = 0;
+  /**
+   * ツリーは見えている行だけを描くので、スクロールで現れた行は「新しい行」
+   * ではない。そのときに出現アニメーションを流すと、スクロールのたびに
+   * 行がちらつく。本当に増えた行だけ true にする。
+   */
+  export let animateEnter = true;
+  /** 描かれていない行も数えた、表の中での行番号（見出しが 1）。 */
+  export let ariaRowIndex = undefined;
   // Capabilities for bulk operations (used when this row is part of multi-selection).
   export let bulkCanMove = false;
   export let bulkCanTreeOp = false;
@@ -321,11 +329,13 @@
   class:ArchivedRow={isArchived}
   class:RootRow={depth === 0}
   class:ParentRow={hasChildren}
+  class:NoEnter={!animateEnter}
   style:--row-depth={depth}
   use:ripple
   tabindex={isTabStop ? 0 : -1}
   draggable="true"
   aria-level={depth + 1}
+  aria-rowindex={ariaRowIndex}
   aria-selected={selected}
   aria-expanded={hasChildren ? expanded : undefined}
   on:click={select}
@@ -713,6 +723,9 @@
     /* 行の区切りだけを引く（セルの縦罫線は引かない）。薄くしすぎると行の
        切れ目が読めないので、区切り線の標準色をそのまま使う。 */
     border-bottom: 1px solid var(--border-muted);
+  }
+  .TableRow.NoEnter {
+    animation: none;
   }
   .TableRow.MenuOpen {
     z-index: 9999;

@@ -251,10 +251,23 @@ export function rescan() {
     publish();
     return;
   }
+  const previous = state.index >= 0 ? state.matches[state.index] : undefined;
   const matches = scanForMatches(state.query);
   state.matches = matches;
+  // 番号ではなく「同じ文字位置の一致」を追う。ツリーは見えている行の
+  // 周りしか描かないので、スクロールで上の一致が消えると番号がずれ、
+  // 次へ進んだときに別の一致へ飛んでしまう。
+  const sameMatch = previous
+    ? matches.findIndex(
+        (range) =>
+          range.startContainer === previous.startContainer &&
+          range.startOffset === previous.startOffset
+      )
+    : -1;
   if (matches.length === 0) {
     state.index = -1;
+  } else if (sameMatch >= 0) {
+    state.index = sameMatch;
   } else if (state.index >= matches.length || state.index < 0) {
     state.index = 0;
   }
