@@ -2481,6 +2481,7 @@ module.exports = {
   normalizeParentLinks,
   normalizeTaskTags,
   legacyMemoId,
+  LEGACY_MEMO_ORDER_BASE,
   parseFrontmatter,
   stringifyFrontmatter,
   atomicWriteFile,

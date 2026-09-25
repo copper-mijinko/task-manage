@@ -264,6 +264,45 @@ describe("workspace graph persistence", () => {
     ).resolves.toMatch(/legacy\.png$/);
   });
 
+  it("imports memos that a pasted task copy shares with its source", async () => {
+    // v0.40 の貼り付けはタスクに新しい id を振るが、メモの配列はそのまま
+    // コピーしたので、同じプロジェクトの別タスクに同じ id のメモ
+    // ファイル（`<memo id>.md`）が並ぶ。
+    projectFixture(tempDir);
+    const alphaDir = path.join(tempDir, "alpha");
+    fs.writeFileSync(
+      path.join(alphaDir, "task-a", "memo-x.md"),
+      "---\nid: memo-x\ntitle: Shared memo\norder: 0\n---\nOriginal body\n"
+    );
+    const pasted = path.join(alphaDir, "task-c");
+    fs.mkdirSync(path.join(pasted, "assets"), { recursive: true });
+    fs.writeFileSync(path.join(pasted, "assets", "pasted.png"), "pasted-image");
+    fs.writeFileSync(
+      path.join(pasted, "_index.md"),
+      "---\nid: task-c\nname: Task A copy\nparents:\n  - id: project-a\n    order: 1\n---\n"
+    );
+    fs.writeFileSync(
+      path.join(pasted, "memo-x.md"),
+      "---\nid: memo-x\ntitle: Shared memo\norder: 0\n---\nEdited after paste\n![img](./assets/pasted.png)\n"
+    );
+
+    const graph = await graphStore.readWorkspaceGraph(tempDir);
+
+    const memos = Object.values(graph.nodes).filter((node) => node.name === "Shared memo");
+    expect(memos).toHaveLength(2);
+    expect(memos.map((memo) => memo.parents[0].id).sort()).toEqual(["task-a", "task-c"]);
+    const original = memos.find((memo) => memo.parents[0].id === "task-a");
+    const copy = memos.find((memo) => memo.parents[0].id === "task-c");
+    expect(original.body).toContain("Original body");
+    expect(copy.body).toContain("Edited after paste");
+    expect(new Set(memos.map((memo) => memo.id)).size).toBe(2);
+    expect(memos.map((memo) => memo.id)).toContain("memo-x");
+    expect(copy.body).toContain(`assets/${copy.id}/assets/pasted.png`);
+    await expect(
+      graphStore.resolveNodeAsset(tempDir, copy.id, `assets/${copy.id}/assets/pasted.png`)
+    ).resolves.toMatch(/pasted\.png$/);
+  });
+
   it("fails migration when a legacy memo id collides with a task id", async () => {
     projectFixture(tempDir);
     fs.writeFileSync(

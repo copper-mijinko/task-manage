@@ -76,10 +76,22 @@ async function copyDirectoryStrict(source, destination, allowedRoot) {
   }
 }
 
+/**
+ * 旧プロジェクトを取り込む前に、読み落としが起きないことを確かめる。
+ *
+ * 返り値の `duplicateMemos` は、同じ id のメモファイルが複数あったときの
+ * 置き場所（id → [{ ownerId, dirName, fileName }]）。v0.40 の貼り付けは
+ * タスクに新しい id を振るがメモの id は引き継いだので、プロジェクト内の
+ * 別タスクに同じ id のメモが並ぶ。旧形式はメモをタスクごとに読んでいたので
+ * これは正しいデータで、取り込み側で片方に新しい id を振る。
+ * メモとタスクの id が重なるのは別の話なので、これまでどおり止める。
+ */
 async function strictProjectPreflight(projectDir, rootId) {
   const ids = new Set([rootId]);
   const entries = await fs.promises.readdir(projectDir, { withFileTypes: true });
-  const nodeDirectories = [{ dir: projectDir, reserved: "_project.md" }];
+  const nodeDirectories = [
+    { dir: projectDir, dirName: "_project", ownerId: rootId, reserved: "_project.md" },
+  ];
   for (const entry of entries) {
     if (!entry.isDirectory() || entry.isSymbolicLink()) continue;
     const indexPath = path.join(projectDir, entry.name, "_index.md");
@@ -94,9 +106,15 @@ async function strictProjectPreflight(projectDir, rootId) {
     if (!id || typeof id !== "string") throw new Error(`Invalid legacy task: ${entry.name}`);
     if (ids.has(id)) throw new Error(`Duplicate node id in legacy project: ${id}`);
     ids.add(id);
-    nodeDirectories.push({ dir: path.join(projectDir, entry.name), reserved: "_index.md" });
+    nodeDirectories.push({
+      dir: path.join(projectDir, entry.name),
+      dirName: entry.name,
+      ownerId: id,
+      reserved: "_index.md",
+    });
   }
-  for (const { dir, reserved } of nodeDirectories) {
+  const memoFiles = new Map();
+  for (const { dir, dirName, ownerId, reserved } of nodeDirectories) {
     const files = await fs.promises.readdir(dir, { withFileTypes: true });
     for (const file of files) {
       if (!file.isFile() || file.name === reserved || !file.name.endsWith(".md")) continue;
@@ -109,11 +127,58 @@ async function strictProjectPreflight(projectDir, rootId) {
       }
       const declaredId = workspace.parseFrontmatter(raw).data.id;
       const id = workspace.legacyMemoId(declaredId, dir, file.name);
-      if (ids.has(id)) throw new Error(`Duplicate legacy memo node id: ${id}`);
+      if (ids.has(id) && !memoFiles.has(id))
+        throw new Error(`Duplicate legacy memo node id: ${id}`);
       ids.add(id);
+      if (!memoFiles.has(id)) memoFiles.set(id, []);
+      memoFiles.get(id).push({ ownerId, dirName, fileName: file.name });
     }
   }
-  return ids;
+  const duplicateMemos = new Map(
+    [...memoFiles].filter(([, occurrences]) => occurrences.length > 1)
+  );
+  return { ids, duplicateMemos };
+}
+
+/**
+ * 同じ id のメモファイルのうち、`readProjectAsync` がノードにしなかったものを
+ * 新しい id のノードとして組み立てる。並び順と中身の読み方は
+ * `promoteLegacyMemos` に合わせる。`taskDirs` には置き場所を足すので、
+ * 画像や添付は元のタスクのディレクトリから取り込まれる。
+ */
+async function importDuplicateLegacyMemos(projectDir, loaded, duplicateMemos) {
+  const nodes = [];
+  const memosByOwner = new Map();
+  for (const [memoId, occurrences] of duplicateMemos) {
+    const kept = loaded.legacyMemoFiles.get(memoId);
+    for (const { ownerId, dirName, fileName } of occurrences) {
+      if (kept && kept.dirName === dirName && kept.fileName === fileName) continue;
+      if (!memosByOwner.has(ownerId))
+        memosByOwner.set(
+          ownerId,
+          await workspace.readTaskMemosAsync(projectDir, ownerId, loaded.taskDirs)
+        );
+      const memos = memosByOwner.get(ownerId);
+      const index = memos.findIndex((memo) => memo.fileName === fileName);
+      if (index < 0) throw new Error(`Legacy memo was not imported: ${memoId}`);
+      const memo = memos[index];
+      const id = crypto.randomUUID();
+      nodes.push({
+        id,
+        name: memo.title || "memo",
+        status: undefined,
+        parents: [{ id: ownerId, order: workspace.LEGACY_MEMO_ORDER_BASE + index }],
+        body: memo.content,
+        format: memo.format,
+        bodyLoaded: true,
+        tags: memo.tags ?? [],
+        attachments: [],
+        createdAt: loaded.tasks.get(ownerId)?.createdAt || "",
+      });
+      loaded.taskDirs.set(id, dirName);
+    }
+  }
+  return nodes;
 }
 
 async function atomicWriteJson(filePath, value) {
@@ -177,18 +242,24 @@ async function importLegacyGraph(workspacePath) {
     },
   };
   for (const [projectIndex, project] of projects.entries()) {
-    const expectedIds = await strictProjectPreflight(project.projectDir, project.rootId);
+    const { ids: expectedIds, duplicateMemos } = await strictProjectPreflight(
+      project.projectDir,
+      project.rootId
+    );
     const loaded = await workspace.readProjectAsync(project.projectDir, {
       includeMemoContent: false,
     });
     const loadedIds = new Set(loaded.tasks.keys());
     for (const id of expectedIds)
       if (!loadedIds.has(id)) throw new Error(`Legacy task was not imported: ${id}`);
-    const tasks = await workspace.loadNodeBodiesAsync(
-      project.projectDir,
-      [...loaded.tasks.values()],
-      loaded.taskDirs
-    );
+    const tasks = [
+      ...(await workspace.loadNodeBodiesAsync(
+        project.projectDir,
+        [...loaded.tasks.values()],
+        loaded.taskDirs
+      )),
+      ...(await importDuplicateLegacyMemos(project.projectDir, loaded, duplicateMemos)),
+    ];
     // 旧形式はプロジェクトごとに独立して読んでいたので、id が一意なのは
     // プロジェクトの中だけだった。v0.40 までのエクスポートはルート以外の id を
     // db.json から引き継いだため、同じプロジェクトを 2 回エクスポートすると
