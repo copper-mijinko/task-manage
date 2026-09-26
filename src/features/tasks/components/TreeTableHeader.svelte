@@ -1,4 +1,4 @@
-﻿<script>
+<script>
   import { getContext, tick } from "svelte";
   import { TREEGRID_APPLICATION } from "@features/workspace/application/treegrid";
   const application = getContext(TREEGRID_APPLICATION);
@@ -981,10 +981,6 @@
   .HeaderLabelRow.sortActive .HeaderSortButton {
     opacity: 1;
   }
-  .HeaderControlRow {
-    opacity: 0.55;
-    transition: opacity 0.12s ease;
-  }
   .TableHeader:hover .HeaderControlRow,
   .TableHeader:focus-within .HeaderControlRow,
   .HeaderControlRow:has(:global(.active)) {
@@ -1097,6 +1093,8 @@
     padding: 0 var(--sp1);
     box-sizing: border-box;
     overflow: hidden;
+    opacity: 0.55;
+    transition: opacity 0.12s ease;
   }
   .HeaderFilterGroup {
     display: flex;
@@ -1216,7 +1214,7 @@
   .LockIcon svg {
     width: 100%;
     height: 100%;
-    stroke: currentColor;
+    stroke: currentcolor;
   }
   .ColumnLabel {
     flex: 1;
@@ -1258,10 +1256,6 @@
   .MoveBtn:disabled {
     opacity: 0.22;
     cursor: default;
-  }
-  .MoveBtn svg {
-    width: 0.9rem;
-    height: 0.9rem;
   }
   .MoveBtn svg {
     width: 100%;

@@ -1,4 +1,4 @@
-﻿<script>
+<script>
   import { onDestroy, onMount } from "svelte";
   import * as platform from "@lib/ipc/platform";
 

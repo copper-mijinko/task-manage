@@ -1,4 +1,4 @@
-﻿<script lang="ts">
+<script lang="ts">
   import { viewportPopover } from "@lib/actions/viewport_popover";
   import { onMount, onDestroy } from "svelte";
   import { activePanelId, newPanelId } from "@stores/panel_coordinator";

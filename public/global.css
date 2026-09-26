@@ -1,8 +1,12 @@
-﻿/* ============================================================
+/* ============================================================
    Global tokens — spacing / shape / elevation / typography scale
    These bridge the M3-aligned mock with the existing theme.ts color tokens.
    ============================================================ */
 :root {
+  /* ツリーの行の高さ。一覧なので、1 行に本文 14px が収まる範囲でできるだけ
+     詰める。36px では画面に入る行数が少なかった。 */
+  --tree-row-height: 2rem;
+
   /* Spacing — 4pt グリッド。rem で持つのでコンポーネント側の rem 指定と
      同じスケールに乗る（1rem = 16px）。 */
   --sp0: 0px;
@@ -147,6 +151,7 @@
    gets tightened, plus the visual flat treatment.
    ============================================================ */
 .density-compact {
+  --tree-row-height: 1.75rem;
   --elevation-1: none;
   --elevation-2: none;
   --elevation-3: none;
@@ -189,8 +194,10 @@ body {
   height: 100%;
 }
 
+/* 色はテーマから渡る意味づけの変数で決める。 */
 body {
-  color: var(--theme-color-Sub-main, #262d32);
+  color: var(--fg-default);
+  background: var(--canvas-default);
   margin: 0;
   padding: 0;
   box-sizing: border-box;
@@ -350,11 +357,6 @@ button:not(:disabled):active,
   color: #1f1f1f;
 }
 
-/* Renderer semantic foundations; values are supplied by the existing Theme store. */
-body {
-  color: var(--fg-default);
-  background: var(--canvas-default);
-}
 :where(button, input, select, textarea, a, [tabindex]):focus-visible {
   outline: 2px solid var(--accent-fg);
   outline-offset: 2px;
@@ -379,15 +381,6 @@ body {
 .ui-action.primary {
   background: var(--accent-emphasis);
   color: var(--accent-on-emphasis);
-}
-
-:root {
-  /* 一覧なので、1 行に本文 14px が収まる範囲でできるだけ詰める。36px では
-     画面に入る行数が少なかった。 */
-  --tree-row-height: 2rem;
-}
-.density-compact {
-  --tree-row-height: 1.75rem;
 }
 
 /* 幅が足りないときにラベルを視覚的にだけ隠す。display:none と違い、

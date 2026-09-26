@@ -1238,8 +1238,7 @@
   .GanttBody {
     flex: 1;
     min-height: 0;
-    overflow-x: auto;
-    overflow-y: hidden;
+    overflow: auto hidden;
   }
 
   .GanttBodyInner {

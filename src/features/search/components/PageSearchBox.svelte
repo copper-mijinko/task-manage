@@ -1,4 +1,4 @@
-﻿<script>
+<script>
   import { onMount, onDestroy, tick } from "svelte";
   import IconButton from "@lib/primitives/IconButton.svelte";
   import { pageSearchQuery } from "@features/search/stores/search";

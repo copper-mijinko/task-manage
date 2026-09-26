@@ -145,7 +145,7 @@
     color: var(--theme-color-Sub-main);
   }
   line {
-    stroke: currentColor;
+    stroke: currentcolor;
     stroke-width: 2;
     opacity: 0.65;
   }
@@ -158,7 +158,7 @@
   }
   rect {
     fill: var(--theme-color-Main-main);
-    stroke: currentColor;
+    stroke: currentcolor;
     stroke-width: 2;
   }
   g.selected rect {

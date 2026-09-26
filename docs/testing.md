@@ -93,5 +93,5 @@ Electron アプリ全体を起動して確認する。
 - E2E のワークスペースと `meta.json` は各テストが一時ディレクトリに作り、`TASK_MANAGE_DATA_DIR` で渡す
 - GitHub Actions
   - `.github/workflows/main.yml` で `check`、`unit`、`component`、`e2e` を実行する
-  - `.github/workflows/lint.yml` で `lint` と `format:check` を実行する
+  - `.github/workflows/lint.yml` で `lint`（ESLint と Stylelint）と `format:check` をすべての PR で実行する
 - `Playwright` の E2E は、実行環境によっては Electron の起動制約を受けることがある

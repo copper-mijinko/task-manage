@@ -654,7 +654,7 @@
     fill: none;
   }
   svg {
-    fill: currentColor;
+    fill: currentcolor;
   }
 
   /* Search field — actual input */
@@ -686,7 +686,7 @@
     width: 0.75rem;
     height: 0.75rem;
     fill: none;
-    stroke: currentColor;
+    stroke: currentcolor;
     stroke-width: 2;
     stroke-linecap: round;
     stroke-linejoin: round;
@@ -710,7 +710,7 @@
     color: var(--fg-muted);
   }
   .SearchInput::-webkit-search-cancel-button {
-    -webkit-appearance: none;
+    appearance: none;
   }
   .SearchShortcut {
     font-size: var(--font-label-sm);

@@ -1,6 +1,20 @@
 {
   "extends": ["stylelint-config-standard", "stylelint-config-html/svelte"],
   "rules": {
-    "selector-class-pattern": null
+    "selector-class-pattern": null,
+    "custom-property-pattern": null,
+    "keyframes-name-pattern": null,
+    "selector-pseudo-class-no-unknown": [true, { "ignorePseudoClasses": ["global"] }],
+    "no-descending-specificity": null,
+    "rule-empty-line-before": null,
+    "comment-empty-line-before": null,
+    "custom-property-empty-line-before": null,
+    "at-rule-empty-line-before": null,
+    "declaration-empty-line-before": null,
+    "alpha-value-notation": null,
+    "color-function-notation": null,
+    "font-family-name-quotes": null,
+    "media-feature-range-notation": null,
+    "selector-not-notation": null
   }
 }

@@ -1,4 +1,4 @@
-﻿import { fireEvent, render, screen } from "@testing-library/svelte";
+import { fireEvent, render, screen } from "@testing-library/svelte";
 import { tick } from "svelte";
 import { vi } from "vitest";
 import PageSearchBox from "@features/search/components/PageSearchBox.svelte";

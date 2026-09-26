@@ -1,4 +1,4 @@
-﻿import { get } from "svelte/store";
+import { get } from "svelte/store";
 import { vi, describe, test, expect, beforeEach } from "vitest";
 import { column_settings, DEFAULT_COLUMN_SETTINGS } from "@features/tasks/stores/column_settings";
 

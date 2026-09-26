@@ -1,4 +1,4 @@
-﻿<script>
+<script>
   import { ripple, tooltip } from "@lib/actions";
   /**
    * @typedef {Object} Props

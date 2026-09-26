@@ -1,4 +1,4 @@
-﻿<script>
+<script>
   import { onMount } from "svelte";
   import Quill from "quill";
   import quillIcons from "quill/ui/icons.js";
@@ -825,7 +825,7 @@
   .wrapper {
     --memo-editor-font:
       "BIZ UDゴシック", "BIZ UDGothic", "ＭＳ ゴシック", "MS Gothic", "Cascadia Mono",
-      "Cascadia Code", Consolas, "Courier New", monospace;
+      "Cascadia Code", consolas, "Courier New", monospace;
 
     display: flex;
     flex-direction: column;
@@ -918,8 +918,8 @@
     right: 6px;
     width: 6px;
     height: 6px;
-    border-right: 1.5px solid currentColor;
-    border-bottom: 1.5px solid currentColor;
+    border-right: 1.5px solid currentcolor;
+    border-bottom: 1.5px solid currentcolor;
     transform: translateY(-65%) rotate(45deg);
     pointer-events: none;
   }

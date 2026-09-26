@@ -35,9 +35,9 @@ electron/                        # main プロセス
 
 src/
 ├── lib/                         # 再利用可能な汎用層（ドメイン非依存）
-│   ├── primitives/              # アトミックUI（Button / Card / Dialog / Select / TagField 等）
+│   ├── primitives/              # アトミックUI（Button / Card / Dialog / SearchBox / TagField 等）
 │   ├── layouts/                 # Pane / SplitPanes
-│   ├── actions/                 # tooltip / ripple / clickOutside / globalDismiss / modal_layer / viewport_popover
+│   ├── actions/                 # tooltip / ripple / globalDismiss / modal_layer / viewport_popover
 │   ├── utils/                   # tags / theme / datetime_shortcuts / parent_links / date_urgency 等
 │   └── ipc/
 │       └── platform.ts          # window.electronAPI の Promise ラッパ
@@ -225,6 +225,7 @@ import LocalComponent from "./LocalComponent.svelte";
 | `npm run check:svelte`   | TS と Svelte（`tsconfig.json`、strict）     |
 | `npm run check:js`       | JS と JS の Svelte（`tsconfig.js.json`）    |
 | `npm run check:electron` | main プロセス（`tsconfig.electron.json`）   |
+| `npm run lint`           | ESLint（src / tests / electron / scripts / tools）と Stylelint（CSS と Svelte の style） |
 | `npm run test:unit`      | Vitest（`tests/unit/`）                     |
 | `npm run test:component` | Vitest（`tests/component/`）                |
 | `npm run test:e2e`       | Playwright                                  |

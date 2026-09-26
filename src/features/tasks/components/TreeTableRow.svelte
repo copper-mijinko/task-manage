@@ -686,7 +686,7 @@
   .TableRow.Dragging {
     opacity: 0.6;
   }
-  .TableRow.DragOverTop:before {
+  .TableRow.DragOverTop::before {
     /* Insert as elder sibling: blue line on top edge */
     border-top: 0.15rem solid var(--theme-color-Primary-dark);
     position: absolute;
@@ -700,7 +700,7 @@
     z-index: 999999999999;
     pointer-events: none;
   }
-  .TableRow.DragOverBottom:before {
+  .TableRow.DragOverBottom::before {
     /* Append as child: outline around the entire row */
     border: 0.15rem solid var(--theme-color-Primary-dark);
     position: absolute;
@@ -714,7 +714,7 @@
     z-index: 999999999999;
     pointer-events: none;
   }
-  .TableRow.DragOverBelow:before {
+  .TableRow.DragOverBelow::before {
     /* Insert as younger sibling: blue line on bottom edge */
     border-bottom: 0.15rem solid var(--theme-color-Primary-dark);
     position: absolute;
@@ -754,15 +754,13 @@
     /* 行の区切りだけを引く（セルの縦罫線は引かない）。薄くしすぎると行の
        切れ目が読めないので、区切り線の標準色をそのまま使う。 */
     border-bottom: 1px solid var(--border-muted);
+    --backgroundColor: var(--theme-color-Main-light);
   }
   .TableRow.NoEnter {
     animation: none;
   }
   .TableRow.MenuOpen {
     z-index: 9999;
-  }
-  .TableRow {
-    --backgroundColor: var(--theme-color-Main-light);
   }
   /* 期限の状態は日付セル（文字色・太さ・左の縁）で示す。行全体を塗ると
      選択やホバーと区別が付かず、色の意味も読めなくなるため塗らない。 */

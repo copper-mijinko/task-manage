@@ -1416,8 +1416,7 @@
   /* Scroll the toolbar at narrow widths without shifting the detail pane. */
   .TbButtonsRowCompact {
     flex-wrap: nowrap;
-    overflow-x: auto;
-    overflow-y: hidden;
+    overflow: auto hidden;
     scrollbar-width: thin;
   }
   .TbButtonsRowCompact::-webkit-scrollbar {

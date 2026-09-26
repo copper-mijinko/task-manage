@@ -1,4 +1,4 @@
-﻿<script>
+<script>
   import { viewportPopover } from "@lib/actions/viewport_popover";
   import { onDestroy } from "svelte";
 

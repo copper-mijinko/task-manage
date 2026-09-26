@@ -599,7 +599,7 @@ delete (= archive) ではなく restore / permanently delete を出す。
   button svg {
     width: 0.8625rem;
     height: 0.8625rem;
-    fill: currentColor;
+    fill: currentcolor;
   }
   .menu-button {
     /* 実測 21x21。行高 32px に収まる範囲で 24px 角まで広げる。 */
