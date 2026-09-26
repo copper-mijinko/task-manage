@@ -343,12 +343,16 @@
       let rowsAddedOrRemoved = false;
       for (const record of records) {
         for (const node of record.removedNodes) {
-          if (node.nodeType === 1 && (node.matches(".TableRow") || node.querySelector(".TableRow")))
+          if (
+            node instanceof Element &&
+            (node.matches(".TableRow") || node.querySelector(".TableRow"))
+          )
             rowsAddedOrRemoved = true;
         }
         for (const node of record.addedNodes) {
-          if (node.nodeType !== 1) {
-            const row = record.target.closest?.(".TableRow");
+          if (!(node instanceof Element)) {
+            const target = record.target;
+            const row = target instanceof Element ? target.closest(".TableRow") : null;
             if (row) changedRows.add(row);
             continue;
           }
@@ -462,6 +466,9 @@
     });
   };
 
+  /**
+   * @returns {[any[], any[], any, ResizeObserver]} 分割線・見出しセル・行・ResizeObserver
+   */
   const createResizers = (
     currentHeaders,
     existingResizers = [],
@@ -615,7 +622,7 @@
     for (let i = 0; i < resizers.length; i++) {
       const resizer = resizers[i];
       const minWidths = headers.map(
-        (columnHeader) => parseFloat(window.getComputedStyle(columnHeader).minWidth, 10) || 10
+        (columnHeader) => parseFloat(window.getComputedStyle(columnHeader).minWidth) || 10
       );
 
       // Track the current position of mouse
@@ -1322,7 +1329,7 @@
   ondragend={handleTableDragEnd}
   onclick={(event) => {
     if (event.target !== event.currentTarget) return;
-    handleBackgroundClick(event);
+    handleBackgroundClick();
   }}
   onkeydown={(e) => {
     if (e.target !== e.currentTarget) return;

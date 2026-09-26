@@ -13,6 +13,7 @@
    * @property {any} [tooltipContent]
    * @property {any} [ariaLabel]
    * @property {string} [type]
+   * @property {(detail?: any) => void} [onclick]
    */
 
   /** @type {Props} */

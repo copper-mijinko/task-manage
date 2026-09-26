@@ -10,6 +10,7 @@
    * @property {any} [leftTextColor]
    * @property {any} [rightTextColor]
    * @property {boolean} [checked]
+   * @property {(detail?: any) => void} [onclick]
    */
 
   /** @type {Props} */

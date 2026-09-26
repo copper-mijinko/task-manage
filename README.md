@@ -47,7 +47,7 @@ npm ci
 - `npm run build` — renderer の production build を作成します。
 - `npm run start` — build 済みアプリを Electron で起動します。
 - `npm run lint` — ESLint を実行します。
-- `npm run check` — Svelte/TypeScript の診断を実行します。
+- `npm run check` — 型検査を実行します（TS は strict、JS と Electron の main プロセスは checkJs）。
 - `npm run format:check` — Prettier の整形状態を確認します。
 - `npm run test` — Vitest の全テストを実行します。
 - `npm run test:e2e` — build 後に Playwright E2E を実行します。

@@ -8,6 +8,7 @@
    * @property {string} [backgroundColor]
    * @property {string} [color]
    * @property {import('svelte').Snippet} [children]
+   * @property {(detail?: any) => void} [onchange]
    */
 
   /** @type {Props} */

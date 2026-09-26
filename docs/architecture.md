@@ -221,13 +221,22 @@ import LocalComponent from "./LocalComponent.svelte";
 | `npm run dev`            | Vite 開発サーバー + Electron 起動           |
 | `npm run build`          | Vite による production ビルド → `renderer/` |
 | `npm run start`          | Electron 単体起動                           |
-| `npm run check`          | svelte-check による型・テンプレ検証         |
+| `npm run check`          | 型検査（下の 3 つを順に実行）               |
+| `npm run check:svelte`   | TS と Svelte（`tsconfig.json`、strict）     |
+| `npm run check:js`       | JS と JS の Svelte（`tsconfig.js.json`）    |
+| `npm run check:electron` | main プロセス（`tsconfig.electron.json`）   |
 | `npm run test:unit`      | Vitest（`tests/unit/`）                     |
 | `npm run test:component` | Vitest（`tests/component/`）                |
 | `npm run test:e2e`       | Playwright                                  |
 | `npm run dist`           | electron-builder で実行ファイル生成         |
 
-### 6.2 検証
+### 6.2 型検査の範囲
+
+- TypeScript と `lang="ts"` の Svelte は `strict` で検査する
+- JavaScript と JS の Svelte、`electron/` は `checkJs` で検査する。注釈のない JS に対して効果の薄い `noImplicitAny` / `strictNullChecks` / `useUnknownInCatchVariables` は外し、存在しないプロパティ・引数の数・未宣言の名前・コンポーネントに無い prop を拾うことを目的にする
+- 型を強めたいファイルは `lang="ts"` / `.ts` に移すと strict の対象になる
+
+### 6.3 検証
 
 CI（`.github/workflows/`）と同じ `npm run lint` / `npm run check` / `npm test` /
 `npm run test:e2e` を手元でも通してからプッシュする。件数は変わるため本書には記録しない。

@@ -1,5 +1,6 @@
 const DEFAULT_AGENT_DEBUG_PORT = 9222;
 
+/** @param {string | number} [rawPort] */
 function parseAgentDebugPort(rawPort = DEFAULT_AGENT_DEBUG_PORT) {
   const normalized = String(rawPort).trim();
   if (!/^\d+$/.test(normalized)) {
