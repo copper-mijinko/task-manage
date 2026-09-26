@@ -106,14 +106,12 @@
   }
 
   function isSavePending(status) {
-    return status === "queued" || status === "writing" || status === "retrying";
+    return status === "queued" || status === "writing";
   }
 
   function saveStatusLabel(status) {
     if (status === "error") return "保存失敗";
-    if (status === "conflict") return "競合";
     if (status === "queued") return "保存待ち";
-    if (status === "retrying") return "再試行中";
     if (status === "writing") return "保存中...";
     return "保存済み";
   }
@@ -416,7 +414,7 @@
       class="SaveIndicator"
       class:saved={$saveStatus === "saved" || $saveStatus === "idle"}
       class:pending={isSavePending($saveStatus)}
-      class:error={$saveStatus === "error" || $saveStatus === "conflict"}
+      class:error={$saveStatus === "error"}
       role="status"
       aria-live="polite"
       aria-atomic="true"

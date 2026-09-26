@@ -1,7 +1,11 @@
-import { fireEvent, render, screen } from "@testing-library/svelte";
+import { fireEvent, screen } from "@testing-library/svelte";
 import { vi } from "vitest";
 
 import TaskAttachments from "@features/tasks/components/TaskAttachments.svelte";
+import { applicationStub, renderWithApplicationStub } from "../helpers/application_stub.js";
+
+const render = (component, { props }, application = applicationStub()) =>
+  renderWithApplicationStub(component, props, application);
 
 function makeAttachment(index) {
   return {
@@ -22,8 +26,6 @@ describe("TaskAttachments", () => {
     render(TaskAttachments, {
       props: {
         attachments: [],
-        isWorkspaceProject: true,
-        workspaceProjectDir: "C:\\workspace\\project-1",
         taskId: "task-1",
       },
     });
@@ -39,8 +41,6 @@ describe("TaskAttachments", () => {
     render(TaskAttachments, {
       props: {
         attachments,
-        isWorkspaceProject: true,
-        workspaceProjectDir: "C:\\workspace\\project-1",
         taskId: "task-1",
       },
     });
@@ -58,8 +58,6 @@ describe("TaskAttachments", () => {
     render(TaskAttachments, {
       props: {
         attachments,
-        isWorkspaceProject: true,
-        workspaceProjectDir: "C:\\workspace\\project-1",
         taskId: "task-1",
       },
     });
@@ -72,8 +70,6 @@ describe("TaskAttachments", () => {
     render(TaskAttachments, {
       props: {
         attachments,
-        isWorkspaceProject: true,
-        workspaceProjectDir: "C:\\workspace\\project-1",
         taskId: "task-1",
       },
     });
@@ -83,37 +79,25 @@ describe("TaskAttachments", () => {
 
   test("opens an attachment when clicked and deletes it after confirmation", async () => {
     const attachment = makeAttachment(1);
-    window.electronAPI = {
-      wsOpenTaskAttachment: vi.fn().mockResolvedValue({ success: true }),
-      wsDeleteTaskAttachment: vi.fn().mockResolvedValue({ success: true, attachments: [] }),
-    };
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
-    const onAttachmentsChange = vi.fn();
-
-    render(TaskAttachments, {
-      props: {
-        attachments: [attachment],
-        isWorkspaceProject: true,
-        workspaceProjectDir: "C:\\workspace\\project-1",
-        taskId: "task-1",
-        onAttachmentsChange,
-      },
+    const application = applicationStub({
+      openAsset: vi.fn().mockResolvedValue(undefined),
+      update: vi.fn().mockResolvedValue({}),
     });
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(
+      TaskAttachments,
+      { props: { attachments: [attachment], taskId: "task-1" } },
+      application
+    );
 
     await fireEvent.click(screen.getByTitle("file-1.txt"));
-    expect(window.electronAPI.wsOpenTaskAttachment).toHaveBeenCalledWith(
-      "C:\\workspace\\project-1",
-      "task-1",
-      "./attachments/file-1.txt"
-    );
+    expect(application.openAsset).toHaveBeenCalledWith("task-1", "./attachments/file-1.txt", false);
 
     await fireEvent.click(screen.getByRole("button", { name: "添付を削除 file-1.txt" }));
 
-    expect(window.electronAPI.wsDeleteTaskAttachment).toHaveBeenCalledWith(
-      "C:\\workspace\\project-1",
-      "task-1",
-      "./attachments/file-1.txt"
-    );
+    // 一覧から外すだけで、ファイルは「元に戻す」のために残す。
+    expect(application.update).toHaveBeenCalledWith("task-1", { attachments: [] });
     confirmSpy.mockRestore();
   });
 
@@ -121,8 +105,6 @@ describe("TaskAttachments", () => {
     render(TaskAttachments, {
       props: {
         attachments: [makeAttachment(1)],
-        isWorkspaceProject: false,
-        workspaceProjectDir: null,
         taskId: null,
       },
     });

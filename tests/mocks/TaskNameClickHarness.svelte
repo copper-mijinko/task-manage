@@ -1,6 +1,11 @@
-﻿<script>
+<script>
+  import { setContext } from "svelte";
+  import { writable } from "svelte/store";
+  import { TREEGRID_APPLICATION } from "@features/workspace/application/treegrid";
   import TaskName from "@features/tasks/components/TaskName.svelte";
 
+  // TaskName が読むのはクリップボードだけ。
+  setContext(TREEGRID_APPLICATION, { copied: writable([]) });
   let clickCount = 0;
 </script>
 

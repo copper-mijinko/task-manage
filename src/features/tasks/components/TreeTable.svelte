@@ -2,9 +2,9 @@
   import { getContext } from "svelte";
   import { TREEGRID_APPLICATION } from "@features/workspace/application/treegrid";
   const application = getContext(TREEGRID_APPLICATION);
-  const closed_row_paths = application?.closed ?? legacy_closed_row_paths;
-  const tree_data = application?.tree ?? legacy_tree_data;
-  const filtered_data = application?.filtered ?? legacy_filtered_data;
+  const closed_row_paths = application.closed;
+  const tree_data = application.tree;
+  const filtered_data = application.filtered;
 
   import { onDestroy, onMount, tick } from "svelte";
   import TreeTableHeader from "@features/tasks/components/TreeTableHeader.svelte";
@@ -15,18 +15,13 @@
   import Button from "@lib/primitives/Button.svelte";
   import Dialog from "@lib/primitives/Dialog.svelte";
   import {
-    tree_data as legacy_tree_data,
-    selected_type,
-    filtered_data as legacy_filtered_data,
-    closed_row_paths as legacy_closed_row_paths,
-    active_row_path,
     table_selected_id,
     theme,
-    ui_density,
     column_settings,
+    active_row_path,
     ganttScrollTop,
+    ui_density,
   } from "@stores";
-  import { workspace_store } from "@features/workspace/stores/workspace";
   import { DEFAULT_COLUMN_SETTINGS } from "@features/tasks/stores/column_settings";
   import { readColumnWidths, saveColumnWidths } from "@features/tasks/stores/column_layout";
   import {
@@ -46,51 +41,24 @@
     buildLineNumberMap,
     buildNodePathMap,
     buildStickyTrail,
-    updateNodeDataById,
-    isChild,
-    reorderTree,
-    addNode,
-    rmNode,
     getNode,
     getParent,
     getNodeByPath,
     parentPathOf,
-    getDefaultNode,
-    moveNodeUp,
-    moveNodeDown,
-    indentNode,
-    outdentNode,
-    cloneWithNewIds,
-    bulkUpdateNodeData,
-    bulkRemoveNodes,
-    reattachOrphans,
-    bulkMoveUp,
-    bulkMoveDown,
-    bulkIndent,
-    bulkOutdent,
-    bulkAddNodes,
-    bulkDuplicate,
     areAllSiblings,
     isContiguousSiblingBlock,
     isNodeEffectivelyArchived,
-    getTopLevelSelection,
-    archiveNode,
-    restoreNode,
-    bulkArchiveNodes,
-    bulkRestoreNodes,
   } from "@features/tasks/utils/tree_control";
   import {
-    copied_task,
-    copied_tasks,
-    selected_ids,
-    bulk_selection_active,
-    selection_anchor_id,
     clearSelection,
     selectOnly,
     toggleSelection,
     selectRange,
     selectAll,
     pruneSelection,
+    bulk_selection_active,
+    selected_ids,
+    selection_anchor_id,
     show_archived,
   } from "@stores/ui";
   import { navigation_history } from "@stores/navigation_history";
@@ -267,7 +235,6 @@
     // 密度とテーマで行の高さが変わる。見出しの高さは通知の有無で変わる。
     void $theme;
     void $ui_density;
-    void taskFolderOpenError;
     tick().then(measureVirtualLayout);
   }
 
@@ -397,8 +364,6 @@
    * 親がひとつしかないノードでは差が無いので出さない。
    */
   let archiveScopeTarget = null;
-  let taskFolderOpenError = "";
-  let taskFolderOpenErrorTimer;
 
   // Visible row ids excluding the project root (root is not selectable).
   $: visibleSelectableIds = rows.filter((r) => r.id !== $tree_data?.data?.id).map((r) => r.id);
@@ -561,10 +526,6 @@
       resizers.forEach((resizer) => resizer.parentNode?.removeChild(resizer));
       resizers = [];
     };
-  });
-
-  onDestroy(() => {
-    if (taskFolderOpenErrorTimer) clearTimeout(taskFolderOpenErrorTimer);
   });
 
   // Cached total height of all table rows. Measuring it walks every row with
@@ -1047,26 +1008,11 @@
   }
 
   function handleCommit(event) {
-    if (application) return application.update(event.detail.id, event.detail.patch);
-    const { id, patch } = event.detail;
-    const data = updateNodeDataById($tree_data.data, id, patch);
-    if (data !== $tree_data.data) {
-      $tree_data = { ...$tree_data, data };
-    }
+    return application.update(event.detail.id, event.detail.patch);
   }
 
   function canDropTarget(draggedId, targetId) {
-    if (application) return draggedId !== targetId;
-    if (!draggedId || !targetId || !$tree_data?.data) {
-      return false;
-    }
-    if (draggedId === targetId) {
-      return false;
-    }
-    if (targetId === $tree_data.data.id) {
-      return false;
-    }
-    return !isChild(targetId, draggedId, $tree_data.data);
+    return draggedId !== targetId;
   }
 
   let pendingDrop = null;
@@ -1078,67 +1024,10 @@
     if (!pendingDrop || dropBusy) return;
     dropBusy = true;
     try {
-      await performReorder({ detail: { ...pendingDrop, operation } });
+      await application.reorder({ ...pendingDrop, operation });
       pendingDrop = null;
     } finally {
       dropBusy = false;
-    }
-  }
-  function performReorder(event) {
-    if (application) return application.reorder(event.detail);
-    const { draggedIds, draggedPath, targetId, targetPath, mode } = event.detail;
-    if (!draggedIds || draggedIds.length === 0) return;
-    if (!$tree_data?.data) return;
-
-    // Reject if any dragged id can't drop on target.
-    if (!draggedIds.every((id) => canDropTarget(id, targetId))) {
-      return;
-    }
-
-    if (event.detail.operation === "copy") {
-      const sources = getTopLevelSelection($tree_data.data, new Set(draggedIds))
-        .map((id) => getNode(id, $tree_data.data))
-        .filter(Boolean);
-      $tree_data = {
-        ...$tree_data,
-        data: bulkAddNodes(
-          sources.map((node) => cloneWithNewIds(node)),
-          targetId,
-          $tree_data.data,
-          mode,
-          targetPath
-        ),
-      };
-    } else if (draggedIds.length === 1) {
-      // 掴んだ辺を外して、落とした行の位置に付け直す（どちらも経路で決まる）。
-      const data = reorderTree(draggedIds[0], targetId, $tree_data.data, mode, {
-        targetPath: draggedPath,
-        basePath: targetPath,
-      });
-      $tree_data = { ...$tree_data, data };
-    } else {
-      // Multi-row D&D: collapse to top-level ancestors, capture node references,
-      // remove them from the tree, then insert at target in original DFS order.
-      const topLevelIds = getTopLevelSelection($tree_data.data, new Set(draggedIds));
-      const draggedNodes = topLevelIds.map((id) => getNode(id, $tree_data.data)).filter((n) => n);
-      if (draggedNodes.length === 0) return;
-
-      // 単一行のドラッグと同じく、**掴んだ辺だけ**を外す。すべての辺を外すと
-      // 多親ノードの親が黙って 1 つに減る。掴んだ行の親を基準にし、そこに
-      // 無いノードだけ最初の辺を外す。
-      const sourceParentPath = parentPathOf(draggedPath ?? "");
-      let data = $tree_data.data;
-      for (const id of topLevelIds) {
-        const edgePath = sourceParentPath ? `${sourceParentPath}/${id}` : undefined;
-        data = rmNode(id, data, getNodeByPath(data, edgePath) ? edgePath : undefined);
-      }
-      data = bulkAddNodes(draggedNodes, targetId, data, mode, targetPath);
-      $tree_data = { ...$tree_data, data };
-    }
-
-    if (mode === "append") {
-      // 落とし先が畳まれていると結果が見えないので、その行を開く。
-      closed_row_paths.expandNodeEverywhere(targetId);
     }
   }
 
@@ -1158,149 +1047,22 @@
     return selectionSize > 1 && $selected_ids.has(id);
   }
 
-  function handleMoveUp(event) {
-    if (application)
-      return application.move(
-        "up",
-        isInMultiSelection(event.detail.id) ? [...selectionSet] : [event.detail.id],
-        rowFor(event.detail.id, event.detail.path)?.path
-      );
+  /** 行メニューの移動。複数選択に含まれる行なら選択全体を動かす。 */
+  function moveFromRow(direction, event) {
     const { id, path } = event.detail;
-    if (isInMultiSelection(id)) {
-      handleBulkMoveUp();
-      return;
-    }
-    const row = rowFor(id, path);
-    if (!row?.canMoveUp) {
-      return;
-    }
-
-    const data = moveNodeUp(id, $tree_data.data, row.path);
-    $tree_data = { ...$tree_data, data };
+    return application.move(
+      direction,
+      isInMultiSelection(id) ? [...selectionSet] : [id],
+      rowFor(id, path)?.path
+    );
   }
-
-  function handleMoveDown(event) {
-    if (application)
-      return application.move(
-        "down",
-        isInMultiSelection(event.detail.id) ? [...selectionSet] : [event.detail.id],
-        rowFor(event.detail.id, event.detail.path)?.path
-      );
-    const { id, path } = event.detail;
-    if (isInMultiSelection(id)) {
-      handleBulkMoveDown();
-      return;
-    }
-    const row = rowFor(id, path);
-    if (!row?.canMoveDown) {
-      return;
-    }
-
-    const data = moveNodeDown(id, $tree_data.data, row.path);
-    $tree_data = { ...$tree_data, data };
-  }
-
-  function handleIndentTask(event) {
-    if (application)
-      return application.move(
-        "indent",
-        isInMultiSelection(event.detail.id) ? [...selectionSet] : [event.detail.id],
-        rowFor(event.detail.id, event.detail.path)?.path
-      );
-    const { id, path } = event.detail;
-    if (isInMultiSelection(id)) {
-      handleBulkIndent();
-      return;
-    }
-    const row = rowFor(id, path);
-    // 多親ノードは行ごとに親が違うので、親はクリックした行の経路から引く。
-    const parentNode = getNodeByPath($tree_data.data, parentPathOf(row?.path ?? ""));
-    const currentIndex = parentNode?.children.findIndex((child) => child.id === id) ?? -1;
-    const newParentId = currentIndex > 0 ? parentNode.children[currentIndex - 1]?.id : undefined;
-
-    if (!newParentId || !row?.canIndent) {
-      return;
-    }
-
-    const data = indentNode(id, $tree_data.data, row.path);
-    // 経路が変わるので、畳んだ状態も一緒に移す。
-    closed_row_paths.rekey(row.path, `${parentPathOf(row.path)}/${newParentId}/${id}`);
-    $tree_data = { ...$tree_data, data };
-
-    closed_row_paths.expandNodeEverywhere(newParentId);
-  }
-
-  function handleOutdentTask(event) {
-    if (application)
-      return application.move(
-        "outdent",
-        isInMultiSelection(event.detail.id) ? [...selectionSet] : [event.detail.id],
-        rowFor(event.detail.id, event.detail.path)?.path
-      );
-    const { id, path } = event.detail;
-    if (isInMultiSelection(id)) {
-      handleBulkOutdent();
-      return;
-    }
-    const row = rowFor(id, path);
-    if (!row?.canOutdent) {
-      return;
-    }
-
-    const data = outdentNode(id, $tree_data.data, row.path);
-    // 1 段上がるので、経路から親を 1 つ抜いたものが新しい経路。
-    closed_row_paths.rekey(row.path, `${parentPathOf(parentPathOf(row.path))}/${id}`);
-    $tree_data = { ...$tree_data, data };
-  }
-
-  /**
-   * 追加したノードへ移動する。DOM の `id` は最初の出現にしか付かないので、
-   * 経路が分かるならそれで引く（分からなければ従来どおり id で引く）。
-   */
-  function focusNewNode(newNodeId, newNodePath) {
-    setTimeout(() => {
-      selectOnly(newNodeId, newNodePath);
-      if (newNodePath) $active_row_path = newNodePath;
-
-      setTimeout(() => {
-        // 画面外の行は描かれていないので、DOM ではなく行の並びから探す。
-        const path = newNodePath ?? rows.find((row) => row.id === newNodeId)?.path;
-        if (path) revealRow(path);
-      }, 50);
-    }, 0);
-  }
+  const handleMoveUp = (event) => moveFromRow("up", event);
+  const handleMoveDown = (event) => moveFromRow("down", event);
+  const handleIndentTask = (event) => moveFromRow("indent", event);
+  const handleOutdentTask = (event) => moveFromRow("outdent", event);
 
   function handleAddRelative(targetId, action, targetPath) {
-    if (application) return application.add(targetId, action, rowFor(targetId, targetPath)?.path);
-    if (!targetId || !$tree_data?.data) {
-      return;
-    }
-
-    const newNode = getDefaultNode();
-    const addAction = targetId === $tree_data.data.id ? "append" : action;
-    // 多親ノードは行ごとに親が違うので、隣に足すときの親は行の経路から引く。
-    const rowPath = rowFor(targetId, targetPath)?.path;
-    let parentId;
-
-    if (addAction === "append") {
-      parentId = targetId;
-    } else {
-      const parentNode =
-        getNodeByPath($tree_data.data, parentPathOf(rowPath ?? "")) ??
-        getParent(targetId, $tree_data.data);
-      if (parentNode) {
-        parentId = parentNode.id;
-      }
-    }
-
-    const data = addNode(newNode, targetId, $tree_data.data, addAction, rowPath);
-    $tree_data = { ...$tree_data, data };
-
-    if (parentId) closed_row_paths.expandNodeEverywhere(parentId);
-
-    // 新しい行の経路は「足した先の行の経路 + 新 id」。
-    const newParentPath = addAction === "append" ? rowPath : parentPathOf(rowPath ?? "");
-    focusNewNode(newNode.id, newParentPath ? `${newParentPath}/${newNode.id}` : undefined);
+    return application.add(targetId, action, rowFor(targetId, targetPath)?.path);
   }
 
   function handleAddBelow(event) {
@@ -1312,176 +1074,41 @@
   }
 
   function handleCopyTask(event) {
-    if (application)
-      return application.copy(
-        isInMultiSelection(event.detail.id) ? [...selectionSet] : [event.detail.id]
-      );
-    const { id } = event.detail;
-    if (!id || !$tree_data?.data) return;
-    if (isInMultiSelection(id)) {
-      const topIds = getTopLevelSelection($tree_data.data, selectionSet);
-      const topNodes = topIds.map((tid) => getNode(tid, $tree_data.data)).filter((n) => n);
-      $copied_tasks = topNodes;
-      $copied_task = topNodes[0] ?? null;
-      return;
-    }
-    const node = getNode(id, $tree_data.data);
-    if (node) {
-      $copied_task = node;
-      $copied_tasks = [node];
-    }
+    return application.copy(
+      isInMultiSelection(event.detail.id) ? [...selectionSet] : [event.detail.id]
+    );
   }
 
-  // NOTE on clipboard aliasing: handleCopyTask (above) stores a *live* reference
-  // into $tree_data.data, not a snapshot (despite the "freshly cloned" wording
-  // in stores/ui.ts — that clone only actually happens here, at paste time).
-  // That's fine for a single paste, but it becomes a real bug when the paste
-  // target is a descendant of the copied node — which is ALWAYS the case when
-  // the copied node is the project root, since every other row in the tree is
-  // by definition its descendant. addNode/bulkAddNodes mutate $tree_data.data
-  // in place, so once a root-subtree copy is pasted once, the still-live
-  // copied_task/copied_tasks reference has *grown* to include that paste. A
-  // second paste from the same clipboard entry (very natural right after
-  // duplicating a whole project into more than one place) then clones the
-  // already-grown tree, and each further paste roughly doubles the payload —
-  // this is what turns "copy a project, paste it a couple of times" into a
-  // save failure (huge, ever-growing write batch), not the paste failing on
-  // structural grounds (parents/order are always recomputed correctly from
-  // tree position, so a pasted root converts into an ordinary task cleanly).
-  //
-  // Fix: whenever we clone-for-insertion, also refresh the clipboard to a
-  // second, independent clone taken from the same pre-mutation source. That
-  // second clone is never attached to the live tree, so it can't alias future
-  // mutations — repeated pastes from one copy stay O(1) per paste instead of
-  // compounding. This is the single choke point for every paste trigger
-  // (context-menu "paste as child", Ctrl+V, and bulk paste all call this
-  // function), so fixing it here covers all of them.
   function handlePasteTask(event) {
-    if (application) return application.paste(event.detail.id);
-    const { id, path } = event.detail;
-    if (!id || !$tree_data?.data) return;
-    // 貼り付け先はクリックした行。多親ノードは行ごとに位置が違う。
-    const pastePath = rowFor(id, path)?.path;
-    if ($copied_tasks && $copied_tasks.length > 1) {
-      const sources = $copied_tasks;
-      const cloned = sources.map((n) => cloneWithNewIds(n));
-      $copied_tasks = sources.map((n) => cloneWithNewIds(n));
-      $copied_task = $copied_tasks[0] ?? null;
-      const data = bulkAddNodes(cloned, id, $tree_data.data, "append", pastePath);
-      $tree_data = { ...$tree_data, data };
-      closed_row_paths.expandNodeEverywhere(id);
-      if (cloned[0])
-        focusNewNode(cloned[0].id, pastePath ? `${pastePath}/${cloned[0].id}` : undefined);
-      return;
-    }
-    const source = $copied_task ?? $copied_tasks?.[0] ?? null;
-    if (!source) return;
-    const cloned = cloneWithNewIds(source);
-    $copied_task = cloneWithNewIds(source);
-    $copied_tasks = [$copied_task];
-    const data = addNode(cloned, id, $tree_data.data, "append", pastePath);
-    $tree_data = { ...$tree_data, data };
-    closed_row_paths.expandNodeEverywhere(id);
-    focusNewNode(cloned.id, pastePath ? `${pastePath}/${cloned.id}` : undefined);
-  }
-
-  function showTaskFolderOpenError(message) {
-    taskFolderOpenError = message;
-    if (taskFolderOpenErrorTimer) clearTimeout(taskFolderOpenErrorTimer);
-    taskFolderOpenErrorTimer = setTimeout(() => {
-      taskFolderOpenError = "";
-    }, 4000);
-  }
-
-  async function handleOpenTaskFolder(event) {
-    const { id } = event.detail;
-    const result = await workspace_store.openTaskFolder(id);
-    if (!result?.success) {
-      showTaskFolderOpenError(result?.error ?? "Task folderを開けませんでした");
-    }
+    return application.paste(event.detail.id);
   }
 
   // --- Bulk operation handlers ---------------------------------------------
 
   function handleBulkStatus(event) {
-    if (application) return application.updateMany({ status: event.detail.value });
-    if (!$tree_data?.data || selectionSize === 0) return;
-    const { value } = event.detail;
-    const data = bulkUpdateNodeData($tree_data.data, selectionSet, { status: value });
-    if (data && data !== $tree_data.data) {
-      $tree_data = { ...$tree_data, data };
-    }
+    return application.updateMany({ status: event.detail.value });
   }
 
   function handleBulkSetDate(event) {
-    if (application) return application.updateMany({ [event.detail.key]: event.detail.value });
-    if (!$tree_data?.data || selectionSize === 0) return;
-    const { key, value } = event.detail;
-    const data = bulkUpdateNodeData($tree_data.data, selectionSet, { [key]: value });
-    if (data && data !== $tree_data.data) {
-      $tree_data = { ...$tree_data, data };
-    }
+    return application.updateMany({ [event.detail.key]: event.detail.value });
   }
 
   function handleBulkClearDate(event) {
-    if (application) return application.updateMany({ [event.detail.key]: undefined });
-    if (!$tree_data?.data || selectionSize === 0) return;
-    const { key } = event.detail;
-    const data = bulkUpdateNodeData($tree_data.data, selectionSet, { [key]: undefined });
-    if (data && data !== $tree_data.data) {
-      $tree_data = { ...$tree_data, data };
-    }
+    return application.updateMany({ [event.detail.key]: undefined });
   }
 
-  function handleBulkMoveUp() {
-    if (application) return application.move("up");
-    if (!$tree_data?.data || !canSiblingMove) return;
-    const data = bulkMoveUp(selectionSet, $tree_data.data, bulkParentPath);
-    $tree_data = { ...$tree_data, data };
-  }
-
-  function handleBulkMoveDown() {
-    if (application) return application.move("down");
-    if (!$tree_data?.data || !canSiblingMove) return;
-    const data = bulkMoveDown(selectionSet, $tree_data.data, bulkParentPath);
-    $tree_data = { ...$tree_data, data };
-  }
-
-  function handleBulkIndent() {
-    if (application) return application.move("indent");
-    if (!$tree_data?.data || !canTreeOp) return;
-    const { tree_data: data, new_parent_ids } = bulkIndent(
-      selectionSet,
-      $tree_data.data,
-      bulkParentPath
-    );
-    $tree_data = { ...$tree_data, data };
-    for (const pid of new_parent_ids) {
-      closed_row_paths.expandNodeEverywhere(pid);
-    }
-  }
-
-  function handleBulkOutdent() {
-    if (application) return application.move("outdent");
-    if (!$tree_data?.data || !canTreeOp || !canBulkOutdent) return;
-    const data = bulkOutdent(selectionSet, $tree_data.data, bulkParentPath);
-    $tree_data = { ...$tree_data, data };
-  }
-
-  function handleBulkDuplicate() {
-    if (application) return application.copy();
-    if (!$tree_data?.data || selectionSize === 0) return;
-    const topLevelIds = getTopLevelSelection($tree_data.data, selectionSet);
-    const topNodes = topLevelIds.map((id) => getNode(id, $tree_data.data)).filter((n) => n);
-    if (topNodes.length === 0) return;
-    $copied_tasks = topNodes;
-    $copied_task = topNodes[0] ?? null;
-  }
+  const handleBulkMoveUp = () => application.move("up");
+  const handleBulkMoveDown = () => application.move("down");
+  const handleBulkIndent = () => application.move("indent");
+  const handleBulkOutdent = () => application.move("outdent");
+  const handleBulkDuplicate = () => application.copy();
 
   function handleBulkDelete() {
     if (!$tree_data?.data || selectionSize === 0) return;
     const rootId = $tree_data.data.id;
-    const targetIds = Array.from(selectionSet).filter((id) => id !== rootId);
+    const targetIds = Array.from(selectionSet).filter(
+      (id) => id !== rootId && !application.isProtected(id)
+    );
     if (targetIds.length === 0) return;
     // active 分はアーカイブ、archived 分は完全削除に自動振り分け（仕様）。
     const archiveIds = [];
@@ -1536,15 +1163,7 @@
     if (!$table_selected_id) return;
     if ((e.ctrlKey || e.metaKey) && (e.key === "c" || e.key === "C")) {
       e.preventDefault();
-      if (application) return application.copy();
-      if (selectionSize > 1 && $tree_data?.data) {
-        const topLevelIds = getTopLevelSelection($tree_data.data, selectionSet);
-        const topNodes = topLevelIds.map((id) => getNode(id, $tree_data.data)).filter((n) => n);
-        $copied_tasks = topNodes;
-        $copied_task = topNodes[0] ?? null;
-      } else {
-        handleCopyTask({ detail: { id: $table_selected_id } });
-      }
+      application.copy();
     } else if ((e.ctrlKey || e.metaKey) && (e.key === "v" || e.key === "V")) {
       e.preventDefault();
       handlePasteTask({ detail: { id: $table_selected_id } });
@@ -1553,7 +1172,7 @@
 
   function requestDelete(event) {
     const { id, path } = event.detail;
-    if (application && !isInMultiSelection(id)) {
+    if (!isInMultiSelection(id)) {
       const occurrencePath = path ?? $active_row_path;
       const state = application.archiveStateOf(id, occurrencePath);
       if (state.shared && !state.node && !state.edge) {
@@ -1567,38 +1186,23 @@
         return;
       }
     }
+    requestRemoval(id, "archive");
+  }
+
+  function requestPermanentDelete(event) {
+    requestRemoval(event.detail.id, "permanent");
+  }
+
+  function requestRemoval(id, mode) {
     if (isInMultiSelection(id)) {
       // bulk は自動振り分けに統一（active→archive、archived→完全削除）
       handleBulkDelete();
       return;
     }
     const node = getNode(id, $tree_data.data);
-    if (!node || node.id === $tree_data.data.id) {
-      return;
-    }
+    if (!node || node.id === $tree_data.data.id || application.isProtected(id)) return;
 
-    deleteMode = "archive";
-    deleteTargetId = id;
-    deleteTargetName = node.data.name;
-    bulkDeleteIsBulk = false;
-    bulkDeleteCount = 0;
-    bulkArchiveTargetIds = [];
-    bulkPermanentTargetIds = [];
-    showDeleteConfirm = true;
-  }
-
-  function requestPermanentDelete(event) {
-    const { id } = event.detail;
-    if (isInMultiSelection(id)) {
-      handleBulkDelete();
-      return;
-    }
-    const node = getNode(id, $tree_data.data);
-    if (!node || node.id === $tree_data.data.id) {
-      return;
-    }
-
-    deleteMode = "permanent";
+    deleteMode = mode;
     deleteTargetId = id;
     deleteTargetName = node.data.name;
     bulkDeleteIsBulk = false;
@@ -1609,31 +1213,13 @@
   }
 
   function requestRestore(event) {
-    if (application) {
-      const { id, path } = event.detail;
-      if (!isInMultiSelection(id)) {
-        // 辺だけのアーカイブと、ノードごとのアーカイブは画面では同じに見える。
-        // 立っている方を外す（両方立っていれば両方）。
-        return application.restoreOccurrence(id, path ?? $active_row_path);
-      }
-      return application.archive([...selectionSet], false);
-    }
     const { id, path } = event.detail;
-    if (isInMultiSelection(id)) {
-      if (!$tree_data?.data || selectionSize === 0) return;
-      const rootId = $tree_data.data.id;
-      const targets = new Set(Array.from(selectionSet).filter((tid) => tid !== rootId));
-      if (targets.size === 0) return;
-      const data = bulkRestoreNodes($tree_data.data, targets);
-      $tree_data = { ...$tree_data, data };
-      return;
+    if (!isInMultiSelection(id)) {
+      // 辺だけのアーカイブと、ノードごとのアーカイブは画面では同じに見える。
+      // 立っている方を外す（両方立っていれば両方）。
+      return application.restoreOccurrence(id, path ?? $active_row_path);
     }
-    const node = getNode(id, $tree_data.data);
-    if (!node || node.id === $tree_data.data.id) return;
-    // 復元はクリックした行の祖先だけを解除する（多親ノードで別の親側を
-    // 巻き添えにしない）。
-    $tree_data.data = restoreNode(id, $tree_data.data, rowFor(id, path)?.path);
-    $tree_data = { ...$tree_data, data: $tree_data.data };
+    return application.archive([...selectionSet], false);
   }
 
   function toggleDeleteConfirm() {
@@ -1648,67 +1234,21 @@
   }
 
   function confirmDelete() {
-    if (application) {
-      const archives = bulkDeleteIsBulk
-        ? bulkArchiveTargetIds
-        : deleteMode === "archive"
-          ? [deleteTargetId]
-          : [];
-      const removes = bulkDeleteIsBulk
-        ? bulkPermanentTargetIds
-        : deleteMode === "permanent"
-          ? [deleteTargetId]
-          : [];
-      void application.dispatch([
-        ...archives.map((nodeId) => ({ type: "update-node", nodeId, changes: { archived: true } })),
-        ...removes.map((nodeId) => ({ type: "delete-node", nodeId })),
-      ]);
-      clearSelection();
-      return;
-    }
-    if (bulkDeleteIsBulk) {
-      if (!$tree_data?.data) return;
-      let data = $tree_data.data;
-      if (bulkArchiveTargetIds.length > 0) {
-        data = bulkArchiveNodes(data, new Set(bulkArchiveTargetIds));
-      }
-      if (bulkPermanentTargetIds.length > 0) {
-        // 削除で最後の親を失うノードを拾うため、消す前にノードを掴んでおく。
-        const removedNodes = bulkPermanentTargetIds
-          .map((id) => getNode(id, data))
-          .filter((node) => node);
-        const removed = bulkRemoveNodes(data, new Set(bulkPermanentTargetIds));
-        if (removed) data = removed;
-        reattachOrphans(data, removedNodes);
-      }
-      $tree_data = { ...$tree_data, data };
-      clearSelection();
-      bulkDeleteIsBulk = false;
-      bulkDeleteCount = 0;
-      deleteMode = "archive";
-      bulkArchiveTargetIds = [];
-      bulkPermanentTargetIds = [];
-      return;
-    }
-    if (!deleteTargetId) {
-      return;
-    }
-    if (deleteMode === "permanent") {
-      const removedNode = getNode(deleteTargetId, $tree_data.data);
-      const data = rmNode(deleteTargetId, $tree_data.data);
-      // 消したノードの子が他に親を持たないなら、ルート直下へ付け直す（孤児を作らない）。
-      if (removedNode) reattachOrphans(data, [removedNode]);
-      $tree_data = { ...$tree_data, data };
-    } else {
-      const data = archiveNode(deleteTargetId, $tree_data.data);
-      $tree_data = { ...$tree_data, data };
-    }
-    if ($table_selected_id === deleteTargetId) {
-      clearSelection();
-    }
-    deleteTargetId = undefined;
-    deleteTargetName = "";
-    deleteMode = "archive";
+    const archives = bulkDeleteIsBulk
+      ? bulkArchiveTargetIds
+      : deleteMode === "archive"
+        ? [deleteTargetId]
+        : [];
+    const removes = bulkDeleteIsBulk
+      ? bulkPermanentTargetIds
+      : deleteMode === "permanent"
+        ? [deleteTargetId]
+        : [];
+    void application.dispatch([
+      ...archives.map((nodeId) => ({ type: "update-node", nodeId, changes: { archived: true } })),
+      ...removes.map((nodeId) => ({ type: "delete-node", nodeId })),
+    ]);
+    clearSelection();
   }
 
   $: deleteDialogHeader = (() => {
@@ -1742,12 +1282,12 @@
         lines.push(`${bulkPermanentTargetIds.length} 件を完全削除`);
       const body = lines.join(" / ");
       if (bulkPermanentTargetIds.length > 0) {
-        return `${body} します。\n${application ? "Workspaceの履歴に残っている間は「元に戻す」で復元できます。" : "完全削除分は取り消せません。"}`;
+        return `${body} します。\nWorkspaceの履歴に残っている間は「元に戻す」で復元できます。`;
       }
       return `${body} します。\n後でアーカイブ表示から復元できます。`;
     }
     if (deleteMode === "permanent") {
-      return `"${deleteTargetName}" を完全に削除しますか？\n${application ? "Workspaceの履歴に残っている間は「元に戻す」で復元できます。" : "この操作は取り消せません。"}`;
+      return `"${deleteTargetName}" を完全に削除しますか？\nWorkspaceの履歴に残っている間は「元に戻す」で復元できます。`;
     }
     return `"${deleteTargetName}" をアーカイブしますか？\n後でアーカイブ表示から復元できます。`;
   })();
@@ -1771,9 +1311,6 @@
     if (e.key === "Escape") handleBackgroundClick();
   }}
 >
-  {#if taskFolderOpenError}
-    <div class="TaskFolderOpenError" role="alert">{taskFolderOpenError}</div>
-  {/if}
   <TreeTableHeader
     bind:this={headerComponent}
     on:columnWidth={handleColumnWidth}
@@ -1831,9 +1368,6 @@
           canMoveDown={row.canMoveDown}
           canIndent={row.canIndent}
           canOutdent={row.canOutdent}
-          canOpenTaskFolder={!application &&
-            $selected_type === "WorkspaceProject" &&
-            Boolean($workspace_store.activeProjectDir)}
           bulkCanMove={canSiblingMove}
           bulkCanTreeOp={canTreeOp}
           bulkCanOutdent={canBulkOutdent}
@@ -1860,7 +1394,6 @@
           on:permanentDeleteTask={requestPermanentDelete}
           on:copyTask={handleCopyTask}
           on:pasteTask={handlePasteTask}
-          on:openTaskFolder={handleOpenTaskFolder}
         />
       {/if}
     {/each}
@@ -2076,19 +1609,6 @@
     height: 100%;
     background-color: var(--theme-color-Primary-main);
     opacity: 0.9;
-  }
-  .TaskFolderOpenError {
-    position: absolute;
-    top: var(--sp2);
-    right: var(--sp2);
-    z-index: 10001;
-    max-width: min(21rem, calc(100% - var(--sp4)));
-    padding: var(--sp1) var(--sp2);
-    border-radius: var(--shape-xs);
-    background-color: var(--theme-color-Error-main);
-    color: #fff;
-    font-size: var(--font-body-sm);
-    box-shadow: var(--elevation-1);
   }
   .EmptyState {
     display: flex;

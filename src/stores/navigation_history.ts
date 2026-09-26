@@ -16,22 +16,16 @@ import {
  * 1 件の「ページ」エントリ。
  *
  * 「ページ」は本アプリでは `(selected_type, selected_id)` を主軸に、
- * Workspace 側の `activeWorkspacePath` / `activeProjectDir` を含めて
- * 一意に同定する。さらに「ページ内で選択していたノード行」も
- * `tableSelectedId` として併せて保持し、戻ったときの TaskDetail / Memo の
- * コンテキストを復元する。
+ * `activeWorkspacePath` を含めて一意に同定する。さらに「ページ内で選択して
+ * いたノード行」も `tableSelectedId` として併せて保持し、戻ったときの
+ * TaskDetail / Memo のコンテキストを復元する。
  *
- * - `Projects` / `WorkspaceProject` の `selectedId` は project root の id
- * - `Inbox` の `selectedId` は `INBOX_SELECTED_ID` センチネル
- * - `Info` の `selectedId` は info ページ id
- * - `projectDir` は `WorkspaceProject` のときのみ意味があり、それ以外では null
- * - `workspacePath` は `WorkspaceProject` / `Projects` 系で意味があり、Inbox/Info でも参考値として持つ（復元時は WorkspaceProject のときだけ反映）
- * - `tableSelectedId` は `Projects` / `WorkspaceProject` のときのみ意味があり、ページ内のノード行選択を表す
+ * - `selectedId` は開いているプロジェクト（スコープ）のノード id
+ * - `tableSelectedId` はページ内のノード行選択
  */
 export interface NavigationEntry {
   selectedType: SelectedType;
   selectedId: string | undefined;
-  projectDir: string | null;
   workspacePath: string | null;
   tableSelectedId: string | undefined;
   occurrencePath?: string;
@@ -79,7 +73,6 @@ function pageEqual(a: NavigationEntry, b: NavigationEntry): boolean {
   return (
     a.selectedType === b.selectedType &&
     a.selectedId === b.selectedId &&
-    a.projectDir === b.projectDir &&
     a.workspacePath === b.workspacePath
   );
 }
@@ -117,10 +110,9 @@ function isTransientRedirect(entry: NavigationEntry): boolean {
  * 「同じページの、保存先がまだ解決していなかった版」かどうか。
  *
  * 起動直後やワークスペース切替の途中では `selected_type` / `selected_id` が
- * 先に決まり、`workspace_store` の `activeWorkspacePath` / `activeProjectDir`
- * は async な読み込みの後で埋まる。`pageEqual` はこの 2 つも同一性に含めるので、
- * 素直に記録すると「保存先 null 版」と「保存先あり版」が別ページとして 2 件
- * 積まれてしまう。
+ * 先に決まり、`workspace_store` の `activeWorkspacePath` は async な読み込みの
+ * 後で埋まる。`pageEqual` はこれも同一性に含めるので、素直に記録すると
+ * 「保存先 null 版」と「保存先あり版」が別ページとして 2 件積まれてしまう。
  *
  * その結果、一度も遷移していないのに `canGoBack` が true になり、しかも
  * 戻った先が現在と同じページなので `navigateTo` が何のストアも動かせず、
@@ -134,15 +126,7 @@ function isLocationFillIn(current: NavigationEntry, next: NavigationEntry): bool
   if (current.selectedType !== next.selectedType) return false;
   if (current.selectedId !== next.selectedId) return false;
 
-  const workspaceFilled = current.workspacePath === null && next.workspacePath !== null;
-  const projectFilled = current.projectDir === null && next.projectDir !== null;
-  if (!workspaceFilled && !projectFilled) return false;
-
-  // 埋まった側以外は一致している必要がある。別ワークスペース・別プロジェクトへの
-  // 移動を「埋め直し」と誤判定しないため。
-  const workspaceConsistent = workspaceFilled || current.workspacePath === next.workspacePath;
-  const projectConsistent = projectFilled || current.projectDir === next.projectDir;
-  return workspaceConsistent && projectConsistent;
+  return current.workspacePath === null && next.workspacePath !== null;
 }
 
 function createNavigationHistory(): NavigationHistoryStore {
@@ -161,13 +145,10 @@ function createNavigationHistory(): NavigationHistoryStore {
   let pendingNavigation: NavigationEntry | null = null;
 
   function currentEntry(): NavigationEntry {
-    const type = get(selected_type);
-    const ws = get(workspace_store);
     return {
-      selectedType: type,
+      selectedType: get(selected_type),
       selectedId: get(selected_id),
-      projectDir: type === "WorkspaceProject" ? (ws.activeProjectDir ?? null) : null,
-      workspacePath: ws.activeWorkspacePath ?? null,
+      workspacePath: get(workspace_store).activeWorkspacePath ?? null,
       tableSelectedId: get(table_selected_id),
       occurrencePath: get(active_row_path),
     };
@@ -282,45 +263,25 @@ function createNavigationHistory(): NavigationHistoryStore {
     }
 
     // ページ自体が変わるナビゲーション。ページ内のノード行も復元したい場合、
-    // loader が読みに行く pendingTaskDetailSelection にヒントを置く。
-    // `tableSelectedId` が未定義のときは触らない（loader は
-    // selectOnly(undefined) に倒す）。
-    if (
-      (target.selectedType === "Projects" || target.selectedType === "WorkspaceProject") &&
-      target.selectedId &&
-      target.tableSelectedId
-    ) {
+    // ページ（WorkspaceTreeGridPage）が読みに行く pendingTaskDetailSelection に
+    // ヒントを置く。
+    if (target.selectedId && target.tableSelectedId) {
       setPendingTaskDetailSelection({
         projectId: target.selectedId,
         taskId: target.tableSelectedId,
-        selectedType: target.selectedType,
-        projectDir: target.projectDir,
         occurrencePath: target.occurrencePath,
       });
     } else {
       setPendingTaskDetailSelection(undefined);
     }
 
-    // activeWorkspacePath を先に戻す。workspace_store.setActive は disk から
-    // projects 一覧を再読込する async 関数で、その間 activeWorkspacePath は
-    // 旧値のまま。サイドバーの projects 表示は遅延更新になるが、
-    // tree の読み込みは activeProjectDir に直接依存するため問題ない。
+    // activeWorkspacePath を先に戻す。
     const currentWorkspacePath = get(workspace_store).activeWorkspacePath ?? null;
     if (target.workspacePath && target.workspacePath !== currentWorkspacePath) {
       // fire-and-forget。失敗しても画面遷移自体は進む。
       void workspace_store.setActive(target.workspacePath);
     }
 
-    // WorkspaceProject の場合は activeProjectDir を選択 store より先に戻す。
-    // MenuList.selectWorkspaceProject() と同じ順序にしておかないと
-    // selected_id の subscriber (loadWorkspaceData) が古い activeProjectDir
-    // を読んで、他プロジェクトのノードから unknown ノードを作ってしまう。
-    if (target.selectedType === "WorkspaceProject" && target.projectDir) {
-      workspace_store.setActiveProject(target.projectDir);
-    }
-    // 順序は selected_type を先にしておく。読み込み側 (ui.ts) は両方の変更を
-    // microtask で 1 回にまとめてさばくため、どちらが先でも結果は同じだが
-    // type が先のほうが「同 type 内での id 切替」と一貫した順序になる。
     selected_type.set(target.selectedType);
     selected_id.set(target.selectedId);
   }
@@ -384,8 +345,7 @@ function createNavigationHistory(): NavigationHistoryStore {
   };
 }
 
-// eslint-disable-next-line prefer-const
-export let navigation_history: NavigationHistoryStore = createNavigationHistory();
+export const navigation_history: NavigationHistoryStore = createNavigationHistory();
 
 /** 戻る操作が可能か。Header の戻るボタン disabled 判定に使う。 */
 export const canGoBack: Readable<boolean> = derived(navigation_history, (state) => state.index > 0);

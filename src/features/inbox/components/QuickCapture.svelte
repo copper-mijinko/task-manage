@@ -1,7 +1,6 @@
 <script>
   import { afterUpdate, tick, createEventDispatcher } from "svelte";
   import { workspace_store } from "@features/workspace/stores/workspace";
-  import { inbox_store } from "@features/inbox/stores/inbox";
   import {
     workspaceApplication,
     workspaceNavigation,
@@ -51,9 +50,7 @@
     }
     busy = true;
     errorMessage = "";
-    const result = $workspaceNavigation
-      ? await workspaceApplication.capture($workspace_store.activeWorkspacePath, name)
-      : await inbox_store.addItem({ name });
+    const result = await workspaceApplication.capture($workspace_store.activeWorkspacePath, name);
     busy = false;
     if (!result.success) {
       errorMessage = result.error || "追加に失敗しました";

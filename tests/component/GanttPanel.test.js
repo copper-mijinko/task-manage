@@ -1,16 +1,18 @@
-﻿import { fireEvent, render } from "@testing-library/svelte";
+import { fireEvent } from "@testing-library/svelte";
 import { get } from "svelte/store";
 import { tick } from "svelte";
 
 import GanttPanel from "@features/gantt/components/GanttPanel.svelte";
-import {
-  closed_row_paths,
-  filtered_data,
-  ganttScale,
-  ganttScrollTop,
-  theme,
-  tree_data,
-} from "@stores";
+import { ganttScale, ganttScrollTop, theme } from "@stores";
+import { renderWithGraph, settle } from "../helpers/render_with_graph.js";
+
+let project;
+let backend;
+async function renderGantt(tree = project) {
+  const result = await renderWithGraph(GanttPanel, { tree });
+  backend = result.backend;
+  return result;
+}
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -86,11 +88,7 @@ function getTimelineWidthRem(container) {
 
 describe("GanttPanel", () => {
   beforeEach(() => {
-    const projectData = createProjectData();
-
-    tree_data.set(projectData);
-    filtered_data.set(projectData.data);
-    closed_row_paths.set(new Set());
+    project = createProjectData();
     ganttScale.set("day");
     ganttScrollTop.set(0);
     theme.set("light");
@@ -101,7 +99,7 @@ describe("GanttPanel", () => {
   });
 
   test("shows a translucent create preview while dragging a new range", async () => {
-    const { container } = render(GanttPanel);
+    const { container } = await renderGantt();
     mockTimelineViewport(container);
 
     const row = container.querySelector('[data-row-id="task-1"]');
@@ -111,18 +109,18 @@ describe("GanttPanel", () => {
     await tick();
 
     expect(container.querySelector(".CreatePreview")).toBeInTheDocument();
-    expect(get(tree_data).data.children[0].data["start date"]).toBeUndefined();
+    expect(backend.node("task-1").startDate).toBeUndefined();
 
     dispatchPointerEvent(document, "pointerup", { clientX: 220 });
-    await tick();
+    await settle();
 
     expect(container.querySelector(".CreatePreview")).not.toBeInTheDocument();
-    expect(get(tree_data).data.children[0].data["start date"]).toBeDefined();
-    expect(get(tree_data).data.children[0].data["due date"]).toBeDefined();
+    expect(backend.node("task-1").startDate).toBeDefined();
+    expect(backend.node("task-1").dueDate).toBeDefined();
   });
 
   test("renders day header date and weekday on separate lines", async () => {
-    const { container } = render(GanttPanel);
+    const { container } = await renderGantt();
     await tick();
 
     const headerCell = container.querySelector(".HeaderCell");
@@ -132,7 +130,7 @@ describe("GanttPanel", () => {
   });
 
   test("renders a left aligned gantt title row with scale buttons", async () => {
-    const { container, getByRole } = render(GanttPanel);
+    const { container, getByRole } = await renderGantt();
     await tick();
 
     const title = container.querySelector(".GanttTitle");
@@ -149,21 +147,19 @@ describe("GanttPanel", () => {
   test("uses the dark theme header color variant when the app is dark", async () => {
     theme.set("dark");
 
-    const { container } = render(GanttPanel);
+    const { container } = await renderGantt();
     await tick();
 
     expect(container.querySelector(".GanttRoot")).toHaveClass("DarkTheme");
   });
 
   test("rescales task bar width when switching between day week and month views", async () => {
-    const projectData = createProjectData({
+    project = createProjectData({
       startDate: "2030-01-01",
       dueDate: "2030-01-07",
     });
-    tree_data.set(projectData);
-    filtered_data.set(projectData.data);
 
-    const { container } = render(GanttPanel);
+    const { container } = await renderGantt();
     await tick();
 
     const dayWidth = getBarWidthRem(container);
@@ -184,17 +180,16 @@ describe("GanttPanel", () => {
   }, 10_000);
 
   test("builds timeline range from today and visible task start and due dates", async () => {
-    vi.useFakeTimers();
+    // 時刻だけを固定する（描画の待ち合わせはタイマーを使う）。
+    vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date(2030, 0, 1, 9));
 
-    const projectData = createProjectData({
+    project = createProjectData({
       startDate: "2029-12-20",
       dueDate: "2030-08-01",
     });
-    tree_data.set(projectData);
-    filtered_data.set(projectData.data);
 
-    const { container } = render(GanttPanel);
+    const { container } = await renderGantt();
     await tick();
 
     const expectedStart = new Date(2029, 10, 20).getTime();

@@ -9,21 +9,6 @@ function createWorkspaceApplication({ authorize, initialize, repository, publish
   }
   return {
     read: prepare,
-    async readInbox(workspacePath) {
-      const graph = await prepare(workspacePath);
-      const root =
-        graph.nodes[graph.inboxId] ??
-        Object.values(graph.nodes).find((node) => node.name.toLowerCase() === "inbox");
-      const tasks = root
-        ? Object.values(graph.nodes).filter(
-            (node) => node.id === root.id || node.parents.some((parent) => parent.id === root.id)
-          )
-        : [];
-      return {
-        rootId: root?.id ?? null,
-        tasks: Object.fromEntries(tasks.map((node) => [node.id, node])),
-      };
-    },
     async execute({ workspacePath, command, origin = "tree", expectedRevision }) {
       await prepare(workspacePath);
       const result = await repository.executeWorkspaceGraphCommand(
@@ -43,6 +28,20 @@ function createWorkspaceApplication({ authorize, initialize, repository, publish
         direction === "undo" ? "undoWorkspaceGraph" : "redoWorkspaceGraph"
       ](workspacePath, expectedRevision);
       if (result.changed) publish(workspacePath, result.graph);
+      return result;
+    },
+    async listMarkdownImports(workspacePath) {
+      await prepare(workspacePath);
+      return repository.listMarkdownImportSources(workspacePath);
+    },
+    async importMarkdown({ workspacePath, dirNames, expectedRevision }) {
+      await prepare(workspacePath);
+      const result = await repository.importMarkdownProjects(
+        workspacePath,
+        Array.isArray(dirNames) ? dirNames.map(String) : [],
+        expectedRevision
+      );
+      publish(workspacePath, result.graph);
       return result;
     },
     async saveAsset({ workspacePath, nodeId, fileName, bytes }) {

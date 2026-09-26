@@ -3,11 +3,11 @@
   import { writable } from "svelte/store";
   import { TREEGRID_APPLICATION } from "@features/workspace/application/treegrid";
   const application = getContext(TREEGRID_APPLICATION);
-  const applicationClipboard = application?.copied ?? writable([]);
+  const applicationClipboard = application.copied;
   import { ripple, tooltip, dismissAllTooltips } from "@lib/actions";
   import TaskMenu from "@features/tasks/components/TaskMenu.svelte";
   import { pageSearchQuery } from "@features/search/stores/search";
-  import { copied_task, copied_tasks, pending_rename_id } from "@stores/ui";
+  import { pending_rename_id } from "@stores/ui";
   import { activePanelId } from "@stores/panel_coordinator";
 
   export let text;
@@ -20,7 +20,6 @@
   export let canMoveDown = false;
   export let canIndent = false;
   export let canOutdent = false;
-  export let canOpenTaskFolder = false;
   export let nodePath = "";
   /** この行が指すノードの id。作成直後の rename ハンドオフ照合に使う。 */
   export let nodeId = "";
@@ -110,11 +109,7 @@
       {
         title: "子ノードとして貼り付け",
         action: "pasteTask",
-        disabled:
-          archived ||
-          (application
-            ? $applicationClipboard.length === 0
-            : $copied_task === null && $copied_tasks.length === 0),
+        disabled: archived || $applicationClipboard.length === 0,
         icon: {
           viewBox: "0 0 24 24",
           path: "M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2",
@@ -174,24 +169,6 @@
           path: "M10 9L5 14L10 19V16H16V12H10V9ZM10 6H20V8H10V6ZM10 16H20V18H10V16Z",
         },
       },
-    ],
-    // 6. Detail — anchor-only; disabled in multi.
-    // Note: "show details" (open task detail window) was moved to the
-    // TaskDetail Card header so the row menu doesn't duplicate the action.
-    [
-      ...(canOpenTaskFolder
-        ? [
-            {
-              title: "フォルダーを開く",
-              action: "openTaskFolder",
-              disabled: isMulti,
-              icon: {
-                viewBox: "0 0 24 24",
-                path: "M3 7.5C3 6.4 3.9 5.5 5 5.5H9.4L11.2 7.3H19C20.1 7.3 21 8.2 21 9.3V10.5M3.4 10.5H20.6L18.8 18.5C18.6 19.4 17.8 20 16.9 20H5.5C4.6 20 3.8 19.4 3.6 18.5L2.3 12C2.1 11.2 2.7 10.5 3.4 10.5Z",
-              },
-            },
-          ]
-        : []),
     ],
     // 7. Delete / Restore — bulk-aware when the row is part of the multi-selection.
     // archived 行では「復元」「完全に削除」を出す。それ以外は通常の delete
@@ -407,8 +384,6 @@
     const data = event.detail;
     if (data && data.action === "rename") {
       toggle();
-    } else if (data && data.action === "openTaskFolder") {
-      dispatch("openTaskFolder");
     } else if (data?.action) {
       dispatch(data.action, data);
     }
@@ -509,7 +484,6 @@
     on:moveDown={handleMenuAction}
     on:indentTask={handleMenuAction}
     on:outdentTask={handleMenuAction}
-    on:openTaskFolder={handleMenuAction}
     on:deleteTask={handleMenuAction}
     on:restoreTask={handleMenuAction}
     on:permanentDeleteTask={handleMenuAction}

@@ -1,63 +1,22 @@
-﻿import { get } from "svelte/store";
-import { describe, expect, test, beforeEach } from "vitest";
-
+import { get } from "svelte/store";
+import { beforeEach, describe, expect, test } from "vitest";
 import { active_tag, tag_index } from "@features/memos/stores/tags";
-import { selected_type } from "@stores/ui";
-import { tree_data } from "@features/tasks/stores/tree";
-
-function createProjectData(tags = ["design"]) {
-  return {
-    headers: [{ name: "name", default_ratio: 10 }],
-    data: {
-      id: "project-1",
-      data: {
-        name: "Sample Project",
-        status: "Open",
-        "due date": undefined,
-        memo: [],
-      },
-      children: [
-        {
-          id: "task-1",
-          data: {
-            name: "Task",
-            status: "Open",
-            "due date": undefined,
-            tags,
-          },
-          children: [],
-        },
-      ],
-    },
-  };
-}
 
 describe("tag stores", () => {
   beforeEach(() => {
+    tag_index.set(new Map([["design", new Set(["task-1"])]]));
     active_tag.set(null);
-    selected_type.set("Projects");
-    tree_data.set(createProjectData());
   });
 
-  // 旧メモのタグは、取り込みのときにそのノードのタグとして引き継がれる。
-  // 索引の持ち主はノードだけになった。
-  test("indexes node tags by node id", () => {
-    expect(get(tag_index).get("design")).toEqual(new Set(["task-1"]));
-  });
-
-  test("clears the active tag when switching between project storage scopes", () => {
+  test("keeps the active tag while the index still has it", () => {
     active_tag.set("design");
-
-    selected_type.set("WorkspaceProject");
-
-    expect(get(active_tag)).toBeNull();
+    tag_index.set(new Map([["design", new Set(["task-2"])]]));
+    expect(get(active_tag)).toBe("design");
   });
 
-  test("clears the active tag when it no longer exists in the current tag index", () => {
+  test("clears the active tag when no node carries it any more", () => {
     active_tag.set("design");
-
-    tree_data.set(createProjectData([]));
-
+    tag_index.set(new Map());
     expect(get(active_tag)).toBeNull();
   });
 });

@@ -1,5 +1,6 @@
 import { derived, get, writable } from "svelte/store";
 import * as platform from "@lib/ipc/platform";
+import { saveStatus } from "@stores/save_status";
 import type {
   GraphCommandOrigin,
   WorkspaceGraph,
@@ -31,8 +32,24 @@ platform.onWorkspaceGraphUpdated((event) => {
   );
 });
 
+/**
+ * 書き込み操作を 1 本の列に並べる。ヘッダーの保存状態もここで知らせる
+ * （書き込み中 → 保存済み、失敗したら保存失敗）。
+ */
 async function run<T>(fn: () => Promise<T>): Promise<T> {
-  const next = operation.catch(() => undefined).then(fn);
+  const next = operation
+    .catch(() => undefined)
+    .then(async () => {
+      saveStatus.set("writing");
+      try {
+        const result = await fn();
+        saveStatus.set("saved");
+        return result;
+      } catch (error) {
+        saveStatus.set("error");
+        throw error;
+      }
+    });
   operation = next;
   return next;
 }

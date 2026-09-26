@@ -79,20 +79,11 @@ describe("workspace path authorization", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
-  it("accepts a registered workspace and its direct project", async () => {
+  it("accepts a registered workspace and rejects others", async () => {
     await expect(authorizer.assertKnownWorkspace(workspaceDir)).resolves.toBe(
       path.resolve(workspaceDir)
     );
-    await expect(authorizer.assertKnownProject(projectDir)).resolves.toBe(path.resolve(projectDir));
-  });
-
-  it("rejects outside paths and nested directories as projects", async () => {
-    const nestedDir = path.join(projectDir, "task-a");
-    fs.mkdirSync(nestedDir);
-    fs.writeFileSync(path.join(nestedDir, "_project.md"), "---\nid: nested\n---\n");
-
-    await expect(authorizer.assertKnownProject(outsideDir)).rejects.toThrow(/registered workspace/);
-    await expect(authorizer.assertKnownProject(nestedDir)).rejects.toThrow(/direct child/);
+    await expect(authorizer.assertKnownWorkspace(outsideDir)).rejects.toThrow(/not registered/);
   });
 
   it("confines opened files to registered workspace real paths", async () => {

@@ -7,7 +7,6 @@ import { _electron as electron } from "@playwright/test";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.resolve(scriptDir, "..");
-const fixtureDir = path.join(repositoryRoot, "tests", "e2e", "fixtures");
 const requestedSamples = Number.parseInt(process.env.PERF_SAMPLES ?? "3", 10);
 const sampleCount =
   Number.isFinite(requestedSamples) && requestedSamples > 0 ? requestedSamples : 3;
@@ -47,10 +46,46 @@ function summarize(values) {
   };
 }
 
+/** project-1 と task-1 を持つワークスペースを作り、設定に登録する。 */
+function seedWorkspace(tempDir) {
+  const workspacePath = path.join(tempDir, "workspace");
+  fs.mkdirSync(path.join(workspacePath, ".task-manage"), { recursive: true });
+  const node = (id, name, parentId) => ({
+    id,
+    name,
+    parents: parentId ? [{ id: parentId, order: 0 }] : [],
+    createdAt: "2026-01-01",
+  });
+  const nodes = [
+    node("root", "Workspace"),
+    node("project-1", "Sample Project", "root"),
+    node("task-1", "First Task", "project-1"),
+  ];
+  const graph = {
+    schemaVersion: 1,
+    workspaceId: "performance",
+    rootId: "root",
+    revision: 0,
+    nodes: Object.fromEntries(nodes.map((n) => [n.id, n])),
+  };
+  fs.writeFileSync(
+    path.join(workspacePath, ".task-manage", "graph-v1.json"),
+    JSON.stringify({ schemaVersion: 1, graph, undo: [], redo: [] })
+  );
+  fs.writeFileSync(
+    path.join(tempDir, "meta.json"),
+    JSON.stringify({
+      theme: "dark",
+      workspaces: [{ label: "Performance", path: workspacePath }],
+      activeWorkspace: workspacePath,
+    })
+  );
+  return workspacePath;
+}
+
 async function measureSample() {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "task-manage-performance-"));
-  fs.copyFileSync(path.join(fixtureDir, "db.json"), path.join(tempDir, "db.json"));
-  fs.copyFileSync(path.join(fixtureDir, "meta.json"), path.join(tempDir, "meta.json"));
+  const workspacePath = seedWorkspace(tempDir);
 
   const launchEnv = { ...process.env };
   delete launchEnv.ELECTRON_RUN_AS_NODE;
@@ -86,16 +121,17 @@ async function measureSample() {
 
     const detailStartedAt = performance.now();
     const detailWindowPromise = electronApp.waitForEvent("window");
-    await mainWindow.evaluate(() => {
+    await mainWindow.evaluate((workspacePath) => {
       window.electronAPI.openTaskDetailWindow({
+        workspacePath,
         projectId: "project-1",
         taskId: "task-1",
         taskName: "First Task",
         requestedAtEpochMs: Date.now(),
       });
-    });
+    }, workspacePath);
     const detailWindow = await detailWindowPromise;
-    await detailWindow.locator(".CardHeaderTitle", { hasText: "First Task" }).waitFor({
+    await detailWindow.getByRole("heading", { name: /First Task/ }).waitFor({
       state: "visible",
     });
     const detailInteractiveMs = roundTiming(performance.now() - detailStartedAt);

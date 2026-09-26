@@ -1,4 +1,4 @@
-﻿<script context="module" lang="ts">
+<script context="module" lang="ts">
   // marked.use() の設定はモジュール読込時に一度だけ行う (下の instance <script> 参照)。
   import { Marked } from "marked";
   const marked = new Marked();
@@ -97,8 +97,6 @@
   export let memoTitles: string[] = [];
   export let currentMemoTitle = "";
   export let openMemoLink: ((title: string) => void) | undefined = undefined;
-  export let workspaceProjectDir: string | null = null;
-  export let taskId: string | null = null;
   export let saveImage: ((file: File) => Promise<string | null>) | undefined = undefined;
   export let resolveAsset: ((relativePath: string) => Promise<string | null>) | undefined =
     undefined;
@@ -365,14 +363,6 @@
     if (!readOnly) void startEdit("edit");
   }
 
-  function canSavePastedImages(): boolean {
-    return Boolean(
-      saveImage ||
-      (workspaceProjectDir && taskId && platform.isPlatformAvailable()) ||
-      !workspaceProjectDir
-    );
-  }
-
   let imageInput: HTMLInputElement;
   let imageTarget: EditorView | null = null;
   async function insertChosenImage(event: Event) {
@@ -382,9 +372,7 @@
     input.value = "";
     if (!file || !target || target !== view) return;
     try {
-      const src = canSavePastedImages()
-        ? await persistPastedImage(file)
-        : await imageToDataUrl(file);
+      const src = await persistPastedImage(file);
       if (src && target === view) {
         insertTextAtSelection(target, `${buildImageMarkdown(src, file.name)}\n`);
         target.focus();
@@ -403,35 +391,14 @@
     });
   }
 
+  /** 貼り付けた画像を保存して、本文に書く参照を返す。保存先が無ければ data URL。 */
   async function persistPastedImage(file: File): Promise<string | null> {
-    if (saveImage) return saveImage(file);
-    if (!workspaceProjectDir || !taskId) {
-      return readFileAsDataUrl(file);
-    }
-
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    const result = await platform.wsSaveMemoImage(
-      workspaceProjectDir,
-      taskId,
-      bytes,
-      file.type || "image/png"
-    );
-
-    return result.success ? (result.path ?? null) : null;
+    return saveImage ? saveImage(file) : readFileAsDataUrl(file);
   }
 
   function buildImageMarkdown(relativePath: string, label = ""): string {
     const alt = label.replace(/\.[^.]+$/, "").trim();
     return alt ? `![${alt}](${relativePath})` : `![](${relativePath})`;
-  }
-
-  function imageToDataUrl(file: File): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = () => reject(new Error("Failed to read image file"));
-      reader.readAsDataURL(file);
-    });
   }
 
   function insertTextAtSelection(editorView: EditorView, text: string) {
@@ -1194,9 +1161,7 @@
   }
 
   async function resolveImageSources(html: string): Promise<string> {
-    if (!resolveAsset && (!workspaceProjectDir || !taskId || !platform.isPlatformAvailable())) {
-      return html;
-    }
+    if (!resolveAsset) return html;
 
     const template = document.createElement("template");
     template.innerHTML = html;
@@ -1209,9 +1174,7 @@
           return;
         }
 
-        const resolved = resolveAsset
-          ? await resolveAsset(src)
-          : ((await platform.wsResolveMemoAsset(workspaceProjectDir!, taskId!, src)).url ?? null);
+        const resolved = await resolveAsset(src);
         if (resolved) {
           image.setAttribute("src", resolved);
         } else {
@@ -1731,12 +1694,7 @@
 
           event.preventDefault();
           void (async () => {
-            let imageSrc: string | null;
-            if (canSavePastedImages()) {
-              imageSrc = await persistPastedImage(file);
-            } else {
-              imageSrc = await imageToDataUrl(file);
-            }
+            const imageSrc = await persistPastedImage(file);
             if (!imageSrc || view !== editorView) {
               return;
             }

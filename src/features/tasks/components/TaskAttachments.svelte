@@ -1,17 +1,13 @@
 <script>
   import { getContext } from "svelte";
   import { TREEGRID_APPLICATION } from "@features/workspace/application/treegrid";
-  const application = getContext(TREEGRID_APPLICATION);
-
   import IconButton from "@lib/primitives/IconButton.svelte";
-  import * as platform from "@lib/ipc/platform";
   import TaskMenu from "./TaskMenu.svelte";
 
+  const application = getContext(TREEGRID_APPLICATION);
+
   export let attachments = [];
-  export let isWorkspaceProject = false;
-  export let workspaceProjectDir = null;
   export let taskId = null;
-  export let onAttachmentsChange = undefined;
   export let readOnly = false;
 
   let fileInput;
@@ -25,14 +21,12 @@
   };
 
   $: attachmentList = Array.isArray(attachments) ? attachments : [];
-  $: canUseAttachments = Boolean(
-    application ? taskId : isWorkspaceProject && workspaceProjectDir && taskId
-  );
+  $: canUseAttachments = Boolean(taskId);
   $: attachmentMenuItems = [
     { title: "開く", action: "open" },
     { title: "プログラムから開く", action: "openWith" },
   ];
-  $: attachTooltip = canUseAttachments ? "添付を追加" : "ワークスペースプロジェクトで利用できます";
+  $: attachTooltip = canUseAttachments ? "添付を追加" : "ノードを選ぶと添付できます";
   $: isDense = attachmentList.length > 8;
 
   function attachmentPath(attachment) {
@@ -52,10 +46,6 @@
     return `${value.toFixed(precision)} ${units[unitIndex]}`;
   }
 
-  function updateAttachments(nextAttachments) {
-    onAttachmentsChange?.(nextAttachments);
-  }
-
   function chooseFiles() {
     if (!canUseAttachments || isBusy || readOnly) return;
     errorMessage = "";
@@ -71,51 +61,21 @@
 
   async function saveFiles(files) {
     if (readOnly || isBusy || !canUseAttachments) return;
-    if (application) {
-      const id = taskId;
-      const existing = [...attachments];
-      isBusy = true;
-      errorMessage = "";
-      try {
-        const added = [];
-        for (const file of Array.from(files || [])) {
-          const relativePath = await application.saveAsset(id, file);
-          added.push({ id: crypto.randomUUID(), name: file.name, relativePath, size: file.size });
-        }
-        await application.update(id, { attachments: [...existing, ...added] });
-      } catch (e) {
-        errorMessage = e.message;
-      } finally {
-        isBusy = false;
-      }
-      return;
-    }
-    const fileList = Array.from(files ?? []).filter((file) => file?.arrayBuffer);
-    if (!canUseAttachments || fileList.length === 0) return;
-
+    const fileList = Array.from(files ?? []);
+    if (fileList.length === 0) return;
+    const id = taskId;
+    const existing = [...attachmentList];
     isBusy = true;
     errorMessage = "";
-    const savedAttachments = [];
-
     try {
+      const added = [];
       for (const file of fileList) {
-        const bytes = new Uint8Array(await file.arrayBuffer());
-        const result = await platform.wsSaveTaskAttachment(
-          workspaceProjectDir,
-          taskId,
-          file.name,
-          bytes
-        );
-        if (!result?.success || !result.attachment) {
-          errorMessage = result?.error ?? "添付を保存できませんでした";
-          continue;
-        }
-        savedAttachments.push(result.attachment);
+        const relativePath = await application.saveAsset(id, file);
+        added.push({ id: crypto.randomUUID(), name: file.name, relativePath, size: file.size });
       }
-
-      if (savedAttachments.length > 0) {
-        updateAttachments([...attachmentList, ...savedAttachments]);
-      }
+      await application.update(id, { attachments: [...existing, ...added] });
+    } catch (e) {
+      errorMessage = e.message;
     } finally {
       isBusy = false;
     }
@@ -159,49 +119,13 @@
     await saveFiles(event.dataTransfer?.files);
   }
 
-  async function openAttachment(attachment) {
-    if (application) {
-      try {
-        closeAttachmentMenu();
-        await application.openAsset(taskId, attachmentPath(attachment));
-      } catch (e) {
-        errorMessage = e.message;
-      }
-      return;
-    }
-    if (!canUseAttachments || isBusy) return;
+  async function openAttachment(attachment, chooseProgram = false) {
     closeAttachmentMenu();
     errorMessage = "";
-    const result = await platform.wsOpenTaskAttachment(
-      workspaceProjectDir,
-      taskId,
-      attachmentPath(attachment)
-    );
-    if (!result?.success) {
-      errorMessage = result?.error ?? "添付を開けませんでした";
-    }
-  }
-
-  async function openAttachmentWith(attachment) {
-    if (application) {
-      try {
-        closeAttachmentMenu();
-        await application.openAsset(taskId, attachmentPath(attachment), true);
-      } catch (e) {
-        errorMessage = e.message;
-      }
-      return;
-    }
-    if (!canUseAttachments || isBusy) return;
-    closeAttachmentMenu();
-    errorMessage = "";
-    const result = await platform.wsOpenTaskAttachmentWith(
-      workspaceProjectDir,
-      taskId,
-      attachmentPath(attachment)
-    );
-    if (!result?.success) {
-      errorMessage = result?.error ?? "プログラムから開けませんでした";
+    try {
+      await application.openAsset(taskId, attachmentPath(attachment), chooseProgram);
+    } catch (e) {
+      errorMessage = e.message;
     }
   }
 
@@ -237,42 +161,22 @@
 
   function handleAttachmentMenuOpenWith() {
     if (attachmentMenu.attachment) {
-      openAttachmentWith(attachmentMenu.attachment);
+      openAttachment(attachmentMenu.attachment, true);
     }
   }
 
+  // 一覧から外すだけで、ファイルは残す（「元に戻す」で添付を戻せるように）。
   async function deleteAttachment(attachment) {
-    if (readOnly) return;
-    if (application) {
-      if (window.confirm(`「${attachment.name}」を添付一覧から削除しますか？`))
-        await application.update(taskId, {
-          attachments: attachments.filter((item) => item.id !== attachment.id),
-        });
-      return;
-    }
-    if (!canUseAttachments || isBusy) return;
+    if (readOnly || !canUseAttachments || isBusy) return;
     closeAttachmentMenu();
-    const confirmed = window.confirm?.(`"${attachment.name}" を削除しますか？`);
-    if (confirmed === false) return;
-
-    isBusy = true;
+    if (!window.confirm(`「${attachment.name}」を添付一覧から削除しますか？`)) return;
     errorMessage = "";
     try {
-      const result = await platform.wsDeleteTaskAttachment(
-        workspaceProjectDir,
-        taskId,
-        attachmentPath(attachment)
-      );
-      if (!result?.success) {
-        errorMessage = result?.error ?? "添付を削除できませんでした";
-        return;
-      }
-      updateAttachments(
-        result.attachments ??
-          attachmentList.filter((entry) => attachmentPath(entry) !== attachmentPath(attachment))
-      );
-    } finally {
-      isBusy = false;
+      await application.update(taskId, {
+        attachments: attachmentList.filter((item) => item.id !== attachment.id),
+      });
+    } catch (e) {
+      errorMessage = e.message;
     }
   }
 </script>

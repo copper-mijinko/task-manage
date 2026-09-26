@@ -3,7 +3,7 @@ const MAX_WAIT_MS = 120_000;
 const RETRY_INTERVAL_MS = 250;
 const RENDERER_URL_PATTERN = /^http:\/\/(?:localhost|127\.0\.0\.1):5173(?:\/|$)/;
 const MAIN_RENDERER_URL_PATTERN = /^http:\/\/(?:localhost|127\.0\.0\.1):5173\/?$/;
-const REQUIRED_PRELOAD_METHODS = ["getProjectIDs", "windowGetState", "wsGetWorkspaces"];
+const REQUIRED_PRELOAD_METHODS = ["wsReadGraph", "windowGetState", "wsGetWorkspaces"];
 
 export class AgentUiDiagnosticError extends Error {
   constructor(code, stage, message, { cause, details = {} } = {}) {

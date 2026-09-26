@@ -1,26 +1,17 @@
-﻿<script>
+<script>
   import {
     selected_type,
     selected_id,
-    table_selected_id,
-    tree_data,
-    setTaskDetailWindowTarget,
     init_store,
-    init_detail_store,
     autoSelectInitialProject,
     showPageSearch,
     theme,
-    undoHistory,
-    redoHistory,
     saveStatus,
-    projectLoading,
     workspace_store,
-    workspace_tasks_cache,
     navigation_history,
   } from "@stores";
   import { onMount, onDestroy, tick } from "svelte";
   import * as platform from "@lib/ipc/platform";
-  import { workspaceToProjectData } from "@features/workspace/utils/workspace_tree";
   import { workspaceApplication } from "@features/workspace/application/workspace";
   import Header from "@features/navigation/components/Header.svelte";
   import MenuList from "@features/navigation/components/MenuList.svelte";
@@ -31,39 +22,13 @@
   import { startAutoRescan, stopAutoRescan } from "@features/search/utils/page_search_highlighter";
   import { registerDateTimeShortcuts } from "@lib/utils/datetime_shortcuts";
   let saveErrorMessage = null;
-  let workspaceConflict = null;
-  let workspaceNoticeMessage = null;
-  let flushingOnShutdown = false;
   let unregisterDateTimeShortcuts = null;
-  let ProjectPageComponent = null;
   let WorkspaceTreeGridPageComponent = null;
-  let InboxPanelComponent = null;
-  let AgendaPanelComponent = null;
   let QuickCaptureComponent = null;
-  let TaskDetailWindowComponent = null;
-  let projectPageLoading = null;
   let workspaceTreeGridPageLoading = null;
-  let inboxPanelLoading = null;
-  let agendaPanelLoading = null;
   let quickCaptureLoading = null;
-  let taskDetailWindowLoading = null;
 
-  const currentHash = typeof window !== "undefined" ? window.location.hash : "";
-  const currentSearch =
-    typeof window !== "undefined"
-      ? new URLSearchParams(window.location.search)
-      : new URLSearchParams();
-
-  ////////////// Initial Settings //////////////
-  if (currentHash === "#task-detail-window") {
-    init_detail_store();
-  } else {
-    init_store();
-  }
-
-  // ページ内検索ショートカットキー設定
-  let searchBox;
-  let isTaskDetailWindow = currentHash === "#task-detail-window";
+  init_store();
 
   /**
    * サイドバーを本文と併置できる幅か。
@@ -74,21 +39,6 @@
    */
   let viewportWidth = typeof window !== "undefined" ? window.innerWidth : 1280;
   $: wideLayout = viewportWidth >= 1000;
-  let detailWindowReady = false;
-  let detailWindowProjectId = currentSearch.get("projectId") || "";
-  let detailWindowTaskId = currentSearch.get("taskId") || "";
-  let detailWindowTaskName = currentSearch.get("taskName") || "Task Detail";
-  let detailWindowSelectedType =
-    currentSearch.get("selectedType") === "WorkspaceProject" ? "WorkspaceProject" : "Projects";
-  let detailWindowProjectDir = currentSearch.get("projectDir") || "";
-
-  function loadProjectPage() {
-    if (ProjectPageComponent || projectPageLoading) return projectPageLoading;
-    projectPageLoading = import("@pages/MainPage.svelte").then((module) => {
-      ProjectPageComponent = module.default;
-    });
-    return projectPageLoading;
-  }
 
   function loadWorkspaceTreeGridPage() {
     if (WorkspaceTreeGridPageComponent || workspaceTreeGridPageLoading)
@@ -98,22 +48,6 @@
         WorkspaceTreeGridPageComponent = module.default;
       });
     return workspaceTreeGridPageLoading;
-  }
-
-  function loadInboxPanel() {
-    if (InboxPanelComponent || inboxPanelLoading) return inboxPanelLoading;
-    inboxPanelLoading = import("@features/inbox/components/InboxPanel.svelte").then((module) => {
-      InboxPanelComponent = module.default;
-    });
-    return inboxPanelLoading;
-  }
-
-  function loadAgendaPanel() {
-    if (AgendaPanelComponent || agendaPanelLoading) return agendaPanelLoading;
-    agendaPanelLoading = import("@features/agenda/components/AgendaPanel.svelte").then((module) => {
-      AgendaPanelComponent = module.default;
-    });
-    return agendaPanelLoading;
   }
 
   function loadQuickCapture() {
@@ -126,120 +60,8 @@
     return quickCaptureLoading;
   }
 
-  function loadTaskDetailWindow() {
-    if (TaskDetailWindowComponent || taskDetailWindowLoading) return taskDetailWindowLoading;
-    taskDetailWindowLoading = import("@pages/TaskDetailPage.svelte").then((module) => {
-      TaskDetailWindowComponent = module.default;
-    });
-    return taskDetailWindowLoading;
-  }
-
-  $: if (isTaskDetailWindow) {
-    void loadTaskDetailWindow();
-  }
-  $: if (
-    !isTaskDetailWindow &&
-    ($selected_type === "Projects" || $selected_type === "WorkspaceProject")
-  ) {
-    void loadProjectPage();
-  }
-  $: if (!isTaskDetailWindow && $selected_type === "WorkspaceProject") {
-    void loadWorkspaceTreeGridPage();
-  }
-  $: if (!isTaskDetailWindow && $selected_type === "Inbox") {
-    void loadInboxPanel();
-  }
-  $: if (!isTaskDetailWindow && $selected_type === "Agenda") {
-    void loadAgendaPanel();
-  }
-  $: if (!isTaskDetailWindow && $showQuickCapture) {
-    void loadQuickCapture();
-  }
-
-  async function initTaskDetailWindow() {
-    try {
-      if (!detailWindowProjectId || !detailWindowTaskId) return;
-
-      document.title = `${detailWindowTaskName} | Task Detail`;
-      setTaskDetailWindowTarget(detailWindowProjectId, detailWindowTaskId, {
-        selectedType: detailWindowSelectedType,
-        projectDir: detailWindowProjectDir || null,
-      });
-
-      if (detailWindowSelectedType === "WorkspaceProject") {
-        if (!detailWindowProjectDir) return;
-
-        workspace_store.update((state) => ({
-          ...state,
-          activeProjectDir: detailWindowProjectDir,
-          projects: state.projects.some((project) => project.projectDir === detailWindowProjectDir)
-            ? state.projects
-            : [
-                ...state.projects,
-                {
-                  name: detailWindowTaskName,
-                  rootId: detailWindowProjectId,
-                  dirName: detailWindowProjectDir.split(/[/\\]/).pop() || detailWindowTaskName,
-                  projectDir: detailWindowProjectDir,
-                },
-              ],
-        }));
-
-        const workspaceProject = await platform.wsReadProject(detailWindowProjectDir, {
-          preferCache: true,
-        });
-        if (workspaceProject) {
-          const workspaceRootTask = Object.values(workspaceProject.tasks ?? {}).find(
-            (task) => task.parents.length === 0
-          );
-          const effectiveProjectId = workspaceRootTask?.id || detailWindowProjectId;
-
-          detailWindowProjectId = effectiveProjectId;
-          setTaskDetailWindowTarget(effectiveProjectId, detailWindowTaskId, {
-            selectedType: "WorkspaceProject",
-            projectDir: detailWindowProjectDir,
-          });
-          workspace_store.syncProjectListItem(detailWindowProjectDir, {
-            rootId: effectiveProjectId,
-            name: workspaceRootTask?.name || detailWindowTaskName,
-            order: workspaceRootTask?.order,
-          });
-          workspace_tasks_cache.set(workspaceProject.tasks);
-          tree_data.setFromSource(
-            workspaceToProjectData(workspaceProject.tasks, effectiveProjectId)
-          );
-          selected_type.set("WorkspaceProject");
-          selected_id.set(effectiveProjectId);
-          table_selected_id.set(detailWindowTaskId);
-        }
-        return;
-      }
-
-      const result = await platform.getTreeData(detailWindowProjectId);
-      if (result) {
-        tree_data.setFromSource(result);
-        selected_type.set("Projects");
-        selected_id.set(detailWindowProjectId);
-        table_selected_id.set(detailWindowTaskId);
-      }
-    } catch {
-      // ignore initialization error
-    } finally {
-      detailWindowReady = true;
-    }
-  }
-
-  // 検索ウィンドウでのテーマ初期化処理
-  async function initSearchWindowTheme() {
-    try {
-      const currentTheme = await platform.getCurrentTheme();
-      if (currentTheme) {
-        theme.set(currentTheme);
-      }
-    } catch {
-      // ignore theme initialization error
-    }
-  }
+  $: if ($selected_type === "WorkspaceProject") void loadWorkspaceTreeGridPage();
+  $: if ($showQuickCapture) void loadQuickCapture();
 
   // capture-phase で window keydown を捕まえているため、CodeMirror や Quill、
   // ネイティブの input / textarea / contenteditable にフォーカスがある状態で
@@ -259,36 +81,26 @@
   function handleKeyDown(event) {
     // Ctrl+F is handled by Header.svelte (focuses the inline search input)
 
-    // Ctrl+Shift+I opens the Inbox Quick Capture overlay from anywhere.
-    // We accept this even when an editable element has focus so the user
-    // can capture an idea mid-edit without losing it. The browser's
-    // devtools shortcut is normally Ctrl+Shift+I too, but Electron's
-    // packaged windows do not expose it to the renderer in production —
-    // and our dev builds open devtools via F12 anyway, so no conflict.
+    // Ctrl+Shift+I はどこからでもクイック追加を開く。編集中でも受け付けるので、
+    // 書きかけの内容を失わずに思いつきを Inbox へ入れられる。
     if (
       (event.ctrlKey || event.metaKey) &&
       event.shiftKey &&
       (event.key === "I" || event.key === "i")
     ) {
-      if (workspace_store && !$workspace_store.activeWorkspacePath) {
-        return;
-      }
+      if (!$workspace_store.activeWorkspacePath) return;
       event.preventDefault();
       event.stopPropagation();
       $showQuickCapture = true;
       return;
     }
 
-    if (isInsideEditableTarget(event.target)) {
-      return;
-    }
+    if (isInsideEditableTarget(event.target)) return;
 
     if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key === "z") {
       event.preventDefault();
       event.stopPropagation();
-      if ($selected_type === "WorkspaceProject")
-        void workspaceApplication.undo().catch((error) => (saveErrorMessage = error.message));
-      else undoHistory();
+      void workspaceApplication.undo().catch((error) => (saveErrorMessage = error.message));
       return;
     }
 
@@ -300,9 +112,7 @@
     ) {
       event.preventDefault();
       event.stopPropagation();
-      if ($selected_type === "WorkspaceProject")
-        void workspaceApplication.redo().catch((error) => (saveErrorMessage = error.message));
-      else redoHistory();
+      void workspaceApplication.redo().catch((error) => (saveErrorMessage = error.message));
       return;
     }
 
@@ -318,17 +128,13 @@
         event.preventDefault();
         event.stopPropagation();
         navigation_history.forward();
-        return;
       }
     }
   }
 
   // Mouse XButtons (back / forward thumb buttons on most mice).
   // Browsers fire `mouseup` with `button === 3` (back) / `4` (forward).
-  // Some browsers also dispatch a native browser-back via `auxclick`, but
-  // since this is an Electron renderer with no navigation, we own the gesture.
   function handleMouseUp(event) {
-    if (isTaskDetailWindow) return;
     if (event.button === 3) {
       event.preventDefault();
       navigation_history.back();
@@ -338,36 +144,8 @@
     }
   }
 
-  async function resolveWorkspaceConflict(action) {
-    if (!workspaceConflict?.projectDir) return;
-    const result = await platform.wsResolveConflict(workspaceConflict.projectDir, action);
-    if (result?.success) {
-      workspaceConflict = null;
-      if (action === "keep-local") {
-        saveStatus.set("queued");
-      }
-    } else {
-      saveErrorMessage = result?.error ?? "Failed to resolve workspace conflict";
-      saveStatus.set("error");
-    }
-  }
-
   async function reportInitialWorkspaceVisible() {
     try {
-      // selected_id queues the project read in a microtask. Let that queue start,
-      // then wait for the disk-backed tree load rather than reporting as soon as
-      // the sidebar selection changes.
-      await Promise.resolve();
-      if ($projectLoading) {
-        await new Promise((resolve) => {
-          const unsubscribe = projectLoading.subscribe((loading) => {
-            if (!loading) {
-              unsubscribe();
-              resolve();
-            }
-          });
-        });
-      }
       await tick();
       const report = () =>
         platform.reportPerformanceMilestone({
@@ -392,77 +170,29 @@
       // renderer-start not set (e.g. test environment)
     }
 
-    if (!isTaskDetailWindow) {
-      platform.reportPerformanceMilestone({
-        name: "startup.mounted",
-        durationMs: performance.now(),
-      });
-    }
-
-    if (isTaskDetailWindow) {
-      await initTaskDetailWindow();
-    } else {
-      detailWindowReady = true;
-      // 起動時の自動選択: Workspace を優先、なければ InApp の先頭プロジェクト。
-      // 既に何か選択されている (例: ノード詳細ウィンドウ) 場合は no-op。
-      void autoSelectInitialProject().then(
-        () => reportInitialWorkspaceVisible(),
-        () => reportInitialWorkspaceVisible()
-      );
-    }
-
-    // テーマ初期化
-    await initSearchWindowTheme();
-
-    // テーマ変更通知のリスナー登録
-    platform.onThemeChanged((newTheme) => {
-      theme.set(newTheme);
+    platform.reportPerformanceMilestone({
+      name: "startup.mounted",
+      durationMs: performance.now(),
     });
+    void autoSelectInitialProject().then(
+      () => reportInitialWorkspaceVisible(),
+      () => reportInitialWorkspaceVisible()
+    );
+
+    try {
+      const currentTheme = await platform.getCurrentTheme();
+      if (currentTheme) theme.applyExternal(currentTheme);
+    } catch {
+      // ignore theme initialization error
+    }
+    platform.onThemeChanged((newTheme) => theme.applyExternal(newTheme));
 
     window.addEventListener("keydown", handleKeyDown, true);
-    if (!isTaskDetailWindow) {
-      window.addEventListener("mouseup", handleMouseUp);
-    }
+    window.addEventListener("mouseup", handleMouseUp);
 
     platform.onSaveError((message) => {
       saveErrorMessage = message;
       saveStatus.set("error");
-    });
-
-    platform.onWorkspaceConflict((event) => {
-      workspaceConflict = event;
-      saveStatus.set("conflict");
-    });
-
-    platform.onWorkspaceNotice((event) => {
-      if (event.kind === "error") {
-        saveErrorMessage = event.message;
-        saveStatus.set("error");
-        return;
-      }
-      // "workspace-updated" はヘッダーの保存状態表示と意味が被るので非表示
-      // ("conflicted-copy" 等のユーザ操作が必要な通知のみバナー表示)
-      if (event.kind === "workspace-updated") {
-        return;
-      }
-      workspaceNoticeMessage = event.message;
-      setTimeout(() => {
-        if (workspaceNoticeMessage === event.message) {
-          workspaceNoticeMessage = null;
-        }
-      }, 4000);
-    });
-
-    platform.onWorkspaceFlushStart(() => {
-      flushingOnShutdown = true;
-    });
-
-    platform.onWorkspaceFlushComplete(() => {
-      // The main process destroys the window shortly after this fires; the
-      // overlay being removed here is a no-op in the normal path. Resetting
-      // it covers the (rare) case where force-quit was chosen and the
-      // window survived for any reason.
-      flushingOnShutdown = false;
     });
 
     // Start the document-wide page-search highlighter. It watches the whole
@@ -495,101 +225,46 @@
         >
       </div>
     {/if}
-    {#if workspaceConflict}
-      <div class="workspace-conflict-banner" role="alert">
-        <span>{workspaceConflict.message}</span>
-        <div class="workspace-conflict-actions">
-          <button type="button" on:click={() => resolveWorkspaceConflict("keep-local")}>
-            維持
-          </button>
-          <button type="button" on:click={() => resolveWorkspaceConflict("reload")}>
-            再読込
-          </button>
-        </div>
-      </div>
-    {:else if workspaceNoticeMessage}
-      <div class="workspace-notice-banner" role="status">
-        <span>{workspaceNoticeMessage}</span>
-        <button type="button" on:click={() => (workspaceNoticeMessage = null)}>×</button>
-      </div>
-    {/if}
   </div>
-  {#if !isTaskDetailWindow}
-    <div class="Header">
-      <Header />
-    </div>
-  {/if}
-  <div class="Body" class:DetailWindowBody={isTaskDetailWindow}>
-    {#if !isTaskDetailWindow}
-      <aside
-        class="Sidebar"
-        class:Collapsed={$sidebarCollapsed}
-        aria-label="ナビゲーション"
-        aria-hidden={$sidebarCollapsed ? "true" : undefined}
-        inert={$sidebarCollapsed}
-      >
-        <MenuList />
-      </aside>
-    {/if}
-    <div class="Main" class:DetailWindowMain={isTaskDetailWindow}>
-      {#if isTaskDetailWindow}
-        {#if TaskDetailWindowComponent}
-          <TaskDetailWindowComponent
-            initialTaskName={detailWindowTaskName}
-            initialTaskId={detailWindowTaskId}
-            initialProjectId={detailWindowProjectId}
-            ready={detailWindowReady}
-          />
+  <div class="Header">
+    <Header />
+  </div>
+  <div class="Body">
+    <aside
+      class="Sidebar"
+      class:Collapsed={$sidebarCollapsed}
+      aria-label="ナビゲーション"
+      aria-hidden={$sidebarCollapsed ? "true" : undefined}
+      inert={$sidebarCollapsed}
+    >
+      <MenuList />
+    </aside>
+    <div class="Main">
+      {#if !($selected_type && $selected_id)}
+        <section class="EmptyStart" aria-labelledby="empty-start-title">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3 7.5h7l2 2h9v9.5H3V7.5Z" />
+            <path d="M7 14h10M12 9v10" />
+          </svg>
+          <h1 id="empty-start-title">ワークスペースを追加して始めましょう</h1>
+          <p>保存先のフォルダーを設定すると、プロジェクトとメモを作成できます。</p>
+          <button
+            type="button"
+            on:click={() => {
+              $sidebarCollapsed = false;
+              $showWorkspaceSetup = true;
+            }}>ワークスペースを設定</button
+          >
+        </section>
+      {/if}
+      {#if $selected_type == "WorkspaceProject"}
+        {#if WorkspaceTreeGridPageComponent}
+          {#key $workspace_store.activeWorkspacePath}<WorkspaceTreeGridPageComponent />{/key}
         {:else}
           <Loading variant="h1" />
         {/if}
-      {:else}
-        {#if !($selected_type && $selected_id)}
-          <section class="EmptyStart" aria-labelledby="empty-start-title">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M3 7.5h7l2 2h9v9.5H3V7.5Z" />
-              <path d="M7 14h10M12 9v10" />
-            </svg>
-            <h1 id="empty-start-title">ワークスペースを追加して始めましょう</h1>
-            <p>保存先のフォルダーを設定すると、プロジェクトとメモを作成できます。</p>
-            <button
-              type="button"
-              on:click={() => {
-                $sidebarCollapsed = false;
-                $showWorkspaceSetup = true;
-              }}>ワークスペースを設定</button
-            >
-          </section>
-        {/if}
-        {#if $selected_type == "WorkspaceProject"}
-          {#if WorkspaceTreeGridPageComponent}
-            {#key $workspace_store.activeWorkspacePath}<WorkspaceTreeGridPageComponent />{/key}
-          {:else}
-            <Loading variant="h1" />
-          {/if}
-        {:else if $selected_type == "Projects" && $projectLoading}
-          <Loading variant="h1" />
-        {:else if $selected_type == "Projects"}
-          {#if ProjectPageComponent}
-            <ProjectPageComponent />
-          {:else}
-            <Loading variant="h1" />
-          {/if}
-        {:else if $selected_type == "Inbox"}
-          {#if InboxPanelComponent}
-            <InboxPanelComponent />
-          {:else}
-            <Loading variant="h1" />
-          {/if}
-        {:else if $selected_type == "Agenda"}
-          {#if AgendaPanelComponent}
-            <AgendaPanelComponent />
-          {:else}
-            <Loading variant="h1" />
-          {/if}
-        {/if}
       {/if}
-      {#if !isTaskDetailWindow && !$sidebarCollapsed && !wideLayout}
+      {#if !$sidebarCollapsed && !wideLayout}
         <!-- 狭いときだけオーバーレイ。広いときはレールとして併置するので
              スクリムは出さない（出すと併置している意味がなくなる）。 -->
         <button
@@ -605,7 +280,6 @@
 
 <!-- 検索ボックスを直接body直下に配置（他の要素と独立して） -->
 <PageSearchBox
-  bind:this={searchBox}
   show={$showPageSearch}
   on:close={() => {
     $showPageSearch = false;
@@ -619,26 +293,6 @@
       $showQuickCapture = false;
     }}
   />
-{/if}
-
-{#if flushingOnShutdown}
-  <div
-    class="flush-overlay"
-    role="alertdialog"
-    aria-modal="true"
-    aria-live="assertive"
-    aria-label="保存中"
-  >
-    <div class="flush-overlay-card">
-      <div class="flush-spinner" aria-hidden="true"></div>
-      <div class="flush-overlay-text">
-        <strong>保存中…</strong>
-        <span
-          >ワークスペースを安全に書き出しています。このウィンドウは保存完了後に自動で閉じます。</span
-        >
-      </div>
-    </div>
-  </div>
 {/if}
 
 <style>
@@ -694,9 +348,6 @@
     height: calc(100% - 2.0625rem);
     overflow: hidden;
   }
-  div.Body.DetailWindowBody {
-    height: 100%;
-  }
   /* 狭い幅ではオーバーレイのドロワー。広い幅では下の media query で
      本文と併置するレールになる。 */
   aside.Sidebar {
@@ -749,10 +400,6 @@
     min-width: 0;
     height: 100%;
     position: relative;
-  }
-  div.Main.DetailWindowMain {
-    height: 100%;
-    flex: 1;
   }
   .EmptyStart {
     display: flex;
@@ -832,82 +479,5 @@
     font-size: var(--font-body-md);
     line-height: 1;
     padding: 0 var(--sp1);
-  }
-  .workspace-conflict-banner,
-  .workspace-notice-banner {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--sp2);
-    padding: var(--sp1) var(--sp3);
-    color: #fff;
-    font-size: var(--font-body-sm);
-    flex-shrink: 0;
-    z-index: 10000;
-  }
-  .workspace-conflict-banner {
-    background-color: var(--theme-color-Warning-main);
-  }
-  .workspace-notice-banner {
-    background-color: var(--theme-color-Info-main, var(--theme-color-Theme-main));
-  }
-  .workspace-conflict-actions {
-    display: flex;
-    gap: var(--sp1);
-  }
-  .workspace-conflict-banner button,
-  .workspace-notice-banner button {
-    border: 1px solid rgba(255, 255, 255, 0.6);
-    border-radius: var(--shape-xs);
-    background: rgba(255, 255, 255, 0.12);
-    color: #fff;
-    cursor: pointer;
-    font-size: var(--font-body-sm);
-    padding: 0 var(--sp2);
-  }
-  .flush-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.55);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 2147483647;
-    pointer-events: all;
-  }
-  .flush-overlay-card {
-    display: flex;
-    align-items: center;
-    gap: var(--sp3);
-    padding: var(--sp4) var(--sp4);
-    border-radius: var(--shape-sm);
-    background: var(--theme-color-Theme-main);
-    color: #fff;
-    box-shadow: var(--elevation-2);
-    max-width: 24rem;
-    min-width: 16.5rem;
-  }
-  .flush-overlay-text {
-    display: flex;
-    flex-direction: column;
-    gap: var(--sp1);
-    font-size: var(--font-body-sm);
-  }
-  .flush-overlay-text strong {
-    font-size: var(--font-body-md);
-  }
-  .flush-spinner {
-    width: 1.5rem;
-    height: 1.5rem;
-    border-radius: 50%;
-    border: 3px solid rgba(255, 255, 255, 0.25);
-    border-top-color: #fff;
-    animation: flush-spin 0.9s linear infinite;
-    flex-shrink: 0;
-  }
-  @keyframes flush-spin {
-    to {
-      transform: rotate(360deg);
-    }
   }
 </style>

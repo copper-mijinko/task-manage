@@ -1,4 +1,4 @@
-﻿<script lang="ts">
+<script lang="ts">
   import { normalizeMemoFormat, type MemoFormat } from "@features/memos/utils/memo_utils";
   import { pendingMemoDrafts } from "@features/memos/stores/pending_drafts";
   import { windowClose } from "@lib/ipc/platform";
@@ -17,9 +17,6 @@
   export let memoTitles: string[] = [];
   export let currentMemoTitle = "";
   export let openMemoLink: ((title: string) => void) | undefined = undefined;
-  export let workspaceProjectDir: string | null = null;
-  export let taskId: string | null = null;
-  export let isWorkspaceProject = false;
   export let format: MemoFormat | undefined = undefined;
   export let saveImage: ((file: File) => Promise<string | null>) | undefined = undefined;
   export let resolveAsset: ((relativePath: string) => Promise<string | null>) | undefined =
@@ -95,7 +92,7 @@
     });
   }
 
-  $: memoFormat = normalizeMemoFormat(format, isWorkspaceProject ? "markdown" : "quill");
+  $: memoFormat = normalizeMemoFormat(format, "markdown");
   $: if (memoFormat === "markdown") {
     loadMarkdownMemo();
   } else {
@@ -120,8 +117,6 @@
         {memoTitles}
         {currentMemoTitle}
         {openMemoLink}
-        {workspaceProjectDir}
-        {taskId}
         {saveImage}
         {resolveAsset}
       />

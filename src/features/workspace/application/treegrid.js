@@ -330,7 +330,6 @@ export function createTreeGridApplication(workspacePath) {
         taskId: nodeId,
         taskName: name,
         occurrencePath: path,
-        selectedType: "WorkspaceProject",
       }),
     /** ノードごとアーカイブ（そのノードの行がすべて片付く）。 */
     archive: (targets = ids(), archived = true) => updateMany({ archived }, targets),

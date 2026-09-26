@@ -3,22 +3,56 @@ import os from "os";
 import path from "path";
 import { test, expect, _electron as electron } from "@playwright/test";
 
+/** 1 つのプロジェクト（project-1）と 1 つのノード（task-1）を持つワークスペース。 */
 function createTempDataDirectory() {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "task-manage-"));
-  const fixtureDir = path.join(__dirname, "fixtures");
-
-  fs.copyFileSync(path.join(fixtureDir, "db.json"), path.join(tempDir, "db.json"));
-  fs.copyFileSync(path.join(fixtureDir, "meta.json"), path.join(tempDir, "meta.json"));
-
-  return tempDir;
+  const workspacePath = path.join(tempDir, "workspace");
+  fs.mkdirSync(path.join(workspacePath, ".task-manage"), { recursive: true });
+  const node = (id, name, parentId, order, extra = {}) => ({
+    id,
+    name,
+    parents: parentId ? [{ id: parentId, order }] : [],
+    createdAt: "2026-01-01",
+    tags: [],
+    attachments: [],
+    ...extra,
+  });
+  const nodes = [
+    node("root", "Workspace", null, 0),
+    node("project-1", "Sample Project", "root", 0, { status: "Open" }),
+    node("task-1", "First Task", "project-1", 0, { status: "Open" }),
+  ];
+  const graph = {
+    schemaVersion: 1,
+    workspaceId: "smoke-test",
+    rootId: "root",
+    revision: 0,
+    nodes: Object.fromEntries(nodes.map((n) => [n.id, n])),
+  };
+  fs.writeFileSync(
+    path.join(workspacePath, ".task-manage", "graph-v1.json"),
+    JSON.stringify({ schemaVersion: 1, graph, undo: [], redo: [] })
+  );
+  fs.writeFileSync(
+    path.join(tempDir, "meta.json"),
+    JSON.stringify({
+      theme: "dark",
+      workspaces: [{ label: "Smoke", path: workspacePath }],
+      activeWorkspace: workspacePath,
+    })
+  );
+  return { tempDir, workspacePath };
 }
 
-function readJson(tempDir, fileName) {
-  return JSON.parse(fs.readFileSync(path.join(tempDir, fileName), "utf8"));
+function readJson(filePath) {
+  return JSON.parse(fs.readFileSync(filePath, "utf8"));
 }
+
+const graphOf = (app) =>
+  readJson(path.join(app.workspacePath, ".task-manage", "graph-v1.json")).graph;
 
 async function launchSeededApp() {
-  const tempDir = createTempDataDirectory();
+  const { tempDir, workspacePath } = createTempDataDirectory();
   const launchEnv = { ...process.env };
   delete launchEnv.ELECTRON_RUN_AS_NODE;
 
@@ -39,7 +73,7 @@ async function launchSeededApp() {
   await expect(window.locator("#project-1")).toBeVisible();
   await expect(window.locator("#task-1")).toBeVisible();
 
-  return { tempDir, electronApp, window };
+  return { tempDir, workspacePath, electronApp, window };
 }
 
 async function closeSeededApp(context) {
@@ -50,14 +84,13 @@ async function closeSeededApp(context) {
   }
 }
 
-async function openTaskDetailWindow(
-  app,
-  detailData = {
+async function openTaskDetailWindow(app) {
+  const detailData = {
+    workspacePath: app.workspacePath,
     projectId: "project-1",
     taskId: "task-1",
     taskName: "First Task",
-  }
-) {
+  };
   const detailWindowPromise = app.electronApp.waitForEvent("window");
 
   await app.window.evaluate((payload) => {
@@ -65,8 +98,8 @@ async function openTaskDetailWindow(
   }, detailData);
 
   const detailWindow = await detailWindowPromise;
-  // The standalone TaskDetail window renders the same pure Card as the main
-  // pane, so the task name lives in the Card title rather than a separate H1.
+  // The standalone detail window renders the same Card as the main pane, so
+  // the node name lives in the Card title rather than a separate H1.
   await expect(
     detailWindow.getByRole("heading", { name: new RegExp(detailData.taskName) })
   ).toBeVisible();
@@ -74,7 +107,23 @@ async function openTaskDetailWindow(
   return detailWindow;
 }
 
-test("loads seeded project data in Electron", async () => {
+/** main プロセスのグラフへ直接コマンドを送る（別ウィンドウからの編集を模す）。 */
+async function executeGraphCommand(app, command) {
+  await app.window.evaluate(
+    async ({ workspacePath, command }) => {
+      const graph = await window.electronAPI.wsReadGraph(workspacePath);
+      await window.electronAPI.wsExecuteGraphCommand(
+        workspacePath,
+        command,
+        "tree",
+        graph.revision
+      );
+    },
+    { workspacePath: app.workspacePath, command }
+  );
+}
+
+test("loads the seeded workspace graph in Electron", async () => {
   const app = await launchSeededApp();
 
   try {
@@ -89,29 +138,27 @@ test("loads seeded project data in Electron", async () => {
   }
 });
 
-test("rejects renderer-invented workspace registration and recursive project deletion", async () => {
+test("rejects renderer-invented workspace registration", async () => {
   const app = await launchSeededApp();
   const inventedWorkspace = path.join(app.tempDir, "invented-workspace");
-  const sentinelDir = path.join(inventedWorkspace, "delete-sentinel");
-  const sentinelFile = path.join(sentinelDir, "keep.txt");
-  fs.mkdirSync(sentinelDir, { recursive: true });
-  fs.writeFileSync(path.join(sentinelDir, "_project.md"), "---\nid: sentinel\n---\n");
-  fs.writeFileSync(sentinelFile, "keep");
+  fs.mkdirSync(inventedWorkspace, { recursive: true });
 
   try {
-    await app.window.evaluate((workspacePath) => {
+    const result = await app.window.evaluate(async (workspacePath) => {
       window.electronAPI.wsSetWorkspaces({
         workspaces: [{ path: workspacePath, label: "Invented" }],
         activeWorkspace: workspacePath,
       });
+      try {
+        await window.electronAPI.wsReadGraph(workspacePath);
+        return "read";
+      } catch (error) {
+        return String(error.message);
+      }
     }, inventedWorkspace);
 
-    const result = await app.window.evaluate((projectDir) => {
-      return window.electronAPI.wsDeleteProject(projectDir);
-    }, sentinelDir);
-
-    expect(result.success).toBe(false);
-    expect(fs.existsSync(sentinelFile)).toBe(true);
+    expect(result).toMatch(/not registered/);
+    expect(fs.existsSync(path.join(inventedWorkspace, ".task-manage"))).toBe(false);
   } finally {
     await closeSeededApp(app);
   }
@@ -188,7 +235,7 @@ test("collapses and restores detail from the tree-priority split boundary", asyn
   }
 });
 
-test("filters the visible task rows from the project search box", async () => {
+test("filters the visible rows from the project search box", async () => {
   const app = await launchSeededApp();
 
   try {
@@ -208,9 +255,6 @@ test("focuses the page-search input with Ctrl+F and clears it on Escape", async 
   const app = await launchSeededApp();
 
   try {
-    // The page-search overlay was replaced with a permanent header input
-    // ("画面内をハイライト検索…"). Ctrl+F now focuses that input rather than
-    // showing/hiding a separate dialog.
     await app.window.evaluate(() => {
       window.dispatchEvent(
         new KeyboardEvent("keydown", {
@@ -227,27 +271,27 @@ test("focuses the page-search input with Ctrl+F and clears it on Escape", async 
 
     await pageSearchInput.fill("First");
     await pageSearchInput.press("Escape");
-    // Escape clears the query (the input still exists in the header).
     await expect(pageSearchInput).toHaveValue("");
   } finally {
     await closeSeededApp(app);
   }
 });
 
-test("adds a sibling task from the project toolbar and persists it", async () => {
+test("adds a sibling node from the project toolbar and persists it", async () => {
   const app = await launchSeededApp();
 
   try {
     await app.window.locator("#task-1").dispatchEvent("click");
-    // Toolbar was renamed from `.TableButtons` to `.TbGroup` (one group per
-    // logical button cluster — Add/Move/Expand/Undo/View). The first group's
-    // first button is still ノード追加 (insert sibling).
+    // The first toolbar group's first button is ノード追加 (insert sibling).
     await app.window.locator(".TbGroup button").nth(0).click();
 
-    await app.window.waitForTimeout(1200);
-
-    const db = readJson(app.tempDir, "db.json");
-    expect(db[0].data.children.some((child) => child.data.name === "new_task")).toBe(true);
+    await expect
+      .poll(() =>
+        Object.values(graphOf(app).nodes).some(
+          (node) => node.name === "新しいノード" && node.parents.some((p) => p.id === "project-1")
+        )
+      )
+      .toBe(true);
   } finally {
     await closeSeededApp(app);
   }
@@ -265,15 +309,13 @@ test("toggles the theme and persists the new value into meta.json", async () => 
     await themeToggle.click();
     await expect(themeCheckbox).toBeChecked();
 
-    await app.window.waitForTimeout(200);
+    await expect.poll(() => readJson(path.join(app.tempDir, "meta.json")).theme).toBe("light");
   } finally {
-    const metaBeforeClose = readJson(app.tempDir, "meta.json");
-    expect(metaBeforeClose.theme).toBe("light");
     await closeSeededApp(app);
   }
 });
 
-test("opens the task detail window for the selected task", async () => {
+test("opens the node detail window for the selected node", async () => {
   const app = await launchSeededApp();
 
   try {
@@ -284,16 +326,16 @@ test("opens the task detail window for the selected task", async () => {
   }
 });
 
-test("keeps the task detail window Card title in sync when the task name changes", async () => {
+test("keeps the detail window Card title in sync when the node name changes", async () => {
   const app = await launchSeededApp();
 
   try {
     const detailWindow = await openTaskDetailWindow(app);
 
-    await app.window.evaluate(async () => {
-      const project = await window.electronAPI.getTreeData("project-1");
-      project.data.children[0].data.name = "Renamed Task";
-      window.electronAPI.setTreeData(project);
+    await executeGraphCommand(app, {
+      type: "update-node",
+      nodeId: "task-1",
+      changes: { name: "Renamed Task" },
     });
 
     await expect(detailWindow.getByRole("heading", { name: /Renamed Task/ })).toBeVisible();
@@ -302,41 +344,15 @@ test("keeps the task detail window Card title in sync when the task name changes
   }
 });
 
-test("shows a missing-task state when the selected task is deleted", async () => {
+test("shows a missing-node state when the selected node is deleted", async () => {
   const app = await launchSeededApp();
 
   try {
     const detailWindow = await openTaskDetailWindow(app);
 
-    await app.window.evaluate(async () => {
-      const project = await window.electronAPI.getTreeData("project-1");
-      project.data.children = project.data.children.filter((child) => child.id !== "task-1");
-      window.electronAPI.setTreeData(project);
-    });
+    await executeGraphCommand(app, { type: "delete-node", nodeId: "task-1" });
 
     await expect(detailWindow.getByText("ノードが見つかりません。")).toBeVisible();
-    await expect(
-      detailWindow.getByText("The target task was deleted. Rename is still tracked by task ID.")
-    ).toBeVisible();
-  } finally {
-    await closeSeededApp(app);
-  }
-});
-
-test("shows a missing-project state when the source project is deleted", async () => {
-  const app = await launchSeededApp();
-
-  try {
-    const detailWindow = await openTaskDetailWindow(app);
-
-    await app.window.evaluate(() => {
-      window.electronAPI.deleteProject("project-1");
-    });
-
-    await expect(detailWindow.getByText("プロジェクトが見つかりません。")).toBeVisible();
-    await expect(
-      detailWindow.getByText("The project for this detail window was deleted.")
-    ).toBeVisible();
   } finally {
     await closeSeededApp(app);
   }

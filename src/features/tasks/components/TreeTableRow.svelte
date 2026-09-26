@@ -12,11 +12,10 @@
   import { getContext } from "svelte";
   import { TREEGRID_APPLICATION } from "@features/workspace/application/treegrid";
   const application = getContext(TREEGRID_APPLICATION);
-  const tree_data = application?.tree ?? legacy_tree_data;
+  const tree_data = application.tree;
 
   import { createEventDispatcher } from "svelte";
   import { selected_ids } from "@stores/ui";
-  import { tree_data as legacy_tree_data } from "@features/tasks/stores/tree";
   import { getNode, getTopLevelSelection } from "@features/tasks/utils/tree_control";
   import { ripple } from "@lib/actions";
   import TaskName from "@features/tasks/components/TaskName.svelte";
@@ -74,7 +73,6 @@
   export let canMoveDown = false;
   export let canIndent = false;
   export let canOutdent = false;
-  export let canOpenTaskFolder = false;
   export let inheritedDueDate = "";
   export let nodePath = "";
   export let lineNumber = 0;
@@ -211,7 +209,7 @@
   }
 
   function dragStart(e) {
-    if (isArchived || application?.isProtected(id) || depth === 0) {
+    if (isArchived || application.isProtected(id) || depth === 0) {
       e.preventDefault();
       return;
     }
@@ -479,12 +477,11 @@
           text={data[header.name]}
           {hasChildren}
           {expanded}
-          isRoot={depth === 0 || application?.isProtected(id)}
+          isRoot={depth === 0 || application.isProtected(id)}
           canMoveUp={effectiveCanMoveUp}
           canMoveDown={effectiveCanMoveDown}
           canIndent={effectiveCanIndent}
           canOutdent={effectiveCanOutdent}
-          {canOpenTaskFolder}
           selectionCount={selectionCountForMenu}
           {nodePath}
           nodeId={id}
@@ -533,9 +530,6 @@
           }}
           on:menuVisibilityChange={({ detail }) => {
             isMenuOpen = detail.open;
-          }}
-          on:openTaskFolder={() => {
-            dispatch("openTaskFolder", { id });
           }}
         />
       {:else if header.name == "status"}

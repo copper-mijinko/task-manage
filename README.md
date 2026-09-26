@@ -14,7 +14,7 @@
 - edge には detach、move、link があります。root 以外の Node は Node 本体とその edge を削除できます。
 - copy には Node only、direct children の共有、subgraph の3モードがあります。
 
-Node には本文、画像・添付ファイル、タグを保存できます。Inbox は素早い入力を受け付け、Agenda は期限を持つ Node をまとめて表示します。
+Node には本文、画像・添付ファイル、タグを保存できます。Inbox は素早い入力を受け付けます。
 
 ## Storage and migration
 
@@ -26,6 +26,8 @@ Node には本文、画像・添付ファイル、タグを保存できます。
 ```
 
 初回読み込み時、既存のプロジェクト Markdown を一度だけ正規 graph に取り込みます。取り込みでは Node ID、親子関係、本文、タグ、画像・添付ファイルを保持します。以後はアプリを正規データの編集に使用してください。後から旧 Markdown を直接編集しても、正規 graph へ自動同期されません。
+
+すでに graph を持つワークスペースにも、ワークスペース管理ダイアログの「Markdown から取り込む」で旧 Markdown のプロジェクトを選んで追加できます（Undo で取り消せます）。元の Markdown ファイルは変更しません。
 
 詳細は [node graph design](docs/node-graph-design.md) と [node graph verification](docs/node-graph-verification.md) を参照してください。
 

@@ -60,19 +60,8 @@ function parseAllowedExternalUrl(value) {
   }
 }
 
-function isDirectChild(parentPath, childPath) {
-  const relativePath = path.relative(parentPath, childPath);
-  return (
-    relativePath !== "" &&
-    !relativePath.startsWith("..") &&
-    !path.isAbsolute(relativePath) &&
-    path.dirname(relativePath) === "."
-  );
-}
-
 function createWorkspaceAuthorizer({ getWorkspacePaths, fsPromises = fs.promises }) {
   const workspaceAuthorizationCache = new Map();
-  const projectAuthorizationCache = new Map();
 
   function knownWorkspacePaths() {
     return [...new Set((getWorkspacePaths?.() || []).filter((item) => typeof item === "string"))];
@@ -85,17 +74,6 @@ function createWorkspaceAuthorizer({ getWorkspacePaths, fsPromises = fs.promises
       knownWorkspacePaths().find(
         (knownPath) => normalizePathForCompare(knownPath) === requestedPath
       ) || null
-    );
-  }
-
-  function findProjectWorkspace(projectDir) {
-    const requestedProject = normalizePathForCompare(projectDir);
-    if (!requestedProject) return null;
-    return (
-      knownWorkspacePaths().find((workspacePath) => {
-        const requestedWorkspace = normalizePathForCompare(workspacePath);
-        return requestedWorkspace && isDirectChild(requestedWorkspace, requestedProject);
-      }) || null
     );
   }
 
@@ -123,49 +101,8 @@ function createWorkspaceAuthorizer({ getWorkspacePaths, fsPromises = fs.promises
     return (await workspaceAuthorizationCache.get(cacheKey)).requestedPath;
   }
 
-  async function assertKnownProject(projectDir) {
-    const workspacePath = findProjectWorkspace(projectDir);
-    if (!workspacePath) {
-      throw new Error("Project is not a direct child of a registered workspace");
-    }
-
-    const projectCacheKey = normalizePathForCompare(projectDir);
-    const workspaceCacheKey = normalizePathForCompare(workspacePath);
-    const cached = projectAuthorizationCache.get(projectCacheKey);
-    if (cached?.workspaceCacheKey === workspaceCacheKey) {
-      return cached.authorization;
-    }
-
-    const authorization = (async () => {
-      await assertKnownWorkspace(workspacePath);
-      const workspaceRealPath = (await workspaceAuthorizationCache.get(workspaceCacheKey)).realPath;
-      const projectRealPath = await fsPromises.realpath(projectDir);
-      if (!isDirectChild(workspaceRealPath, projectRealPath)) {
-        throw new Error("Project resolves outside its registered workspace");
-      }
-
-      const [projectStats, markerStats] = await Promise.all([
-        fsPromises.stat(projectRealPath),
-        fsPromises.stat(path.join(projectRealPath, "_project.md")),
-      ]);
-      if (!projectStats.isDirectory() || !markerStats.isFile()) {
-        throw new Error("Project directory is invalid");
-      }
-      return path.resolve(projectDir);
-    })();
-    projectAuthorizationCache.set(projectCacheKey, { workspaceCacheKey, authorization });
-    authorization.catch(() => projectAuthorizationCache.delete(projectCacheKey));
-    return authorization;
-  }
-
-  function forgetProject(projectDir) {
-    const cacheKey = normalizePathForCompare(projectDir);
-    if (cacheKey) projectAuthorizationCache.delete(cacheKey);
-  }
-
   function reset() {
     workspaceAuthorizationCache.clear();
-    projectAuthorizationCache.clear();
   }
 
   async function isInsideKnownWorkspace(targetPath) {
@@ -196,10 +133,8 @@ function createWorkspaceAuthorizer({ getWorkspacePaths, fsPromises = fs.promises
   }
 
   return {
-    assertKnownProject,
     assertKnownWorkspace,
     findKnownWorkspace,
-    forgetProject,
     isInsideKnownWorkspace,
     reset,
   };

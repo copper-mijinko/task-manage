@@ -1,4 +1,4 @@
-﻿import { render, screen, fireEvent } from "@testing-library/svelte";
+import { render, screen, fireEvent } from "@testing-library/svelte";
 import { tick } from "svelte";
 import { vi } from "vitest";
 
@@ -14,10 +14,6 @@ vi.mock("@features/search/components/PageSearchBox.svelte", async () => {
   const mod = await import("../mocks/PassThroughStub.svelte");
   return { default: mod.default };
 });
-vi.mock("@pages/TaskDetailPage.svelte", async () => {
-  const mod = await import("../mocks/TaskDetailStub.svelte");
-  return { default: mod.default };
-});
 
 import App from "../../src/App.svelte";
 import { saveStatus, selected_id, selected_type, sidebarCollapsed } from "@stores";
@@ -26,15 +22,8 @@ import { get } from "svelte/store";
 
 function makeElectronAPI(overrides = {}) {
   return {
-    getInitialTreeData: vi.fn().mockResolvedValue(undefined),
-    getProjectIDs: vi.fn().mockResolvedValue([]),
-    onProjectDeleted: vi.fn(),
-    onTreeDataUpdated: vi.fn(),
     onThemeChanged: vi.fn(),
     onSaveError: vi.fn(),
-    onWorkspaceConflict: vi.fn(),
-    onWorkspaceNotice: vi.fn(),
-    wsResolveConflict: vi.fn().mockResolvedValue({ success: true }),
     getMetaData: vi.fn().mockResolvedValue(null),
     setMetaData: vi.fn(),
     getCurrentTheme: vi.fn().mockResolvedValue("dark"),
@@ -76,162 +65,45 @@ describe("App - empty workspace guidance", () => {
   });
 });
 
-// Save status indicator is now rendered inside Header.svelte (which is mocked out in App tests).
-// These tests are skipped here; equivalent coverage should live in a Header-specific test.
-describe.skip("App - save status indicator", () => {
+describe("App - save error banner", () => {
   afterEach(() => {
     saveStatus.set("idle");
     delete window.electronAPI;
   });
 
-  test("idle 状態では「保存済み」として表示される", async () => {
-    await renderApp();
-    // idle 状態でも Header の保存インジケーターは常時表示され「保存済み」を表す
-    const el = screen.getByTestId("save-status-indicator");
-    expect(el).toBeInTheDocument();
-    expect(el).toHaveTextContent("保存済み");
-    expect(el).toHaveAttribute("data-status", "idle");
-  });
-
-  test("saving 状態で「保存中...」を表示する", async () => {
-    await renderApp();
-    saveStatus.set("saving");
-    await tick();
-
-    const el = screen.getByTestId("save-status-indicator");
-    expect(el).toBeInTheDocument();
-    expect(el).toHaveTextContent("保存中...");
-    expect(el).toHaveAttribute("data-status", "saving");
-  });
-
-  test("saved 状態で「保存済み」を表示する", async () => {
-    await renderApp();
-    saveStatus.set("saved");
-    await tick();
-
-    const el = screen.getByTestId("save-status-indicator");
-    expect(el).toBeInTheDocument();
-    expect(el).toHaveTextContent("保存済み");
-    expect(el).toHaveAttribute("data-status", "saved");
-  });
-
-  test("error 状態（バナーなし）で「保存失敗」インジケーターを表示する", async () => {
-    await renderApp();
-    saveStatus.set("error");
-    await tick();
-
-    const el = screen.getByTestId("save-status-indicator");
-    expect(el).toBeInTheDocument();
-    expect(el).toHaveTextContent("保存失敗");
-    expect(el).toHaveAttribute("data-status", "error");
-  });
-
-  test("onSaveError 発火でエラーバナーが表示され、インジケーターは隠れる", async () => {
-    let savedCallback;
+  test("shows the save error from the main process and marks the status as failed", async () => {
+    let reportSaveError;
     await renderApp(
       makeElectronAPI({
-        onSaveError: vi.fn((cb) => {
-          savedCallback = cb;
+        onSaveError: vi.fn((callback) => {
+          reportSaveError = callback;
         }),
       })
     );
-    saveStatus.set("saving");
+
+    reportSaveError("ファイル保存に失敗しました");
     await tick();
 
-    savedCallback("ファイル保存に失敗しました");
-    await tick();
-
-    expect(screen.getByRole("alert")).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("ファイル保存に失敗しました");
-    // Header indicator is always present (data-status reflects the current state)
-    expect(screen.getByTestId("save-status-indicator")).toBeInTheDocument();
+    expect(get(saveStatus)).toBe("error");
   });
 
-  test("エラーバナーを閉じると saveStatus が idle に戻る", async () => {
-    let savedCallback;
+  test("closing the banner resets the status to idle", async () => {
+    let reportSaveError;
     await renderApp(
       makeElectronAPI({
-        onSaveError: vi.fn((cb) => {
-          savedCallback = cb;
+        onSaveError: vi.fn((callback) => {
+          reportSaveError = callback;
         }),
       })
     );
 
-    savedCallback("保存失敗");
+    reportSaveError("保存失敗");
     await tick();
-
-    const closeButton = screen.getByRole("alert").querySelector("button");
-    await fireEvent.click(closeButton);
+    await fireEvent.click(screen.getByRole("alert").querySelector("button"));
     await tick();
 
     expect(get(saveStatus)).toBe("idle");
     expect(screen.queryByRole("alert")).toBeNull();
-    // Header indicator remains and reflects idle state
-    const el = screen.getByTestId("save-status-indicator");
-    expect(el).toHaveAttribute("data-status", "idle");
-  });
-
-  test("saving → saved への状態遷移でインジケーターが切り替わる", async () => {
-    await renderApp();
-
-    saveStatus.set("saving");
-    await tick();
-    expect(screen.getByTestId("save-status-indicator")).toHaveTextContent("保存中...");
-
-    saveStatus.set("saved");
-    await tick();
-    expect(screen.getByTestId("save-status-indicator")).toHaveTextContent("保存済み");
-  });
-});
-
-describe("App - workspace conflict notifications", () => {
-  afterEach(() => {
-    saveStatus.set("idle");
-    delete window.electronAPI;
-  });
-
-  test("shows workspace conflict actions and keeps local changes", async () => {
-    let conflictCallback;
-    const api = makeElectronAPI({
-      onWorkspaceConflict: vi.fn((cb) => {
-        conflictCallback = cb;
-      }),
-    });
-    await renderApp(api);
-
-    conflictCallback({
-      projectDir: "C:\\workspace\\project",
-      message: "Workspace changed on disk.",
-    });
-    await tick();
-
-    expect(screen.getByRole("alert")).toHaveTextContent("Workspace changed on disk.");
-    await fireEvent.click(screen.getByRole("button", { name: "維持" }));
-    await tick();
-
-    expect(api.wsResolveConflict).toHaveBeenCalledWith("C:\\workspace\\project", "keep-local");
-    expect(screen.queryByText("Workspace changed on disk.")).toBeNull();
-  });
-
-  test("resolves workspace conflict by reloading from disk", async () => {
-    let conflictCallback;
-    const api = makeElectronAPI({
-      onWorkspaceConflict: vi.fn((cb) => {
-        conflictCallback = cb;
-      }),
-    });
-    await renderApp(api);
-
-    conflictCallback({
-      projectDir: "C:\\workspace\\project",
-      message: "Workspace changed on disk.",
-    });
-    await tick();
-
-    await fireEvent.click(screen.getByRole("button", { name: "再読込" }));
-    await tick();
-
-    expect(api.wsResolveConflict).toHaveBeenCalledWith("C:\\workspace\\project", "reload");
-    expect(screen.queryByText("Workspace changed on disk.")).toBeNull();
   });
 });
