@@ -1,7 +1,6 @@
 <script>
   import { viewportPopover } from "@lib/actions/viewport_popover";
   import { globalDismiss } from "@lib/actions";
-  import { createEventDispatcher } from "svelte";
 
   /**
    * 親ノードを付け外しするフィールド。タグ欄と同じ操作にしてある
@@ -14,32 +13,30 @@
    * 循環はTreeGridのterminal referenceで表示する。
    */
 
-  /** 現在の親（ノード id の配列）。 */
-  export let parentIds = [];
   /**
-   * 候補。`{ id, name, path }` の配列。呼び出し側が操作契約に従って渡す。
+   * @typedef {Object} Props
+   * @property {any} [parentIds] - 現在の親（ノード id の配列）。
+   * @property {any} [candidates] - 候補。`{ id, name, path }` の配列。呼び出し側が操作契約に従って渡す。
+   * @property {any} [nameById] - id → 表示名。チップのラベルに使う。
+   * @property {boolean} [disabled]
+   * @property {number} [maxSuggestions]
+   * @property {(detail?: any) => void} [onchange]
    */
-  export let candidates = [];
-  /** id → 表示名。チップのラベルに使う。 */
-  export let nameById = {};
-  export let disabled = false;
-  export let maxSuggestions = 8;
 
-  const dispatch = createEventDispatcher();
+  /** @type {Props} */
+  let {
+    parentIds = [],
+    candidates = [],
+    nameById = {},
+    disabled = false,
+    maxSuggestions = 8,
+    onchange,
+  } = $props();
 
-  let input = "";
-  let open = false;
-  let inputElement;
-  let activeIndex = 0;
-
-  $: current = parentIds ?? [];
-  $: query = input.trim().toLowerCase();
-  /**
-   * VS Code 風に、入力文字が順に含まれていれば拾う（部分一致より緩い）。
-   * 連続一致を優先して並べるので、素直に打てば目当てが上に来る。
-   */
-  $: visibleCandidates = rank(candidates ?? [], query).slice(0, maxSuggestions);
-  $: if (visibleCandidates.length <= activeIndex) activeIndex = 0;
+  let input = $state("");
+  let open = $state(false);
+  let inputElement = $state();
+  let activeIndex = $state(0);
 
   function subsequenceScore(text, needle) {
     if (!needle) return 0;
@@ -77,13 +74,13 @@
     input = "";
     open = false;
     activeIndex = 0;
-    dispatch("change", { parentIds: [...current, id] });
+    onchange?.({ parentIds: [...current, id] });
   }
 
   function removeParent(id) {
     // 最後の親は外させない。孤児を作らないため（外したい場合は先に別の親を足す）。
     if (disabled || current.length <= 1) return;
-    dispatch("change", { parentIds: current.filter((parentId) => parentId !== id) });
+    onchange?.({ parentIds: current.filter((parentId) => parentId !== id) });
   }
 
   function handleKeydown(event) {
@@ -107,6 +104,16 @@
       removeParent(current[current.length - 1]);
     }
   }
+  let current = $derived(parentIds ?? []);
+  let query = $derived(input.trim().toLowerCase());
+  /**
+   * VS Code 風に、入力文字が順に含まれていれば拾う（部分一致より緩い）。
+   * 連続一致を優先して並べるので、素直に打てば目当てが上に来る。
+   */
+  let visibleCandidates = $derived(rank(candidates ?? [], query).slice(0, maxSuggestions));
+  $effect.pre(() => {
+    if (visibleCandidates.length <= activeIndex) activeIndex = 0;
+  });
 </script>
 
 <div class="ParentField">
@@ -124,7 +131,7 @@
           title={current.length <= 1
             ? "唯一の親は外せません（先に別の親を足してください）"
             : "この親を外す"}
-          on:click={() => removeParent(id)}>×</button
+          onclick={() => removeParent(id)}>×</button
         >
       </span>
     {/each}
@@ -138,10 +145,10 @@
       spellcheck="false"
       placeholder={current.length === 0 ? "親を選択…" : "親を追加…"}
       aria-label="親ノードを追加"
-      on:focus={() => (open = true)}
-      on:click={() => (open = true)}
-      on:input={() => (open = true)}
-      on:keydown={handleKeydown}
+      onfocus={() => (open = true)}
+      onclick={() => (open = true)}
+      oninput={() => (open = true)}
+      onkeydown={handleKeydown}
     />
   </div>
 
@@ -161,8 +168,8 @@
             class:Active={index === activeIndex}
             role="option"
             aria-selected={index === activeIndex}
-            on:mouseenter={() => (activeIndex = index)}
-            on:click={() => addParent(candidate.id)}
+            onmouseenter={() => (activeIndex = index)}
+            onclick={() => addParent(candidate.id)}
           >
             <span class="SuggestionName">{candidate.name}</span>
             {#if candidate.path}

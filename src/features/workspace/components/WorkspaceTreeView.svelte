@@ -1,36 +1,51 @@
 <script>
-  import { createEventDispatcher } from "svelte";
   import { projectGraphTree } from "@features/workspace/utils/graph_projection";
-  export let graph;
-  export let selectedOccurrenceId = "";
-  export let showArchived = false;
-  export let persistenceKey = "";
-  const dispatch = createEventDispatcher();
-  let expanded = new Set(),
-    restored = "";
-  $: if (persistenceKey && restored !== persistenceKey) {
-    restored = persistenceKey;
-    try {
-      expanded = new Set(
-        JSON.parse(localStorage.getItem(`task-manage:tree-expanded:${persistenceKey}`) || "[]")
-      );
-    } catch {
-      expanded = new Set();
+  /**
+   * @typedef {Object} Props
+   * @property {any} graph
+   * @property {string} [selectedOccurrenceId]
+   * @property {boolean} [showArchived]
+   * @property {string} [persistenceKey]
+   * @property {(detail?: any) => void} [onselect]
+   */
+
+  /** @type {Props} */
+  let {
+    graph,
+    selectedOccurrenceId = "",
+    showArchived = false,
+    persistenceKey = "",
+    onselect,
+  } = $props();
+  let expanded = $state(new Set()),
+    restored = $state("");
+  $effect.pre(() => {
+    if (persistenceKey && restored !== persistenceKey) {
+      restored = persistenceKey;
+      try {
+        expanded = new Set(
+          JSON.parse(localStorage.getItem(`task-manage:tree-expanded:${persistenceKey}`) || "[]")
+        );
+      } catch {
+        expanded = new Set();
+      }
     }
-  }
-  $: projection = projectGraphTree(graph);
-  $: visible = projection
-    .filter(
-      (r) => r.nodeId === graph.rootId || r.cycleReference || showArchived || !r.node.archived
-    )
-    .filter(
-      (r) =>
-        r.depth === 0 ||
-        r.occurrenceId
-          .split("/")
-          .slice(0, -1)
-          .every((_, i, a) => expanded.has(a.slice(0, i + 1).join("/")))
-    );
+  });
+  let projection = $derived(projectGraphTree(graph));
+  let visible = $derived(
+    projection
+      .filter(
+        (r) => r.nodeId === graph.rootId || r.cycleReference || showArchived || !r.node.archived
+      )
+      .filter(
+        (r) =>
+          r.depth === 0 ||
+          r.occurrenceId
+            .split("/")
+            .slice(0, -1)
+            .every((_, i, a) => expanded.has(a.slice(0, i + 1).join("/")))
+      )
+  );
   function toggle(r, e) {
     e.stopPropagation();
     if (!r.expandable) return;
@@ -59,7 +74,7 @@
         type="button"
         aria-label={expanded.has(row.occurrenceId) ? "折りたたむ" : "展開する"}
         disabled={!row.expandable}
-        on:click={(e) => toggle(row, e)}
+        onclick={(e) => toggle(row, e)}
         >{row.cycleReference
           ? "↪"
           : row.expandable
@@ -67,7 +82,7 @@
               ? "▾"
               : "▸"
             : "·"}</button
-      ><button class="label" type="button" on:click={() => dispatch("select", row)}
+      ><button class="label" type="button" onclick={() => onselect?.(row)}
         >{row.node.name}{#if row.cycleReference}<small>循環参照 — グラフで表示</small
           >{/if}{#if row.node.archived}<small>アーカイブ</small>{/if}</button
       >

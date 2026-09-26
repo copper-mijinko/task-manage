@@ -68,8 +68,8 @@
     isTextEditingTarget,
   } from "@lib/utils/hotkey_priority";
 
-  let table_root; // Bind
-  let headerComponent;
+  let table_root = $state(); // Bind
+  let headerComponent = $state();
   /** ツールバーの「…」メニュー、またはクリックイベントから開かれる。 */
   export function openColumns(anchor) {
     headerComponent?.openPanel(anchor);
@@ -101,29 +101,6 @@
     { name: "tags", default_ratio: 2 },
   ];
 
-  $: rows = $filtered_data
-    ? flattenVisibleTree($filtered_data, $closed_row_paths, $show_archived)
-    : [];
-  /**
-   * いま操作している 1 行（＝辺）。選択はノード単位なので、多親ノードを選ぶと
-   * その出現すべてが選択色になる。どこを操作しているのかは行でしか分からない
-   * ので、経路で 1 行だけを「現在行」として別扱いする。
-   *
-   * Tab の停留点も同じ行。全行を tabindex="0" にすると、テーブルを通り過ぎる
-   * だけで行数ぶん Tab を押すことになる。
-   */
-  $: {
-    const stillValid = rows.some(
-      (row) =>
-        row.path === $active_row_path && ($selected_ids.size === 0 || $selected_ids.has(row.id))
-    );
-    if (!stillValid) {
-      $active_row_path =
-        rows.find((row) => $selected_ids.has(row.id))?.path ?? rows[0]?.path ?? undefined;
-    }
-  }
-  $: tabStopRowPath = $active_row_path;
-  $: activeRowId = rows.find((row) => row.path === $active_row_path)?.id ?? null;
   /**
    * ノードごとの「置かれている場所」。同じノードが複数の親の下に出るのが
    * 普通なので、行だけを見ても別ノードなのか同じノードなのか分からない。
@@ -149,13 +126,7 @@
     }
     return index;
   }
-  $: occurrenceIndex = buildOccurrenceIndex($tree_data?.data);
-  $: inheritedDueDateMap = buildInheritedDueDateMap(rows);
-  $: nodePathMap = buildNodePathMap(rows);
-  $: lineNumberMap = buildLineNumberMap($filtered_data);
-  $: isDark = $theme == "dark";
-  $: hasNoTasks = !$tree_data?.data?.children?.length;
-  let scrollTop = 0;
+  let scrollTop = $state(0);
 
   // Compute visible headers from tree_data.headers filtered/ordered by column_settings
   function mergeBuiltInHeaders(treeHeaders = []) {
@@ -193,15 +164,6 @@
     return result;
   }
 
-  $: visibleHeaders = computeVisibleHeaders($tree_data?.headers, $column_settings);
-  $: allHeaders = mergeBuiltInHeaders($tree_data?.headers);
-
-  // Memoize the id→row map against `rows` so scrolling (which only changes
-  // scrollTop) does not rebuild it for every frame.
-  // 祖先を辿るキーは経路。多親ノードは同じ id の行が複数あるので id では引けない。
-  $: rowByPath = new Map(rows.map((row) => [row.path, row]));
-  $: stickyTrail = buildStickyTrail(rows, scrollTop, rowHeightPx, rowByPath);
-
   // ---- 見えている行だけを描く（仮想スクロール） ----
   //
   // 全行を DOM にすると、ノードが数千あるワークスペースでは起動のたびに
@@ -213,16 +175,16 @@
   const FALLBACK_ALL_ROWS = 200;
   const FALLBACK_WINDOW_ROWS = 60;
 
-  let rowHeightProbe;
-  let rowsTopMarker;
+  let rowHeightProbe = $state();
+  let rowsTopMarker = $state();
   /**
    * 1 行の高さ（px）。`--tree-row-height` は rem で書かれているので、
    * 変数の値を parseFloat しても px にはならない。実際に描いた要素で測る。
    */
-  let rowHeightPx = 0;
+  let rowHeightPx = $state(0);
   /** スクロール内容の先頭から最初の行までの距離（見出しの高さ）。 */
-  let rowsOffset = 0;
-  let viewportHeight = 0;
+  let rowsOffset = $state(0);
+  let viewportHeight = $state(0);
 
   function measureVirtualLayout() {
     if (!table_root) return;
@@ -231,14 +193,6 @@
     viewportHeight = table_root.clientHeight;
     scrollTop = table_root.scrollTop;
   }
-  $: {
-    // 密度とテーマで行の高さが変わる。見出しの高さは通知の有無で変わる。
-    void $theme;
-    void $ui_density;
-    tick().then(measureVirtualLayout);
-  }
-
-  $: rowIndexByPath = new Map(rows.map((row, index) => [row.path, index]));
 
   /**
    * ページ内検索（ヘッダーの検索ボックス）は描かれている文字を探す。
@@ -258,10 +212,9 @@
     });
     return indices;
   }
-  $: searchMatchIndices = collectSearchMatchIndices(rows, $pageSearchQuery);
 
   /** ドラッグ中の行。消すと dragend が届かないので、画面外でも描いておく。 */
-  let draggingRowPath;
+  let draggingRowPath = $state();
   function handleTableDragStart(event) {
     draggingRowPath = event.target?.closest?.('[role="row"][data-row-path]')?.dataset.rowPath;
   }
@@ -269,52 +222,15 @@
     draggingRowPath = undefined;
   }
 
-  $: rowRange = visibleRowRange({
-    rowCount: rows.length,
-    scrollTop,
-    viewportHeight,
-    rowHeight: rowHeightPx,
-    rowsOffset,
-    overscan: OVERSCAN_ROWS,
-    fallbackAllRows: FALLBACK_ALL_ROWS,
-    fallbackWindowRows: FALLBACK_WINDOW_ROWS,
-  });
-  $: pinnedSearchIndices = nearestIndices(
-    searchMatchIndices,
-    Math.floor((rowRange.start + rowRange.end) / 2),
-    PAGE_SEARCH_PIN_LIMIT
-  );
-  // 描いていない一致があれば、ヘッダーの件数に「+」を付けてもらう。
-  $: pageSearchCountIsPartial.set(searchMatchIndices.length > pinnedSearchIndices.length);
   onDestroy(() => pageSearchCountIsPartial.set(false));
-  // いま操作している行は、キーボード操作と Tab の停留点なので常に描く。
-  $: pinnedRowIndices = [
-    rowIndexByPath.get($active_row_path),
-    rowIndexByPath.get(draggingRowPath),
-    ...pinnedSearchIndices,
-  ].filter((index) => index !== undefined);
-  $: renderItems = buildRenderItems(rows.length, rowRange, pinnedRowIndices);
 
   /**
    * 出現アニメーションは本当に増えた行だけに流す。スクロールで描き始めた
    * 行にも流すと、スクロールのたびに行がちらつく。
    */
   let previousRowPaths = null;
-  let enteringRowPaths = new Set();
+  let enteringRowPaths = $state(new Set());
   let enteringTimer;
-  $: {
-    const current = new Set(rows.map((row) => row.path));
-    enteringRowPaths =
-      previousRowPaths === null
-        ? current
-        : new Set([...current].filter((path) => !previousRowPaths.has(path)));
-    previousRowPaths = current;
-    clearTimeout(enteringTimer);
-    if (enteringRowPaths.size > 0) {
-      // アニメーション（0.16s）が終わってから外す。
-      enteringTimer = setTimeout(() => (enteringRowPaths = new Set()), 250);
-    }
-  }
 
   /** 行が見える位置までスクロールする（見えていれば何もしない）。 */
   function revealRow(path) {
@@ -342,57 +258,23 @@
   // どこから変わっても同じ。描かれていない行は DOM から探せないので、
   // スクロールで行を描かせるのはここに寄せる。
   let lastRevealedRowPath;
-  $: if ($active_row_path !== lastRevealedRowPath) {
-    lastRevealedRowPath = $active_row_path;
-    const path = $active_row_path;
-    if (path) tick().then(() => revealRow(path));
-  }
 
-  let showDeleteConfirm = false;
+  let showDeleteConfirm = $state(false);
   let deleteTargetId;
-  let deleteTargetName = "";
+  let deleteTargetName = $state("");
   let bulkDeleteCount = 0;
-  let bulkDeleteIsBulk = false;
+  let bulkDeleteIsBulk = $state(false);
   /** 単発時のモード: "archive" | "permanent"。bulk のときは見ない。 */
-  let deleteMode = "archive";
+  let deleteMode = $state("archive");
   /** bulk のときの振り分け結果。 */
-  let bulkArchiveTargetIds = [];
-  let bulkPermanentTargetIds = [];
+  let bulkArchiveTargetIds = $state([]);
+  let bulkPermanentTargetIds = $state([]);
   /**
    * 多親ノードをアーカイブするときの範囲選択。行は「ノードの辺」なので、
    * この行だけ片付けたいのか、ノードごと（＝全部の行）なのかを選ばせる。
    * 親がひとつしかないノードでは差が無いので出さない。
    */
-  let archiveScopeTarget = null;
-
-  // Visible row ids excluding the project root (root is not selectable).
-  $: visibleSelectableIds = rows.filter((r) => r.id !== $tree_data?.data?.id).map((r) => r.id);
-  $: anchorRowExists = $selection_anchor_id !== undefined;
-  $: selectionSet = $selected_ids;
-  $: selectionSize = selectionSet.size;
-  // 一括操作の基準の親は、いま操作している行の親（多親ノードが混ざったとき、
-  // どの親の下でまとめて動かすのかを画面と一致させる）。
-  $: bulkParentPath = parentPathOf($active_row_path ?? "");
-  $: canSiblingMove =
-    selectionSize > 0 && isContiguousSiblingBlock($tree_data?.data, selectionSet, bulkParentPath);
-  $: canTreeOp =
-    selectionSize > 0 && areAllSiblings($tree_data?.data, selectionSet, bulkParentPath);
-  // Outdent is permitted iff the shared parent has its own parent.
-  $: canBulkOutdent = (() => {
-    if (!canTreeOp || !$tree_data?.data) return false;
-    const anyId = selectionSet.values().next().value;
-    if (!anyId) return false;
-    // 基準の親も、いま操作している行の側で見る。
-    const parent =
-      getNodeByPath($tree_data.data, bulkParentPath) ?? getParent(anyId, $tree_data.data);
-    if (!parent) return false;
-    return !!(
-      getNodeByPath($tree_data.data, parentPathOf(bulkParentPath ?? "")) ??
-      getParent(parent.id, $tree_data.data)
-    );
-  })();
-  $: selectableCount = visibleSelectableIds.length;
-  $: selectedCount = $bulk_selection_active ? selectionSize : 0;
+  let archiveScopeTarget = $state(null);
 
   // Filter or tree-shape changes can hide previously selected rows. Prune the
   // multi-selection by what survives the current filter (independent of expand /
@@ -410,17 +292,6 @@
     return out;
   }
   let lastFilterKey = "";
-  $: filteredIds = collectAllFilteredIds($filtered_data);
-  $: {
-    // Stringify the id set as a cheap change key; only re-prune when it changes.
-    const key = Array.from(filteredIds).sort().join("|");
-    if (key !== lastFilterKey) {
-      lastFilterKey = key;
-      if (selectionSize > 0) {
-        pruneSelection(filteredIds);
-      }
-    }
-  }
 
   onMount(() => {
     measureVirtualLayout();
@@ -852,7 +723,7 @@
   };
 
   function handleSelectRow(event) {
-    const { id, path, shiftKey, ctrlKey } = event.detail;
+    const { id, path, shiftKey, ctrlKey } = event;
     if (path) $active_row_path = path;
     if (shiftKey && $selection_anchor_id) {
       selectRange(
@@ -873,7 +744,7 @@
   }
 
   function handleToggleCheckbox(event) {
-    const { id, path, shiftKey, ctrlKey } = event.detail;
+    const { id, path, shiftKey, ctrlKey } = event;
     if (path) $active_row_path = path;
     if (!$bulk_selection_active) {
       selectOnly(id, path);
@@ -954,7 +825,7 @@
   }
 
   function handleRowNavigate(event) {
-    const { id, path, key, shiftKey } = event.detail;
+    const { id, path, key, shiftKey } = event;
     // 多親ノードは複数行に出るため、位置は経路で決める。
     const index = rows.findIndex((row) => row.path === path);
     if (index < 0) return;
@@ -998,7 +869,7 @@
 
   function handleToggleRow(event) {
     // 開閉は経路ごと。同じノードでも、別の親の下の行は畳んだままにする。
-    const { path } = event.detail;
+    const { path } = event;
     if (!path) return;
     if ($closed_row_paths.has(path)) {
       closed_row_paths.delete(path);
@@ -1008,17 +879,17 @@
   }
 
   function handleCommit(event) {
-    return application.update(event.detail.id, event.detail.patch);
+    return application.update(event.id, event.patch);
   }
 
   function canDropTarget(draggedId, targetId) {
     return draggedId !== targetId;
   }
 
-  let pendingDrop = null;
-  let dropBusy = false;
+  let pendingDrop = $state(null);
+  let dropBusy = $state(false);
   function handleReorder(event) {
-    pendingDrop = { ...event.detail };
+    pendingDrop = { ...event };
   }
   async function finishDrop(operation) {
     if (!pendingDrop || dropBusy) return;
@@ -1049,7 +920,7 @@
 
   /** 行メニューの移動。複数選択に含まれる行なら選択全体を動かす。 */
   function moveFromRow(direction, event) {
-    const { id, path } = event.detail;
+    const { id, path } = event;
     return application.move(
       direction,
       isInMultiSelection(id) ? [...selectionSet] : [id],
@@ -1066,35 +937,33 @@
   }
 
   function handleAddBelow(event) {
-    handleAddRelative(event.detail.id, "insert_after", event.detail.path);
+    handleAddRelative(event.id, "insert_after", event.path);
   }
 
   function handleAddChild(event) {
-    handleAddRelative(event.detail.id, "append", event.detail.path);
+    handleAddRelative(event.id, "append", event.path);
   }
 
   function handleCopyTask(event) {
-    return application.copy(
-      isInMultiSelection(event.detail.id) ? [...selectionSet] : [event.detail.id]
-    );
+    return application.copy(isInMultiSelection(event.id) ? [...selectionSet] : [event.id]);
   }
 
   function handlePasteTask(event) {
-    return application.paste(event.detail.id);
+    return application.paste(event.id);
   }
 
   // --- Bulk operation handlers ---------------------------------------------
 
   function handleBulkStatus(event) {
-    return application.updateMany({ status: event.detail.value });
+    return application.updateMany({ status: event.value });
   }
 
   function handleBulkSetDate(event) {
-    return application.updateMany({ [event.detail.key]: event.detail.value });
+    return application.updateMany({ [event.key]: event.value });
   }
 
   function handleBulkClearDate(event) {
-    return application.updateMany({ [event.detail.key]: undefined });
+    return application.updateMany({ [event.key]: undefined });
   }
 
   const handleBulkMoveUp = () => application.move("up");
@@ -1171,7 +1040,7 @@
   }
 
   function requestDelete(event) {
-    const { id, path } = event.detail;
+    const { id, path } = event;
     if (!isInMultiSelection(id)) {
       const occurrencePath = path ?? $active_row_path;
       const state = application.archiveStateOf(id, occurrencePath);
@@ -1190,7 +1059,7 @@
   }
 
   function requestPermanentDelete(event) {
-    requestRemoval(event.detail.id, "permanent");
+    requestRemoval(event.id, "permanent");
   }
 
   function requestRemoval(id, mode) {
@@ -1213,7 +1082,7 @@
   }
 
   function requestRestore(event) {
-    const { id, path } = event.detail;
+    const { id, path } = event;
     if (!isInMultiSelection(id)) {
       // 辺だけのアーカイブと、ノードごとのアーカイブは画面では同じに見える。
       // 立っている方を外す（両方立っていれば両方）。
@@ -1251,49 +1120,194 @@
     clearSelection();
   }
 
-  $: deleteDialogHeader = (() => {
-    if (bulkDeleteIsBulk) {
-      if (bulkArchiveTargetIds.length > 0 && bulkPermanentTargetIds.length > 0) {
-        return "アーカイブと完全削除の確認";
+  let rows = $derived(
+    $filtered_data ? flattenVisibleTree($filtered_data, $closed_row_paths, $show_archived) : []
+  );
+  /**
+   * いま操作している 1 行（＝辺）。選択はノード単位なので、多親ノードを選ぶと
+   * その出現すべてが選択色になる。どこを操作しているのかは行でしか分からない
+   * ので、経路で 1 行だけを「現在行」として別扱いする。
+   *
+   * Tab の停留点も同じ行。全行を tabindex="0" にすると、テーブルを通り過ぎる
+   * だけで行数ぶん Tab を押すことになる。
+   */
+  $effect.pre(() => {
+    const stillValid = rows.some(
+      (row) =>
+        row.path === $active_row_path && ($selected_ids.size === 0 || $selected_ids.has(row.id))
+    );
+    if (!stillValid) {
+      $active_row_path =
+        rows.find((row) => $selected_ids.has(row.id))?.path ?? rows[0]?.path ?? undefined;
+    }
+  });
+  let tabStopRowPath = $derived($active_row_path);
+  let activeRowId = $derived(rows.find((row) => row.path === $active_row_path)?.id ?? null);
+  let occurrenceIndex = $derived(buildOccurrenceIndex($tree_data?.data));
+  let inheritedDueDateMap = $derived(buildInheritedDueDateMap(rows));
+  let nodePathMap = $derived(buildNodePathMap(rows));
+  let lineNumberMap = $derived(buildLineNumberMap($filtered_data));
+  let isDark = $derived($theme == "dark");
+  let hasNoTasks = $derived(!$tree_data?.data?.children?.length);
+  let visibleHeaders = $derived(computeVisibleHeaders($tree_data?.headers, $column_settings));
+  let allHeaders = $derived(mergeBuiltInHeaders($tree_data?.headers));
+  // Memoize the id→row map against `rows` so scrolling (which only changes
+  // scrollTop) does not rebuild it for every frame.
+  // 祖先を辿るキーは経路。多親ノードは同じ id の行が複数あるので id では引けない。
+  let rowByPath = $derived(new Map(rows.map((row) => [row.path, row])));
+  let stickyTrail = $derived(buildStickyTrail(rows, scrollTop, rowHeightPx, rowByPath));
+  $effect.pre(() => {
+    // 密度とテーマで行の高さが変わる。見出しの高さは通知の有無で変わる。
+    void $theme;
+    void $ui_density;
+    tick().then(measureVirtualLayout);
+  });
+  let rowIndexByPath = $derived(new Map(rows.map((row, index) => [row.path, index])));
+  let searchMatchIndices = $derived(collectSearchMatchIndices(rows, $pageSearchQuery));
+  let rowRange = $derived(
+    visibleRowRange({
+      rowCount: rows.length,
+      scrollTop,
+      viewportHeight,
+      rowHeight: rowHeightPx,
+      rowsOffset,
+      overscan: OVERSCAN_ROWS,
+      fallbackAllRows: FALLBACK_ALL_ROWS,
+      fallbackWindowRows: FALLBACK_WINDOW_ROWS,
+    })
+  );
+  let pinnedSearchIndices = $derived(
+    nearestIndices(
+      searchMatchIndices,
+      Math.floor((rowRange.start + rowRange.end) / 2),
+      PAGE_SEARCH_PIN_LIMIT
+    )
+  );
+  // 描いていない一致があれば、ヘッダーの件数に「+」を付けてもらう。
+  $effect.pre(() => {
+    pageSearchCountIsPartial.set(searchMatchIndices.length > pinnedSearchIndices.length);
+  });
+  // いま操作している行は、キーボード操作と Tab の停留点なので常に描く。
+  let pinnedRowIndices = $derived(
+    [
+      rowIndexByPath.get($active_row_path),
+      rowIndexByPath.get(draggingRowPath),
+      ...pinnedSearchIndices,
+    ].filter((index) => index !== undefined)
+  );
+  let renderItems = $derived(buildRenderItems(rows.length, rowRange, pinnedRowIndices));
+  $effect.pre(() => {
+    const current = new Set(rows.map((row) => row.path));
+    const entering =
+      previousRowPaths === null
+        ? current
+        : new Set([...current].filter((path) => !previousRowPaths.has(path)));
+    enteringRowPaths = entering;
+    previousRowPaths = current;
+    clearTimeout(enteringTimer);
+    if (entering.size > 0) {
+      // アニメーション（0.16s）が終わってから外す。
+      enteringTimer = setTimeout(() => (enteringRowPaths = new Set()), 250);
+    }
+  });
+  $effect.pre(() => {
+    if ($active_row_path !== lastRevealedRowPath) {
+      lastRevealedRowPath = $active_row_path;
+      const path = $active_row_path;
+      if (path) tick().then(() => revealRow(path));
+    }
+  });
+  // Visible row ids excluding the project root (root is not selectable).
+  let visibleSelectableIds = $derived(
+    rows.filter((r) => r.id !== $tree_data?.data?.id).map((r) => r.id)
+  );
+  let anchorRowExists = $derived($selection_anchor_id !== undefined);
+  let selectionSet = $derived($selected_ids);
+  let selectionSize = $derived(selectionSet.size);
+  // 一括操作の基準の親は、いま操作している行の親（多親ノードが混ざったとき、
+  // どの親の下でまとめて動かすのかを画面と一致させる）。
+  let bulkParentPath = $derived(parentPathOf($active_row_path ?? ""));
+  let canSiblingMove = $derived(
+    selectionSize > 0 && isContiguousSiblingBlock($tree_data?.data, selectionSet, bulkParentPath)
+  );
+  let canTreeOp = $derived(
+    selectionSize > 0 && areAllSiblings($tree_data?.data, selectionSet, bulkParentPath)
+  );
+  // Outdent is permitted iff the shared parent has its own parent.
+  let canBulkOutdent = $derived(
+    (() => {
+      if (!canTreeOp || !$tree_data?.data) return false;
+      const anyId = selectionSet.values().next().value;
+      if (!anyId) return false;
+      // 基準の親も、いま操作している行の側で見る。
+      const parent =
+        getNodeByPath($tree_data.data, bulkParentPath) ?? getParent(anyId, $tree_data.data);
+      if (!parent) return false;
+      return !!(
+        getNodeByPath($tree_data.data, parentPathOf(bulkParentPath ?? "")) ??
+        getParent(parent.id, $tree_data.data)
+      );
+    })()
+  );
+  let selectableCount = $derived(visibleSelectableIds.length);
+  let selectedCount = $derived($bulk_selection_active ? selectionSize : 0);
+  let filteredIds = $derived(collectAllFilteredIds($filtered_data));
+  $effect.pre(() => {
+    // Stringify the id set as a cheap change key; only re-prune when it changes.
+    const key = Array.from(filteredIds).sort().join("|");
+    if (key !== lastFilterKey) {
+      lastFilterKey = key;
+      if (selectionSize > 0) {
+        pruneSelection(filteredIds);
       }
-      return bulkPermanentTargetIds.length > 0 ? "完全削除の確認" : "アーカイブの確認";
     }
-    return deleteMode === "permanent" ? "完全削除の確認" : "アーカイブの確認";
-  })();
-
-  $: deleteDialogOk = (() => {
-    if (bulkDeleteIsBulk) {
-      if (bulkPermanentTargetIds.length > 0 && bulkArchiveTargetIds.length > 0) return "実行する";
-      return bulkPermanentTargetIds.length > 0 ? "完全に削除" : "アーカイブする";
-    }
-    return deleteMode === "permanent" ? "完全に削除" : "アーカイブする";
-  })();
-
-  $: deleteDialogDanger = bulkDeleteIsBulk
-    ? bulkPermanentTargetIds.length > 0
-    : deleteMode === "permanent";
-
-  $: deleteDialogContent = (() => {
-    if (bulkDeleteIsBulk) {
-      const lines = [];
-      if (bulkArchiveTargetIds.length > 0)
-        lines.push(`${bulkArchiveTargetIds.length} 件をアーカイブ`);
-      if (bulkPermanentTargetIds.length > 0)
-        lines.push(`${bulkPermanentTargetIds.length} 件を完全削除`);
-      const body = lines.join(" / ");
-      if (bulkPermanentTargetIds.length > 0) {
-        return `${body} します。\nWorkspaceの履歴に残っている間は「元に戻す」で復元できます。`;
+  });
+  let deleteDialogHeader = $derived(
+    (() => {
+      if (bulkDeleteIsBulk) {
+        if (bulkArchiveTargetIds.length > 0 && bulkPermanentTargetIds.length > 0) {
+          return "アーカイブと完全削除の確認";
+        }
+        return bulkPermanentTargetIds.length > 0 ? "完全削除の確認" : "アーカイブの確認";
       }
-      return `${body} します。\n後でアーカイブ表示から復元できます。`;
-    }
-    if (deleteMode === "permanent") {
-      return `"${deleteTargetName}" を完全に削除しますか？\nWorkspaceの履歴に残っている間は「元に戻す」で復元できます。`;
-    }
-    return `"${deleteTargetName}" をアーカイブしますか？\n後でアーカイブ表示から復元できます。`;
-  })();
+      return deleteMode === "permanent" ? "完全削除の確認" : "アーカイブの確認";
+    })()
+  );
+  let deleteDialogOk = $derived(
+    (() => {
+      if (bulkDeleteIsBulk) {
+        if (bulkPermanentTargetIds.length > 0 && bulkArchiveTargetIds.length > 0) return "実行する";
+        return bulkPermanentTargetIds.length > 0 ? "完全に削除" : "アーカイブする";
+      }
+      return deleteMode === "permanent" ? "完全に削除" : "アーカイブする";
+    })()
+  );
+  let deleteDialogDanger = $derived(
+    bulkDeleteIsBulk ? bulkPermanentTargetIds.length > 0 : deleteMode === "permanent"
+  );
+  let deleteDialogContent = $derived(
+    (() => {
+      if (bulkDeleteIsBulk) {
+        const lines = [];
+        if (bulkArchiveTargetIds.length > 0)
+          lines.push(`${bulkArchiveTargetIds.length} 件をアーカイブ`);
+        if (bulkPermanentTargetIds.length > 0)
+          lines.push(`${bulkPermanentTargetIds.length} 件を完全削除`);
+        const body = lines.join(" / ");
+        if (bulkPermanentTargetIds.length > 0) {
+          return `${body} します。\nWorkspaceの履歴に残っている間は「元に戻す」で復元できます。`;
+        }
+        return `${body} します。\n後でアーカイブ表示から復元できます。`;
+      }
+      if (deleteMode === "permanent") {
+        return `"${deleteTargetName}" を完全に削除しますか？\nWorkspaceの履歴に残っている間は「元に戻す」で復元できます。`;
+      }
+      return `"${deleteTargetName}" をアーカイブしますか？\n後でアーカイブ表示から復元できます。`;
+    })()
+  );
 </script>
 
-<svelte:window on:keydown={handleGlobalKeydown} />
+<svelte:window onkeydown={handleGlobalKeydown} />
 
 <div
   bind:this={table_root}
@@ -1303,23 +1317,27 @@
   aria-multiselectable="true"
   aria-rowcount={rows.length + 1}
   tabindex="-1"
-  on:scroll={handleScroll}
-  on:dragstart={handleTableDragStart}
-  on:dragend={handleTableDragEnd}
-  on:click|self={handleBackgroundClick}
-  on:keydown|self={(e) => {
+  onscroll={handleScroll}
+  ondragstart={handleTableDragStart}
+  ondragend={handleTableDragEnd}
+  onclick={(event) => {
+    if (event.target !== event.currentTarget) return;
+    handleBackgroundClick(event);
+  }}
+  onkeydown={(e) => {
+    if (e.target !== e.currentTarget) return;
     if (e.key === "Escape") handleBackgroundClick();
   }}
 >
   <TreeTableHeader
     bind:this={headerComponent}
-    on:columnWidth={handleColumnWidth}
+    oncolumnwidth={handleColumnWidth}
     headers={visibleHeaders}
     {allHeaders}
     {selectedCount}
     {selectableCount}
-    on:selectAll={handleHeaderSelectAll}
-    on:clearSelection={handleHeaderClearSelection}
+    onselectall={handleHeaderSelectAll}
+    onclearselection={handleHeaderClearSelection}
   />
   {#if stickyTrail.length > 0}
     <div class="StickyTrail" aria-hidden="true">
@@ -1377,23 +1395,23 @@
           lineNumber={lineNumberMap.get(row.path) ?? 0}
           isTabStop={row.path === tabStopRowPath}
           isEchoRow={row.id === activeRowId && row.path !== $active_row_path}
-          on:select={handleSelectRow}
-          on:navigate={handleRowNavigate}
-          on:toggleCheckbox={handleToggleCheckbox}
-          on:toggle={handleToggleRow}
-          on:commit={handleCommit}
-          on:reorder={handleReorder}
-          on:moveUp={handleMoveUp}
-          on:moveDown={handleMoveDown}
-          on:indentTask={handleIndentTask}
-          on:outdentTask={handleOutdentTask}
-          on:addBelow={handleAddBelow}
-          on:addChild={handleAddChild}
-          on:deleteTask={requestDelete}
-          on:restoreTask={requestRestore}
-          on:permanentDeleteTask={requestPermanentDelete}
-          on:copyTask={handleCopyTask}
-          on:pasteTask={handlePasteTask}
+          onselect={handleSelectRow}
+          onnavigate={handleRowNavigate}
+          ontogglecheckbox={handleToggleCheckbox}
+          ontoggle={handleToggleRow}
+          oncommit={handleCommit}
+          onreorder={handleReorder}
+          onmoveup={handleMoveUp}
+          onmovedown={handleMoveDown}
+          onindenttask={handleIndentTask}
+          onoutdenttask={handleOutdentTask}
+          onaddbelow={handleAddBelow}
+          onaddchild={handleAddChild}
+          ondeletetask={requestDelete}
+          onrestoretask={requestRestore}
+          onpermanentdeletetask={requestPermanentDelete}
+          oncopytask={handleCopyTask}
+          onpastetask={handlePasteTask}
         />
       {/if}
     {/each}
@@ -1461,28 +1479,28 @@
         content="キャンセル"
         variant="text"
         disabled={dropBusy}
-        on:click={() => (pendingDrop = null)}
+        onclick={() => (pendingDrop = null)}
       />
       <Button
         content="子孫もコピー"
         variant="outlined"
         disabled={dropBusy}
-        on:click={() => finishDrop("copy")}
+        onclick={() => finishDrop("copy")}
       />
-      <Button content="移動" disabled={dropBusy} on:click={() => finishDrop("move")} />
+      <Button content="移動" disabled={dropBusy} onclick={() => finishDrop("move")} />
     </div>
   </div>
 </Modal>
 <ArchiveScopeDialog
   target={archiveScopeTarget}
-  on:cancel={() => (archiveScopeTarget = null)}
-  on:edge={() => {
+  oncancel={() => (archiveScopeTarget = null)}
+  onedge={() => {
     const target = archiveScopeTarget;
     archiveScopeTarget = null;
     void application.archiveEdge(target.id, target.path, true);
     clearSelection();
   }}
-  on:node={() => {
+  onnode={() => {
     const target = archiveScopeTarget;
     archiveScopeTarget = null;
     void application.archive([target.id], true);
@@ -1491,11 +1509,11 @@
 />
 <BulkActionBar
   count={selectionSize}
-  on:bulkStatus={handleBulkStatus}
-  on:bulkSetDate={handleBulkSetDate}
-  on:bulkClearDate={handleBulkClearDate}
-  on:bulkCopy={handleBulkDuplicate}
-  on:clearSelection={() => clearSelection()}
+  onbulkstatus={handleBulkStatus}
+  onbulksetdate={handleBulkSetDate}
+  onbulkcleardate={handleBulkClearDate}
+  onbulkcopy={handleBulkDuplicate}
+  onclearselection={() => clearSelection()}
 />
 
 <style>

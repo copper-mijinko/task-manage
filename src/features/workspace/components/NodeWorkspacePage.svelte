@@ -25,72 +25,15 @@
   import WorkspaceFinderView from "./WorkspaceFinderView.svelte";
   import WorkspaceNodeInspector from "./WorkspaceNodeInspector.svelte";
   import NodeGanttPanel from "@features/gantt/components/NodeGanttPanel.svelte";
-  let view = "graph",
-    selectedId = "",
-    selectedOccurrenceId = "",
-    sourceParentId = "",
-    message = "",
-    localError = "",
-    loadedPath = "",
-    showArchived = false,
-    restoredPath = "";
-  $: workspacePath = $workspace_store.activeWorkspacePath;
-  $: graph = $workspace_graph;
-  $: state = $workspace_graph_store;
-  $: if (workspacePath && workspacePath !== loadedPath) {
-    loadedPath = workspacePath;
-    selectedId = "";
-    selectedOccurrenceId = "";
-    void workspace_graph_store.load(workspacePath).catch(() => {});
-  }
-  $: if (workspacePath && workspacePath !== restoredPath) {
-    restoredPath = workspacePath;
-    try {
-      const saved = JSON.parse(
-        localStorage.getItem(`task-manage:graph-view:${workspacePath}`) || "{}"
-      );
-      view = saved.view || "graph";
-      selectedId = saved.selectedId || "";
-      selectedOccurrenceId = saved.selectedOccurrenceId || "";
-      sourceParentId = saved.sourceParentId || "";
-      showArchived = Boolean(saved.showArchived);
-    } catch {
-      /* Ignore invalid local view preferences. */
-    }
-  }
-  $: if (workspacePath && restoredPath === workspacePath)
-    localStorage.setItem(
-      `task-manage:graph-view:${workspacePath}`,
-      JSON.stringify({ view, selectedId, selectedOccurrenceId, sourceParentId, showArchived })
-    );
-  $: if (graph && graph.workspaceId && selectedId && !graph.nodes[selectedId]) {
-    selectedId = "";
-    selectedOccurrenceId = "";
-    sourceParentId = "";
-  }
-  $: if (graph && $selected_id === AGENDA_SELECTED_ID) {
-    view = "gantt";
-    $selected_id = graph.rootId;
-  }
-  $: if (graph && $selected_id === INBOX_SELECTED_ID) {
-    view = "tree";
-    const inbox = Object.values(graph.nodes).find((node) => node.name.toLowerCase() === "inbox");
-    selectedId = inbox?.id || graph.rootId;
-    $selected_id = selectedId;
-  }
-  $: if (graph) {
-    const index = new Map();
-    for (const node of Object.values(graph.nodes)) {
-      if (node.archived && !showArchived) continue;
-      for (const raw of node.tags || []) {
-        const tag = raw.toLowerCase();
-        if (!index.has(tag)) index.set(tag, new Set());
-        index.get(tag).add(node.id);
-      }
-    }
-    $tag_index = index;
-  }
-  $: displayGraph = graph ? filterGraph(graph, $active_tag) : graph;
+  let view = $state("graph"),
+    selectedId = $state(""),
+    selectedOccurrenceId = $state(""),
+    sourceParentId = $state(""),
+    message = $state(""),
+    localError = $state(""),
+    loadedPath = $state(""),
+    showArchived = $state(false),
+    restoredPath = $state("");
   function filterGraph(source, tag) {
     if (!tag) return source;
     const include = new Set([source.rootId]);
@@ -164,6 +107,77 @@
         origin: "graph",
       });
   }
+  let workspacePath = $derived($workspace_store.activeWorkspacePath);
+  let graph = $derived($workspace_graph);
+  let graphState = $derived($workspace_graph_store);
+  $effect.pre(() => {
+    if (workspacePath && workspacePath !== loadedPath) {
+      loadedPath = workspacePath;
+      selectedId = "";
+      selectedOccurrenceId = "";
+      void workspace_graph_store.load(workspacePath).catch(() => {});
+    }
+  });
+  $effect.pre(() => {
+    if (workspacePath && workspacePath !== restoredPath) {
+      restoredPath = workspacePath;
+      try {
+        const saved = JSON.parse(
+          localStorage.getItem(`task-manage:graph-view:${workspacePath}`) || "{}"
+        );
+        view = saved.view || "graph";
+        selectedId = saved.selectedId || "";
+        selectedOccurrenceId = saved.selectedOccurrenceId || "";
+        sourceParentId = saved.sourceParentId || "";
+        showArchived = Boolean(saved.showArchived);
+      } catch {
+        /* Ignore invalid local view preferences. */
+      }
+    }
+  });
+  $effect.pre(() => {
+    if (graph && $selected_id === AGENDA_SELECTED_ID) {
+      view = "gantt";
+      $selected_id = graph.rootId;
+    }
+  });
+  $effect.pre(() => {
+    if (graph && $selected_id === INBOX_SELECTED_ID) {
+      view = "tree";
+      const inbox = Object.values(graph.nodes).find((node) => node.name.toLowerCase() === "inbox");
+      selectedId = inbox?.id || graph.rootId;
+      $selected_id = selectedId;
+    }
+  });
+  $effect.pre(() => {
+    if (graph && graph.workspaceId && selectedId && !graph.nodes[selectedId]) {
+      selectedId = "";
+      selectedOccurrenceId = "";
+      sourceParentId = "";
+    }
+  });
+  $effect.pre(() => {
+    if (workspacePath && restoredPath === workspacePath)
+      localStorage.setItem(
+        `task-manage:graph-view:${workspacePath}`,
+        JSON.stringify({ view, selectedId, selectedOccurrenceId, sourceParentId, showArchived })
+      );
+  });
+  $effect.pre(() => {
+    if (graph) {
+      const index = new Map();
+      for (const node of Object.values(graph.nodes)) {
+        if (node.archived && !showArchived) continue;
+        for (const raw of node.tags || []) {
+          const tag = raw.toLowerCase();
+          if (!index.has(tag)) index.set(tag, new Set());
+          index.get(tag).add(node.id);
+        }
+      }
+      $tag_index = index;
+    }
+  });
+  let displayGraph = $derived(graph ? filterGraph(graph, $active_tag) : graph);
 </script>
 
 <main class="page" aria-label="Workspace nodes" style="width:100%;flex:1;align-self:stretch">
@@ -176,35 +190,35 @@
       {#each [["graph", "グラフ"], ["tree", "ツリー"], ["finder", "ファインダー"], ["gantt", "ガント"]] as tab}<button
           class:active={view === tab[0]}
           aria-pressed={view === tab[0]}
-          on:click={() => (view = tab[0])}>{tab[1]}</button
+          onclick={() => (view = tab[0])}>{tab[1]}</button
         >{/each}
     </nav>
     <label class="archived"
       ><input type="checkbox" bind:checked={showArchived} />アーカイブを表示</label
-    ><button on:click={createAtRoot} disabled={!graph}>ルートに作成</button><button
-      on:click={() => history("undo")}>元に戻す</button
-    ><button on:click={() => history("redo")}>やり直す</button>
+    ><button onclick={createAtRoot} disabled={!graph}>ルートに作成</button><button
+      onclick={() => history("undo")}>元に戻す</button
+    ><button onclick={() => history("redo")}>やり直す</button>
   </header>
-  {#if localError || state.error}<div class="alert" role="alert">
-      {localError || state.error}
+  {#if localError || graphState.error}<div class="alert" role="alert">
+      {localError || graphState.error}
     </div>{:else if message}<div class="status" role="status">{message}</div>{/if}
-  {#if state.loading}<div class="empty">グラフを読み込んでいます…</div>{:else if graph}
+  {#if graphState.loading}<div class="empty">グラフを読み込んでいます…</div>{:else if graph}
     <div class="body">
       <section class="canvas">
         {#if view === "graph"}<WorkspaceGraphView
             graph={displayGraph}
             {selectedId}
-            on:select={(e) => select(e.detail)}
-            on:execute={(e) => execute(e.detail)}
+            onselect={(e) => select(e)}
+            onexecute={(e) => execute(e)}
           />
         {:else if view === "tree"}<WorkspaceTreeView
             graph={displayGraph}
             {showArchived}
             {selectedOccurrenceId}
             persistenceKey={workspacePath}
-            on:select={(e) => {
-              if (e.detail.cycleReference) view = "graph";
-              select(e.detail);
+            onselect={(e) => {
+              if (e.cycleReference) view = "graph";
+              select(e);
             }}
           />
         {:else if view === "finder"}<WorkspaceFinderView
@@ -212,8 +226,8 @@
             {showArchived}
             {selectedOccurrenceId}
             persistenceKey={workspacePath}
-            on:select={(e) => select(e.detail)}
-            on:showgraph={() => (view = "graph")}
+            onselect={(e) => select(e)}
+            onshowgraph={() => (view = "graph")}
           />
         {:else}<NodeGanttPanel
             nodes={graph.nodes}
@@ -233,7 +247,7 @@
         bind:sourceParentId
         {view}
         {workspacePath}
-        on:execute={(e) => execute(e.detail)}
+        onexecute={(e) => execute(e)}
       />
     </div>
   {:else}<div class="empty">

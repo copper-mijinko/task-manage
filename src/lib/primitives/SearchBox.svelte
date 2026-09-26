@@ -3,18 +3,18 @@
   import { tooltip } from "@lib/actions";
   import { filter } from "@stores";
   import { tag_index, active_tag } from "@features/memos/stores/tags";
-  let searchMode = "full_text";
+  let searchMode = $state("full_text");
   function changeMode() {
     terms = [...($filter?.[searchMode] ?? [])];
     search_text = "";
     search_box?.focus();
   }
 
-  let terms = []; // confirmed chips
-  let search_text = ""; // current in-progress typing
-  let search_box; //bind
-  let memoSearchEnabled = false;
-  let root_el; //bind
+  let terms = $state([]); // confirmed chips
+  let search_text = $state(""); // current in-progress typing
+  let search_box = $state(); //bind
+  let memoSearchEnabled = $state(false);
+  let root_el = $state(); //bind
 
   const currentFullText = () => {
     const combined = search_text !== "" ? [...terms, search_text] : [...terms];
@@ -86,7 +86,7 @@
   // ActiveFilterBar) and the box isn't focused. Treat all entries as
   // confirmed chips with no in-progress text to keep things simple and
   // avoid feedback loops with applyFilter() above.
-  $: {
+  $effect.pre(() => {
     // Compare against the RAW stored value first (not deduped): while the
     // user is actively typing, applyFilter() writes [...terms, search_text]
     // verbatim, and search_text may legitimately equal an already-confirmed
@@ -118,9 +118,11 @@
         }
       }
     }
-  }
+  });
 
-  $: memoSearchEnabled = ($filter?.search_memo?.length ?? 0) > 0;
+  $effect.pre(() => {
+    memoSearchEnabled = ($filter?.search_memo?.length ?? 0) > 0;
+  });
 
   const params = {
     color: "var(--theme-color-Main-main)",
@@ -136,7 +138,7 @@
     class="SearchMode"
     aria-label="絞り込みの対象"
     bind:value={searchMode}
-    on:change={changeMode}
+    onchange={changeMode}
   >
     <option value="full_text">全文</option><option value="tags">タグ</option>
   </select>
@@ -148,7 +150,7 @@
   <div
     class="SearchChips"
     class:is-empty={terms.length === 0}
-    on:click={(e) => {
+    onclick={(e) => {
       if (e.target?.closest?.("button")) return;
       search_box?.focus();
     }}
@@ -161,7 +163,10 @@
           class="SearchChipX"
           aria-label={`「${term}」を削除`}
           title={`「${term}」を削除`}
-          on:click|stopPropagation={() => removeChipAt(i)}
+          onclick={(event) => {
+            event.stopPropagation();
+            removeChipAt(i);
+          }}
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M7 7L17 17M17 7L7 17" />
@@ -182,13 +187,13 @@
           : "ノードを絞り込み"
         : ""}
       aria-label="ノード一覧を絞り込み"
-      on:input={() => {
+      oninput={() => {
         applyFilter();
       }}
-      on:click={(e) => {
+      onclick={(e) => {
         e.stopPropagation();
       }}
-      on:keydown={(e) => {
+      onkeydown={(e) => {
         if (e.isComposing || e.keyCode === 229) return;
         if ("Enter" == e.key) {
           confirmChip();
@@ -203,7 +208,7 @@
     />
   </div>
   <IconButton
-    on:click={() => {
+    onclick={() => {
       confirmChip();
       search_box?.focus();
     }}
@@ -226,7 +231,7 @@
     >
   </IconButton>
   <IconButton
-    on:click={toggleMemoSearch}
+    onclick={toggleMemoSearch}
     ariaLabel={memoSearchEnabled ? "メモ本文を検索対象から外す" : "メモ本文も検索する"}
     ariaPressed={memoSearchEnabled ? "true" : "false"}
     variant="text"

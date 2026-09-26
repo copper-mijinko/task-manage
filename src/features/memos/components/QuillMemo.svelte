@@ -8,11 +8,18 @@
 
   import { formatDate, formatTime } from "@lib/utils/datetime_shortcuts";
   import { date_time_format } from "@stores/preferences";
-  export let saveMemo;
-  export let content = "";
-  export let readOnly = false;
+  /**
+   * @typedef {Object} Props
+   * @property {any} saveMemo
+   * @property {string} [content]
+   * @property {boolean} [readOnly]
+   */
+
+  /** @type {Props} */
+  let { saveMemo, content = "", readOnly = false } = $props();
   let pendingSave;
-  let unsavedContent;
+  // エディタから受け取った値をそのまま持つ（Proxy にすると同一性の比較と IPC が壊れる）。
+  let unsavedContent = $state.raw();
   function persistContent(contents, selection) {
     unsavedContent = contents;
     const save = saveMemo;
@@ -29,11 +36,11 @@
     return pendingSave;
   }
 
-  let editor;
-  let quill = null;
-  let isEditing = false;
-  let savedSelection = null;
-  let lastSavedContent = null;
+  let editor = $state();
+  let quill = $state(null);
+  let isEditing = $state(false);
+  let savedSelection = $state.raw(null);
+  let lastSavedContent = $state.raw(null);
   let linkClickListener;
   let pasteListener;
   let visibleSpaceLayer = null;
@@ -46,7 +53,7 @@
   let visibleSpaceUpdateTimer = null;
   let visibleSpaceAnimationFrame = null;
   let editReleaseTimer;
-  let errorMessage = null;
+  let errorMessage = $state(null);
   let isHandlingLink = false;
   let isVisibleSpaceComposing = false;
 
@@ -718,32 +725,36 @@
     };
   });
 
-  $: if (quill && !isEditing && !unsavedContent) {
-    const normalizedContent = normalizeContent(content);
-    const normalizedLastSavedContent = normalizeContent(lastSavedContent);
-    const contentIsEmpty = isEmptyContent(normalizedContent);
-    const lastSavedIsEmpty = isEmptyContent(normalizedLastSavedContent);
-    const needsUpdate =
-      contentIsEmpty !== lastSavedIsEmpty ||
-      (!contentIsEmpty &&
-        !isEqual(
-          memoContentForCompare(normalizedContent),
-          memoContentForCompare(normalizedLastSavedContent)
-        ));
+  $effect.pre(() => {
+    if (quill && !isEditing && !unsavedContent) {
+      const normalizedContent = normalizeContent(content);
+      const normalizedLastSavedContent = normalizeContent(lastSavedContent);
+      const contentIsEmpty = isEmptyContent(normalizedContent);
+      const lastSavedIsEmpty = isEmptyContent(normalizedLastSavedContent);
+      const needsUpdate =
+        contentIsEmpty !== lastSavedIsEmpty ||
+        (!contentIsEmpty &&
+          !isEqual(
+            memoContentForCompare(normalizedContent),
+            memoContentForCompare(normalizedLastSavedContent)
+          ));
 
-    if (needsUpdate) {
-      isEditing = true;
-      applyContent(normalizedContent);
-      restoreSelection(savedSelection);
-      lastSavedContent = normalizedContent;
-      scheduleVisibleSpaceOverlayUpdate();
-      releaseEditingAfter(50);
+      if (needsUpdate) {
+        isEditing = true;
+        applyContent(normalizedContent);
+        restoreSelection(savedSelection);
+        lastSavedContent = normalizedContent;
+        scheduleVisibleSpaceOverlayUpdate();
+        releaseEditingAfter(50);
+      }
     }
-  }
+  });
 
-  $: if (quill) {
-    quill.enable(!readOnly);
-  }
+  $effect.pre(() => {
+    if (quill) {
+      quill.enable(!readOnly);
+    }
+  });
   function insertDateTime(kind) {
     const range = quill?.getSelection(true) || savedSelection || { index: 0, length: 0 };
     const text =
@@ -770,29 +781,37 @@
   {#if errorMessage}
     <div class="error-banner" role="alert">
       <span>{errorMessage}</span>
-      <button type="button" aria-label="Dismiss link error" on:click={() => (errorMessage = null)}>
+      <button type="button" aria-label="Dismiss link error" onclick={() => (errorMessage = null)}>
         x
       </button>
     </div>
   {/if}
   {#if !readOnly}
     <div class="quill-commands">
-      <button class="ui-action" on:mousedown|preventDefault on:click={() => quill?.history.undo()}
-        >元に戻す</button
-      >
-      <button class="ui-action" on:mousedown|preventDefault on:click={() => quill?.history.redo()}
-        >やり直し</button
+      <button
+        class="ui-action"
+        onmousedown={(event) => event.preventDefault()}
+        onclick={() => quill?.history.undo()}>元に戻す</button
       >
       <button
         class="ui-action"
-        on:mousedown|preventDefault
-        on:click={() => quill?.setSelection(0, quill.getLength())}>全選択</button
+        onmousedown={(event) => event.preventDefault()}
+        onclick={() => quill?.history.redo()}>やり直し</button
       >
-      <button class="ui-action" on:mousedown|preventDefault on:click={() => insertDateTime("date")}
-        >日付を挿入</button
+      <button
+        class="ui-action"
+        onmousedown={(event) => event.preventDefault()}
+        onclick={() => quill?.setSelection(0, quill.getLength())}>全選択</button
       >
-      <button class="ui-action" on:mousedown|preventDefault on:click={() => insertDateTime("time")}
-        >時刻を挿入</button
+      <button
+        class="ui-action"
+        onmousedown={(event) => event.preventDefault()}
+        onclick={() => insertDateTime("date")}>日付を挿入</button
+      >
+      <button
+        class="ui-action"
+        onmousedown={(event) => event.preventDefault()}
+        onclick={() => insertDateTime("time")}>時刻を挿入</button
       >
     </div>
   {/if}

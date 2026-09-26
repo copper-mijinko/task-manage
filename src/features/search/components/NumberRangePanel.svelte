@@ -1,47 +1,58 @@
 ﻿<script lang="ts">
   import { viewportPopover } from "@lib/actions/viewport_popover";
-  import { createEventDispatcher, onMount, onDestroy } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import { activePanelId, newPanelId } from "@stores/panel_coordinator";
   import { globalDismiss } from "@lib/actions";
 
-  export let column: string;
-  export let min: string = "";
-  export let max: string = "";
-  export let anchorRect: DOMRect | null = null;
+  interface Props {
+    column: string;
+    min?: string;
+    max?: string;
+    anchorRect?: DOMRect | null;
+    onchange?: (detail: { min: string; max: string }) => void;
+    onclose?: () => void;
+  }
 
-  const dispatch = createEventDispatcher<{
-    change: { min: string; max: string };
-    close: void;
-  }>();
-  let panelElement: HTMLElement;
+  let {
+    column,
+    min = $bindable(""),
+    max = $bindable(""),
+    anchorRect = null,
+    onchange,
+    onclose,
+  }: Props = $props();
+
+  let panelElement: HTMLElement | undefined = $state();
   const myPanelId = newPanelId();
   let unsubPanelCoord: (() => void) | undefined;
 
   onMount(() => {
     activePanelId.set(myPanelId);
     unsubPanelCoord = activePanelId.subscribe((id) => {
-      if (id !== null && id !== myPanelId) dispatch("close");
+      if (id !== null && id !== myPanelId) onclose?.();
     });
   });
   onDestroy(() => unsubPanelCoord?.());
 
-  $: panelStyle = anchorRect ? `top: ${anchorRect.bottom + 2}px; left: ${anchorRect.left}px;` : "";
+  let panelStyle = $derived(
+    anchorRect ? `top: ${anchorRect.bottom + 2}px; left: ${anchorRect.left}px;` : ""
+  );
 
   function handleKeydown(event: KeyboardEvent) {
     event.stopPropagation();
     if (event.key === "Escape") {
-      dispatch("close");
+      onclose?.();
     }
   }
 
   function handleChange() {
-    dispatch("change", { min, max });
+    onchange?.({ min, max });
   }
 
   function handleClear() {
     min = "";
     max = "";
-    dispatch("change", { min: "", max: "" });
+    onchange?.({ min: "", max: "" });
   }
 
   function portal(node: HTMLElement) {
@@ -61,11 +72,11 @@
   role="dialog"
   tabindex="-1"
   aria-label="{column} 数値フィルター"
-  on:click|stopPropagation
-  on:keydown={handleKeydown}
+  onclick={(event) => event.stopPropagation()}
+  onkeydown={handleKeydown}
   use:portal
   use:viewportPopover={anchorRect}
-  use:globalDismiss={() => dispatch("close")}
+  use:globalDismiss={() => onclose?.()}
 >
   <div class="PanelTitle">{column} フィルター</div>
   <div class="NumberRow">
@@ -76,7 +87,7 @@
       min="0"
       step="1"
       bind:value={min}
-      on:change={handleChange}
+      onchange={handleChange}
       placeholder="—"
     />
     <span class="Unit">件</span>
@@ -89,13 +100,13 @@
       min="0"
       step="1"
       bind:value={max}
-      on:change={handleChange}
+      onchange={handleChange}
       placeholder="—"
     />
     <span class="Unit">件</span>
   </div>
   {#if min || max}
-    <button class="ClearBtn" on:click={handleClear}>クリア</button>
+    <button class="ClearBtn" onclick={handleClear}>クリア</button>
   {/if}
 </div>
 

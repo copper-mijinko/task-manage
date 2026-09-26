@@ -2,25 +2,43 @@
   import { normalizeMemoFormat, type MemoFormat } from "@features/memos/utils/memo_utils";
   import { pendingMemoDrafts } from "@features/memos/stores/pending_drafts";
   import { windowClose } from "@lib/ipc/platform";
+  import { untrack } from "svelte";
 
-  export let saveMemo: (content: unknown) => unknown;
-  export let content: unknown = "";
-  export let draftKey = "";
-  export let freezeTarget = false;
-  const instanceSave = saveMemo;
-  const instanceDraftKey = draftKey;
-  const initialDraft = pendingMemoDrafts.get(draftKey);
-  let recoveredDraft = initialDraft;
-  let recoveryError = Boolean(initialDraft);
-  $: editorContent = recoveredDraft ? recoveredDraft.content : content;
-  export let readOnly = false;
-  export let memoTitles: string[] = [];
-  export let currentMemoTitle = "";
-  export let openMemoLink: ((title: string) => void) | undefined = undefined;
-  export let format: MemoFormat | undefined = undefined;
-  export let saveImage: ((file: File) => Promise<string | null>) | undefined = undefined;
-  export let resolveAsset: ((relativePath: string) => Promise<string | null>) | undefined =
-    undefined;
+  interface Props {
+    saveMemo: (content: unknown) => unknown;
+    content?: unknown;
+    draftKey?: string;
+    freezeTarget?: boolean;
+    readOnly?: boolean;
+    memoTitles?: string[];
+    currentMemoTitle?: string;
+    openMemoLink?: ((title: string) => void) | undefined;
+    format?: MemoFormat | undefined;
+    saveImage?: ((file: File) => Promise<string | null>) | undefined;
+    resolveAsset?: ((relativePath: string) => Promise<string | null>) | undefined;
+  }
+
+  let {
+    saveMemo,
+    content = "",
+    draftKey = "",
+    freezeTarget = false,
+    readOnly = false,
+    memoTitles = [],
+    currentMemoTitle = "",
+    openMemoLink = undefined,
+    format = undefined,
+    saveImage = undefined,
+    resolveAsset = undefined,
+  }: Props = $props();
+
+  // 保存先と下書きのキーは作成時のものに固定する（途中で別ノードに
+  // 切り替わっても、書きかけは元のノードへ保存する）。
+  const instanceSave = untrack(() => saveMemo);
+  const instanceDraftKey = untrack(() => draftKey);
+  const initialDraft = pendingMemoDrafts.get(instanceDraftKey);
+  let recoveredDraft = $state(initialDraft);
+  let recoveryError = $state(Boolean(initialDraft));
 
   let editor:
     | (import("svelte").SvelteComponent & {
@@ -28,7 +46,7 @@
         hasPendingSave?: () => boolean;
         startEditing?: () => void;
       })
-    | undefined;
+    | undefined = $state();
   let closing = false;
   function beforeUnload(event: BeforeUnloadEvent) {
     if (!freezeTarget || (!editor?.hasPendingSave?.() && !pendingMemoDrafts.size)) return;
@@ -71,8 +89,9 @@
   }
 
   let MarkdownMemo: typeof import("@features/memos/components/MarkdownMemo.svelte").default | null =
-    null;
-  let QuillMemo: typeof import("@features/memos/components/QuillMemo.svelte").default | null = null;
+    $state(null);
+  let QuillMemo: typeof import("@features/memos/components/QuillMemo.svelte").default | null =
+    $state(null);
   let markdownMemoLoading: Promise<void> | null = null;
   let quillMemoLoading: Promise<void> | null = null;
 
@@ -92,24 +111,26 @@
     });
   }
 
-  $: memoFormat = normalizeMemoFormat(format, "markdown");
-  $: if (memoFormat === "markdown") {
-    loadMarkdownMemo();
-  } else {
-    loadQuillMemo();
-  }
+  let editorContent = $derived(recoveredDraft ? recoveredDraft.content : content);
+  let memoFormat = $derived(normalizeMemoFormat(format, "markdown"));
+  $effect.pre(() => {
+    if (memoFormat === "markdown") {
+      loadMarkdownMemo();
+    } else {
+      loadQuillMemo();
+    }
+  });
 </script>
 
-<svelte:window on:beforeunload={beforeUnload} />
+<svelte:window onbeforeunload={beforeUnload} />
 
 <div class="memo-host">
   {#if recoveryError}<div role="alert">
-      未保存の本文があります。<button class="ui-action" on:click={flush}>再試行</button>
+      未保存の本文があります。<button class="ui-action" onclick={flush}>再試行</button>
     </div>{/if}
   {#if memoFormat === "markdown"}
     {#if MarkdownMemo}
-      <svelte:component
-        this={MarkdownMemo}
+      <MarkdownMemo
         bind:this={editor}
         saveMemo={saveUnknown}
         content={editorContent}
@@ -122,13 +143,7 @@
       />
     {/if}
   {:else if QuillMemo}
-    <svelte:component
-      this={QuillMemo}
-      bind:this={editor}
-      saveMemo={saveUnknown}
-      content={editorContent}
-      {readOnly}
-    />
+    <QuillMemo bind:this={editor} saveMemo={saveUnknown} content={editorContent} {readOnly} />
   {/if}
 </div>
 

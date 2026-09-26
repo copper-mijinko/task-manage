@@ -465,3 +465,15 @@ capture phase を選ぶ理由は、CodeMirror / Quill が自前のキーマッ�
 #### 読み取り専用化
 
 - アーカイブ済みノードの行・詳細ペインは編集を受け付けない（`TreeTableRow` / `TaskName` / `TaskDetail` が `archived` を見て入力を止め、詳細ペインはバナーを出す）
+
+### 8.14 Svelte 5 の書き方
+
+コンポーネントはすべて runes で書く。旧記法（`export let` / `$:` / `on:` / `createEventDispatcher` / `<slot>`）は使わない。
+
+- **props**: `let { ... } = $props()`。JS のコンポーネントは JSDoc の `@typedef Props` で型を書く
+- **イベント**: 子から親への通知はコールバック prop にする。名前は `on` + イベント名の小文字（`onchange` / `onaddchild`）。引数は値そのもの（`CustomEvent` の `detail` で包まない）
+- **メニュー**: `TaskMenu` は選んだ項目を `onaction(item)` で 1 本にまとめて渡し、受け側が `item.action` で振り分ける
+- **状態**: 描画に使う値は `$state` / `$derived`。描画に使わない控え（前回値・タイマー id など）は普通の `let` にする。`$state` にすると、それを読み書きする `$effect` が自分自身を起こし直す
+- **外から来たオブジェクト**: エディタの内容など、同一性を比べたり IPC に渡したりするオブジェクトは `$state.raw` に入れる。`$state` は中身を Proxy に包むので `===` が成り立たず、IPC の structured clone もできない
+- **IPC の境界**: `src/lib/ipc/platform.ts` は送る値を素のオブジェクトへ写してから渡す（`plain()`）。どこかの `$state` から来た値でも送れる
+- **副作用**: 値を計算するだけなら `$derived` / `$derived.by`。ストアへの書込みや、ある値が変わったときに別の状態を戻す処理は `$effect.pre`

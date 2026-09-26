@@ -11,27 +11,29 @@
     "due date": "期限日",
     attachments: "添付数",
   };
-  $: chips = Object.entries($filter).flatMap(([key, values]) => {
-    if (!labels[key] || !values?.length) return [];
-    if (["start date", "due date", "attachments"].includes(key)) {
-      if (!values.some(Boolean)) return [];
-      return [
-        {
-          key,
-          index: -1,
-          label: labels[key],
-          value: (values[0] || "指定なし") + " 〜 " + (values[1] || "指定なし"),
-        },
-      ];
-    }
-    return values.map((value, index) => ({
-      key,
-      index,
-      label: key === "full_text" && $filter.search_memo?.length ? "検索(メモ含む)" : labels[key],
-      value:
-        key === "full_text" ? tokenizeFullTextQuery(value.trim()).join(" ") : value || "未設定",
-    }));
-  });
+  let chips = $derived(
+    Object.entries($filter).flatMap(([key, values]) => {
+      if (!labels[key] || !values?.length) return [];
+      if (["start date", "due date", "attachments"].includes(key)) {
+        if (!values.some(Boolean)) return [];
+        return [
+          {
+            key,
+            index: -1,
+            label: labels[key],
+            value: (values[0] || "指定なし") + " 〜 " + (values[1] || "指定なし"),
+          },
+        ];
+      }
+      return values.map((value, index) => ({
+        key,
+        index,
+        label: key === "full_text" && $filter.search_memo?.length ? "検索(メモ含む)" : labels[key],
+        value:
+          key === "full_text" ? tokenizeFullTextQuery(value.trim()).join(" ") : value || "未設定",
+      }));
+    })
+  );
   function removeChip(key: string, index: number) {
     const values = $filter[key] ?? [];
     if (key === "tags" && $active_tag) active_tag.set(null);
@@ -58,7 +60,7 @@
           aria-label={chip.key === "full_text"
             ? "全文フィルタ「" + chip.value + "」を削除"
             : chip.label + "フィルタ「" + chip.value + "」を削除"}
-          on:click={() => removeChip(chip.key, chip.index)}
+          onclick={() => removeChip(chip.key, chip.index)}
         >
           <svg viewBox="0 0 24 24" aria-hidden="true"
             ><path
@@ -71,7 +73,7 @@
         </button>
       </span>
     {/each}
-    <button type="button" class="ClearAll" on:click={clearAll}>すべてクリア</button>
+    <button type="button" class="ClearAll" onclick={clearAll}>すべてクリア</button>
   </div>
 {/if}
 

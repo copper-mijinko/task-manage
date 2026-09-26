@@ -7,10 +7,21 @@
   import Loading from "@lib/primitives/Loading.svelte";
   import TaskDetail from "@features/tasks/components/TaskDetail.svelte";
 
-  export let initialTaskName = "Task Detail";
-  export let initialTaskId = "";
-  export let initialProjectId = "";
-  export let ready = false;
+  /**
+   * @typedef {Object} Props
+   * @property {string} [initialTaskName]
+   * @property {string} [initialTaskId]
+   * @property {string} [initialProjectId]
+   * @property {boolean} [ready]
+   */
+
+  /** @type {Props} */
+  let {
+    initialTaskName = "Task Detail",
+    initialTaskId = "",
+    initialProjectId = "",
+    ready = false,
+  } = $props();
 
   function getNodePathName(targetId, root) {
     const names = [];
@@ -30,21 +41,27 @@
     return root && visit(root) ? names.filter(Boolean).join(" / ") : "";
   }
 
-  $: node = initialTaskId && $tree_data ? getNode(initialTaskId, $tree_data.data) : undefined;
-  $: taskPathName =
-    initialTaskId && $tree_data ? getNodePathName(initialTaskId, $tree_data.data) : "";
-  $: taskName = taskPathName || node?.data?.name || initialTaskName;
-  $: if (ready && taskName && typeof document !== "undefined") {
-    document.title = `${taskName} | Task Detail`;
-  }
-  $: isProjectDeleted = ready && initialProjectId && $selected_id !== initialProjectId;
-  $: isTaskDeleted =
+  let node = $derived(
+    initialTaskId && $tree_data ? getNode(initialTaskId, $tree_data.data) : undefined
+  );
+  let taskPathName = $derived(
+    initialTaskId && $tree_data ? getNodePathName(initialTaskId, $tree_data.data) : ""
+  );
+  let taskName = $derived(taskPathName || node?.data?.name || initialTaskName);
+  $effect.pre(() => {
+    if (ready && taskName && typeof document !== "undefined") {
+      document.title = `${taskName} | Task Detail`;
+    }
+  });
+  let isProjectDeleted = $derived(ready && initialProjectId && $selected_id !== initialProjectId);
+  let isTaskDeleted = $derived(
     ready &&
-    !isProjectDeleted &&
-    !!initialTaskId &&
-    !!$selected_id &&
-    $selected_id === initialProjectId &&
-    !node;
+      !isProjectDeleted &&
+      !!initialTaskId &&
+      !!$selected_id &&
+      $selected_id === initialProjectId &&
+      !node
+  );
 </script>
 
 <div class="detail-window">

@@ -1,14 +1,26 @@
 <script>
   import { viewportPopover } from "@lib/actions/viewport_popover";
-  import { createEventDispatcher, onDestroy, tick } from "svelte";
+  import { onDestroy, tick } from "svelte";
 
-  export let status = "";
-  export let style = "";
-  export let disabled = false;
-  export let tabIndex = 0;
-  export let ariaLabel = "ステータス";
+  /**
+   * @typedef {Object} Props
+   * @property {string} [status]
+   * @property {string} [style]
+   * @property {boolean} [disabled]
+   * @property {number} [tabIndex]
+   * @property {string} [ariaLabel]
+   * @property {(detail?: any) => void} [onchange]
+   */
 
-  const dispatch = createEventDispatcher();
+  /** @type {Props} */
+  let {
+    status = "",
+    style = "",
+    disabled = false,
+    tabIndex = 0,
+    ariaLabel = "ステータス",
+    onchange,
+  } = $props();
 
   // 「無し」は既定値ではなく状態のひとつ。メモから育ったノードは進み具合を
   // 持たないので、そこに「未着手」を出すと未完了ノードの山に埋もれる。
@@ -24,14 +36,14 @@
     "Completed",
     "Canceled",
   ];
-  const STATUS_LABELS = {
+  const STATUS_LABELS = $state({
     [NO_STATUS]: "なし",
     Open: "未着手",
     Pending: "保留",
     "In Progress": "進行中",
     Completed: "完了",
     Canceled: "キャンセル",
-  };
+  });
 
   STATUS_LABELS[NO_STATUS] = "ステータスなし";
   STATUS_LABELS[UNDEFINED_STATUS] = "未定義";
@@ -46,10 +58,10 @@
     Canceled: "var(--theme-color-Sub-main)",
   };
 
-  let open = false;
-  let containerEl;
-  let popupEl;
-  let popupStyle = "";
+  let open = $state(false);
+  let containerEl = $state();
+  let popupEl = $state();
+  let popupStyle = $state("");
 
   async function toggle(event) {
     event.stopPropagation();
@@ -69,7 +81,7 @@
     open = false;
     if (value === status) return;
     // Dispatch a change event whose target.value matches the legacy <select> API.
-    dispatch("change", { target: { value }, value });
+    onchange?.({ target: { value }, value });
   }
 
   function handleWindowClick(e) {
@@ -101,7 +113,7 @@
   });
 </script>
 
-<svelte:window on:click={handleWindowClick} on:keydown={handleKey} />
+<svelte:window onclick={handleWindowClick} onkeydown={handleKey} />
 
 <span class="s-chip" data-status={status} {style} bind:this={containerEl}>
   <button
@@ -116,7 +128,7 @@
     {disabled}
     data-current-status={status}
     title={STATUS_LABELS[status] ?? status}
-    on:click={toggle}
+    onclick={toggle}
   >
     <span class="s-dot" style="--dot-color: {color_map[status]};"></span>
     <!-- 未設定は「ステータスなし」の 7 文字を全行に並べると、列の中でいちばん
@@ -154,7 +166,7 @@
           aria-selected={opt === status}
           class="s-option"
           class:selected={opt === status}
-          on:click={() => select(opt)}
+          onclick={() => select(opt)}
         >
           <span class="s-dot s-dot-static" style="--dot-color: {color_map[opt]};" data-status={opt}
           ></span>

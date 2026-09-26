@@ -1,4 +1,4 @@
-<script context="module">
+<script module>
   // Multi-id drag payload. For a single-row drag this contains exactly one id;
   // for a multi-select drag it contains the top-level selected ancestors in DFS
   // order. Shared module state so dragOver/drop can see what's being dragged.
@@ -14,7 +14,6 @@
   const application = getContext(TREEGRID_APPLICATION);
   const tree_data = application.tree;
 
-  import { createEventDispatcher } from "svelte";
   import { selected_ids } from "@stores/ui";
   import { getNode, getTopLevelSelection } from "@features/tasks/utils/tree_control";
   import { ripple } from "@lib/actions";
@@ -25,110 +24,109 @@
   import { active_tag } from "@features/memos/stores/tags";
   import { normalizeTagList } from "@lib/utils/tags";
 
-  export let row;
-  export let headers = [];
-  export let selected = false;
-  export let bulkSelectionActive = false;
-  export let isAnchor = false;
-  export let anyMultiSelected = false;
   /**
-   * roving tabindex。行は 1 つだけ Tab の停留点にする。全行が停留点だと、
-   * テーブルを通り過ぎるだけで行数ぶん Tab を押すことになる。
+   * @typedef {Object} Props
+   * @property {any} row
+   * @property {any} [headers]
+   * @property {boolean} [selected]
+   * @property {boolean} [bulkSelectionActive]
+   * @property {boolean} [isAnchor]
+   * @property {boolean} [anyMultiSelected]
+   * @property {boolean} [isTabStop] - roving tabindex。行は 1 つだけ Tab の停留点にする。全行が停留点だと、
+テーブルを通り過ぎるだけで行数ぶん Tab を押すことになる。
+   * @property {boolean} [isPrimaryOccurrence] - このノードの最初の出現か。多親ノードは親ごとに複数行に出るので、DOM の
+`id` 属性は最初の行にだけ付ける（重複 id を作らないため）。他の行は
+`data-node-id` で引ける。
+   * @property {any} [sharedPlaces] - このノードが置かれている場所（親の名前）。2 つ以上なら共有ノード。
+   * @property {boolean} [isEchoRow] - いま操作している行と同じノードを指す、別の親の下の行。選択はノード単位
+なので多親ノードを選ぶと出現がすべて選択色になるが、「同じものがここにも
+ある」ことと「いま触っている行」は別物なので、こちらは弱く表示する。
+いま触っている行は tabindex の停留点（`isTabStop`）と一致する。
+   * @property {boolean} [isDark]
+   * @property {any} [canDrop]
+   * @property {boolean} [canMoveUp]
+   * @property {boolean} [canMoveDown]
+   * @property {boolean} [canIndent]
+   * @property {boolean} [canOutdent]
+   * @property {string} [inheritedDueDate]
+   * @property {string} [nodePath]
+   * @property {number} [lineNumber]
+   * @property {boolean} [animateEnter] - ツリーは見えている行だけを描くので、スクロールで現れた行は「新しい行」
+ではない。そのときに出現アニメーションを流すと、スクロールのたびに
+行がちらつく。本当に増えた行だけ true にする。
+   * @property {any} [ariaRowIndex] - 描かれていない行も数えた、表の中での行番号（見出しが 1）。
+   * @property {boolean} [bulkCanMove] - Capabilities for bulk operations (used when this row is part of multi-selection).
+   * @property {boolean} [bulkCanTreeOp]
+   * @property {boolean} [bulkCanOutdent]
+   * @property {(detail?: any) => void} [onselect]
+   * @property {(detail?: any) => void} [ontogglecheckbox]
+   * @property {(detail?: any) => void} [ontoggle]
+   * @property {(detail?: any) => void} [onnavigate]
+   * @property {(detail?: any) => void} [oncommit]
+   * @property {(detail?: any) => void} [onreorder]
+   * @property {(detail?: any) => void} [onaddbelow]
+   * @property {(detail?: any) => void} [onaddchild]
+   * @property {(detail?: any) => void} [onmoveup]
+   * @property {(detail?: any) => void} [onmovedown]
+   * @property {(detail?: any) => void} [onindenttask]
+   * @property {(detail?: any) => void} [onoutdenttask]
+   * @property {(detail?: any) => void} [ondeletetask]
+   * @property {(detail?: any) => void} [onrestoretask]
+   * @property {(detail?: any) => void} [onpermanentdeletetask]
+   * @property {(detail?: any) => void} [oncopytask]
+   * @property {(detail?: any) => void} [onpastetask]
    */
-  export let isTabStop = false;
-  /**
-   * 行の中のコントロール（展開トグル・名前入力・行メニュー・ステータス・
-   * 日付）が Tab の停留点になるかどうか。
-   *
-   * 行自体には roving tabindex が入っていたのに、行の中の操作要素は素の
-   * まま（tabindex=0 相当）だったので、6 行のツリーで文書全体のタブ
-   * ストップが 90 個あった。行数に比例するので、実データ規模ではツリーを
-   * 通り過ぎるだけで数百回 Tab を押すことになる。
-   *
-   * いま操作している行のコントロールだけを停留点にする。矢印キーでの行移動
-   * は既に実装されているので（handleKeydown → TreeTable）、
-   *   Tab でツリーに入る → その行の操作要素を Tab で辿れる → Tab で抜ける
-   *   矢印キーで行を移ると、その行の操作要素が辿れるようになる
-   * となり、編集経路を一切変えずにタブストップが行数に依存しなくなる。
-   */
-  $: cellTabIndex = isTabStop ? 0 : -1;
-  /**
-   * このノードの最初の出現か。多親ノードは親ごとに複数行に出るので、DOM の
-   * `id` 属性は最初の行にだけ付ける（重複 id を作らないため）。他の行は
-   * `data-node-id` で引ける。
-   */
-  export let isPrimaryOccurrence = true;
-  /** このノードが置かれている場所（親の名前）。2 つ以上なら共有ノード。 */
-  export let sharedPlaces = [];
-  /**
-   * いま操作している行と同じノードを指す、別の親の下の行。選択はノード単位
-   * なので多親ノードを選ぶと出現がすべて選択色になるが、「同じものがここにも
-   * ある」ことと「いま触っている行」は別物なので、こちらは弱く表示する。
-   * いま触っている行は tabindex の停留点（`isTabStop`）と一致する。
-   */
-  export let isEchoRow = false;
-  export let isDark = false;
-  export let canDrop = () => false;
-  export let canMoveUp = false;
-  export let canMoveDown = false;
-  export let canIndent = false;
-  export let canOutdent = false;
-  export let inheritedDueDate = "";
-  export let nodePath = "";
-  export let lineNumber = 0;
-  /**
-   * ツリーは見えている行だけを描くので、スクロールで現れた行は「新しい行」
-   * ではない。そのときに出現アニメーションを流すと、スクロールのたびに
-   * 行がちらつく。本当に増えた行だけ true にする。
-   */
-  export let animateEnter = true;
-  /** 描かれていない行も数えた、表の中での行番号（見出しが 1）。 */
-  export let ariaRowIndex = undefined;
-  // Capabilities for bulk operations (used when this row is part of multi-selection).
-  export let bulkCanMove = false;
-  export let bulkCanTreeOp = false;
-  export let bulkCanOutdent = false;
 
-  const dispatch = createEventDispatcher();
-  let taskName;
+  /** @type {Props} */
+  let {
+    row,
+    headers = [],
+    selected = false,
+    bulkSelectionActive = false,
+    isAnchor = false,
+    anyMultiSelected = false,
+    isTabStop = false,
+    isPrimaryOccurrence = true,
+    sharedPlaces = [],
+    isEchoRow = false,
+    isDark = false,
+    canDrop = () => false,
+    canMoveUp = false,
+    canMoveDown = false,
+    canIndent = false,
+    canOutdent = false,
+    inheritedDueDate = "",
+    nodePath = "",
+    lineNumber = 0,
+    animateEnter = true,
+    ariaRowIndex = undefined,
+    bulkCanMove = false,
+    bulkCanTreeOp = false,
+    bulkCanOutdent = false,
+    onselect,
+    ontogglecheckbox,
+    ontoggle,
+    onnavigate,
+    oncommit,
+    onreorder,
+    onaddbelow,
+    onaddchild,
+    onmoveup,
+    onmovedown,
+    onindenttask,
+    onoutdenttask,
+    ondeletetask,
+    onrestoretask,
+    onpermanentdeletetask,
+    oncopytask,
+    onpastetask,
+  } = $props();
 
-  $: id = row.id;
-  $: path = row.path;
-  $: node = row.node;
-  $: depth = row.depth;
-  $: data = node.data;
-  $: hasChildren = row.hasChildren;
-  $: expanded = row.expanded;
-  // A row is treated as archived if it is archived itself OR sits under an
-  // archived ancestor (computed by flattenVisibleTree). Children of an archived
-  // task don't carry their own `archived` flag, so relying on node.archived
-  // alone would wrongly let them be edited in the show-archived view.
-  $: isArchived = row.effectivelyArchived ?? !!node.archived;
+  let taskName = $state();
 
-  // When this row is part of an active multi-selection, the right-click menu
-  // routes actions to the bulk handlers. Use bulk capability flags so the menu
-  // accurately reflects what the bulk handler can actually do.
-  $: inMulti = selected && anyMultiSelected;
-  $: effectiveCanMoveUp = inMulti ? bulkCanMove : canMoveUp;
-  $: effectiveCanMoveDown = inMulti ? bulkCanMove : canMoveDown;
-  $: effectiveCanIndent = inMulti ? bulkCanTreeOp : canIndent;
-  $: effectiveCanOutdent = inMulti ? bulkCanTreeOp && bulkCanOutdent : canOutdent;
-  $: selectionCountForMenu = inMulti ? $selected_ids.size : 1;
-
-  let dragOverType;
-  let isDragging = false;
-  let isMenuOpen = false;
-
-  $: rowDueUrgency = dueDateUrgency(data["due date"] || inheritedDueDate, data["status"]);
-  // ツリーのガイド線。祖先の段ごとの「まだ兄弟が続くか」と、自分が末っ子か。
-  $: guideLines = row.guideLines ?? [];
-  $: isLastSibling = row.isLastSibling ?? false;
-  $: rowTags = normalizeTagList(data.tags);
-  // 列幅は限られるので、読める大きさで出せる範囲だけ表示し、残りは「+N」で示す
-  // （全件はセルの title と詳細ペインで確認できる）。3 件以上あるときは
-  // 「+N」の幅を確保するため 1 件だけ出す。
-  $: visibleRowTags = rowTags.slice(0, rowTags.length > 2 ? 1 : 2);
-  $: hiddenRowTagCount = rowTags.length - visibleRowTags.length;
+  let dragOverType = $state();
+  let isDragging = $state(false);
+  let isMenuOpen = $state(false);
 
   const COUNT_LABELS = { attachments: "添付" };
 
@@ -148,7 +146,7 @@
 
   function select(e) {
     e.stopPropagation();
-    dispatch("select", {
+    onselect?.({
       id,
       path,
       shiftKey: !!e.shiftKey,
@@ -158,7 +156,7 @@
 
   function toggleCheckbox(e) {
     e.stopPropagation();
-    dispatch("toggleCheckbox", {
+    ontogglecheckbox?.({
       id,
       path,
       shiftKey: !!e.shiftKey,
@@ -168,7 +166,7 @@
 
   function toggle(e) {
     e.stopPropagation();
-    dispatch("toggle", { id, path });
+    ontoggle?.({ id, path });
   }
 
   /**
@@ -193,14 +191,14 @@
     // 修飾キー付きは既存のショートカット（Ctrl+↑ の移動など）に譲る。
     if (!NAVIGATION_KEYS.has(e.key) || e.ctrlKey || e.metaKey || e.altKey) return;
     e.preventDefault();
-    dispatch("navigate", { id, path, key: e.key, shiftKey: e.shiftKey });
+    onnavigate?.({ id, path, key: e.key, shiftKey: e.shiftKey });
   }
 
   function commitData(key, value) {
     // archived 行は読み取り専用（仕様）。subscribe 経路で誤って入った
     // commit を捨て、データ層を変えない。archived 配下の子も対象に含める。
     if (isArchived) return;
-    dispatch("commit", {
+    oncommit?.({
       id,
       patch: {
         [key]: value,
@@ -280,7 +278,7 @@
     else if (dragOverType === "DragOverBelow") mode = "insert_after";
     else mode = "append";
 
-    dispatch("reorder", {
+    onreorder?.({
       draggedIds: [...dragged_ids],
       draggedPath: dragged_path,
       targetId: id,
@@ -299,12 +297,82 @@
     // If this row is part of an existing multi-selection, keep the selection
     // intact and let the menu act on the whole set. Otherwise reduce to this row.
     if (!$selected_ids.has(id)) {
-      dispatch("select", { id, path, shiftKey: false, ctrlKey: false });
+      onselect?.({ id, path, shiftKey: false, ctrlKey: false });
     }
     taskName?.openMenuAt({
       x: e.clientX,
       y: e.clientY,
     });
+  }
+  /**
+   * 行の中のコントロール（展開トグル・名前入力・行メニュー・ステータス・
+   * 日付）が Tab の停留点になるかどうか。
+   *
+   * 行自体には roving tabindex が入っていたのに、行の中の操作要素は素の
+   * まま（tabindex=0 相当）だったので、6 行のツリーで文書全体のタブ
+   * ストップが 90 個あった。行数に比例するので、実データ規模ではツリーを
+   * 通り過ぎるだけで数百回 Tab を押すことになる。
+   *
+   * いま操作している行のコントロールだけを停留点にする。矢印キーでの行移動
+   * は既に実装されているので（handleKeydown → TreeTable）、
+   *   Tab でツリーに入る → その行の操作要素を Tab で辿れる → Tab で抜ける
+   *   矢印キーで行を移ると、その行の操作要素が辿れるようになる
+   * となり、編集経路を一切変えずにタブストップが行数に依存しなくなる。
+   */
+  let cellTabIndex = $derived(isTabStop ? 0 : -1);
+  let id = $derived(row.id);
+  let path = $derived(row.path);
+  let node = $derived(row.node);
+  let depth = $derived(row.depth);
+  let data = $derived(node.data);
+  let hasChildren = $derived(row.hasChildren);
+  let expanded = $derived(row.expanded);
+  // A row is treated as archived if it is archived itself OR sits under an
+  // archived ancestor (computed by flattenVisibleTree). Children of an archived
+  // task don't carry their own `archived` flag, so relying on node.archived
+  // alone would wrongly let them be edited in the show-archived view.
+  let isArchived = $derived(row.effectivelyArchived ?? !!node.archived);
+  // When this row is part of an active multi-selection, the right-click menu
+  // routes actions to the bulk handlers. Use bulk capability flags so the menu
+  // accurately reflects what the bulk handler can actually do.
+  let inMulti = $derived(selected && anyMultiSelected);
+  let effectiveCanMoveUp = $derived(inMulti ? bulkCanMove : canMoveUp);
+  let effectiveCanMoveDown = $derived(inMulti ? bulkCanMove : canMoveDown);
+  let effectiveCanIndent = $derived(inMulti ? bulkCanTreeOp : canIndent);
+  let effectiveCanOutdent = $derived(inMulti ? bulkCanTreeOp && bulkCanOutdent : canOutdent);
+  let selectionCountForMenu = $derived(inMulti ? $selected_ids.size : 1);
+  let rowDueUrgency = $derived(
+    dueDateUrgency(data["due date"] || inheritedDueDate, data["status"])
+  );
+  // ツリーのガイド線。祖先の段ごとの「まだ兄弟が続くか」と、自分が末っ子か。
+  let guideLines = $derived(row.guideLines ?? []);
+  let isLastSibling = $derived(row.isLastSibling ?? false);
+  let rowTags = $derived(normalizeTagList(data.tags));
+  // 列幅は限られるので、読める大きさで出せる範囲だけ表示し、残りは「+N」で示す
+  // （全件はセルの title と詳細ペインで確認できる）。3 件以上あるときは
+  // 「+N」の幅を確保するため 1 件だけ出す。
+  let visibleRowTags = $derived(rowTags.slice(0, rowTags.length > 2 ? 1 : 2));
+  let hiddenRowTagCount = $derived(rowTags.length - visibleRowTags.length);
+
+  // ノード名の三点リーダメニューで選ばれた操作を、行の操作として親へ渡す。
+  // 経路も渡す。多親ノードでは「この行（辺）だけ」を片付ける選択があるので、
+  // どの親の下の行なのかが要る。
+  function handleNameMenuAction({ action }) {
+    const handlers = {
+      addBelow: () => onaddbelow?.({ id, path }),
+      addChild: () => onaddchild?.({ id, path }),
+      toggleExpand: () => ontoggle?.({ id, path }),
+      moveUp: () => onmoveup?.({ id, path }),
+      moveDown: () => onmovedown?.({ id, path }),
+      indentTask: () => onindenttask?.({ id, path }),
+      outdentTask: () => onoutdenttask?.({ id, path }),
+      deleteTask: () => ondeletetask?.({ id, path }),
+      restoreTask: () => onrestoretask?.({ id, path }),
+      permanentDeleteTask: () => onpermanentdeletetask?.({ id }),
+      copyTask: () => oncopytask?.({ id }),
+      pasteTask: () => onpastetask?.({ id, path }),
+    };
+    handlers[action]?.();
   }
 </script>
 
@@ -336,14 +404,14 @@
   aria-rowindex={ariaRowIndex}
   aria-selected={selected}
   aria-expanded={hasChildren ? expanded : undefined}
-  on:click={select}
-  on:keydown={handleKeydown}
-  on:dragstart={dragStart}
-  on:dragend={dragEnd}
-  on:dragover={dragOver}
-  on:dragleave={dragLeave}
-  on:drop={dragDrop}
-  on:contextmenu={openContextMenu}
+  onclick={select}
+  onkeydown={handleKeydown}
+  ondragstart={dragStart}
+  ondragend={dragEnd}
+  ondragover={dragOver}
+  ondragleave={dragLeave}
+  ondrop={dragDrop}
+  oncontextmenu={openContextMenu}
 >
   <div
     class="CheckboxCell"
@@ -352,9 +420,12 @@
     role="gridcell"
     tabindex="-1"
     draggable="false"
-    on:click|stopPropagation
-    on:keydown|stopPropagation
-    on:dragstart|preventDefault|stopPropagation
+    onclick={(event) => event.stopPropagation()}
+    onkeydown={(event) => event.stopPropagation()}
+    ondragstart={(event) => {
+      event.stopPropagation();
+      event.preventDefault();
+    }}
   >
     {#if lineNumber > 0}
       <span class="RowNumber" aria-hidden="true" data-page-search-skip>{lineNumber}</span>
@@ -369,8 +440,8 @@
           aria-label="一括操作の対象として選択"
           title="一括操作の対象として選択"
           tabindex={cellTabIndex}
-          on:click={toggleCheckbox}
-          on:keydown|stopPropagation
+          onclick={toggleCheckbox}
+          onkeydown={(event) => event.stopPropagation()}
         />
       </label>
     {/if}
@@ -394,7 +465,7 @@
             tabindex={cellTabIndex}
             style="flex-shrink: 0"
             aria-label={expanded ? "ノードを折りたたむ" : "ノードを展開"}
-            on:click={toggle}
+            onclick={toggle}
           >
             <svg viewBox="-12 0 32 32" xmlns="http://www.w3.org/2000/svg"
               ><path
@@ -487,49 +558,12 @@
           nodeId={id}
           {cellTabIndex}
           archived={isArchived}
-          on:commit={(e) => {
-            commitData("name", e.detail.value);
+          oncommit={(e) => {
+            commitData("name", e.value);
           }}
-          on:addBelow={() => {
-            dispatch("addBelow", { id, path });
-          }}
-          on:addChild={() => {
-            dispatch("addChild", { id, path });
-          }}
-          on:toggleExpand={() => {
-            dispatch("toggle", { id, path });
-          }}
-          on:moveUp={() => {
-            dispatch("moveUp", { id, path });
-          }}
-          on:moveDown={() => {
-            dispatch("moveDown", { id, path });
-          }}
-          on:indentTask={() => {
-            dispatch("indentTask", { id, path });
-          }}
-          on:outdentTask={() => {
-            dispatch("outdentTask", { id, path });
-          }}
-          on:deleteTask={() => {
-            // 経路も渡す。多親ノードでは「この行（辺）だけ」を片付ける選択が
-            // あるので、どの親の下の行なのかが要る。
-            dispatch("deleteTask", { id, path });
-          }}
-          on:restoreTask={() => {
-            dispatch("restoreTask", { id, path });
-          }}
-          on:permanentDeleteTask={() => {
-            dispatch("permanentDeleteTask", { id });
-          }}
-          on:copyTask={() => {
-            dispatch("copyTask", { id });
-          }}
-          on:pasteTask={() => {
-            dispatch("pasteTask", { id, path });
-          }}
-          on:menuVisibilityChange={({ detail }) => {
-            isMenuOpen = detail.open;
+          onaction={handleNameMenuAction}
+          onmenuvisibilitychange={({ open }) => {
+            isMenuOpen = open;
           }}
         />
       {:else if header.name == "status"}
@@ -538,8 +572,8 @@
           tabIndex={cellTabIndex}
           ariaLabel={`${data.name}のステータス`}
           disabled={isArchived}
-          on:change={(e) => {
-            commitData("status", e.detail.value);
+          onchange={(e) => {
+            commitData("status", e.value);
           }}
         />
       {:else if header.name == "start date"}
@@ -552,7 +586,7 @@
           ariaLabel={`${data.name}の開始日`}
           showUrgency={false}
           disabled={isArchived}
-          on:change={(e) => {
+          onchange={(e) => {
             commitData("start date", e.target.value);
           }}
         />
@@ -567,7 +601,7 @@
           status={data["status"]}
           inheritedDate={inheritedDueDate}
           disabled={isArchived}
-          on:change={(e) => {
+          onchange={(e) => {
             commitData("due date", e.target.value);
           }}
         />
@@ -582,7 +616,10 @@
                 title={`タグ ${tag} で絞り込む`}
                 aria-pressed={$active_tag === tag}
                 aria-label={`タグ ${tag} で絞り込む`}
-                on:click|stopPropagation={() => ($active_tag = $active_tag === tag ? null : tag)}
+                onclick={(event) => {
+                  event.stopPropagation();
+                  $active_tag = $active_tag === tag ? null : tag;
+                }}
               >
                 {tag}
               </button>

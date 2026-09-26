@@ -1,7 +1,7 @@
-import { screen } from "@testing-library/svelte";
+import { fireEvent, screen } from "@testing-library/svelte";
 import fs from "node:fs";
 import path from "node:path";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
 import TreeTableRow from "@features/tasks/components/TreeTableRow.svelte";
 import { renderWithApplicationStub } from "../helpers/application_stub.js";
@@ -53,6 +53,26 @@ describe("TreeTableRow", () => {
       ],
     };
   }
+
+  test("passes the name-menu actions up as row operations with the row path", async () => {
+    const onaddchild = vi.fn();
+    const onaddbelow = vi.fn();
+    const props = createProps();
+    renderWithApplicationStub(TreeTableRow, {
+      ...props,
+      row: { ...props.row, path: "project-1/task-1" },
+      onaddchild,
+      onaddbelow,
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "ノード操作を開く" }));
+    await fireEvent.click(await screen.findByRole("menuitem", { name: "子ノードを追加" }));
+    expect(onaddchild).toHaveBeenCalledWith({ id: "task-1", path: "project-1/task-1" });
+
+    await fireEvent.click(screen.getByRole("button", { name: "ノード操作を開く" }));
+    await fireEvent.click(await screen.findByRole("menuitem", { name: "下にノードを追加" }));
+    expect(onaddbelow).toHaveBeenCalledWith({ id: "task-1", path: "project-1/task-1" });
+  });
 
   test("renders array-valued columns as a count badge", () => {
     renderWithApplicationStub(TreeTableRow, createProps());

@@ -1,37 +1,54 @@
 <script>
-  import { createEventDispatcher } from "svelte";
   import { projectFinderRows } from "@features/workspace/utils/graph_projection";
-  export let graph;
-  export let selectedOccurrenceId = "";
-  export let showArchived = false;
-  export let persistenceKey = "";
-  const dispatch = createEventDispatcher();
-  let path = [],
-    restored = "";
-  $: if (graph && restored !== persistenceKey) {
-    restored = persistenceKey;
-    try {
-      const saved = JSON.parse(
-        localStorage.getItem(`task-manage:finder-path:${persistenceKey}`) || "[]"
-      );
-      path = saved[0] === graph.rootId ? saved : [graph.rootId];
-    } catch {
-      path = [graph.rootId];
+  /**
+   * @typedef {Object} Props
+   * @property {any} graph
+   * @property {string} [selectedOccurrenceId]
+   * @property {boolean} [showArchived]
+   * @property {string} [persistenceKey]
+   * @property {(detail?: any) => void} [onselect]
+   * @property {(detail?: any) => void} [onshowgraph]
+   */
+
+  /** @type {Props} */
+  let {
+    graph,
+    selectedOccurrenceId = "",
+    showArchived = false,
+    persistenceKey = "",
+    onselect,
+    onshowgraph,
+  } = $props();
+  let path = $state([]),
+    restored = $state("");
+  $effect.pre(() => {
+    if (graph && restored !== persistenceKey) {
+      restored = persistenceKey;
+      try {
+        const saved = JSON.parse(
+          localStorage.getItem(`task-manage:finder-path:${persistenceKey}`) || "[]"
+        );
+        path = saved[0] === graph.rootId ? saved : [graph.rootId];
+      } catch {
+        path = [graph.rootId];
+      }
     }
-  }
-  $: columns = path.map((parentId, index) => ({
-    parentId,
-    index,
-    rows: projectFinderRows(graph, parentId, path.slice(0, index)).filter(
-      (r) => r.cycleReference || showArchived || !r.node.archived
-    ),
-  }));
+  });
+  let columns = $derived(
+    path.map((parentId, index) => ({
+      parentId,
+      index,
+      rows: projectFinderRows(graph, parentId, path.slice(0, index)).filter(
+        (r) => r.cycleReference || showArchived || !r.node.archived
+      ),
+    }))
+  );
   function choose(row, index) {
-    dispatch("select", row);
+    onselect?.(row);
     path = [...path.slice(0, index + 1), row.nodeId];
     if (persistenceKey)
       localStorage.setItem(`task-manage:finder-path:${persistenceKey}`, JSON.stringify(path));
-    if (row.cycleReference) dispatch("showgraph", row.nodeId);
+    if (row.cycleReference) onshowgraph?.(row.nodeId);
   }
 </script>
 
@@ -46,7 +63,7 @@
           type="button"
           class:selected={selectedOccurrenceId === row.occurrenceId}
           class:reference={row.cycleReference}
-          on:click={() => choose(row, column.index)}
+          onclick={() => choose(row, column.index)}
           ><span>{row.node.name}</span><span
             >{row.cycleReference ? "循環参照 ↗" : row.expandable ? "›" : ""}</span
           ></button

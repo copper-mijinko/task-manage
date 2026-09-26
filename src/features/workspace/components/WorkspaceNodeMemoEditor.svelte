@@ -1,13 +1,9 @@
 <script>
-  import { createEventDispatcher } from "svelte";
   import Memo from "@features/memos/components/Memo.svelte";
   import * as platform from "@lib/ipc/platform";
-  export let node;
-  export let nodeId;
-  export let workspacePath;
-  const dispatch = createEventDispatcher();
+  let { node, nodeId, workspacePath, onexecute } = $props();
   function update(changes) {
-    dispatch("execute", {
+    onexecute?.({
       command: { type: "update-node", nodeId, changes },
       origin: "graph",
       workspacePath,

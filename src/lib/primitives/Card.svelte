@@ -1,21 +1,26 @@
 <script>
-  /** Optional title shown in a header bar above the content. */
-  export let title = "";
-  /** Outer style overrides. */
-  export let style = "";
-  /** When true, the inner content area gets default padding. Default true. */
-  export let padded = true;
+  /**
+   * @typedef {Object} Props
+   * @property {string} [title] - Optional title shown in a header bar above the content.
+   * @property {string} [style] - Outer style overrides.
+   * @property {boolean} [padded] - When true, the inner content area gets default padding.
+   * @property {import("svelte").Snippet} [headerActions] - Controls shown at the right of the title.
+   * @property {import("svelte").Snippet} [children]
+   */
+
+  /** @type {Props} */
+  let { title = "", style = "", padded = true, headerActions, children } = $props();
 </script>
 
 <div class="Card" {style}>
   {#if title}
     <header class="CardHeader">
       <span class="CardHeaderTitle">{title}</span>
-      <slot name="header-actions" />
+      {@render headerActions?.()}
     </header>
   {/if}
   <div class="CardBody" class:padded>
-    <slot />
+    {@render children?.()}
   </div>
 </div>
 
