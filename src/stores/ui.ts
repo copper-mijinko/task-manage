@@ -1,399 +1,27 @@
-﻿import { get, writable, type Writable } from "svelte/store";
-import {
-  collectTreePaths,
-  getNode,
-  getNodeByPath,
-  pathIncludesNode,
-  pathLeafId,
-  type TreeData,
-} from "@features/tasks/utils/tree_control";
-import { workspaceToProjectData } from "@features/workspace/utils/workspace_tree";
-import type { PendingTaskDetailSelection, SaveStatus, SelectedType } from "@app-types/app";
-import { clearHistory, tree_data } from "@features/tasks/stores/tree";
-import { workspace_store, workspace_tasks_cache } from "@features/workspace/stores/workspace";
+import { get, writable, type Writable } from "svelte/store";
+import type { PendingTaskDetailSelection, SelectedType } from "@app-types/app";
 import * as platform from "@lib/ipc/platform";
 
-const currentHash = typeof window !== "undefined" ? window.location.hash : "";
-const currentSearch =
-  typeof window !== "undefined"
-    ? new URLSearchParams(window.location.search)
-    : new URLSearchParams();
-const isTaskDetailWindow = currentHash === "#task-detail-window";
-const detailProjectId = currentSearch.get("projectId") || undefined;
-const detailTaskId = currentSearch.get("taskId") || undefined;
-const detailSelectedType =
-  currentSearch.get("selectedType") === "WorkspaceProject" ? "WorkspaceProject" : "Projects";
-const detailProjectDir = currentSearch.get("projectDir") || undefined;
+export { saveStatus } from "./save_status";
 
-export let pendingTaskDetailSelection: PendingTaskDetailSelection | undefined =
-  isTaskDetailWindow && detailProjectId && detailTaskId
-    ? {
-        projectId: detailProjectId,
-        taskId: detailTaskId,
-        selectedType: detailSelectedType,
-        projectDir: detailProjectDir,
-      }
-    : undefined;
+/**
+ * 「このプロジェクトのこのノードを選んで」というヒント。ページ遷移履歴の
+ * 戻る／進むが入れ、`WorkspaceTreeGridPage` がプロジェクトを開いた直後に消費する。
+ */
+export let pendingTaskDetailSelection: PendingTaskDetailSelection | undefined = undefined;
 
 export function clearPendingTaskDetailSelection() {
   pendingTaskDetailSelection = undefined;
 }
 
-/**
- * `pendingTaskDetailSelection` をセットする。`setTaskDetailWindowTarget`
- * と違い `selected_type` / `selected_id` の store には触らない。
- * 主にページ遷移履歴の back/forward 用：load 完了後に loader 内で消費される
- * 「このプロジェクトのこのノードを選択しろ」というヒントだけを与える。
- */
 export function setPendingTaskDetailSelection(value: PendingTaskDetailSelection | undefined) {
   pendingTaskDetailSelection = value;
 }
 
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
-}
-
-export interface SelectedIdStore extends Writable<string | undefined> {
-  init: () => void;
-}
-
-/**
- * 折り畳み状態は**行（＝辺）ごと**に持つ。多親ノードは親ごとに別の行として
- * 現れるので、ノード id で持つと片方を畳んだだけで全部が畳まれてしまう。
- * 集合の要素は `VisibleTreeRow.path`（`ルートid/親id/子id`）。
- *
- * ノード id しか分からない呼び出し（追加・貼り付け後の自動展開、削除後の
- * 後始末）は `expandNodeEverywhere` / `pruneNodes` を使う。
- */
-export interface ClosedRowPathsStore extends Writable<Set<string>> {
-  init: () => void;
-  add: (path: string) => void;
-  delete: (path: string) => void;
-  /** そのノードを、現れるすべての経路で開く。子孫の折り畳みは保つ。 */
-  expandNodeEverywhere: (nodeId: string) => void;
-  /** 消えたノードの残骸を捨てる。そのノードを通る経路をすべて外す。 */
-  pruneNodes: (nodeIds: Iterable<string>) => void;
-  /**
-   * 移動でノードの経路が変わったとき、折り畳み状態を新しい経路へ移す。
-   * これをしないと、畳んだノードを動かした瞬間に開いてしまう。
-   */
-  rekey: (oldPath: string, newPath: string) => void;
-  /** ツリーに存在しない経路を捨てる。移動を繰り返しても溜まらないように。 */
-  pruneMissing: (tree: TreeData | undefined) => void;
-  expandAll: () => void;
-  collapseAll: () => void;
-}
-
-export const projectLoading = writable(false);
-
-function createSelectedID(initialValue: string | undefined): SelectedIdStore {
-  const { subscribe, set, update } = writable<string | undefined>(initialValue);
-
-  return {
-    subscribe,
-    set,
-    update,
-    init: () => {
-      let loadVersion = 0;
-      let loadQueued = false;
-
-      function queueLoadSelectedData() {
-        if (loadQueued) return;
-        loadQueued = true;
-        Promise.resolve().then(() => {
-          loadQueued = false;
-          const current = get({ subscribe } as SelectedIdStore);
-          const currentSelectedType = get(selected_type);
-          const version = ++loadVersion;
-          if (!current) {
-            projectLoading.set(false);
-            return;
-          }
-
-          // Graph pages own their projection and selection; the legacy loader must not clear them.
-          if (
-            currentSelectedType === "WorkspaceProject" &&
-            get(workspace_store).activeWorkspacePath
-          ) {
-            projectLoading.set(false);
-            return;
-          }
-          tree_data.flushPendingPersist();
-          clearSelection();
-          copied_tasks.set([]);
-          if (currentSelectedType === "Projects") {
-            projectLoading.set(true);
-            tree_data.resetForLoad();
-            loadProjectsData(current, version);
-          } else if (currentSelectedType === "WorkspaceProject") {
-            projectLoading.set(true);
-            tree_data.resetForLoad();
-            loadWorkspaceData(current, version);
-          } else {
-            projectLoading.set(false);
-          }
-        });
-      }
-
-      function finishLoad(version: number) {
-        if (version === loadVersion) {
-          projectLoading.set(false);
-        }
-      }
-
-      function loadProjectsData(current: string, version: number) {
-        clearHistory();
-        platform.getTreeData(current).then(
-          (result) => {
-            if (version !== loadVersion) return;
-            if (!result) {
-              tree_data.resetForLoad();
-              table_selected_id.set(undefined);
-              finishLoad(version);
-              return;
-            }
-            tree_data.setFromSource(result);
-
-            if (
-              pendingTaskDetailSelection?.projectId === current &&
-              pendingTaskDetailSelection.taskId
-            ) {
-              if (getNode(pendingTaskDetailSelection.taskId, result.data)) {
-                selectOnly(pendingTaskDetailSelection.taskId);
-              } else {
-                clearPendingTaskDetailSelection();
-                selectOnly(result.data.id);
-              }
-            } else {
-              // プロジェクト選択時は、ツリーのルート (= プロジェクト名)
-              // を自動選択する。
-              selectOnly(result.data.id);
-            }
-            finishLoad(version);
-          },
-          () => {
-            if (version === loadVersion) {
-              tree_data.resetForLoad();
-              table_selected_id.set(undefined);
-            }
-            finishLoad(version);
-          }
-        );
-      }
-
-      function loadWorkspaceData(current: string, version: number) {
-        clearHistory();
-        const { activeProjectDir } = get(workspace_store);
-        if (!activeProjectDir) {
-          tree_data.resetForLoad();
-          table_selected_id.set(undefined);
-          finishLoad(version);
-          return;
-        }
-        platform.wsReadProject(activeProjectDir).then(
-          (result) => {
-            if (version !== loadVersion) return;
-            if (!result) {
-              tree_data.resetForLoad();
-              table_selected_id.set(undefined);
-              finishLoad(version);
-              return;
-            }
-            workspace_tasks_cache.set(result.tasks);
-            const converted = workspaceToProjectData(result.tasks, current);
-            tree_data.setFromSource(converted);
-            if (
-              pendingTaskDetailSelection?.selectedType === "WorkspaceProject" &&
-              pendingTaskDetailSelection.projectId === current &&
-              (!pendingTaskDetailSelection.projectDir ||
-                pendingTaskDetailSelection.projectDir === activeProjectDir) &&
-              pendingTaskDetailSelection.taskId &&
-              getNode(pendingTaskDetailSelection.taskId, converted.data)
-            ) {
-              selectOnly(pendingTaskDetailSelection.taskId);
-            } else {
-              // プロジェクト選択時は、ツリーのルート (= プロジェクト名)
-              // を自動選択する。
-              selectOnly(converted.data.id);
-            }
-            finishLoad(version);
-          },
-          () => {
-            if (version === loadVersion) {
-              tree_data.resetForLoad();
-              table_selected_id.set(undefined);
-            }
-            finishLoad(version);
-          }
-        );
-      }
-
-      subscribe(() => {
-        queueLoadSelectedData();
-      });
-
-      selected_type.subscribe(() => {
-        queueLoadSelectedData();
-      });
-    },
-  };
-}
-
-/**
- * 永続化キー。旧版はノード id の配列を `closed_nodes_<projectId>` に置いていた。
- * 意味が「ノード」から「経路」に変わったので新しいキーにする（旧キーは読まない）。
- * 影響は「移行後の初回だけ折り畳み状態が初期化される」ことだけ。
- */
-function closedPathsMetaKey(projectId: string): string {
-  return `closed_paths_${projectId}`;
-}
-
-function createClosedRowPaths(initialValue: Set<string>): ClosedRowPathsStore {
-  const projectExpandedStates = new Map<string, Set<string>>();
-  const { subscribe, set, update } = writable<Set<string>>(initialValue || new Set());
-
-  const loadState = async (projectId: string) => {
-    if (!projectId) return undefined;
-
-    try {
-      const metaKey = closedPathsMetaKey(projectId);
-      const result = await platform.getMetaData(metaKey);
-
-      const newState = isStringArray(result) ? new Set(result) : new Set<string>();
-      projectExpandedStates.set(projectId, newState);
-      set(newState);
-      return newState;
-    } catch {
-      return new Set<string>();
-    }
-  };
-
-  const saveState = (projectId: string, state: Set<string>) => {
-    if (!projectId) return;
-
-    try {
-      platform.setMetaData(closedPathsMetaKey(projectId), Array.from(state));
-    } catch {
-      // ignore save error
-    }
-  };
-
-  /** 現在プロジェクトの折り畳み集合を書き換えて保存する共通処理。 */
-  const mutate = (apply: (draft: Set<string>) => void) => {
-    const projectId = get(selected_id);
-    if (!projectId) return;
-
-    update((currentState) => {
-      const newState = new Set(currentState);
-      apply(newState);
-      if (newState.size === currentState.size) {
-        let same = true;
-        for (const path of newState) {
-          if (!currentState.has(path)) {
-            same = false;
-            break;
-          }
-        }
-        if (same) return currentState;
-      }
-      projectExpandedStates.set(projectId, newState);
-      saveState(projectId, newState);
-      return newState;
-    });
-  };
-
-  return {
-    subscribe,
-    set,
-    update,
-    add: (path: string) => {
-      mutate((newState) => {
-        newState.add(path);
-      });
-    },
-    delete: (path: string) => {
-      mutate((newState) => {
-        newState.delete(path);
-      });
-    },
-    expandNodeEverywhere: (nodeId: string) => {
-      if (!nodeId) return;
-      mutate((newState) => {
-        for (const path of [...newState]) {
-          // その行だけを開く。子孫の折り畳みはそのまま残す。
-          if (pathLeafId(path) === nodeId) newState.delete(path);
-        }
-      });
-    },
-    pruneNodes: (nodeIds: Iterable<string>) => {
-      const removed = new Set(nodeIds);
-      if (removed.size === 0) return;
-      mutate((newState) => {
-        // 消えたノードを通る経路（その行と、そこから下の子孫の行）をまとめて外す。
-        // 他の親から辿れる子孫の行は生きているので残る。
-        for (const path of [...newState]) {
-          if ([...removed].some((id) => pathIncludesNode(path, id))) newState.delete(path);
-        }
-      });
-    },
-    init: () => {
-      selected_id.subscribe(async (projectId) => {
-        if (projectId) {
-          if (projectExpandedStates.has(projectId)) {
-            set(projectExpandedStates.get(projectId) as Set<string>);
-          } else {
-            await loadState(projectId);
-          }
-        }
-      });
-    },
-    rekey: (oldPath: string, newPath: string) => {
-      if (!oldPath || !newPath || oldPath === newPath) return;
-      mutate((newState) => {
-        for (const path of [...newState]) {
-          if (path !== oldPath && !path.startsWith(`${oldPath}/`)) continue;
-          newState.delete(path);
-          newState.add(`${newPath}${path.slice(oldPath.length)}`);
-        }
-      });
-    },
-    pruneMissing: (tree: TreeData | undefined) => {
-      if (!tree) return;
-      mutate((newState) => {
-        for (const path of [...newState]) {
-          if (!getNodeByPath(tree, path)) newState.delete(path);
-        }
-      });
-    },
-    expandAll: () => {
-      const projectId = get(selected_id);
-      if (!projectId) return;
-      const newState = new Set<string>();
-      projectExpandedStates.set(projectId, newState);
-      saveState(projectId, newState);
-      set(newState);
-    },
-    collapseAll: () => {
-      const projectId = get(selected_id);
-      if (!projectId) return;
-      const currentTreeData = get(tree_data);
-      if (!currentTreeData?.data) return;
-      const newState = new Set<string>(collectTreePaths(currentTreeData.data));
-      projectExpandedStates.set(projectId, newState);
-      saveState(projectId, newState);
-      set(newState);
-    },
-  };
-}
-
-// eslint-disable-next-line prefer-const
-export let selected_type: Writable<SelectedType> = writable<SelectedType>(undefined);
-// eslint-disable-next-line prefer-const
-export let table_selected_id: Writable<string | undefined> = writable<string | undefined>(
+export const selected_type: Writable<SelectedType> = writable<SelectedType>(undefined);
+export const table_selected_id: Writable<string | undefined> = writable<string | undefined>(
   undefined
 );
-// eslint-disable-next-line prefer-const
-export let closed_row_paths: ClosedRowPathsStore = createClosedRowPaths(new Set<string>());
 
 /**
  * いま操作している行（辺）の経路。多親ノードは親ごとに複数の行として現れる
@@ -406,8 +34,8 @@ export let closed_row_paths: ClosedRowPathsStore = createClosedRowPaths(new Set<
 export const active_row_path: Writable<string | undefined> = writable<string | undefined>(
   undefined
 );
-// eslint-disable-next-line prefer-const
-export let selected_id: SelectedIdStore = createSelectedID(undefined);
+/** 開いているプロジェクト（スコープ）のノード id。 */
+export const selected_id: Writable<string | undefined> = writable<string | undefined>(undefined);
 
 export interface ShowArchivedStore extends Writable<boolean> {
   init: () => void;
@@ -469,8 +97,7 @@ function createShowArchived(): ShowArchivedStore {
   };
 }
 
-// eslint-disable-next-line prefer-const
-export let show_archived: ShowArchivedStore = createShowArchived();
+export const show_archived: ShowArchivedStore = createShowArchived();
 
 // Multi-select state for the task tree.
 // `selected_ids` holds the live set; `selection_anchor_id` is the pivot used
@@ -636,27 +263,6 @@ export function pruneSelection(existingIds: Set<string>) {
   });
 }
 
-export function setTaskDetailWindowTarget(
-  projectId: string,
-  taskId: string,
-  options: { selectedType?: "Projects" | "WorkspaceProject"; projectDir?: string | null } = {}
-) {
-  if (!projectId || !taskId) {
-    pendingTaskDetailSelection = undefined;
-    return;
-  }
-
-  const selectedType = options.selectedType ?? "Projects";
-  pendingTaskDetailSelection = {
-    projectId,
-    taskId,
-    selectedType,
-    projectDir: options.projectDir ?? null,
-  };
-  selected_type.set(selectedType);
-  selected_id.set(projectId);
-}
-
 export const showPageSearch = writable(false);
 
 /**
@@ -679,21 +285,6 @@ export const pending_rename_id = writable<string | undefined>(undefined);
 
 /** 初期画面など、サイドバー外からWorkspace設定を開くための共有状態。 */
 export const showWorkspaceSetup = writable(false);
-
-export const saveStatus = writable<SaveStatus>("idle");
-
-// Populated with a *live* node reference at copy time (see TreeTable.svelte's
-// handleCopyTask) — not cloned yet. TreeTable.svelte's handlePasteTask clones
-// with fresh ids on every paste, both for the node actually inserted into the
-// tree AND to refresh this store to a new, still-detached snapshot. That
-// refresh matters: without it, pasting the project root (whose only possible
-// paste targets are its own descendants) would leave this store aliasing a
-// live subtree that grows with every paste, so a second paste from the same
-// copy would clone an already-grown tree instead of the original one.
-export const copied_task = writable<TreeData | null>(null);
-
-// Multi-selection clipboard. When non-empty, takes precedence over `copied_task`.
-export const copied_tasks = writable<TreeData[]>([]);
 
 /**
  * The left navigation sidebar always starts hidden on launch. Per UX

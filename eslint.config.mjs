@@ -64,7 +64,13 @@ export default [
     },
   },
   {
-    files: ["electron/**/*.js"],
+    // BOM は付けない（エディタによって付いていた）。
+    rules: {
+      "unicode-bom": ["error", "never"],
+    },
+  },
+  {
+    files: ["electron/**/*.js", "tools/**/*.js"],
     languageOptions: {
       globals: {
         ...globals.node,

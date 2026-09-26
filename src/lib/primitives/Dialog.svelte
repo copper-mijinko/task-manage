@@ -1,26 +1,38 @@
 <script>
   import Modal from "@lib/primitives/Modal.svelte";
   import Button from "@lib/primitives/Button.svelte";
-  export let show = false;
-  export let toggle;
-  export let header;
-  export let content;
-  export let callback = undefined;
+
   /**
-   * 確定ボタンのラベル。既定は英語の "ok" だったが、UI 全体が日本語なので
-   * 言語が混ざるうえ、"ok" は「何が起きるか」を述べない。呼び出し側は
-   * 「アーカイブする」「完全に削除」のように動作を名指しするのが望ましい。
+   * @typedef {Object} Props
+   * @property {boolean} [show]
+   * @property {any} toggle
+   * @property {any} header
+   * @property {any} content
+   * @property {any} [callback]
+   * @property {string | false} [ok] - false なら確定ボタンを出さない。 確定ボタンのラベル。既定は英語の "ok" だったが、UI 全体が日本語なので
+言語が混ざるうえ、"ok" は「何が起きるか」を述べない。呼び出し側は
+「アーカイブする」「完全に削除」のように動作を名指しするのが望ましい。
+   * @property {string} [cancel]
+   * @property {boolean} [danger] - 取り消せない操作（完全削除など）の確認かどうか。true のとき確定ボタンを
+エラー色にして、通常の確認と見分けられるようにする。既定のプライマリ青の
+ままだと、削除の確認と保存の確認が同じ見た目になる。
+   * @property {string} [width]
+   * @property {string} [height]
    */
-  export let ok = "実行";
-  export let cancel = "キャンセル";
-  /**
-   * 取り消せない操作（完全削除など）の確認かどうか。true のとき確定ボタンを
-   * エラー色にして、通常の確認と見分けられるようにする。既定のプライマリ青の
-   * ままだと、削除の確認と保存の確認が同じ見た目になる。
-   */
-  export let danger = false;
-  export let width = "21rem";
-  export let height = "auto";
+
+  /** @type {Props} */
+  let {
+    show = false,
+    toggle,
+    header,
+    content,
+    callback = undefined,
+    ok = "実行",
+    cancel = "キャンセル",
+    danger = false,
+    width = "21rem",
+    height = "auto",
+  } = $props();
 
   const dialogHeaderId = `dialog-header-${Math.random().toString(36).slice(2)}`;
 </script>
@@ -32,7 +44,7 @@
     {#if ok || cancel}
       <div class="control">
         {#if cancel}
-          <Button use_ripple={false} variant="text" content={cancel} on:click={toggle} />
+          <Button use_ripple={false} variant="text" content={cancel} onclick={toggle} />
         {/if}
         {#if ok}
           <Button
@@ -41,7 +53,7 @@
             content={ok}
             normalColor={danger ? "var(--theme-color-Error-main)" : "var(--theme-color-Info-main)"}
             activeColor={danger ? "var(--theme-color-Error-dark)" : "var(--theme-color-Info-dark)"}
-            on:click={() => {
+            onclick={() => {
               callback();
               toggle();
             }}

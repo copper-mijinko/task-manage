@@ -19,7 +19,7 @@ const readyRuntime = {
   bridgeType: "object",
   href: "http://localhost:5173/",
   preloadMethods: {
-    getProjectIDs: true,
+    wsReadGraph: true,
     windowGetState: true,
     wsGetWorkspaces: true,
   },
@@ -160,7 +160,7 @@ describe("agent UI runtime verification", () => {
     ).rejects.toMatchObject({
       code: "PRELOAD_MISSING",
       details: {
-        missingMethods: ["getProjectIDs", "windowGetState", "wsGetWorkspaces"],
+        missingMethods: ["wsReadGraph", "windowGetState", "wsGetWorkspaces"],
       },
       stage: "preload",
     });

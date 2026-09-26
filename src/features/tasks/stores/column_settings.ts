@@ -1,4 +1,4 @@
-﻿import { writable, type Writable } from "svelte/store";
+import { writable, type Writable } from "svelte/store";
 import * as platform from "@lib/ipc/platform";
 
 export interface ColumnSetting {

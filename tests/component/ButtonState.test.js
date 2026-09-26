@@ -1,4 +1,4 @@
-﻿import { render } from "@testing-library/svelte";
+import { render } from "@testing-library/svelte";
 import { tick } from "svelte";
 
 import Button from "@lib/primitives/Button.svelte";

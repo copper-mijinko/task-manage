@@ -137,16 +137,6 @@ describe("TaskName", () => {
   });
 
   describe("three-dot menu toggle", () => {
-    test("dispatches open folder from the task actions menu", async () => {
-      render(TaskNameCommitHarness, { initialText: "Original", canOpenTaskFolder: true });
-
-      const menuButton = screen.getByRole("button", { name: "ノード操作を開く" });
-      await fireEvent.click(menuButton);
-      await fireEvent.click(await screen.findByRole("menuitem", { name: "フォルダーを開く" }));
-
-      expect(screen.getByTestId("open-folder-count")).toHaveTextContent("1");
-    });
-
     test("clicking the trigger button a second time closes the menu", async () => {
       // Regression: previously the menu's outside-click handler closed the
       // menu on the same pointerdown that the trigger's click then re-opened,

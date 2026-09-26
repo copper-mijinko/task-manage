@@ -1,14 +1,28 @@
-﻿<script>
+<script>
   import Pane from "@lib/layouts/Pane.svelte";
   import SplitPanes from "@lib/layouts/SplitPanes.svelte";
 
-  export let defaultRatio = [1, 1];
-  export let collapsePriority = "both";
-  export let collapseSize = 64;
-  export let collapsedPane = null;
-  export let separatorLabel = "ペインのサイズを変更";
-  export let persistenceKey = "";
-  export let paneMinWidth = "128px";
+  /**
+   * @typedef {Object} Props
+   * @property {any} [defaultRatio]
+   * @property {string} [collapsePriority]
+   * @property {number} [collapseSize]
+   * @property {any} [collapsedPane]
+   * @property {string} [separatorLabel]
+   * @property {string} [persistenceKey]
+   * @property {string} [paneMinWidth]
+   */
+
+  /** @type {Props} */
+  let {
+    defaultRatio = [1, 1],
+    collapsePriority = "both",
+    collapseSize = 64,
+    collapsedPane = $bindable(null),
+    separatorLabel = "ペインのサイズを変更",
+    persistenceKey = "",
+    paneMinWidth = "128px",
+  } = $props();
 </script>
 
 <div style="width: 400px; height: 300px;">

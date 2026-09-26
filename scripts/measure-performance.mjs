@@ -7,10 +7,14 @@ import { _electron as electron } from "@playwright/test";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.resolve(scriptDir, "..");
-const fixtureDir = path.join(repositoryRoot, "tests", "e2e", "fixtures");
 const requestedSamples = Number.parseInt(process.env.PERF_SAMPLES ?? "3", 10);
 const sampleCount =
   Number.isFinite(requestedSamples) && requestedSamples > 0 ? requestedSamples : 3;
+// ワークスペースの大きさ（ノード数のおおよそ）。大きいワークスペースでの
+// 編集の重さを測るときに増やす（例: PERF_NODES=2000）。
+const requestedNodes = Number.parseInt(process.env.PERF_NODES ?? "2", 10);
+const extraNodeCount =
+  Number.isFinite(requestedNodes) && requestedNodes > 2 ? requestedNodes - 2 : 0;
 const imageDataUrl =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 
@@ -47,10 +51,58 @@ function summarize(values) {
   };
 }
 
+/** project-1 と task-1 を持つワークスペースを作り、設定に登録する。 */
+function seedWorkspace(tempDir) {
+  const workspacePath = path.join(tempDir, "workspace");
+  fs.mkdirSync(path.join(workspacePath, ".task-manage"), { recursive: true });
+  const node = (id, name, parentId, order = 0) => ({
+    id,
+    name,
+    parents: parentId ? [{ id: parentId, order }] : [],
+    createdAt: "2026-01-01",
+  });
+  const nodes = [
+    node("root", "Workspace"),
+    node("project-1", "Sample Project", "root"),
+    node("task-1", "First Task", "project-1"),
+  ];
+  // 大きさを指定されたら、100 ノードずつのプロジェクトを足す。
+  for (let index = 0; index < extraNodeCount; index += 1) {
+    const projectId = `bulk-${Math.floor(index / 100)}`;
+    // 計測に使う project-1 が先頭に来るよう、足すプロジェクトは後ろに並べる。
+    if (index % 100 === 0)
+      nodes.push(node(projectId, `Bulk ${projectId}`, "root", 1 + index / 100));
+    else
+      nodes.push({
+        ...node(`${projectId}-${index}`, `Bulk task ${index}`, projectId, index % 100),
+        status: "Open",
+      });
+  }
+  const graph = {
+    schemaVersion: 1,
+    workspaceId: "performance",
+    rootId: "root",
+    revision: 0,
+    nodes: Object.fromEntries(nodes.map((n) => [n.id, n])),
+  };
+  fs.writeFileSync(
+    path.join(workspacePath, ".task-manage", "graph-v1.json"),
+    JSON.stringify({ schemaVersion: 1, graph, undo: [], redo: [] })
+  );
+  fs.writeFileSync(
+    path.join(tempDir, "meta.json"),
+    JSON.stringify({
+      theme: "dark",
+      workspaces: [{ label: "Performance", path: workspacePath }],
+      activeWorkspace: workspacePath,
+    })
+  );
+  return workspacePath;
+}
+
 async function measureSample() {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "task-manage-performance-"));
-  fs.copyFileSync(path.join(fixtureDir, "db.json"), path.join(tempDir, "db.json"));
-  fs.copyFileSync(path.join(fixtureDir, "meta.json"), path.join(tempDir, "meta.json"));
+  const workspacePath = seedWorkspace(tempDir);
 
   const launchEnv = { ...process.env };
   delete launchEnv.ELECTRON_RUN_AS_NODE;
@@ -86,16 +138,17 @@ async function measureSample() {
 
     const detailStartedAt = performance.now();
     const detailWindowPromise = electronApp.waitForEvent("window");
-    await mainWindow.evaluate(() => {
+    await mainWindow.evaluate((workspacePath) => {
       window.electronAPI.openTaskDetailWindow({
+        workspacePath,
         projectId: "project-1",
         taskId: "task-1",
         taskName: "First Task",
         requestedAtEpochMs: Date.now(),
       });
-    });
+    }, workspacePath);
     const detailWindow = await detailWindowPromise;
-    await detailWindow.locator(".CardHeaderTitle", { hasText: "First Task" }).waitFor({
+    await detailWindow.getByRole("heading", { name: /First Task/ }).waitFor({
       state: "visible",
     });
     const detailInteractiveMs = roundTiming(performance.now() - detailStartedAt);
@@ -112,6 +165,15 @@ async function measureSample() {
     });
     await detailWindow.close();
 
+    // 行を選んでノードを足し、新しい行が出るまで。編集 1 回の重さの目安。
+    await mainWindow.locator("#task-1").dispatchEvent("click");
+    const addStartedAt = performance.now();
+    await mainWindow.getByRole("button", { name: "ノード追加", exact: true }).click();
+    await mainWindow.locator('[aria-label="新しいノードのノード名"]').first().waitFor({
+      state: "visible",
+    });
+    const addNodeMs = roundTiming(performance.now() - addStartedAt);
+
     async function measureImageOpen() {
       const imageStartedAt = performance.now();
       const imageWindowPromise = electronApp.waitForEvent("window");
@@ -127,6 +189,7 @@ async function measureSample() {
     return {
       startupInteractiveMs,
       detailInteractiveMs,
+      addNodeMs,
       imageFirstOpenMs: await measureImageOpen(),
       imageReopenMs: await measureImageOpen(),
       renderer: Object.fromEntries(
@@ -151,6 +214,7 @@ for (let index = 0; index < sampleCount; index += 1) {
 const timingKeys = [
   "startupInteractiveMs",
   "detailInteractiveMs",
+  "addNodeMs",
   "imageFirstOpenMs",
   "imageReopenMs",
 ];
@@ -158,6 +222,7 @@ const rendererKeys = Object.keys(samples[0]?.renderer ?? {});
 const detailRendererKeys = Object.keys(samples[0]?.detailRenderer ?? {});
 const result = {
   sampleCount,
+  workspaceNodes: 3 + extraNodeCount,
   summary: {
     ...Object.fromEntries(
       timingKeys.map((key) => [key, summarize(samples.map((sample) => sample[key]))])

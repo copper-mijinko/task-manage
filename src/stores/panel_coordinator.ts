@@ -12,7 +12,7 @@
  *   });
  *   onDestroy(() => unsubscribe?.());
  *
- * Usage for persistent components (MultiSelect, column-settings, …):
+ * Usage for persistent components (column settings, filter panels, …):
  *   const myId = newPanelId();
  *   // When opening:  activePanelId.set(myId)
  *   // To auto-close: $: if ($activePanelId !== null && $activePanelId !== myId && isOpen) isOpen = false;

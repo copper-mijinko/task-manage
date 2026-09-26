@@ -22,6 +22,64 @@ function graph(nodes) {
 }
 
 describe("workspace graph commands", () => {
+  it("never modifies the input graph and shares the nodes a command does not change", () => {
+    const input = graph([
+      node("root"),
+      node("a", ["root"]),
+      node("b", ["a"]),
+      node("c", ["root"]),
+      node("d", ["b", "c"]),
+    ]);
+    input.positions = { a: { x: 1, y: 2 } };
+    const snapshot = JSON.stringify(input);
+    const commands = [
+      { type: "update-node", nodeId: "b", changes: { name: "B", status: "Open" } },
+      { type: "create-node", parentId: "a", node: { name: "new" } },
+      { type: "link", childId: "c", parentId: "a" },
+      { type: "detach", childId: "d", parentId: "b" },
+      { type: "move", childId: "b", fromParentId: "a", toParentId: "c" },
+      { type: "archive-edge", childId: "d", parentId: "c" },
+      { type: "delete-node", nodeId: "a" },
+      { type: "copy", nodeId: "a", targetParentId: "c", mode: "subgraph" },
+      { type: "copy", nodeId: "b", targetParentId: "c", mode: "share-children" },
+      { type: "set-position", nodeId: "a", x: 5, y: 6 },
+      {
+        type: "batch",
+        commands: [
+          { type: "update-node", nodeId: "a", changes: { name: "A" } },
+          { type: "link", childId: "b", parentId: "c" },
+        ],
+      },
+    ];
+    for (const command of commands) {
+      const { graph: output } = executeGraphCommand(input, command);
+      expect(JSON.stringify(input), command.type).toBe(snapshot);
+      expect(output).not.toBe(input);
+    }
+    // 名前だけ変えたとき、ほかのノードは同じオブジェクトのまま使い回す。
+    const renamed = executeGraphCommand(input, {
+      type: "update-node",
+      nodeId: "b",
+      changes: { name: "B" },
+    }).graph;
+    expect(renamed.nodes.a).toBe(input.nodes.a);
+    expect(renamed.nodes.b).not.toBe(input.nodes.b);
+  });
+
+  it("still rejects invalid field values when only the changed node is checked", () => {
+    const input = graph([node("root"), node("a", ["root"])]);
+    expect(() =>
+      executeGraphCommand(input, {
+        type: "update-node",
+        nodeId: "a",
+        changes: { startDate: "2026-02-10", dueDate: "2026-02-01" },
+      })
+    ).toThrow("Start date is after due date");
+    expect(() =>
+      executeGraphCommand(input, { type: "update-node", nodeId: "a", changes: { status: "Nope" } })
+    ).toThrow("Invalid node status");
+  });
+
   it("protects the Inbox identity after renaming while allowing item deletion", () => {
     const input = graph([
       node("root"),

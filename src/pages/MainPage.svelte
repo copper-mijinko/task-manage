@@ -3,8 +3,8 @@
   import { dismissAllTooltips } from "@lib/actions";
   import { TREEGRID_APPLICATION } from "@features/workspace/application/treegrid";
   const application = getContext(TREEGRID_APPLICATION);
-  const closed_row_paths = application?.closed ?? legacy_closed_row_paths;
-  const tree_data = application?.tree ?? legacy_tree_data;
+  const closed_row_paths = application.closed;
+  const tree_data = application.tree;
 
   import Pane from "@lib/layouts/Pane.svelte";
   import SplitPanes from "@lib/layouts/SplitPanes.svelte";
@@ -19,15 +19,7 @@
   import ActiveFilterBar from "@features/search/components/ActiveFilterBar.svelte";
   import TaskMenu from "@features/tasks/components/TaskMenu.svelte";
   import ArchiveScopeDialog from "@features/tasks/components/ArchiveScopeDialog.svelte";
-  import { tick } from "svelte";
-  import {
-    table_selected_id,
-    tree_data as legacy_tree_data,
-    closed_row_paths as legacy_closed_row_paths,
-    active_row_path,
-    ganttVisible,
-    selected_type,
-  } from "@stores";
+  import { table_selected_id, active_row_path, ganttVisible } from "@stores";
   import {
     convertMemoContent,
     isEmptyMemoContent,
@@ -35,49 +27,19 @@
   } from "@features/memos/utils/memo_utils";
   import {
     getNode,
-    addNode,
-    rmNode,
     getParent,
-    moveNodeUp,
-    moveNodeDown,
-    indentNode,
-    outdentNode,
-    bulkRemoveNodes,
-    reattachOrphans,
-    bulkMoveUp,
-    bulkMoveDown,
-    bulkIndent,
-    bulkOutdent,
     areAllSiblings,
     isContiguousSiblingBlock,
     isNodeEffectivelyArchived,
-    archiveNode,
-    restoreNode,
-    bulkArchiveNodes,
-    bulkRestoreNodes,
     canIndentNode,
     getNodeByPath,
     parentPathOf,
-    pathLeafId,
   } from "@features/tasks/utils/tree_control";
-  import { getDefaultNode } from "@features/tasks/utils/tree_control";
-  import {
-    undoHistory,
-    redoHistory,
-    canUndoLegacy,
-    canRedoLegacy,
-  } from "@features/tasks/stores/tree";
   import {
     can_undo_graph as canUndoGraph,
     can_redo_graph as canRedoGraph,
   } from "@features/workspace/stores/graph";
-  import {
-    selected_ids,
-    clearSelection,
-    selectOnly,
-    show_archived,
-    pending_rename_id,
-  } from "@stores/ui";
+  import { selected_ids, clearSelection, show_archived } from "@stores/ui";
 
   // ページ内検索はstoresから共有
 
@@ -86,14 +48,14 @@
   // bulk のときは「active 分はアーカイブ、archived 分は完全削除」と
   // 自動振り分けする（仕様）。archiveTargetIds と permanentTargetIds の
   // 両方を保持し、ダイアログには両方の件数を表示する。
-  let show_confirm = false;
+  let show_confirm = $state(false);
   /** 単発時のモード: "archive" | "permanent"。bulk のときは見ない。 */
-  let confirm_mode = "archive";
+  let confirm_mode = $state("archive");
   /** アーカイブ範囲の確認中の対象（多親ノードのときだけ立つ）。 */
-  let archive_scope_target = null;
+  let archive_scope_target = $state(null);
   /** bulk の振り分け結果。 */
-  let archive_target_ids = [];
-  let permanent_target_ids = [];
+  let archive_target_ids = $state([]);
+  let permanent_target_ids = $state([]);
 
   const toggle_confirm = () => {
     show_confirm = !show_confirm;
@@ -105,184 +67,35 @@
       permanent_target_ids = [];
     }
   };
-  let name_confirm = "";
-  let is_bulk_confirm = false;
+  let name_confirm = $state("");
+  let is_bulk_confirm = $state(false);
   let bulk_confirm_count = 0;
 
   const callback_confirm = () => {
-    if (application) {
-      const archives = is_bulk_confirm
-        ? archive_target_ids
-        : confirm_mode === "archive"
-          ? [$table_selected_id]
-          : [];
-      const removes = is_bulk_confirm
-        ? permanent_target_ids
-        : confirm_mode === "permanent"
-          ? [$table_selected_id]
-          : [];
-      void application.dispatch([
-        ...archives.map((nodeId) => ({ type: "update-node", nodeId, changes: { archived: true } })),
-        ...removes.map((nodeId) => ({ type: "delete-node", nodeId })),
-      ]);
-      clearSelection();
-      return;
-    }
-    if (!$tree_data?.data) return;
-    if (is_bulk_confirm) {
-      let data = $tree_data.data;
-      if (archive_target_ids.length > 0) {
-        data = bulkArchiveNodes(data, new Set(archive_target_ids));
-      }
-      if (permanent_target_ids.length > 0) {
-        // 削除で最後の親を失うノードを拾うため、消す前にノードを掴んでおく。
-        const removedNodes = permanent_target_ids
-          .map((id) => getNode(id, data))
-          .filter((node) => node);
-        const removed = bulkRemoveNodes(data, new Set(permanent_target_ids));
-        if (removed) data = removed;
-        reattachOrphans(data, removedNodes);
-      }
-      $tree_data = { ...$tree_data, data };
-      clearSelection();
-      is_bulk_confirm = false;
-      bulk_confirm_count = 0;
-      confirm_mode = "archive";
-      archive_target_ids = [];
-      permanent_target_ids = [];
-      return;
-    }
-    if (!$table_selected_id) return;
-    if (confirm_mode === "permanent") {
-      const removedNode = getNode($table_selected_id, $tree_data.data);
-      $tree_data.data = rmNode($table_selected_id, $tree_data.data);
-      // 消したノードの子が他に親を持たないなら、ルート直下へ付け直す（孤児を作らない）。
-      if (removedNode) reattachOrphans($tree_data.data, [removedNode]);
-      $tree_data = { ...$tree_data, data: $tree_data.data };
-    } else {
-      $tree_data.data = archiveNode($table_selected_id, $tree_data.data);
-      $tree_data = { ...$tree_data, data: $tree_data.data };
-    }
+    const archives = is_bulk_confirm
+      ? archive_target_ids
+      : confirm_mode === "archive"
+        ? [$table_selected_id]
+        : [];
+    const removes = is_bulk_confirm
+      ? permanent_target_ids
+      : confirm_mode === "permanent"
+        ? [$table_selected_id]
+        : [];
+    void application.dispatch([
+      ...archives.map((nodeId) => ({ type: "update-node", nodeId, changes: { archived: true } })),
+      ...removes.map((nodeId) => ({ type: "delete-node", nodeId })),
+    ]);
     clearSelection();
-    confirm_mode = "archive";
   };
 
-  $: confirmDialogHeader = (() => {
-    if (is_bulk_confirm) {
-      if (archive_target_ids.length > 0 && permanent_target_ids.length > 0) {
-        return "アーカイブと完全削除の確認";
-      }
-      return permanent_target_ids.length > 0 ? "完全削除の確認" : "アーカイブの確認";
-    }
-    return confirm_mode === "permanent" ? "完全削除の確認" : "アーカイブの確認";
-  })();
-
-  /** 確定ボタンのラベル。何が起きるかを動作で名指しする。 */
-  $: confirmDialogOk = (() => {
-    if (is_bulk_confirm) {
-      if (permanent_target_ids.length > 0 && archive_target_ids.length > 0) return "実行する";
-      return permanent_target_ids.length > 0 ? "完全に削除" : "アーカイブする";
-    }
-    return confirm_mode === "permanent" ? "完全に削除" : "アーカイブする";
-  })();
-
-  /** 取り消せない完全削除を含むかどうか。確定ボタンをエラー色にする。 */
-  $: confirmDialogDanger = is_bulk_confirm
-    ? permanent_target_ids.length > 0
-    : confirm_mode === "permanent";
-
-  $: confirmDialogContent = (() => {
-    if (is_bulk_confirm) {
-      const lines = [];
-      if (archive_target_ids.length > 0) lines.push(`${archive_target_ids.length} 件をアーカイブ`);
-      if (permanent_target_ids.length > 0)
-        lines.push(`${permanent_target_ids.length} 件を完全削除`);
-      const body = lines.join(" / ");
-      if (permanent_target_ids.length > 0) {
-        return `${body} します。\n${application ? "Workspaceの履歴に残っている間は「元に戻す」で復元できます。" : "完全削除分は取り消せません。"}`;
-      }
-      return `${body} します。\n後でアーカイブ表示から復元できます。`;
-    }
-    if (confirm_mode === "permanent") {
-      return `"${name_confirm}" を完全に削除しますか？\n${application ? "Workspaceの履歴に残っている間は「元に戻す」で復元できます。" : "この操作は取り消せません。"}`;
-    }
-    return `"${name_confirm}" をアーカイブしますか？\n後でアーカイブ表示から復元できます。`;
-  })();
-
-  // Reactive bulk-capability flags for the toolbar buttons.
-  $: selectionSize = $selected_ids.size;
-  $: isMultiSelect = selectionSize > 1;
-  // 一括操作の基準の親は、ツリーでいま操作している行の親。
-  $: bulkParentPath = parentPathOf($active_row_path ?? "");
-  /**
-   * いま操作している行の親。多親ノードは同じ id の行が複数あるので、
-   * ボタンの活性判定も「最初に見つかった親」ではなく見ている行の側で見る
-   * （実際の移動・インデントは経路で動くので、ここがずれると見た目と
-   * 動作が食い違う）。
-   */
-  $: activeParentNode = getNodeByPath($tree_data?.data, bulkParentPath);
-  // `$:` で作る。ふつうの関数にすると、これを呼ぶ側の `$:` が
-  // `activeParentNode` を依存として拾わず、行を移っても活性判定が
-  // 更新されないままになる。
-  $: parentForRow = (id) =>
-    (activeParentNode?.children?.some((child) => child.id === id) ? activeParentNode : undefined) ??
-    ($tree_data?.data ? getParent(id, $tree_data.data) : undefined);
-  /** 祖父。アウトデント可否に使う。ここも見ている行の側から辿る。 */
-  $: grandParentForRow = (parentId) =>
-    getNodeByPath($tree_data?.data, parentPathOf(bulkParentPath)) ??
-    ($tree_data?.data ? getParent(parentId, $tree_data.data) : undefined);
-  $: canMultiSiblingMove =
-    isMultiSelect && isContiguousSiblingBlock($tree_data?.data, $selected_ids, bulkParentPath);
-  $: canMultiTreeOp =
-    isMultiSelect && areAllSiblings($tree_data?.data, $selected_ids, bulkParentPath);
-  $: canMultiOutdent = (() => {
-    if (!canMultiTreeOp || !$tree_data?.data) return false;
-    const anyId = $selected_ids.values().next().value;
-    if (!anyId) return false;
-    const parent = parentForRow(anyId);
-    if (!parent) return false;
-    return !!grandParentForRow(parent.id);
-  })();
-  $: selectionTreeCapabilities = (() => {
-    const unavailable = { moveUp: false, moveDown: false, indent: false, outdent: false };
-    if (!$tree_data?.data || !$table_selected_id || anchorIsArchived || anchorIsRoot) {
-      return unavailable;
-    }
-
-    const ids = isMultiSelect ? $selected_ids : new Set([$table_selected_id]);
-    if (!areAllSiblings($tree_data.data, ids, bulkParentPath)) return unavailable;
-
-    const anyId = ids.values().next().value;
-    if (!anyId) return unavailable;
-    const parent = parentForRow(anyId);
-    if (!parent) return unavailable;
-
-    const indices = parent.children
-      .map((child, index) => (ids.has(child.id) ? index : -1))
-      .filter((index) => index >= 0);
-    if (indices.length !== ids.size) return unavailable;
-
-    const first = Math.min(...indices);
-    const last = Math.max(...indices);
-    const contiguous =
-      !isMultiSelect || isContiguousSiblingBlock($tree_data.data, ids, bulkParentPath);
-    return {
-      moveUp: contiguous && first > 0,
-      moveDown: contiguous && last < parent.children.length - 1,
-      // 直前の兄弟が自分の子孫なら循環するので、そこへは入れられない。
-      indent: first > 0 && canIndentNode(anyId, $tree_data.data, `${bulkParentPath}/${anyId}`),
-      outdent: !!grandParentForRow(parent.id),
-    };
-  })();
-
-  let show_alert = false;
-  let alert_content = "プロジェクトルートはアーカイブできません。";
+  let show_alert = $state(false);
+  let alert_content = $state("プロジェクトルートはアーカイブできません。");
   const toggle_alert = () => {
     show_alert = !show_alert;
   };
 
-  let outerCollapsedPane = null;
-  $: detailPaneVisible = outerCollapsedPane !== "end";
+  let outerCollapsedPane = $state(null);
 
   /**
    * 狭い幅では、詰まるのは列ではなく脇のペインのほう。760px の実測:
@@ -299,48 +112,19 @@
    * 明示的に出したものを幅の都合で引っ込めない、が優先。
    */
   const NARROW_LAYOUT_WIDTH = 900;
-  let viewportWidth = 0;
+  let viewportWidth = $state(0);
   /** 幅がしきい値をまたいだ一度きりだけ動かすための掛け金。 */
-  let narrowLayoutApplied = false;
-  let detailAutoCollapsed = false;
-  let ganttAutoHidden = false;
-  $: {
-    const narrow = viewportWidth > 0 && viewportWidth < NARROW_LAYOUT_WIDTH;
-    if (narrow && !narrowLayoutApplied) {
-      narrowLayoutApplied = true;
-      if (outerCollapsedPane !== "end") {
-        detailAutoCollapsed = true;
-        outerCollapsedPane = "end";
-      }
-      if ($ganttVisible) {
-        ganttAutoHidden = true;
-        $ganttVisible = false;
-      }
-    } else if (!narrow && narrowLayoutApplied) {
-      narrowLayoutApplied = false;
-      // 戻すのは「こちらが引っ込めたもの」だけ。利用者が自分で開閉したものは
-      // toggle 側でフラグが落ちているので触らない。
-      if (detailAutoCollapsed) {
-        detailAutoCollapsed = false;
-        outerCollapsedPane = null;
-      }
-      if (ganttAutoHidden) {
-        ganttAutoHidden = false;
-        $ganttVisible = true;
-      }
-    }
-  }
-  let show_memo_format_confirm = false;
-  let bulkMemoTargetFormat = "markdown";
-  let bulkMemoPhase = "ready";
-  let bulkMemoItems = [];
+  let narrowLayoutApplied = $state(false);
+  let detailAutoCollapsed = $state(false);
+  let ganttAutoHidden = $state(false);
+  let show_memo_format_confirm = $state(false);
+  let bulkMemoTargetFormat = $state(
+    /** @type {import("@features/memos/utils/memo_utils").MemoFormat} */ ("markdown")
+  );
+  let bulkMemoPhase = $state("ready");
+  let bulkMemoItems = $state([]);
 
-  $: defaultMemoFormat = $selected_type === "WorkspaceProject" ? "markdown" : "quill";
-  $: projectName = $tree_data?.data?.data?.name || "Task Tree";
-  $: projectStorageLabel = $selected_type === "WorkspaceProject" ? "Workspace" : "InApp";
-  $: bulkMemoTargetLabel = getMemoFormatLabel(bulkMemoTargetFormat);
-  $: successfulBulkMemoItems = bulkMemoItems.filter((item) => item.status === "ok");
-  $: failedBulkMemoItems = bulkMemoItems.filter((item) => item.status === "error");
+  const defaultMemoFormat = "markdown";
 
   function getMemoFormatLabel(format) {
     return format === "markdown" ? "Markdown" : "Quill";
@@ -408,34 +192,6 @@
     );
   }
 
-  function convertNodeMemosToFormatWithResults(node, targetFormat, fallbackFormat, resultMap) {
-    const currentFormat = normalizeMemoFormat(node.data.format, fallbackFormat);
-    let data = node.data;
-
-    if (currentFormat !== targetFormat && !isEmptyMemoContent(node.data.body)) {
-      const result = resultMap.get(node.id);
-      try {
-        const body = convertMemoContent(node.data.body, currentFormat, targetFormat);
-        if (result) result.status = "ok";
-        data = { ...node.data, format: targetFormat, body };
-      } catch (error) {
-        if (result) {
-          result.status = "error";
-          result.error = error instanceof Error ? error.message : String(error);
-        }
-        data = { ...node.data, format: currentFormat };
-      }
-    }
-
-    return {
-      ...node,
-      data,
-      children: (node.children ?? []).map((child) =>
-        convertNodeMemosToFormatWithResults(child, targetFormat, fallbackFormat, resultMap)
-      ),
-    };
-  }
-
   function requestBulkMemoFormat(targetFormat) {
     bulkMemoTargetFormat = targetFormat;
     bulkMemoItems = collectProjectMemosForFormat($tree_data?.data, targetFormat, defaultMemoFormat);
@@ -450,115 +206,43 @@
   }
 
   async function applyBulkMemoFormat() {
-    if (application) {
-      bulkMemoPhase = "running";
-      try {
-        const commands = bulkMemoItems.map((item) => {
-          const node = getNode(item.id, $tree_data.data);
-          return {
-            type: "update-node",
-            nodeId: item.id,
-            changes: {
-              body: convertMemoContent(
-                node.data.body,
-                node.data.format || defaultMemoFormat,
-                bulkMemoTargetFormat
-              ),
-              format: bulkMemoTargetFormat,
-            },
-          };
-        });
-        const result = await application.dispatch(commands);
-        bulkMemoItems = bulkMemoItems.map((item) => ({
-          ...item,
-          status: result ? "ok" : "error",
-        }));
-      } catch (error) {
-        bulkMemoItems = bulkMemoItems.map((item) => ({
-          ...item,
-          status: "error",
-          error: error instanceof Error ? error.message : String(error),
-        }));
-      } finally {
-        bulkMemoPhase = "done";
-      }
-      return;
-    }
-    if (!$tree_data?.data) return;
     bulkMemoPhase = "running";
-    const results = bulkMemoItems.map((item) => ({ ...item, status: "pending", error: "" }));
-    const resultMap = new Map(results.map((item) => [item.id, item]));
-    $tree_data = {
-      ...$tree_data,
-      data: convertNodeMemosToFormatWithResults(
-        $tree_data.data,
-        bulkMemoTargetFormat,
-        defaultMemoFormat,
-        resultMap
-      ),
-    };
-    results.forEach((item) => {
-      if (item.status === "pending") {
-        item.status = "error";
-        item.error = "Target memo was not found.";
-      }
-    });
-    bulkMemoItems = results;
-    bulkMemoPhase = "done";
+    try {
+      const commands = bulkMemoItems.map((item) => {
+        const node = getNode(item.id, $tree_data.data);
+        return {
+          type: "update-node",
+          nodeId: item.id,
+          changes: {
+            body: convertMemoContent(
+              node.data.body,
+              node.data.format || defaultMemoFormat,
+              bulkMemoTargetFormat
+            ),
+            format: bulkMemoTargetFormat,
+          },
+        };
+      });
+      const result = await application.dispatch(commands);
+      bulkMemoItems = bulkMemoItems.map((item) => ({
+        ...item,
+        status: result ? "ok" : "error",
+      }));
+    } catch (error) {
+      bulkMemoItems = bulkMemoItems.map((item) => ({
+        ...item,
+        status: "error",
+        error: error instanceof Error ? error.message : String(error),
+      }));
+    } finally {
+      bulkMemoPhase = "done";
+    }
   }
 
   // Add
-  export async function handleAdd(e, action) {
-    if (application) {
-      e.stopPropagation();
-      return application.add($table_selected_id, action, $active_row_path);
-    }
+  export function handleAdd(e, action) {
     e.stopPropagation();
-
-    if (!$tree_data?.data) {
-      return;
-    }
-
-    const new_node = getDefaultNode();
-    const rootId = $tree_data.data.id;
-    // The project root cannot have siblings. Treat the primary add action as
-    // "add a top-level task" here so the most prominent add button always works.
-    const selectedId = $table_selected_id ?? rootId;
-    const addAction = selectedId === rootId ? "append" : action;
-
-    if (selectedId) {
-      // 親ノードのIDを特定
-      let parentId;
-      if (addAction === "append") {
-        // appendの場合は選択されているノードが親
-        parentId = selectedId;
-      } else {
-        // insert_afterの場合は選択されているノードの親
-        const parentNode = parentForRow(selectedId);
-        if (parentNode) {
-          parentId = parentNode.id;
-        }
-      }
-
-      // ノードを追加。多親ノードは行ごとに親が違うので、いま見ている行の経路で足す。
-      const rowPath =
-        pathLeafId($active_row_path ?? "") === selectedId ? $active_row_path : undefined;
-      $tree_data.data = addNode(new_node, selectedId, $tree_data.data, addAction, rowPath);
-
-      // 親ノードが折りたたまれている場合は展開する
-      if (parentId) closed_row_paths.expandNodeEverywhere(parentId);
-
-      // 新しいノードを選択状態にしてDOMの更新を待つ
-      selectOnly(new_node.id);
-      // 作った行をそのまま名前入力にする（graph 経路の add と同じ挙動）。
-      pending_rename_id.set(new_node.id);
-      await tick();
-
-      const newRow = document.getElementById(new_node.id);
-      if (newRow) {
-        newRow.scrollIntoView({ behavior: "smooth", block: "nearest" });
-      }
-    }
+    return application.add($table_selected_id, action, $active_row_path);
   }
 
   // Remove — toolbar の削除ボタン。
@@ -602,7 +286,7 @@
       if (node) {
         // 多親ノードをアーカイブするときは、その行（辺）だけか、ノードごとかを
         // 先に聞く。ツリーの行メニューと同じ選択肢を出す。
-        if (application && mode === "archive") {
+        if (mode === "archive") {
           const state = application.archiveStateOf($table_selected_id, $active_row_path);
           if (state.shared && !state.node && !state.edge) {
             archive_scope_target = {
@@ -627,253 +311,29 @@
 
   // Restore — archived 行を元に戻す。確認ダイアログは挟まない（取り消し可能なため）。
   export function handleRestore(e) {
-    if (application) {
-      e.stopPropagation();
-      return application.archive(undefined, false);
-    }
     e.stopPropagation();
-    if (!$tree_data?.data) return;
-    if (isMultiSelect) {
-      const rootId = $tree_data.data.id;
-      const targets = new Set(Array.from($selected_ids).filter((id) => id !== rootId));
-      if (targets.size === 0) return;
-      const data = bulkRestoreNodes($tree_data.data, targets);
-      $tree_data = { ...$tree_data, data };
-      return;
-    }
-    if ($table_selected_id) {
-      const node = getNode($table_selected_id, $tree_data.data);
-      if (!node || node.id === $tree_data.data.id) return;
-      $tree_data.data = restoreNode(
-        $table_selected_id,
-        $tree_data.data,
-        pathLeafId($active_row_path ?? "") === $table_selected_id ? $active_row_path : undefined
-      );
-      $tree_data = { ...$tree_data, data: $tree_data.data };
-    }
+    return application.archive(undefined, false);
   }
 
-  // 選択中の anchor が archived かどうか（toolbar のアイコン切替に使う）
-  $: anchorIsArchived = (() => {
-    if (!$tree_data?.data || !$table_selected_id) return false;
-    return isNodeEffectivelyArchived($table_selected_id, $tree_data.data);
-  })();
-  $: anchorIsRoot = Boolean(
-    !isMultiSelect &&
-    (application?.isProtected($table_selected_id) ||
-      ($tree_data?.data && $table_selected_id === $tree_data.data.id))
-  );
-  /**
-   * アーカイブ／削除ボタンを押せるか。
-   *
-   * 以前は `disabled={anchorIsRoot}` だけだったため、何も選択していない状態でも
-   * 押せてしまい、押しても何も起きなかった（handleRemove が table_selected_id
-   * 無しで素通りする）。同じツールバーの移動系ボタンは対象なしで無効化される
-   * ので、無効化の基準がボタンごとにばらつき、「押せる＝実行できる」という
-   * 手がかりが信用できなくなっていた。
-   */
-  /**
-   * 元に戻す / やり直しが実際に効くか。
-   *
-   * graph 経路の履歴は main プロセスの `graph-v1.json` にあり、これまで
-   * レンダラーには渡っていなかったため、履歴が空でもボタンが有効なままで、
-   * 押しても何も起きなかった。read / execute / history の戻り値に段数を
-   * 添えるようにしたので、それを見る。legacy 経路は自前のスタックを見る。
-   */
-  $: undoAvailable = application ? $canUndoGraph : $canUndoLegacy;
-  $: redoAvailable = application ? $canRedoGraph : $canRedoLegacy;
-
-  $: hasRemoveTarget = isMultiSelect || Boolean($table_selected_id);
-  $: removeDisabled = anchorIsRoot || !hasRemoveTarget;
-  // 選択中のどこかに archived が含まれているか（restore ボタン表示の判定に使う）
-  $: selectionHasArchived = (() => {
-    if (!$tree_data?.data) return false;
-    for (const id of $selected_ids) {
-      if (isNodeEffectivelyArchived(id, $tree_data.data)) return true;
-    }
-    return anchorIsArchived;
-  })();
-
-  // Move / indent helpers — tree_control functions mutate the tree in-place
-  // and return the SAME reference, so we must force Svelte reactivity by
-  // reassigning the store with a shallow-cloned wrapper.
-  function withSelectedNode(updater) {
-    if (!$table_selected_id || !$tree_data?.data) return;
-    const target = $table_selected_id;
-    // 多親ノードは同じ id の行が複数ある。ツールバーとショートカットも、
-    // ツリーでいま操作している行（辺）に対して動かす。
-    const rowPath = pathLeafId($active_row_path ?? "") === target ? $active_row_path : undefined;
-    updater(target, $tree_data.data, rowPath);
-    $tree_data = { ...$tree_data, data: $tree_data.data };
-  }
-  // Bulk dispatcher for the move/indent/outdent toolbar buttons.
-  // When multiple rows are selected, route to the bulk helper; otherwise
-  // fall back to the single-row helper acting on $table_selected_id.
-  function runBulkOrSingle({ bulk, single, gate }) {
-    if (!$tree_data?.data) return;
-    if (isMultiSelect) {
-      if (gate && !gate()) return;
-      bulk($selected_ids, $tree_data.data, bulkParentPath);
-      $tree_data = { ...$tree_data, data: $tree_data.data };
-      return;
-    }
-    withSelectedNode(single);
-  }
-  const handleMoveUp = (e) => {
-    if (application) {
-      e?.stopPropagation();
-      return application.move("up");
-    }
+  // ツールバーとメニューの移動。複数選択なら選択全体を、いま操作している行の
+  // 経路を基準に動かす（application が決める）。
+  const moveSelection = (direction) => (e) => {
     e?.stopPropagation?.();
-    if (!selectionTreeCapabilities.moveUp) return;
-    runBulkOrSingle({
-      bulk: bulkMoveUp,
-      single: moveNodeUp,
-      gate: () => canMultiSiblingMove,
-    });
+    return application.move(direction);
   };
-  const handleMoveDown = (e) => {
-    if (application) {
-      e?.stopPropagation();
-      return application.move("down");
-    }
-    e?.stopPropagation?.();
-    if (!selectionTreeCapabilities.moveDown) return;
-    runBulkOrSingle({
-      bulk: bulkMoveDown,
-      single: moveNodeDown,
-      gate: () => canMultiSiblingMove,
-    });
-  };
-  const handleIndent = (e) => {
-    if (application) {
-      e?.stopPropagation();
-      return application.move("indent");
-    }
-    e?.stopPropagation?.();
-    if (!selectionTreeCapabilities.indent) return;
-    if (isMultiSelect) {
-      if (!canMultiTreeOp || !$tree_data?.data) return;
-      const { new_parent_ids } = bulkIndent($selected_ids, $tree_data.data, bulkParentPath);
-      $tree_data = { ...$tree_data, data: $tree_data.data };
-      for (const pid of new_parent_ids) {
-        closed_row_paths.expandNodeEverywhere(pid);
-      }
-      return;
-    }
-    withSelectedNode(indentNode);
-  };
-  const handleOutdent = (e) => {
-    if (application) {
-      e?.stopPropagation();
-      return application.move("outdent");
-    }
-    e?.stopPropagation?.();
-    if (!selectionTreeCapabilities.outdent) return;
-    runBulkOrSingle({
-      bulk: bulkOutdent,
-      single: outdentNode,
-      gate: () => canMultiTreeOp && canMultiOutdent,
-    });
-  };
+  const handleMoveUp = moveSelection("up");
+  const handleMoveDown = moveSelection("down");
+  const handleIndent = moveSelection("indent");
+  const handleOutdent = moveSelection("outdent");
   const handleExpandAll = () => closed_row_paths.expandAll();
   const handleCollapseAll = () => closed_row_paths.collapseAll();
 
   // Both row densities share one toolbar; secondary actions live in its menu.
   const isCompact = true;
-  let showOverflowMenu = false;
-  let treeComponent;
-  let overflowMenuPosition = { x: 0, y: 0, position: "left" };
+  let showOverflowMenu = $state(false);
+  let treeComponent = $state();
+  let overflowMenuPosition = $state({ x: 0, y: 0, position: "left" });
   let overflowTrigger = null;
-
-  $: markdownConvertCount = countProjectMemosForFormat(
-    $tree_data?.data,
-    "markdown",
-    defaultMemoFormat
-  );
-  $: quillConvertCount = countProjectMemosForFormat($tree_data?.data, "quill", defaultMemoFormat);
-
-  $: overflowMenuItems = (() => {
-    const moveGroup = [
-      {
-        id: "moveUp",
-        action: "overflowAction",
-        title: "上に移動",
-        disabled: !selectionTreeCapabilities.moveUp,
-      },
-      {
-        id: "moveDown",
-        action: "overflowAction",
-        title: "下に移動",
-        disabled: !selectionTreeCapabilities.moveDown,
-      },
-      {
-        id: "outdent",
-        action: "overflowAction",
-        title: "アウトデント",
-        disabled: !selectionTreeCapabilities.outdent,
-      },
-      {
-        id: "indent",
-        action: "overflowAction",
-        title: "インデント",
-        disabled: !selectionTreeCapabilities.indent,
-      },
-    ];
-    const expandGroup = [
-      { id: "expandAll", action: "overflowAction", title: "すべて展開" },
-      { id: "collapseAll", action: "overflowAction", title: "すべて折りたたみ" },
-    ];
-    const memoGroup = [
-      {
-        id: "memoMarkdown",
-        action: "overflowAction",
-        title: "全メモをMarkdownへ変換",
-        disabled: markdownConvertCount === 0,
-      },
-      {
-        id: "memoQuill",
-        action: "overflowAction",
-        title: "全メモをQuillへ変換",
-        disabled: quillConvertCount === 0,
-      },
-    ];
-    const viewGroup = [
-      {
-        id: "columnSettings",
-        action: "overflowAction",
-        title: "列の設定",
-      },
-      // 表示トグルは menuitemcheckbox + aria-checked で現在の状態を出す。
-      // ラベルの動詞が反転するだけでは、メニューを開いた時点でどちらの状態か
-      // を読み取れず、支援技術にも状態が渡らなかった。
-      {
-        id: "toggleGantt",
-        action: "overflowAction",
-        title: "ガントチャート",
-        checked: $ganttVisible,
-      },
-      {
-        id: "toggleDetail",
-        action: "overflowAction",
-        title: "詳細欄",
-        checked: detailPaneVisible,
-      },
-      {
-        id: "toggleArchived",
-        action: "overflowAction",
-        title: "アーカイブ済みを表示",
-        checked: $show_archived,
-      },
-    ];
-    const groups = [moveGroup, expandGroup, memoGroup, viewGroup];
-    const out = [];
-    for (const g of groups) {
-      if (out.length) out.push({ type: "separator" });
-      out.push(...g);
-    }
-    return out;
-  })();
 
   function openOverflowMenu(e) {
     e.stopPropagation();
@@ -895,7 +355,7 @@
   }
 
   function handleOverflowAction(event) {
-    const id = event.detail?.id;
+    const id = event?.id;
     switch (id) {
       case "moveUp":
         handleMoveUp();
@@ -910,12 +370,10 @@
         handleOutdent();
         break;
       case "undo":
-        if (application) void application.history("undo");
-        else undoHistory();
+        void application.history("undo");
         break;
       case "redo":
-        if (application) void application.history("redo");
-        else redoHistory();
+        void application.history("redo");
         break;
       case "expandAll":
         handleExpandAll();
@@ -943,6 +401,292 @@
         break;
     }
   }
+  let confirmDialogHeader = $derived(
+    (() => {
+      if (is_bulk_confirm) {
+        if (archive_target_ids.length > 0 && permanent_target_ids.length > 0) {
+          return "アーカイブと完全削除の確認";
+        }
+        return permanent_target_ids.length > 0 ? "完全削除の確認" : "アーカイブの確認";
+      }
+      return confirm_mode === "permanent" ? "完全削除の確認" : "アーカイブの確認";
+    })()
+  );
+  /** 確定ボタンのラベル。何が起きるかを動作で名指しする。 */
+  let confirmDialogOk = $derived(
+    (() => {
+      if (is_bulk_confirm) {
+        if (permanent_target_ids.length > 0 && archive_target_ids.length > 0) return "実行する";
+        return permanent_target_ids.length > 0 ? "完全に削除" : "アーカイブする";
+      }
+      return confirm_mode === "permanent" ? "完全に削除" : "アーカイブする";
+    })()
+  );
+  /** 取り消せない完全削除を含むかどうか。確定ボタンをエラー色にする。 */
+  let confirmDialogDanger = $derived(
+    is_bulk_confirm ? permanent_target_ids.length > 0 : confirm_mode === "permanent"
+  );
+  let confirmDialogContent = $derived(
+    (() => {
+      if (is_bulk_confirm) {
+        const lines = [];
+        if (archive_target_ids.length > 0)
+          lines.push(`${archive_target_ids.length} 件をアーカイブ`);
+        if (permanent_target_ids.length > 0)
+          lines.push(`${permanent_target_ids.length} 件を完全削除`);
+        const body = lines.join(" / ");
+        if (permanent_target_ids.length > 0) {
+          return `${body} します。\nWorkspaceの履歴に残っている間は「元に戻す」で復元できます。`;
+        }
+        return `${body} します。\n後でアーカイブ表示から復元できます。`;
+      }
+      if (confirm_mode === "permanent") {
+        return `"${name_confirm}" を完全に削除しますか？\nWorkspaceの履歴に残っている間は「元に戻す」で復元できます。`;
+      }
+      return `"${name_confirm}" をアーカイブしますか？\n後でアーカイブ表示から復元できます。`;
+    })()
+  );
+  // Reactive bulk-capability flags for the toolbar buttons.
+  let selectionSize = $derived($selected_ids.size);
+  let isMultiSelect = $derived(selectionSize > 1);
+  // 一括操作の基準の親は、ツリーでいま操作している行の親。
+  let bulkParentPath = $derived(parentPathOf($active_row_path ?? ""));
+  /**
+   * いま操作している行の親。多親ノードは同じ id の行が複数あるので、
+   * ボタンの活性判定も「最初に見つかった親」ではなく見ている行の側で見る
+   * （実際の移動・インデントは経路で動くので、ここがずれると見た目と
+   * 動作が食い違う）。
+   */
+  let activeParentNode = $derived(getNodeByPath($tree_data?.data, bulkParentPath));
+  // `$:` で作る。ふつうの関数にすると、これを呼ぶ側の `$:` が
+  // `activeParentNode` を依存として拾わず、行を移っても活性判定が
+  // 更新されないままになる。
+  let parentForRow = $derived(
+    (id) =>
+      (activeParentNode?.children?.some((child) => child.id === id)
+        ? activeParentNode
+        : undefined) ?? ($tree_data?.data ? getParent(id, $tree_data.data) : undefined)
+  );
+  /** 祖父。アウトデント可否に使う。ここも見ている行の側から辿る。 */
+  let grandParentForRow = $derived(
+    (parentId) =>
+      getNodeByPath($tree_data?.data, parentPathOf(bulkParentPath)) ??
+      ($tree_data?.data ? getParent(parentId, $tree_data.data) : undefined)
+  );
+  let canMultiSiblingMove = $derived(
+    isMultiSelect && isContiguousSiblingBlock($tree_data?.data, $selected_ids, bulkParentPath)
+  );
+  let canMultiTreeOp = $derived(
+    isMultiSelect && areAllSiblings($tree_data?.data, $selected_ids, bulkParentPath)
+  );
+  let canMultiOutdent = $derived(
+    (() => {
+      if (!canMultiTreeOp || !$tree_data?.data) return false;
+      const anyId = $selected_ids.values().next().value;
+      if (!anyId) return false;
+      const parent = parentForRow(anyId);
+      if (!parent) return false;
+      return !!grandParentForRow(parent.id);
+    })()
+  );
+  // 選択中の anchor が archived かどうか（toolbar のアイコン切替に使う）
+  let anchorIsArchived = $derived(
+    (() => {
+      if (!$tree_data?.data || !$table_selected_id) return false;
+      return isNodeEffectivelyArchived($table_selected_id, $tree_data.data);
+    })()
+  );
+  let anchorIsRoot = $derived(
+    Boolean(
+      !isMultiSelect &&
+      (application.isProtected($table_selected_id) ||
+        ($tree_data?.data && $table_selected_id === $tree_data.data.id))
+    )
+  );
+  let selectionTreeCapabilities = $derived(
+    (() => {
+      const unavailable = { moveUp: false, moveDown: false, indent: false, outdent: false };
+      if (!$tree_data?.data || !$table_selected_id || anchorIsArchived || anchorIsRoot) {
+        return unavailable;
+      }
+
+      const ids = isMultiSelect ? $selected_ids : new Set([$table_selected_id]);
+      if (!areAllSiblings($tree_data.data, ids, bulkParentPath)) return unavailable;
+
+      const anyId = ids.values().next().value;
+      if (!anyId) return unavailable;
+      const parent = parentForRow(anyId);
+      if (!parent) return unavailable;
+
+      const indices = parent.children
+        .map((child, index) => (ids.has(child.id) ? index : -1))
+        .filter((index) => index >= 0);
+      if (indices.length !== ids.size) return unavailable;
+
+      const first = Math.min(...indices);
+      const last = Math.max(...indices);
+      const contiguous =
+        !isMultiSelect || isContiguousSiblingBlock($tree_data.data, ids, bulkParentPath);
+      return {
+        moveUp: contiguous && first > 0,
+        moveDown: contiguous && last < parent.children.length - 1,
+        // 直前の兄弟が自分の子孫なら循環するので、そこへは入れられない。
+        indent: first > 0 && canIndentNode(anyId, $tree_data.data, `${bulkParentPath}/${anyId}`),
+        outdent: !!grandParentForRow(parent.id),
+      };
+    })()
+  );
+  $effect.pre(() => {
+    const narrow = viewportWidth > 0 && viewportWidth < NARROW_LAYOUT_WIDTH;
+    if (narrow && !narrowLayoutApplied) {
+      narrowLayoutApplied = true;
+      if (outerCollapsedPane !== "end") {
+        detailAutoCollapsed = true;
+        outerCollapsedPane = "end";
+      }
+      if ($ganttVisible) {
+        ganttAutoHidden = true;
+        $ganttVisible = false;
+      }
+    } else if (!narrow && narrowLayoutApplied) {
+      narrowLayoutApplied = false;
+      // 戻すのは「こちらが引っ込めたもの」だけ。利用者が自分で開閉したものは
+      // toggle 側でフラグが落ちているので触らない。
+      if (detailAutoCollapsed) {
+        detailAutoCollapsed = false;
+        outerCollapsedPane = null;
+      }
+      if (ganttAutoHidden) {
+        ganttAutoHidden = false;
+        $ganttVisible = true;
+      }
+    }
+  });
+  let detailPaneVisible = $derived(outerCollapsedPane !== "end");
+  let projectName = $derived($tree_data?.data?.data?.name || "Task Tree");
+  let bulkMemoTargetLabel = $derived(getMemoFormatLabel(bulkMemoTargetFormat));
+  let successfulBulkMemoItems = $derived(bulkMemoItems.filter((item) => item.status === "ok"));
+  let failedBulkMemoItems = $derived(bulkMemoItems.filter((item) => item.status === "error"));
+  /**
+   * アーカイブ／削除ボタンを押せるか。
+   *
+   * 以前は `disabled={anchorIsRoot}` だけだったため、何も選択していない状態でも
+   * 押せてしまい、押しても何も起きなかった（handleRemove が table_selected_id
+   * 無しで素通りする）。同じツールバーの移動系ボタンは対象なしで無効化される
+   * ので、無効化の基準がボタンごとにばらつき、「押せる＝実行できる」という
+   * 手がかりが信用できなくなっていた。
+   */
+  /**
+   * 元に戻す / やり直しが実際に効くか。
+   *
+   * graph 経路の履歴は main プロセスの `graph-v1.json` にあり、これまで
+   * レンダラーには渡っていなかったため、履歴が空でもボタンが有効なままで、
+   * 押しても何も起きなかった。read / execute / history の戻り値に段数を
+   * 添えるようにしたので、それを見る。
+   */
+  let undoAvailable = $derived($canUndoGraph);
+  let redoAvailable = $derived($canRedoGraph);
+  let hasRemoveTarget = $derived(isMultiSelect || Boolean($table_selected_id));
+  let removeDisabled = $derived(anchorIsRoot || !hasRemoveTarget);
+  // 選択中のどこかに archived が含まれているか（restore ボタン表示の判定に使う）
+  let selectionHasArchived = $derived(
+    (() => {
+      if (!$tree_data?.data) return false;
+      for (const id of $selected_ids) {
+        if (isNodeEffectivelyArchived(id, $tree_data.data)) return true;
+      }
+      return anchorIsArchived;
+    })()
+  );
+  let markdownConvertCount = $derived(
+    countProjectMemosForFormat($tree_data?.data, "markdown", defaultMemoFormat)
+  );
+  let quillConvertCount = $derived(
+    countProjectMemosForFormat($tree_data?.data, "quill", defaultMemoFormat)
+  );
+  let overflowMenuItems = $derived(
+    (() => {
+      const moveGroup = [
+        {
+          id: "moveUp",
+          action: "overflowAction",
+          title: "上に移動",
+          disabled: !selectionTreeCapabilities.moveUp,
+        },
+        {
+          id: "moveDown",
+          action: "overflowAction",
+          title: "下に移動",
+          disabled: !selectionTreeCapabilities.moveDown,
+        },
+        {
+          id: "outdent",
+          action: "overflowAction",
+          title: "アウトデント",
+          disabled: !selectionTreeCapabilities.outdent,
+        },
+        {
+          id: "indent",
+          action: "overflowAction",
+          title: "インデント",
+          disabled: !selectionTreeCapabilities.indent,
+        },
+      ];
+      const expandGroup = [
+        { id: "expandAll", action: "overflowAction", title: "すべて展開" },
+        { id: "collapseAll", action: "overflowAction", title: "すべて折りたたみ" },
+      ];
+      const memoGroup = [
+        {
+          id: "memoMarkdown",
+          action: "overflowAction",
+          title: "全メモをMarkdownへ変換",
+          disabled: markdownConvertCount === 0,
+        },
+        {
+          id: "memoQuill",
+          action: "overflowAction",
+          title: "全メモをQuillへ変換",
+          disabled: quillConvertCount === 0,
+        },
+      ];
+      const viewGroup = [
+        {
+          id: "columnSettings",
+          action: "overflowAction",
+          title: "列の設定",
+        },
+        // 表示トグルは menuitemcheckbox + aria-checked で現在の状態を出す。
+        // ラベルの動詞が反転するだけでは、メニューを開いた時点でどちらの状態か
+        // を読み取れず、支援技術にも状態が渡らなかった。
+        {
+          id: "toggleGantt",
+          action: "overflowAction",
+          title: "ガントチャート",
+          checked: $ganttVisible,
+        },
+        {
+          id: "toggleDetail",
+          action: "overflowAction",
+          title: "詳細欄",
+          checked: detailPaneVisible,
+        },
+        {
+          id: "toggleArchived",
+          action: "overflowAction",
+          title: "アーカイブ済みを表示",
+          checked: $show_archived,
+        },
+      ];
+      const groups = [moveGroup, expandGroup, memoGroup, viewGroup];
+      const out = [];
+      for (const g of groups) {
+        if (out.length) out.push({ type: "separator" });
+        out.push(...g);
+      }
+      return out;
+    })()
+  );
 </script>
 
 <svelte:window bind:innerWidth={viewportWidth} />
@@ -960,7 +704,7 @@
       <Pane style={"min-width: 7.5rem;"}>
         <section class="tree-workspace" aria-label="ノード一覧">
           <header class="tree-heading">
-            <strong>{projectName}</strong><span class="storage-badge">{projectStorageLabel}</span>
+            <strong>{projectName}</strong>
           </header>
           <div class="TaskListToolbar">
             <!-- Keep filter search on a separate row at narrow widths. -->
@@ -979,7 +723,7 @@
                   variant="text"
                   activeColor={"var(--theme-color-Primary-main)"}
                   normalColor={"var(--theme-color-Sub-main)"}
-                  on:click={(e) => handleAdd(e, "insert_after")}
+                  onclick={(e) => handleAdd(e, "insert_after")}
                 >
                   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
                     ><path
@@ -1000,7 +744,7 @@
                   variant="text"
                   activeColor={"var(--theme-color-Primary-main)"}
                   normalColor={"var(--theme-color-Sub-main)"}
-                  on:click={(e) => handleAdd(e, "append")}
+                  onclick={(e) => handleAdd(e, "append")}
                 >
                   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path
@@ -1049,7 +793,7 @@
                   disabled={removeDisabled}
                   activeColor={"var(--theme-color-Error-main)"}
                   normalColor={"var(--theme-color-Error-main)"}
-                  on:click={(e) => handleRemove(e, anchorIsArchived ? "permanent" : "archive")}
+                  onclick={(e) => handleRemove(e, anchorIsArchived ? "permanent" : "archive")}
                 >
                   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path
@@ -1068,7 +812,7 @@
                     variant="text"
                     activeColor={"var(--theme-color-Primary-main)"}
                     normalColor={"var(--theme-color-Primary-main)"}
-                    on:click={handleRestore}
+                    onclick={handleRestore}
                   >
                     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path
@@ -1101,7 +845,7 @@
                   normalColor={"var(--theme-color-Sub-main)"}
                   activeColor={"var(--theme-color-Primary-main)"}
                   disabled={!selectionTreeCapabilities.moveUp}
-                  on:click={handleMoveUp}
+                  onclick={handleMoveUp}
                 >
                   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path
@@ -1124,7 +868,7 @@
                   normalColor={"var(--theme-color-Sub-main)"}
                   activeColor={"var(--theme-color-Primary-main)"}
                   disabled={!selectionTreeCapabilities.moveDown}
-                  on:click={handleMoveDown}
+                  onclick={handleMoveDown}
                 >
                   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path
@@ -1149,7 +893,7 @@
                   normalColor={"var(--theme-color-Sub-main)"}
                   activeColor={"var(--theme-color-Primary-main)"}
                   disabled={!selectionTreeCapabilities.outdent}
-                  on:click={handleOutdent}
+                  onclick={handleOutdent}
                 >
                   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path
@@ -1172,7 +916,7 @@
                   normalColor={"var(--theme-color-Sub-main)"}
                   activeColor={"var(--theme-color-Primary-main)"}
                   disabled={!selectionTreeCapabilities.indent}
-                  on:click={handleIndent}
+                  onclick={handleIndent}
                 >
                   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path
@@ -1196,7 +940,7 @@
                     variant="text"
                     normalColor={"var(--theme-color-Sub-main)"}
                     activeColor={"var(--theme-color-Primary-main)"}
-                    on:click={handleExpandAll}
+                    onclick={handleExpandAll}
                   >
                     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path
@@ -1214,7 +958,7 @@
                     variant="text"
                     normalColor={"var(--theme-color-Sub-main)"}
                     activeColor={"var(--theme-color-Primary-main)"}
-                    on:click={handleCollapseAll}
+                    onclick={handleCollapseAll}
                   >
                     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path
@@ -1242,7 +986,7 @@
                   normalColor={"var(--theme-color-Sub-main)"}
                   activeColor={"var(--theme-color-Primary-main)"}
                   disabled={!undoAvailable}
-                  on:click={() => (application ? application.history("undo") : undoHistory())}
+                  onclick={() => application.history("undo")}
                 >
                   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path
@@ -1263,7 +1007,7 @@
                   normalColor={"var(--theme-color-Sub-main)"}
                   activeColor={"var(--theme-color-Primary-main)"}
                   disabled={!redoAvailable}
-                  on:click={() => (application ? application.history("redo") : redoHistory())}
+                  onclick={() => application.history("redo")}
                 >
                   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path
@@ -1288,7 +1032,7 @@
                     normalColor={"var(--theme-color-Sub-main)"}
                     activeColor={"var(--theme-color-Primary-main)"}
                     disabled={markdownConvertCount === 0}
-                    on:click={() => requestBulkMemoFormat("markdown")}
+                    onclick={() => requestBulkMemoFormat("markdown")}
                   >
                     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path
@@ -1307,7 +1051,7 @@
                     normalColor={"var(--theme-color-Sub-main)"}
                     activeColor={"var(--theme-color-Primary-main)"}
                     disabled={quillConvertCount === 0}
-                    on:click={() => requestBulkMemoFormat("quill")}
+                    onclick={() => requestBulkMemoFormat("quill")}
                   >
                     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path
@@ -1341,7 +1085,7 @@
                       ? "var(--theme-color-Primary-main)"
                       : "var(--theme-color-Sub-main)"}
                     activeColor={"var(--theme-color-Primary-main)"}
-                    on:click={toggleGanttPane}
+                    onclick={toggleGanttPane}
                   >
                     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <rect x="3" y="4" width="4" height="3" rx="0.5" fill="currentColor" />
@@ -1358,7 +1102,7 @@
                       ? "var(--theme-color-Primary-main)"
                       : "var(--theme-color-Sub-main)"}
                     activeColor={"var(--theme-color-Primary-main)"}
-                    on:click={toggleDetailPane}
+                    onclick={toggleDetailPane}
                   >
                     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <rect
@@ -1384,7 +1128,7 @@
                       ? "var(--theme-color-Primary-main)"
                       : "var(--theme-color-Sub-main)"}
                     activeColor={"var(--theme-color-Primary-main)"}
-                    on:click={() => show_archived.set(!$show_archived)}
+                    onclick={() => show_archived.set(!$show_archived)}
                   >
                     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path
@@ -1409,7 +1153,7 @@
                     variant="text"
                     normalColor={"var(--theme-color-Sub-main)"}
                     activeColor={"var(--theme-color-Primary-main)"}
-                    on:click={openOverflowMenu}
+                    onclick={openOverflowMenu}
                   >
                     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <circle cx="5" cy="12" r="1.6" fill="currentColor" />
@@ -1470,13 +1214,13 @@
   />
   <ArchiveScopeDialog
     target={archive_scope_target}
-    on:cancel={() => (archive_scope_target = null)}
-    on:edge={() => {
+    oncancel={() => (archive_scope_target = null)}
+    onedge={() => {
       const target = archive_scope_target;
       archive_scope_target = null;
       void application.archiveEdge(target.id, target.path, true);
     }}
-    on:node={() => {
+    onnode={() => {
       const target = archive_scope_target;
       archive_scope_target = null;
       void application.archive([target.id], true);
@@ -1494,8 +1238,8 @@
     menuItems={overflowMenuItems}
     position={overflowMenuPosition}
     show={showOverflowMenu}
-    on:close={closeOverflowMenu}
-    on:overflowAction={handleOverflowAction}
+    onclose={closeOverflowMenu}
+    onaction={handleOverflowAction}
   />
   <Modal
     show={show_memo_format_confirm}
@@ -1564,10 +1308,10 @@
           <button
             class="bulk-convert-btn"
             disabled={bulkMemoItems.length === 0}
-            on:click={applyBulkMemoFormat}>変換</button
+            onclick={applyBulkMemoFormat}>変換</button
           >
         {/if}
-        <button class="bulk-close-btn" on:click={closeBulkMemoFormatConfirm}>
+        <button class="bulk-close-btn" onclick={closeBulkMemoFormatConfirm}>
           {bulkMemoPhase === "done" ? "閉じる" : "キャンセル"}
         </button>
       </div>
@@ -1672,8 +1416,7 @@
   /* Scroll the toolbar at narrow widths without shifting the detail pane. */
   .TbButtonsRowCompact {
     flex-wrap: nowrap;
-    overflow-x: auto;
-    overflow-y: hidden;
+    overflow: auto hidden;
     scrollbar-width: thin;
   }
   .TbButtonsRowCompact::-webkit-scrollbar {
@@ -1696,16 +1439,6 @@
   .TbSearchRow :global(> *) {
     flex: 1 1 auto;
     min-width: 0;
-  }
-  .storage-badge {
-    color: var(--fg-muted);
-    flex: 0 0 auto;
-    padding: 0.1125rem var(--sp2);
-    border-radius: var(--shape-xs);
-    background-color: color-mix(in srgb, var(--fg-muted) 12%, transparent);
-    font-size: var(--font-label-md);
-    font-weight: 600;
-    white-space: nowrap;
   }
   .TbSep {
     display: inline-block;

@@ -1,39 +1,39 @@
 <script>
   import { getContext } from "svelte";
   import { TREEGRID_APPLICATION } from "@features/workspace/application/treegrid";
-  const application = getContext(TREEGRID_APPLICATION);
-
   import IconButton from "@lib/primitives/IconButton.svelte";
-  import * as platform from "@lib/ipc/platform";
   import TaskMenu from "./TaskMenu.svelte";
 
-  export let attachments = [];
-  export let isWorkspaceProject = false;
-  export let workspaceProjectDir = null;
-  export let taskId = null;
-  export let onAttachmentsChange = undefined;
-  export let readOnly = false;
+  const application = getContext(TREEGRID_APPLICATION);
 
-  let fileInput;
-  let isBusy = false;
-  let isFileDragActive = false;
-  let errorMessage = "";
-  let attachmentMenu = {
+  /**
+   * @typedef {Object} Props
+   * @property {any} [attachments]
+   * @property {any} [taskId]
+   * @property {boolean} [readOnly]
+   */
+
+  /** @type {Props} */
+  let { attachments = [], taskId = null, readOnly = false } = $props();
+
+  let fileInput = $state();
+  let isBusy = $state(false);
+  let isFileDragActive = $state(false);
+  let errorMessage = $state("");
+  let attachmentMenu = $state({
     show: false,
     attachment: null,
     position: { x: 0, y: 0, position: "right" },
-  };
+  });
 
-  $: attachmentList = Array.isArray(attachments) ? attachments : [];
-  $: canUseAttachments = Boolean(
-    application ? taskId : isWorkspaceProject && workspaceProjectDir && taskId
-  );
-  $: attachmentMenuItems = [
+  let attachmentList = $derived(Array.isArray(attachments) ? attachments : []);
+  let canUseAttachments = $derived(Boolean(taskId));
+  let attachmentMenuItems = $derived([
     { title: "開く", action: "open" },
     { title: "プログラムから開く", action: "openWith" },
-  ];
-  $: attachTooltip = canUseAttachments ? "添付を追加" : "ワークスペースプロジェクトで利用できます";
-  $: isDense = attachmentList.length > 8;
+  ]);
+  let attachTooltip = $derived(canUseAttachments ? "添付を追加" : "ノードを選ぶと添付できます");
+  let isDense = $derived(attachmentList.length > 8);
 
   function attachmentPath(attachment) {
     return attachment?.relativePath || attachment?.path || attachment?.id || "";
@@ -52,10 +52,6 @@
     return `${value.toFixed(precision)} ${units[unitIndex]}`;
   }
 
-  function updateAttachments(nextAttachments) {
-    onAttachmentsChange?.(nextAttachments);
-  }
-
   function chooseFiles() {
     if (!canUseAttachments || isBusy || readOnly) return;
     errorMessage = "";
@@ -71,51 +67,21 @@
 
   async function saveFiles(files) {
     if (readOnly || isBusy || !canUseAttachments) return;
-    if (application) {
-      const id = taskId;
-      const existing = [...attachments];
-      isBusy = true;
-      errorMessage = "";
-      try {
-        const added = [];
-        for (const file of Array.from(files || [])) {
-          const relativePath = await application.saveAsset(id, file);
-          added.push({ id: crypto.randomUUID(), name: file.name, relativePath, size: file.size });
-        }
-        await application.update(id, { attachments: [...existing, ...added] });
-      } catch (e) {
-        errorMessage = e.message;
-      } finally {
-        isBusy = false;
-      }
-      return;
-    }
-    const fileList = Array.from(files ?? []).filter((file) => file?.arrayBuffer);
-    if (!canUseAttachments || fileList.length === 0) return;
-
+    const fileList = Array.from(files ?? []);
+    if (fileList.length === 0) return;
+    const id = taskId;
+    const existing = [...attachmentList];
     isBusy = true;
     errorMessage = "";
-    const savedAttachments = [];
-
     try {
+      const added = [];
       for (const file of fileList) {
-        const bytes = new Uint8Array(await file.arrayBuffer());
-        const result = await platform.wsSaveTaskAttachment(
-          workspaceProjectDir,
-          taskId,
-          file.name,
-          bytes
-        );
-        if (!result?.success || !result.attachment) {
-          errorMessage = result?.error ?? "添付を保存できませんでした";
-          continue;
-        }
-        savedAttachments.push(result.attachment);
+        const relativePath = await application.saveAsset(id, file);
+        added.push({ id: crypto.randomUUID(), name: file.name, relativePath, size: file.size });
       }
-
-      if (savedAttachments.length > 0) {
-        updateAttachments([...attachmentList, ...savedAttachments]);
-      }
+      await application.update(id, { attachments: [...existing, ...added] });
+    } catch (e) {
+      errorMessage = e.message;
     } finally {
       isBusy = false;
     }
@@ -159,49 +125,13 @@
     await saveFiles(event.dataTransfer?.files);
   }
 
-  async function openAttachment(attachment) {
-    if (application) {
-      try {
-        closeAttachmentMenu();
-        await application.openAsset(taskId, attachmentPath(attachment));
-      } catch (e) {
-        errorMessage = e.message;
-      }
-      return;
-    }
-    if (!canUseAttachments || isBusy) return;
+  async function openAttachment(attachment, chooseProgram = false) {
     closeAttachmentMenu();
     errorMessage = "";
-    const result = await platform.wsOpenTaskAttachment(
-      workspaceProjectDir,
-      taskId,
-      attachmentPath(attachment)
-    );
-    if (!result?.success) {
-      errorMessage = result?.error ?? "添付を開けませんでした";
-    }
-  }
-
-  async function openAttachmentWith(attachment) {
-    if (application) {
-      try {
-        closeAttachmentMenu();
-        await application.openAsset(taskId, attachmentPath(attachment), true);
-      } catch (e) {
-        errorMessage = e.message;
-      }
-      return;
-    }
-    if (!canUseAttachments || isBusy) return;
-    closeAttachmentMenu();
-    errorMessage = "";
-    const result = await platform.wsOpenTaskAttachmentWith(
-      workspaceProjectDir,
-      taskId,
-      attachmentPath(attachment)
-    );
-    if (!result?.success) {
-      errorMessage = result?.error ?? "プログラムから開けませんでした";
+    try {
+      await application.openAsset(taskId, attachmentPath(attachment), chooseProgram);
+    } catch (e) {
+      errorMessage = e.message;
     }
   }
 
@@ -237,42 +167,22 @@
 
   function handleAttachmentMenuOpenWith() {
     if (attachmentMenu.attachment) {
-      openAttachmentWith(attachmentMenu.attachment);
+      openAttachment(attachmentMenu.attachment, true);
     }
   }
 
+  // 一覧から外すだけで、ファイルは残す（「元に戻す」で添付を戻せるように）。
   async function deleteAttachment(attachment) {
-    if (readOnly) return;
-    if (application) {
-      if (window.confirm(`「${attachment.name}」を添付一覧から削除しますか？`))
-        await application.update(taskId, {
-          attachments: attachments.filter((item) => item.id !== attachment.id),
-        });
-      return;
-    }
-    if (!canUseAttachments || isBusy) return;
+    if (readOnly || !canUseAttachments || isBusy) return;
     closeAttachmentMenu();
-    const confirmed = window.confirm?.(`"${attachment.name}" を削除しますか？`);
-    if (confirmed === false) return;
-
-    isBusy = true;
+    if (!window.confirm(`「${attachment.name}」を添付一覧から削除しますか？`)) return;
     errorMessage = "";
     try {
-      const result = await platform.wsDeleteTaskAttachment(
-        workspaceProjectDir,
-        taskId,
-        attachmentPath(attachment)
-      );
-      if (!result?.success) {
-        errorMessage = result?.error ?? "添付を削除できませんでした";
-        return;
-      }
-      updateAttachments(
-        result.attachments ??
-          attachmentList.filter((entry) => attachmentPath(entry) !== attachmentPath(attachment))
-      );
-    } finally {
-      isBusy = false;
+      await application.update(taskId, {
+        attachments: attachmentList.filter((item) => item.id !== attachment.id),
+      });
+    } catch (e) {
+      errorMessage = e.message;
     }
   }
 </script>
@@ -283,10 +193,10 @@
   role="group"
   aria-label="添付"
   data-testid="task-attachments"
-  on:dragenter={handleDragEnter}
-  on:dragover={handleDragOver}
-  on:dragleave={handleDragLeave}
-  on:drop={handleDrop}
+  ondragenter={handleDragEnter}
+  ondragover={handleDragOver}
+  ondragleave={handleDragLeave}
+  ondrop={handleDrop}
 >
   <!-- 0 件のときはタブが「添付 (0)」と言っていて、入口は下の領域の
        「ファイルを選択」がある。件数とクリップ記号をここで繰り返さない。 -->
@@ -305,7 +215,7 @@
       disabled={!canUseAttachments || isBusy || readOnly}
       activeColor={"var(--theme-color-Primary-main)"}
       normalColor={"var(--theme-color-Sub-main)"}
-      on:click={chooseFiles}
+      onclick={chooseFiles}
     >
       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path
@@ -323,7 +233,7 @@
       type="file"
       multiple
       class="attachment-input"
-      on:change={attachFiles}
+      onchange={attachFiles}
     />
   </div>
 
@@ -339,8 +249,8 @@
             class="attachment-open"
             title={attachment.name}
             disabled={!canUseAttachments || isBusy}
-            on:click={() => openAttachment(attachment)}
-            on:contextmenu={(event) => openAttachmentMenu(event, attachment)}
+            onclick={() => openAttachment(attachment)}
+            oncontextmenu={(event) => openAttachmentMenu(event, attachment)}
           >
             <span class="file-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none">
@@ -367,7 +277,7 @@
             class="ui-action"
             aria-label={attachment.name + "の操作"}
             data-task-menu-trigger
-            on:click={(event) => openAttachmentMenu(event, attachment)}>…</button
+            onclick={(event) => openAttachmentMenu(event, attachment)}>…</button
           >
           <span class="attachment-delete">
             <IconButton
@@ -377,7 +287,7 @@
               disabled={!canUseAttachments || isBusy || readOnly}
               activeColor={"var(--theme-color-Error-main)"}
               normalColor={"var(--theme-color-Sub-main)"}
-              on:click={() => deleteAttachment(attachment)}
+              onclick={() => deleteAttachment(attachment)}
             >
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 <path
@@ -400,7 +310,7 @@
        すぐ下のドロップ領域と点線の箱が 2 つ縦に並んでいた。件数はタブが
        言っているので、ここは受け口だけを出す。
        ドロップを受けるのは実際にはこの帯ではなく添付欄ぜんたい
-       (.attachments-field の on:drop) なので、文言もそう書く。 -->
+       (.attachments-field の ondrop) なので、文言もそう書く。 -->
   {#if canUseAttachments && !readOnly}
     <div
       class="attachment-drop-hint"
@@ -417,7 +327,7 @@
           />
         </svg>
         <span>この欄にファイルをドロップ</span>
-        <button type="button" class="ui-action" disabled={isBusy} on:click={chooseFiles}
+        <button type="button" class="ui-action" disabled={isBusy} onclick={chooseFiles}
           >ファイルを選択</button
         >
       {:else}
@@ -433,9 +343,9 @@
     menuItems={attachmentMenuItems}
     position={attachmentMenu.position}
     show={attachmentMenu.show}
-    on:open={handleAttachmentMenuOpen}
-    on:openWith={handleAttachmentMenuOpenWith}
-    on:close={closeAttachmentMenu}
+    onaction={(item) =>
+      item.action === "openWith" ? handleAttachmentMenuOpenWith() : handleAttachmentMenuOpen()}
+    onclose={closeAttachmentMenu}
   />
 </div>
 

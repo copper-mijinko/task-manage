@@ -1,9 +1,10 @@
-import { render, screen } from "@testing-library/svelte";
+import { fireEvent, screen } from "@testing-library/svelte";
 import fs from "node:fs";
 import path from "node:path";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
 import TreeTableRow from "@features/tasks/components/TreeTableRow.svelte";
+import { renderWithApplicationStub } from "../helpers/application_stub.js";
 
 describe("TreeTableRow", () => {
   function createProps() {
@@ -53,8 +54,28 @@ describe("TreeTableRow", () => {
     };
   }
 
+  test("passes the name-menu actions up as row operations with the row path", async () => {
+    const onaddchild = vi.fn();
+    const onaddbelow = vi.fn();
+    const props = createProps();
+    renderWithApplicationStub(TreeTableRow, {
+      ...props,
+      row: { ...props.row, path: "project-1/task-1" },
+      onaddchild,
+      onaddbelow,
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "ノード操作を開く" }));
+    await fireEvent.click(await screen.findByRole("menuitem", { name: "子ノードを追加" }));
+    expect(onaddchild).toHaveBeenCalledWith({ id: "task-1", path: "project-1/task-1" });
+
+    await fireEvent.click(screen.getByRole("button", { name: "ノード操作を開く" }));
+    await fireEvent.click(await screen.findByRole("menuitem", { name: "下にノードを追加" }));
+    expect(onaddbelow).toHaveBeenCalledWith({ id: "task-1", path: "project-1/task-1" });
+  });
+
   test("renders array-valued columns as a count badge", () => {
-    render(TreeTableRow, { props: createProps() });
+    renderWithApplicationStub(TreeTableRow, createProps());
 
     expect(screen.getByRole("textbox")).toHaveValue("Task with files");
     expect(screen.getByLabelText("添付 2件")).toHaveTextContent("2");
@@ -67,7 +88,7 @@ describe("TreeTableRow", () => {
     const props = createProps();
     delete props.row.node.data.attachments;
 
-    render(TreeTableRow, { props });
+    renderWithApplicationStub(TreeTableRow, props);
 
     expect(screen.queryByText("0")).not.toBeInTheDocument();
     expect(screen.getByLabelText("添付 なし")).toBeInTheDocument();
@@ -79,26 +100,28 @@ describe("TreeTableRow", () => {
     const props = createProps();
     props.row.depth = 0;
 
-    const { container } = render(TreeTableRow, { props });
+    const { container } = renderWithApplicationStub(TreeTableRow, props);
 
     expect(container.querySelector('[role="row"]')).toHaveClass("RootRow");
   });
 
   test("does not mark a child row as the root", () => {
-    const { container } = render(TreeTableRow, { props: createProps() });
+    const { container } = renderWithApplicationStub(TreeTableRow, createProps());
 
     expect(container.querySelector('[role="row"]')).not.toHaveClass("RootRow");
   });
 
   test("does not check the bulk-selection box for an ordinary focused row", () => {
-    render(TreeTableRow, { props: { ...createProps(), selected: true } });
+    renderWithApplicationStub(TreeTableRow, { ...createProps(), selected: true });
 
     expect(screen.getByRole("checkbox", { name: "一括操作の対象として選択" })).not.toBeChecked();
   });
 
   test("checks the box after bulk selection is explicitly activated", () => {
-    render(TreeTableRow, {
-      props: { ...createProps(), selected: true, bulkSelectionActive: true },
+    renderWithApplicationStub(TreeTableRow, {
+      ...createProps(),
+      selected: true,
+      bulkSelectionActive: true,
     });
 
     expect(screen.getByRole("checkbox", { name: "一括操作の対象として選択" })).toBeChecked();

@@ -1,13 +1,25 @@
 <script>
   import { onDestroy } from "svelte";
 
-  export let content = "";
-  export let saveMemo = undefined;
-  export let memoIndex = 0;
-  export let format = undefined;
   export function flush() {}
   export function startEditing() {}
-  export let currentMemoTitle = "";
+  /**
+   * @typedef {Object} Props
+   * @property {string} [content]
+   * @property {any} [saveMemo]
+   * @property {number} [memoIndex]
+   * @property {any} [format]
+   * @property {string} [currentMemoTitle]
+   */
+
+  /** @type {Props} */
+  let {
+    content = "",
+    saveMemo = undefined,
+    memoIndex = 0,
+    format = undefined,
+    currentMemoTitle = "",
+  } = $props();
 
   onDestroy(() => {
     if (window.__memoStubSaveOnDestroy) {
@@ -25,4 +37,4 @@
 >
   {typeof content === "string" ? content : "memo-content"}
 </div>
-<button type="button" data-testid="memo-save" on:click={() => saveMemo?.("edited")}>Save</button>
+<button type="button" data-testid="memo-save" onclick={() => saveMemo?.("edited")}>Save</button>

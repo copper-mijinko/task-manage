@@ -1,39 +1,38 @@
-﻿<script>
-  import { getContext } from "svelte";
+<script>
+  import { getContext, onDestroy, onMount } from "svelte";
   import { TREEGRID_APPLICATION } from "@features/workspace/application/treegrid";
+  import { ganttScrollTop, ganttScale, theme } from "@stores";
+  import { flattenVisibleTree, buildInheritedDueDateMap } from "@features/tasks/utils/tree_control";
+  import { buildRenderItems, visibleRowRange } from "@features/tasks/utils/virtual_rows";
+
   const application = getContext(TREEGRID_APPLICATION);
-  const closed_row_paths = application?.closed ?? legacy_closed_row_paths;
-  const tree_data = application?.tree ?? legacy_tree_data;
-  const filtered_data = application?.filtered ?? legacy_filtered_data;
+  const closed_row_paths = application.closed;
+  const filtered_data = application.filtered;
 
-  import { onDestroy, onMount } from "svelte";
-  import {
-    filtered_data as legacy_filtered_data,
-    closed_row_paths as legacy_closed_row_paths,
-    ganttScrollTop,
-    ganttScale,
-    theme,
-    tree_data as legacy_tree_data,
-  } from "@stores";
-  import {
-    flattenVisibleTree,
-    buildInheritedDueDateMap,
-    updateNodeDataById,
-  } from "@features/tasks/utils/tree_control";
-
-  let bodyEl;
-  let headerScrollLeft = 0;
-  let dragState;
-  let rootFontSizePx = 16;
+  let bodyEl = $state();
+  let headerScrollLeft = $state(0);
+  let dragState = $state();
+  let rootFontSizePx = $state(16);
   let locale =
     typeof navigator !== "undefined" && navigator.language ? navigator.language : undefined;
   let prevTimelineStartTs = null;
 
-  $: rows = $filtered_data ? flattenVisibleTree($filtered_data, $closed_row_paths) : [];
-  $: inheritedMap = buildInheritedDueDateMap(rows);
-
-  // Sync scroll position from TreeTable
-  $: if (bodyEl && !dragState) bodyEl.scrollTop = $ganttScrollTop;
+  // ── 見えている行だけ描く ─────────────────────────────────────────
+  // ツリーと同じく、行の高さは --tree-row-height で固定なので、縦の
+  // スクロール位置から描く範囲を出せる。描かない行は同じ高さの空白に
+  // 置き換える（スクロールの長さと各行の位置は変わらない）。
+  const OVERSCAN_ROWS = 8;
+  const FALLBACK_ALL_ROWS = 200;
+  const FALLBACK_WINDOW_ROWS = 60;
+  let bodyScrollTop = $state(0);
+  let bodyHeight = $state(0);
+  let rowHeightProbe = $state();
+  let rowHeightPx = $state(0);
+  function measureRows() {
+    rowHeightPx = rowHeightProbe?.offsetHeight || 0;
+    bodyHeight = bodyEl?.clientHeight || 0;
+    bodyScrollTop = bodyEl?.scrollTop || 0;
+  }
 
   // ── Timeline range ──────────────────────────────────────────────
 
@@ -74,68 +73,8 @@
     return new Intl.DateTimeFormat(locale, options).format(date);
   }
 
-  let timelineStart = new Date();
-  let timelineEnd = new Date();
-
-  $: {
-    let minTs = null;
-    let maxTs = null;
-    for (const row of rows) {
-      const sd = parseDate(row.node.data["start date"]);
-      const dd = parseDate(row.node.data["due date"]) || parseDate(inheritedMap.get(row.path));
-      for (const ts of [sd, dd]) {
-        if (!ts) continue;
-        if (minTs === null || ts < minTs) minTs = ts;
-        if (maxTs === null || ts > maxTs) maxTs = ts;
-      }
-    }
-    const today = startOfDay();
-    const startBaseTs = minTs === null ? today : Math.min(today, minTs);
-    const endBaseTs = maxTs === null ? today : maxTs;
-    const desiredStart = new Date(startOfDay(startBaseTs - TIMELINE_START_PADDING_DAYS * DAY_MS));
-    const desiredEndTs = Math.max(
-      today + TIMELINE_TODAY_FUTURE_DAYS * DAY_MS,
-      endBaseTs + TIMELINE_END_PADDING_DAYS * DAY_MS
-    );
-    const desiredEnd = new Date(startOfDay(desiredEndTs) + DAY_MS);
-
-    // Only grow the window — never shrink it. This keeps the user's current
-    // view from jumping around when they enter or clear a single date.
-    const nextStart =
-      timelineStart instanceof Date && timelineStart.getTime() <= desiredStart.getTime()
-        ? timelineStart
-        : desiredStart;
-    const nextEnd =
-      timelineEnd instanceof Date && timelineEnd.getTime() >= desiredEnd.getTime()
-        ? timelineEnd
-        : desiredEnd;
-
-    if (!dragState) {
-      // Preserve the user's scroll position relative to the timeline when the
-      // start shifts earlier (everything shifts right in pixel space).
-      const previousStartTs = prevTimelineStartTs;
-      const nextStartTs = nextStart.getTime();
-      if (
-        bodyEl &&
-        previousStartTs !== null &&
-        previousStartTs !== nextStartTs &&
-        rootFontSizePx > 0
-      ) {
-        const deltaDays = Math.round((previousStartTs - nextStartTs) / DAY_MS);
-        const deltaPx = deltaDays * remPerDay * rootFontSizePx;
-        if (Number.isFinite(deltaPx) && deltaPx !== 0) {
-          const currentScrollLeft = bodyEl.scrollLeft;
-          requestAnimationFrame(() => {
-            bodyEl.scrollLeft = currentScrollLeft + deltaPx;
-            headerScrollLeft = bodyEl.scrollLeft;
-          });
-        }
-      }
-      timelineStart = nextStart;
-      timelineEnd = nextEnd;
-      prevTimelineStartTs = nextStartTs;
-    }
-  }
+  let timelineStart = $state(new Date());
+  let timelineEnd = $state(new Date());
 
   // ── Scale helpers ────────────────────────────────────────────────
 
@@ -166,20 +105,6 @@
   function remFromDate(date, scaleRemPerDay = remPerDay, rangeStart = timelineStart) {
     return dayOffset(date, rangeStart) * scaleRemPerDay;
   }
-
-  $: remPerDay =
-    $ganttScale === "day"
-      ? CELL_REM.day
-      : $ganttScale === "week"
-        ? CELL_REM.week / 7
-        : CELL_REM.month / 30;
-
-  $: totalDays = Math.ceil((timelineEnd.getTime() - timelineStart.getTime()) / DAY_MS);
-  $: totalWidthRem = totalDays * remPerDay;
-  $: todayTs = startOfDay();
-  // remPerDay も依存に含めて、スケール (日/週/月) 切替時に再計算されるようにする。
-  // (remFromDate の default 引数で間接参照すると Svelte の reactive 解析対象外)
-  $: todayRem = dayOffset(todayTs, timelineStart) * remPerDay;
 
   // ── Header cells ─────────────────────────────────────────────────
 
@@ -234,8 +159,6 @@
     }
     return cells;
   }
-
-  $: headerCells = buildHeaderCells($ganttScale, timelineStart, timelineEnd);
 
   // ── Bar helpers ──────────────────────────────────────────────────
 
@@ -466,15 +389,7 @@
   }
 
   function commitTaskDates(id, patch) {
-    if (application) return application.update(id, patch);
-    if (!$tree_data?.data) {
-      return;
-    }
-
-    const data = updateNodeDataById($tree_data.data, id, patch);
-    if (data !== $tree_data.data) {
-      $tree_data = { ...$tree_data, data };
-    }
+    return application.update(id, patch);
   }
 
   function dateFromClientX(clientX) {
@@ -757,6 +672,7 @@
   }
 
   function handleBodyScroll(event) {
+    bodyScrollTop = event.currentTarget.scrollTop;
     if (dragState) {
       headerScrollLeft = event.currentTarget.scrollLeft;
       dragState = {
@@ -807,6 +723,11 @@
   onMount(() => {
     updateRootFontSizePx();
     window.addEventListener("resize", updateRootFontSizePx);
+    // ペインの大きさと、密度の切り替えで変わる行の高さを測り直す。
+    measureRows();
+    const rowObserver = new ResizeObserver(() => measureRows());
+    if (bodyEl) rowObserver.observe(bodyEl);
+    if (rowHeightProbe) rowObserver.observe(rowHeightProbe);
 
     // Position today on first paint. tick + 2 rAFs makes sure
     // GanttBodyInner has its real width / scrollWidth before we read them.
@@ -851,6 +772,7 @@
 
     return () => {
       window.removeEventListener("resize", updateRootFontSizePx);
+      rowObserver.disconnect();
       scaleUnsub?.();
     };
   });
@@ -859,6 +781,116 @@
     removeDragListeners();
     stopDrag();
   });
+  let rows = $derived($filtered_data ? flattenVisibleTree($filtered_data, $closed_row_paths) : []);
+  let inheritedMap = $derived(buildInheritedDueDateMap(rows));
+  let rowRange = $derived(
+    visibleRowRange({
+      rowCount: rows.length,
+      scrollTop: bodyScrollTop,
+      viewportHeight: bodyHeight,
+      rowHeight: rowHeightPx,
+      rowsOffset: 0,
+      overscan: OVERSCAN_ROWS,
+      fallbackAllRows: FALLBACK_ALL_ROWS,
+      fallbackWindowRows: FALLBACK_WINDOW_ROWS,
+    })
+  );
+  // ドラッグ中の行は、画面外へスクロールしても描いておく（操作が途切れない）。
+  let pinnedRowIndices = $derived(
+    dragState ? rows.flatMap((row, index) => (row.id === dragState.id ? [index] : [])) : []
+  );
+  let renderItems = $derived(buildRenderItems(rows.length, rowRange, pinnedRowIndices));
+  // Sync scroll position from TreeTable
+  $effect.pre(() => {
+    if (bodyEl && !dragState) bodyEl.scrollTop = $ganttScrollTop;
+  });
+  let remPerDay = $derived(
+    $ganttScale === "day"
+      ? CELL_REM.day
+      : $ganttScale === "week"
+        ? CELL_REM.week / 7
+        : CELL_REM.month / 30
+  );
+  $effect.pre(() => {
+    let minTs = null;
+    let maxTs = null;
+    for (const row of rows) {
+      const sd = parseDate(row.node.data["start date"]);
+      const dd = parseDate(row.node.data["due date"]) || parseDate(inheritedMap.get(row.path));
+      for (const ts of [sd, dd]) {
+        if (!ts) continue;
+        if (minTs === null || ts < minTs) minTs = ts;
+        if (maxTs === null || ts > maxTs) maxTs = ts;
+      }
+    }
+    const today = startOfDay();
+    const startBaseTs = minTs === null ? today : Math.min(today, minTs);
+    const endBaseTs = maxTs === null ? today : maxTs;
+    const desiredStart = new Date(startOfDay(startBaseTs - TIMELINE_START_PADDING_DAYS * DAY_MS));
+    const desiredEndTs = Math.max(
+      today + TIMELINE_TODAY_FUTURE_DAYS * DAY_MS,
+      endBaseTs + TIMELINE_END_PADDING_DAYS * DAY_MS
+    );
+    const desiredEnd = new Date(startOfDay(desiredEndTs) + DAY_MS);
+
+    // Only grow the window — never shrink it. This keeps the user's current
+    // view from jumping around when they enter or clear a single date.
+    const nextStart =
+      timelineStart instanceof Date && timelineStart.getTime() <= desiredStart.getTime()
+        ? timelineStart
+        : desiredStart;
+    const nextEnd =
+      timelineEnd instanceof Date && timelineEnd.getTime() >= desiredEnd.getTime()
+        ? timelineEnd
+        : desiredEnd;
+
+    if (!dragState) {
+      // Preserve the user's scroll position relative to the timeline when the
+      // start shifts earlier (everything shifts right in pixel space).
+      const previousStartTs = prevTimelineStartTs;
+      const nextStartTs = nextStart.getTime();
+      if (
+        bodyEl &&
+        previousStartTs !== null &&
+        previousStartTs !== nextStartTs &&
+        rootFontSizePx > 0
+      ) {
+        const deltaDays = Math.round((previousStartTs - nextStartTs) / DAY_MS);
+        const deltaPx = deltaDays * remPerDay * rootFontSizePx;
+        if (Number.isFinite(deltaPx) && deltaPx !== 0) {
+          const currentScrollLeft = bodyEl.scrollLeft;
+          requestAnimationFrame(() => {
+            bodyEl.scrollLeft = currentScrollLeft + deltaPx;
+            headerScrollLeft = bodyEl.scrollLeft;
+          });
+        }
+      }
+      timelineStart = nextStart;
+      timelineEnd = nextEnd;
+      prevTimelineStartTs = nextStartTs;
+    }
+  });
+  let totalDays = $derived(Math.ceil((timelineEnd.getTime() - timelineStart.getTime()) / DAY_MS));
+  let totalWidthRem = $derived(totalDays * remPerDay);
+  let todayTs = $derived(startOfDay());
+  // remPerDay も依存に含めて、スケール (日/週/月) 切替時に再計算されるようにする。
+  // (remFromDate の default 引数で間接参照すると Svelte の reactive 解析対象外)
+  let todayRem = $derived(dayOffset(todayTs, timelineStart) * remPerDay);
+  let headerCells = $derived(buildHeaderCells($ganttScale, timelineStart, timelineEnd));
+
+  // 横スクロールに変えるため preventDefault したいので、wheel は passive にしない。
+  function nonPassiveWheel(node, handler) {
+    const listener = (event) => handler(event);
+    node.addEventListener("wheel", listener, { passive: false });
+    return {
+      update(next) {
+        handler = next;
+      },
+      destroy() {
+        node.removeEventListener("wheel", listener);
+      },
+    };
+  }
 </script>
 
 <div class="GanttRoot" class:DraggingTimeline={!!dragState} class:DarkTheme={$theme === "dark"}>
@@ -874,7 +906,7 @@
           aria-label="日表示"
           aria-pressed={$ganttScale === "day"}
           title="日表示"
-          on:click={() => ($ganttScale = "day")}>日</button
+          onclick={() => ($ganttScale = "day")}>日</button
         >
         <button
           type="button"
@@ -883,7 +915,7 @@
           aria-label="週表示"
           aria-pressed={$ganttScale === "week"}
           title="週表示"
-          on:click={() => ($ganttScale = "week")}>週</button
+          onclick={() => ($ganttScale = "week")}>週</button
         >
         <button
           type="button"
@@ -892,7 +924,7 @@
           aria-label="月表示"
           aria-pressed={$ganttScale === "month"}
           title="月表示"
-          on:click={() => ($ganttScale = "month")}>月</button
+          onclick={() => ($ganttScale = "month")}>月</button
         >
       </div>
     </div>
@@ -929,8 +961,8 @@
   <div
     class="GanttBody"
     bind:this={bodyEl}
-    on:scroll={handleBodyScroll}
-    on:wheel|nonpassive={handleBodyWheel}
+    onscroll={handleBodyScroll}
+    use:nonPassiveWheel={handleBodyWheel}
   >
     <div
       class="GanttBodyInner"
@@ -951,73 +983,83 @@
         <div class="TodayDayBody" style="left:{todayRem}rem; width:{remPerDay}rem;"></div>
         <div class="TodayLineFull" style="left:{todayRem}rem;"></div>
       {/if}
+      <div class="RowHeightProbe" bind:this={rowHeightProbe} aria-hidden="true"></div>
       <!-- key は経路。多親ノードは親ごとに複数行に出るので id では重複する。 -->
-      {#each rows as row (row.path)}
-        {@const bar = getBarStyle(row, dragState, remPerDay, todayRem, todayTs, timelineStart)}
-        {@const preview = getCreatePreview(row, dragState, remPerDay, timelineStart)}
-        <div
-          class="GanttRow"
-          data-row-id={row.id}
-          data-row-path={row.path}
-          role="presentation"
-          on:pointerdown={(event) => startCreateDrag(event, row)}
-          on:dblclick={(event) => createRange(event, row, bar)}
-        >
-          {#if preview}
-            <div
-              class="CreatePreview"
-              style="left:{preview.leftRem}rem; width:{preview.widthRem}rem;"
-              aria-hidden="true"
-            >
-              <span class="PreviewEdge StartEdge"></span>
-              <span class="PreviewEdge EndEdge"></span>
-            </div>
-          {/if}
-          {#if bar}
-            <button
-              type="button"
-              class="Bar"
-              class:DueMarker={bar.isDue}
-              class:StartMarker={bar.isStartOnly}
-              class:Inherited={bar.isInherited}
-              class:DraggingBar={dragState?.id === row.id && dragState.mode !== "create"}
-              style="left:{bar.leftRem}rem; width:{bar.widthRem}rem; background:{bar.color}; opacity:{bar.opacity};"
-              aria-label={bar.isDue
-                ? "期限日を変更"
-                : bar.isStartOnly
-                  ? "開始日を変更"
-                  : "期間を移動"}
-              title={bar.isDue ? "期限日を変更" : bar.isStartOnly ? "開始日を変更" : "期間を移動"}
-              disabled={bar.isInherited}
-              on:pointerdown={(event) =>
-                startDrag(event, row, bar.isStartOnly ? "start" : "move", bar)}
-            ></button>
-            {#if bar.overdue}
+      {#each renderItems as item (item.kind === "row" ? rows[item.index].path : `gap:${item.start}`)}
+        {#if item.kind === "gap"}
+          <div
+            class="RowGap"
+            aria-hidden="true"
+            style:height={`calc(var(--tree-row-height, 36px) * ${item.count})`}
+          ></div>
+        {:else}
+          {@const row = rows[item.index]}
+          {@const bar = getBarStyle(row, dragState, remPerDay, todayRem, todayTs, timelineStart)}
+          {@const preview = getCreatePreview(row, dragState, remPerDay, timelineStart)}
+          <div
+            class="GanttRow"
+            data-row-id={row.id}
+            data-row-path={row.path}
+            role="presentation"
+            onpointerdown={(event) => startCreateDrag(event, row)}
+            ondblclick={(event) => createRange(event, row, bar)}
+          >
+            {#if preview}
               <div
-                class="OverdueSegment"
-                style="left:{bar.overdue.leftRem}rem; width:{bar.overdue
-                  .widthRem}rem; background:{bar.overdue.color}; opacity:{bar.opacity};"
+                class="CreatePreview"
+                style="left:{preview.leftRem}rem; width:{preview.widthRem}rem;"
                 aria-hidden="true"
-              ></div>
+              >
+                <span class="PreviewEdge StartEdge"></span>
+                <span class="PreviewEdge EndEdge"></span>
+              </div>
             {/if}
-            {#if !bar.isDue && !bar.isStartOnly && !bar.isInherited}
+            {#if bar}
               <button
-                class="BarHandle StartHandle"
-                aria-label="開始日を変更"
-                title="開始日を変更"
-                style="left:{bar.leftRem}rem;"
-                on:pointerdown={(event) => startDrag(event, row, "start", bar)}
+                type="button"
+                class="Bar"
+                class:DueMarker={bar.isDue}
+                class:StartMarker={bar.isStartOnly}
+                class:Inherited={bar.isInherited}
+                class:DraggingBar={dragState?.id === row.id && dragState.mode !== "create"}
+                style="left:{bar.leftRem}rem; width:{bar.widthRem}rem; background:{bar.color}; opacity:{bar.opacity};"
+                aria-label={bar.isDue
+                  ? "期限日を変更"
+                  : bar.isStartOnly
+                    ? "開始日を変更"
+                    : "期間を移動"}
+                title={bar.isDue ? "期限日を変更" : bar.isStartOnly ? "開始日を変更" : "期間を移動"}
+                disabled={bar.isInherited}
+                onpointerdown={(event) =>
+                  startDrag(event, row, bar.isStartOnly ? "start" : "move", bar)}
               ></button>
-              <button
-                class="BarHandle EndHandle"
-                aria-label="期限日を変更"
-                title="期限日を変更"
-                style="left:{bar.leftRem + bar.widthRem}rem;"
-                on:pointerdown={(event) => startDrag(event, row, "end", bar)}
-              ></button>
+              {#if bar.overdue}
+                <div
+                  class="OverdueSegment"
+                  style="left:{bar.overdue.leftRem}rem; width:{bar.overdue
+                    .widthRem}rem; background:{bar.overdue.color}; opacity:{bar.opacity};"
+                  aria-hidden="true"
+                ></div>
+              {/if}
+              {#if !bar.isDue && !bar.isStartOnly && !bar.isInherited}
+                <button
+                  class="BarHandle StartHandle"
+                  aria-label="開始日を変更"
+                  title="開始日を変更"
+                  style="left:{bar.leftRem}rem;"
+                  onpointerdown={(event) => startDrag(event, row, "start", bar)}
+                ></button>
+                <button
+                  class="BarHandle EndHandle"
+                  aria-label="期限日を変更"
+                  title="期限日を変更"
+                  style="left:{bar.leftRem + bar.widthRem}rem;"
+                  onpointerdown={(event) => startDrag(event, row, "end", bar)}
+                ></button>
+              {/if}
             {/if}
-          {/if}
-        </div>
+          </div>
+        {/if}
       {/each}
     </div>
   </div>
@@ -1248,8 +1290,7 @@
   .GanttBody {
     flex: 1;
     min-height: 0;
-    overflow-x: auto;
-    overflow-y: hidden;
+    overflow: auto hidden;
   }
 
   .GanttBodyInner {
@@ -1279,6 +1320,13 @@
     z-index: 5;
   }
 
+  .RowHeightProbe {
+    position: absolute;
+    visibility: hidden;
+    pointer-events: none;
+    width: 1px;
+    height: var(--tree-row-height, 36px);
+  }
   .GanttRow {
     height: var(--tree-row-height, 36px);
     min-height: var(--tree-row-height, 36px);

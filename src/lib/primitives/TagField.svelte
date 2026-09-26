@@ -1,47 +1,62 @@
 <script>
-  import { createEventDispatcher } from "svelte";
   import { viewportPopover } from "@lib/actions/viewport_popover";
   import { globalDismiss } from "@lib/actions";
   import { normalizeTag, withTagAdded, withTagRemoved } from "@lib/utils/tags";
 
-  /** 現在付いているタグ。 */
-  export let tags = [];
-  /** 候補として提示するタグ（プロジェクト内で既出のもの）。 */
-  export let suggestions = [];
-  export let disabled = false;
-  export let label = "タグ";
-  export let suggestionLabel = "候補";
-  export let ariaLabel = "タグ";
-  export let placeholder = "タグを入力…";
-  export let emptyPlaceholder = "タグを入力… (Enter)";
-  export let maxSuggestions = 8;
-  /** ラベル列を出さずチップだけを描画する（詳細ペインなど省スペース用）。 */
-  export let showLabels = true;
+  /**
+   * @typedef {Object} Props
+   * @property {any} [tags] - 現在付いているタグ。
+   * @property {any} [suggestions] - 候補として提示するタグ（プロジェクト内で既出のもの）。
+   * @property {boolean} [disabled]
+   * @property {string} [label]
+   * @property {string} [suggestionLabel]
+   * @property {string} [ariaLabel]
+   * @property {string} [placeholder]
+   * @property {string} [emptyPlaceholder]
+   * @property {number} [maxSuggestions]
+   * @property {boolean} [showLabels] - ラベル列を出さずチップだけを描画する（詳細ペインなど省スペース用）。
+   * @property {(detail?: any) => void} [onchange]
+   */
 
-  const dispatch = createEventDispatcher();
+  /** @type {Props} */
+  let {
+    tags = [],
+    suggestions = [],
+    disabled = false,
+    label = "タグ",
+    suggestionLabel = "候補",
+    ariaLabel = "タグ",
+    placeholder = "タグを入力…",
+    emptyPlaceholder = "タグを入力… (Enter)",
+    maxSuggestions = 8,
+    showLabels = true,
+    onchange,
+  } = $props();
 
-  let input = "";
-  let inputElement;
-  let suggestionsOpen = false;
+  let input = $state("");
+  let inputElement = $state();
+  let suggestionsOpen = $state(false);
   function floatSuggestions(node) {
     return showLabels
       ? {}
       : viewportPopover(node, () => inputElement.closest(".tag-chips").getBoundingClientRect());
   }
 
-  $: currentTags = tags ?? [];
-  $: normalizedQuery = normalizeTag(input);
-  $: visibleSuggestions = (suggestions ?? [])
-    .filter((tag) => !currentTags.includes(tag))
-    .filter((tag) => !normalizedQuery || tag.includes(normalizedQuery))
-    .slice(0, maxSuggestions);
+  let currentTags = $derived(tags ?? []);
+  let normalizedQuery = $derived(normalizeTag(input));
+  let visibleSuggestions = $derived(
+    (suggestions ?? [])
+      .filter((tag) => !currentTags.includes(tag))
+      .filter((tag) => !normalizedQuery || tag.includes(normalizedQuery))
+      .slice(0, maxSuggestions)
+  );
 
   function commit(next) {
     if (disabled) return;
     if (next.length === currentTags.length && next.every((tag, i) => tag === currentTags[i])) {
       return;
     }
-    dispatch("change", { tags: next });
+    onchange?.({ tags: next });
   }
 
   function addTag(value) {
@@ -81,7 +96,7 @@
       class="tag-chips"
       class:is-empty={currentTags.length === 0}
       class:disabled
-      on:click={focusInput}
+      onclick={focusInput}
     >
       {#each currentTags as tag (tag)}
         <span class="tag-chip">
@@ -91,7 +106,10 @@
             class="tag-chip-x"
             {disabled}
             aria-label={`タグ ${tag} を外す`}
-            on:click|stopPropagation={() => removeTag(tag)}
+            onclick={(event) => {
+              event.stopPropagation();
+              removeTag(tag);
+            }}
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M7 7L17 17M17 7L7 17" />
@@ -105,10 +123,10 @@
         {disabled}
         bind:this={inputElement}
         bind:value={input}
-        on:keydown={handleKeydown}
-        on:focus={() => (suggestionsOpen = true)}
-        on:input={() => (suggestionsOpen = true)}
-        on:blur={() => input.trim() && addTag(input)}
+        onkeydown={handleKeydown}
+        onfocus={() => (suggestionsOpen = true)}
+        oninput={() => (suggestionsOpen = true)}
+        onblur={() => input.trim() && addTag(input)}
         placeholder={currentTags.length === 0 ? emptyPlaceholder : placeholder}
         aria-label={ariaLabel}
         autocomplete="off"
@@ -133,8 +151,8 @@
             type="button"
             class="tag-pill"
             {disabled}
-            on:pointerdown|preventDefault
-            on:click={() => addTag(tag)}
+            onpointerdown={(event) => event.preventDefault()}
+            onclick={() => addTag(tag)}
             aria-label={`タグ ${tag} を追加`}
           >
             <span class="tag-pill-plus" aria-hidden="true">＋</span>#{tag}
@@ -271,7 +289,7 @@
     width: 0.525rem;
     height: 0.525rem;
     fill: none;
-    stroke: currentColor;
+    stroke: currentcolor;
     stroke-width: 2.5;
     stroke-linecap: round;
     stroke-linejoin: round;

@@ -1,25 +1,38 @@
-﻿<script>
+<script>
   import { ripple, tooltip } from "@lib/actions";
-  export let content;
-  export let activeColor = "var(--theme-color-Info-dark)";
-  export let normalColor = "var(--theme-color-Info-main)";
-  export let rippleColor = "var(--theme-color-Sub-main)";
-  export let style = "";
-  export let disabled = false;
-  export let use_ripple = true;
-  export let variant = "filled"; // "outlined", "text"
-  export let tooltipContent = undefined;
-  export let ariaLabel = undefined;
-  export let type = "button";
+  /**
+   * @typedef {Object} Props
+   * @property {any} content
+   * @property {string} [activeColor]
+   * @property {string} [normalColor]
+   * @property {string} [rippleColor]
+   * @property {string} [style]
+   * @property {boolean} [disabled]
+   * @property {boolean} [use_ripple]
+   * @property {string} [variant] - "outlined", "text"
+   * @property {any} [tooltipContent]
+   * @property {any} [ariaLabel]
+   * @property {string} [type]
+   * @property {(detail?: any) => void} [onclick]
+   */
+
+  /** @type {Props} */
+  let {
+    content,
+    activeColor = "var(--theme-color-Info-dark)",
+    normalColor = "var(--theme-color-Info-main)",
+    rippleColor = "var(--theme-color-Sub-main)",
+    style = "",
+    disabled = false,
+    use_ripple = true,
+    variant = "filled",
+    tooltipContent = undefined,
+    ariaLabel = undefined,
+    type = "button",
+    onclick,
+  } = $props();
   // tooltip
-  let use_tooltip = tooltipContent === undefined ? false : true;
-  let afcolor = "gray";
-  let abgcolor = "gray";
-  let abdcolor = "gray";
-  let fcolor = "gray";
-  let bgcolor = "gray";
-  let bdcolor = "gray";
-  let shadow = "0 0.15rem 0.375rem rgba(0,0,0,0.25), 0 .1em 0.1875rem rgba(0,0,0,0);";
+  let use_tooltip = $derived(tooltipContent !== undefined);
 
   /**
    * 無効時の色。以前は文字も背景も同じ "gray" で、ラベルが背景に溶けて
@@ -30,7 +43,9 @@
   const DISABLED_BG = "color-mix(in srgb, var(--fg-muted) 16%, transparent)";
   const DISABLED_BD = "color-mix(in srgb, var(--fg-muted) 28%, transparent)";
 
-  $: {
+  // 変種と無効状態から決まる色。
+  let { afcolor, abgcolor, abdcolor, fcolor, bgcolor, bdcolor, shadow } = $derived.by(() => {
+    let afcolor, abgcolor, abdcolor, fcolor, bgcolor, bdcolor, shadow;
     afcolor = disabled ? DISABLED_FG : "var(--theme-color-Main-light)";
     abgcolor = disabled ? DISABLED_BG : activeColor;
     abdcolor = disabled ? DISABLED_BD : "none";
@@ -63,7 +78,8 @@
           break;
       }
     }
-  }
+    return { afcolor, abgcolor, abdcolor, fcolor, bgcolor, bdcolor, shadow };
+  });
 </script>
 
 <button
@@ -83,7 +99,7 @@
     content: tooltipContent,
     force: true,
   }}
-  on:click
+  {onclick}
   style="--shadow:{shadow}; --activeFontColor: {afcolor}; --activeBorderColor: {abdcolor}; --activeBackgroundColor: {abgcolor}; --backgroundColor: {bgcolor}; --borderColor: {bdcolor}; --fontColor: {fcolor}; {style}"
 >
   <span>{content}</span>

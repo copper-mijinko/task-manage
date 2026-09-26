@@ -1,4 +1,4 @@
-﻿import { fireEvent, render, screen } from "@testing-library/svelte";
+import { fireEvent, screen } from "@testing-library/svelte";
 import { get } from "svelte/store";
 import { tick } from "svelte";
 import { vi } from "vitest";
@@ -19,25 +19,20 @@ vi.mock("@lib/primitives/Dialog.svelte", async () => {
 });
 
 import TreeTable from "@features/tasks/components/TreeTable.svelte";
-import {
-  closed_row_paths,
-  column_settings,
-  filtered_data,
-  selected_id,
-  selected_type,
-  table_selected_id,
-  theme,
-  tree_data,
-} from "@stores";
-import {
-  active_row_path,
-  clearSelection,
-  copied_task,
-  copied_tasks,
-  selected_ids,
-} from "@stores/ui";
-import { workspace_store } from "@features/workspace/stores/workspace";
+import { column_settings, table_selected_id, theme } from "@stores";
+import { active_row_path, clearSelection, selected_ids } from "@stores/ui";
 import { pageSearchCountIsPartial, pageSearchQuery } from "@features/search/stores/search";
+import { renderWithGraph, settle } from "../helpers/render_with_graph.js";
+
+let project;
+let app;
+let backend;
+async function renderTree(tree = project) {
+  const result = await renderWithGraph(TreeTable, { tree });
+  app = result.application;
+  backend = result.backend;
+  return result;
+}
 
 function createProjectData() {
   return {
@@ -97,7 +92,7 @@ describe("TreeTable", () => {
   let originalGetBoundingClientRect;
 
   beforeEach(() => {
-    const projectData = createProjectData();
+    project = createProjectData();
     originalGetBoundingClientRect = Element.prototype.getBoundingClientRect;
 
     if (!globalThis.ResizeObserver) {
@@ -107,22 +102,8 @@ describe("TreeTable", () => {
       };
     }
 
-    Object.defineProperty(window, "electronAPI", {
-      configurable: true,
-      value: {
-        setMetaData: vi.fn(),
-      },
-    });
-
-    tree_data.set(projectData);
-    filtered_data.set(projectData.data);
-    selected_id.set("project-1");
     clearSelection();
-    selected_type.set("Projects");
     table_selected_id.set(undefined);
-    copied_task.set(null);
-    copied_tasks.set([]);
-    closed_row_paths.set(new Set());
     active_row_path.set(undefined);
     column_settings.set([
       { id: "name", label: "ノード名", visible: true },
@@ -133,12 +114,6 @@ describe("TreeTable", () => {
       { id: "attachments", label: "添付数", visible: true },
     ]);
     theme.set("dark");
-    workspace_store.set({
-      workspaces: [],
-      activeWorkspacePath: null,
-      activeProjectDir: null,
-      projects: [],
-    });
   });
 
   afterEach(() => {
@@ -146,7 +121,7 @@ describe("TreeTable", () => {
   });
 
   test("selects a row and reflects the selected state", async () => {
-    render(TreeTable);
+    await renderTree();
 
     await fireEvent.click(screen.getByTestId("select-task-1"));
     await tick();
@@ -161,7 +136,7 @@ describe("TreeTable", () => {
   });
 
   test("checks the bulk-selection control only after it is explicitly clicked", async () => {
-    render(TreeTable);
+    await renderTree();
 
     await fireEvent.click(screen.getByTestId("select-task-1"));
     await fireEvent.click(screen.getByTestId("bulk-select-task-1"));
@@ -176,7 +151,7 @@ describe("TreeTable", () => {
   });
 
   test("keeps the current row selected when the tree background is clicked", async () => {
-    const { container } = render(TreeTable);
+    const { container } = await renderTree();
 
     await fireEvent.click(screen.getByTestId("select-task-1"));
     await tick();
@@ -205,9 +180,7 @@ describe("TreeTable", () => {
       },
       children: [shared],
     });
-    tree_data.set(projectData);
-    filtered_data.set(projectData.data);
-    const { container } = render(TreeTable);
+    const { container } = await renderTree(projectData);
     await tick();
 
     const rowAt = (path) => container.querySelector(`[data-row-path="${path}"]`);
@@ -259,9 +232,7 @@ describe("TreeTable", () => {
       },
       children: [shared],
     });
-    tree_data.set(projectData);
-    filtered_data.set(projectData.data);
-    const { container } = render(TreeTable);
+    const { container } = await renderTree(projectData);
     await tick();
 
     const paths = () =>
@@ -276,63 +247,40 @@ describe("TreeTable", () => {
     );
     await tick();
 
-    expect(get(closed_row_paths)).toEqual(new Set(["project-1/task-1/task-1-1"]));
+    expect(get(app.closed)).toEqual(new Set(["project-1/task-1/task-1-1"]));
     expect(paths()).not.toContain("project-1/task-1/task-1-1/task-1-1-1");
     // もう片方の親の下は開いたまま。
     expect(paths()).toContain("project-1/task-2/task-1-1/task-1-1-1");
   });
 
   test("collapses and expands a branch by toggling the row", async () => {
-    render(TreeTable);
+    await renderTree();
 
     expect(screen.getByText("Nested Task")).toBeInTheDocument();
 
     await fireEvent.click(screen.getByTestId("toggle-task-1"));
     await tick();
 
-    expect(get(closed_row_paths).has("project-1/task-1")).toBe(true);
+    expect(get(app.closed).has("project-1/task-1")).toBe(true);
     expect(screen.queryByText("Nested Task")).not.toBeInTheDocument();
 
     await fireEvent.click(screen.getByTestId("toggle-task-1"));
     await tick();
 
-    expect(get(closed_row_paths).has("project-1/task-1")).toBe(false);
+    expect(get(app.closed).has("project-1/task-1")).toBe(false);
     expect(screen.getByText("Nested Task")).toBeInTheDocument();
   });
 
-  test("shows the attachments count column", () => {
-    render(TreeTable);
+  test("shows the attachments count column", async () => {
+    await renderTree();
 
     expect(screen.getByTestId("header-attachments")).toHaveTextContent("attachments");
     expect(screen.getByTestId("cell-task-1-attachments")).toHaveTextContent("1");
     expect(screen.getByTestId("cell-task-1-1-attachments")).toHaveTextContent("0");
   });
 
-  test("opens a workspace task folder from the row action", async () => {
-    const wsOpenTaskFolder = vi.fn().mockResolvedValue({ success: true });
-    Object.defineProperty(window, "electronAPI", {
-      configurable: true,
-      value: {
-        setMetaData: vi.fn(),
-        wsOpenTaskFolder,
-      },
-    });
-    selected_type.set("WorkspaceProject");
-    workspace_store.set({
-      workspaces: [{ path: "C:/workspace", label: "Workspace" }],
-      activeWorkspacePath: "C:/workspace",
-      activeProjectDir: "C:/workspace/project",
-      projects: [],
-    });
-    render(TreeTable);
-
-    await fireEvent.click(screen.getByTestId("open-folder-task-1"));
-
-    expect(wsOpenTaskFolder).toHaveBeenCalledWith("C:/workspace/project", "task-1");
-  });
-
   test("lets selected text copy before the task copy shortcut", async () => {
-    render(TreeTable);
+    await renderTree();
 
     await fireEvent.click(screen.getByTestId("select-task-1"));
     await tick();
@@ -357,8 +305,7 @@ describe("TreeTable", () => {
       await fireEvent.keyDown(window, { key: "c", ctrlKey: true });
       await tick();
 
-      expect(get(copied_task)).toBeNull();
-      expect(get(copied_tasks)).toEqual([]);
+      expect(get(app.copied)).toEqual([]);
     } finally {
       selection.removeAllRanges();
       memoHost.remove();
@@ -366,7 +313,7 @@ describe("TreeTable", () => {
   });
 
   test("copies the selected task when no document text is selected", async () => {
-    render(TreeTable);
+    await renderTree();
 
     await fireEvent.click(screen.getByTestId("select-task-1"));
     await tick();
@@ -374,86 +321,35 @@ describe("TreeTable", () => {
     await fireEvent.keyDown(window, { key: "c", ctrlKey: true });
     await tick();
 
-    expect(get(copied_task)?.id).toBe("task-1");
-    expect(get(copied_tasks).map((task) => task.id)).toEqual(["task-1"]);
+    expect(get(app.copied)).toEqual(["task-1"]);
   });
 
-  function countNodes(node) {
-    return 1 + (node.children ?? []).reduce((sum, child) => sum + countNodes(child), 0);
-  }
+  test("pastes a copied project-root subtree as an ordinary node under another node", async () => {
+    await renderTree();
 
-  test("pastes a copied project-root subtree as an ordinary task under another node", async () => {
-    render(TreeTable);
-
-    // Copy the whole project (the root row itself, id === tree_data.data.id).
-    // The context menu hides "copy" for the root row, but Ctrl+C on the
-    // selected root row is the (intentional) way to grab the entire project.
+    // Ctrl+C on the selected root row grabs the entire project.
     await fireEvent.click(screen.getByTestId("select-project-1"));
     await tick();
     await fireEvent.keyDown(window, { key: "c", ctrlKey: true });
     await tick();
-
-    expect(get(copied_task)?.id).toBe("project-1");
-
-    // Paste it as a child of "task-1", an ordinary node inside the same tree.
-    await fireEvent.click(screen.getByTestId("select-task-1"));
-    await tick();
-    await fireEvent.keyDown(window, { key: "v", ctrlKey: true });
-    await tick();
-
-    const task1 = get(tree_data).data.children.find((c) => c.id === "task-1");
-    expect(task1.children).toHaveLength(2); // original "task-1-1" + the pasted clone
-    const pastedRoot = task1.children.find((c) => c.id !== "task-1-1");
-    expect(pastedRoot).toBeDefined();
-    // The pasted node is a plain task: nothing marks it as a project root, and
-    // (per workspace_tree.ts) its `parents` on save is derived purely from
-    // tree position, so it is written as a normal task, never as `_project.md`.
-    expect(pastedRoot.data.name).toBe("Sample Project");
-    expect(pastedRoot.id).not.toBe("project-1");
-    // The whole copied subtree (project-1 -> task-1 "Parent Task" -> task-1-1
-    // "Nested Task") comes along, with fresh ids at every level.
-    expect(pastedRoot.children.map((c) => c.data.name)).toEqual(["Parent Task"]);
-    expect(pastedRoot.children[0].children.map((c) => c.data.name)).toEqual(["Nested Task"]);
-    expect(pastedRoot.id).not.toBe("project-1");
-    expect(pastedRoot.children[0].id).not.toBe("task-1");
-    expect(pastedRoot.children[0].children[0].id).not.toBe("task-1-1");
-  });
-
-  test("repeated pastes of a copied project root do not compound in size", async () => {
-    // Regression test for the clipboard-aliasing bug: handleCopyTask stores a
-    // *live* reference into $tree_data.data. Because the project root's only
-    // possible paste targets are its own descendants, pasting it once used to
-    // leave the clipboard aliasing an now-larger live tree, so a second paste
-    // from the same clipboard entry re-cloned the already-grown tree instead
-    // of the original — turning "copy a project, paste it twice" into an
-    // ever-doubling write payload (a real-world save failure for big
-    // projects). handlePasteTask now refreshes the clipboard to a fresh,
-    // detached clone on every paste, so growth stays linear.
-    render(TreeTable);
-
-    await fireEvent.click(screen.getByTestId("select-project-1"));
-    await tick();
-    await fireEvent.keyDown(window, { key: "c", ctrlKey: true });
-    await tick();
-
-    const sizeBefore = countNodes(get(tree_data).data);
+    expect(get(app.copied)).toEqual(["project-1"]);
 
     await fireEvent.click(screen.getByTestId("select-task-1"));
     await tick();
     await fireEvent.keyDown(window, { key: "v", ctrlKey: true });
-    await tick();
-    const sizeAfterFirstPaste = countNodes(get(tree_data).data);
-    const growthPerPaste = sizeAfterFirstPaste - sizeBefore;
-    expect(growthPerPaste).toBeGreaterThan(0);
+    await settle();
 
-    // Paste again from the same (still-populated) clipboard entry without
-    // re-copying — a natural thing to do right after duplicating a project.
-    await fireEvent.keyDown(window, { key: "v", ctrlKey: true });
-    await tick();
-    const sizeAfterSecondPaste = countNodes(get(tree_data).data);
-
-    // Fixed behaviour: each paste adds the same, constant-size snapshot.
-    expect(sizeAfterSecondPaste - sizeAfterFirstPaste).toBe(growthPerPaste);
+    const children = backend.childrenOf("task-1");
+    expect(children).toHaveLength(2); // original "task-1-1" + the pasted copy
+    const pastedRoot = children.find((id) => id !== "task-1-1");
+    expect(backend.node(pastedRoot).name).toBe("Sample Project のコピー");
+    // The whole subtree comes along, with fresh ids at every level.
+    const [pastedParent] = backend.childrenOf(pastedRoot);
+    expect(backend.node(pastedParent).name).toBe("Parent Task");
+    expect(pastedParent).not.toBe("task-1");
+    const [pastedNested] = backend.childrenOf(pastedParent);
+    expect(backend.node(pastedNested).name).toBe("Nested Task");
+    expect(pastedNested).not.toBe("task-1-1");
   });
 
   test("positions resizers after the selection checkbox column", async () => {
@@ -486,14 +382,15 @@ describe("TreeTable", () => {
       return originalGetBoundingClientRect.call(this);
     };
 
-    const { container } = render(TreeTable);
+    const { container } = await renderTree();
     await tick();
 
     const firstResizer = container.querySelector(".Resizer");
-    const nameRatio = 10;
-    // fixture の headers（name 10 / status 4 / due date 4 / memo 2 / attachments 2）
-    // に、BUILT_IN_HEADERS から補われる start date (2.5) を足した合計。
-    const ratioSum = 10 + 4 + 2.5 + 4 + 2 + 2;
+    const nameRatio = 16;
+    // グラフの射影は headers を持たないので BUILT_IN_HEADERS が使われる。
+    // 列の設定で見えているもの（name 16 / status 3 / start 2.5 / due 2.5 /
+    // attachments 1.2）の合計。
+    const ratioSum = 16 + 3 + 2.5 + 2.5 + 1.2;
     const checkboxWidth = 28;
     const expectedNameWidth = ((1000 - checkboxWidth) * nameRatio) / ratioSum;
 
@@ -520,7 +417,7 @@ describe("TreeTable", () => {
     const rowOf = (id) => screen.getByTestId(`row-${id}`);
 
     test("moves down and up through the visible rows", async () => {
-      render(TreeTable);
+      await renderTree();
       await tick();
 
       await fireEvent.keyDown(rowOf("project-1"), { key: "ArrowDown" });
@@ -537,7 +434,7 @@ describe("TreeTable", () => {
     });
 
     test("jumps to the first and last visible row with Home and End", async () => {
-      render(TreeTable);
+      await renderTree();
       await tick();
 
       await fireEvent.keyDown(rowOf("project-1"), { key: "End" });
@@ -550,12 +447,12 @@ describe("TreeTable", () => {
     });
 
     test("ArrowLeft collapses an expanded row, then moves to the parent", async () => {
-      render(TreeTable);
+      await renderTree();
       await tick();
 
       await fireEvent.keyDown(rowOf("task-1"), { key: "ArrowLeft" });
       await tick();
-      expect(get(closed_row_paths).has("project-1/task-1")).toBe(true);
+      expect(get(app.closed).has("project-1/task-1")).toBe(true);
       // 閉じただけで、まだ移動はしない。
       expect(get(table_selected_id)).toBeUndefined();
 
@@ -565,13 +462,13 @@ describe("TreeTable", () => {
     });
 
     test("ArrowRight expands a collapsed row, then steps into the first child", async () => {
-      closed_row_paths.set(new Set(["project-1/task-1"]));
-      render(TreeTable);
+      await renderTree();
+      app.closed.add("project-1/task-1");
       await tick();
 
       await fireEvent.keyDown(rowOf("task-1"), { key: "ArrowRight" });
       await tick();
-      expect(get(closed_row_paths).has("project-1/task-1")).toBe(false);
+      expect(get(app.closed).has("project-1/task-1")).toBe(false);
 
       await fireEvent.keyDown(rowOf("task-1"), { key: "ArrowRight" });
       await tick();
@@ -579,7 +476,7 @@ describe("TreeTable", () => {
     });
 
     test("Shift+ArrowDown extends the selection instead of replacing it", async () => {
-      render(TreeTable);
+      await renderTree();
       await tick();
 
       await fireEvent.keyDown(rowOf("project-1"), { key: "ArrowDown" });
@@ -591,7 +488,7 @@ describe("TreeTable", () => {
     });
 
     test("keeps exactly one row in the tab order", async () => {
-      render(TreeTable);
+      await renderTree();
       await tick();
 
       const tabStops = () =>
@@ -631,14 +528,11 @@ describe("TreeTable", () => {
       ];
       restoreLayout = () => restores.forEach((restore) => restore());
 
-      const projectData = createProjectData();
-      projectData.data.children = Array.from({ length: 500 }, (_, index) => ({
+      project.data.children = Array.from({ length: 500 }, (_, index) => ({
         id: `bulk-${index}`,
         data: { name: `Bulk ${index}`, status: "Open", memo: [], attachments: [] },
         children: [],
       }));
-      tree_data.set(projectData);
-      filtered_data.set(projectData.data);
     });
 
     afterEach(() => restoreLayout());
@@ -647,7 +541,7 @@ describe("TreeTable", () => {
       container.querySelectorAll('[role="row"][data-row-path]').length;
 
     test("renders only the rows around the viewport, but counts every row", async () => {
-      const { container } = render(TreeTable);
+      const { container } = await renderTree();
       await tick();
       await tick();
 
@@ -660,7 +554,7 @@ describe("TreeTable", () => {
     });
 
     test("marks the page-search count as partial only when matches are left unrendered", async () => {
-      render(TreeTable);
+      await renderTree();
       await tick();
 
       pageSearchQuery.set("Bulk");
@@ -675,7 +569,7 @@ describe("TreeTable", () => {
     });
 
     test("End moves to the last row even though it was not rendered", async () => {
-      const { container } = render(TreeTable);
+      const { container } = await renderTree();
       await tick();
       await tick();
       expect(container.querySelector('[data-node-id="bulk-499"]')).toBeNull();

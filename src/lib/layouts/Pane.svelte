@@ -1,9 +1,16 @@
-﻿<script>
-  export let style = "";
+<script>
+  /**
+   * @typedef {Object} Props
+   * @property {string} [style]
+   * @property {import('svelte').Snippet} [children]
+   */
+
+  /** @type {Props} */
+  let { style = "", children } = $props();
 </script>
 
 <div class:Pane={true} {style}>
-  <slot />
+  {@render children?.()}
 </div>
 
 <style>
@@ -20,7 +27,7 @@
     padding: 0;
   }
 
-  .Pane:has(> :global(.Card)) {
+  .Pane:has(:global(> :global(.Card))) {
     align-items: stretch;
     justify-content: stretch;
     overflow: hidden;

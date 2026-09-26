@@ -93,6 +93,14 @@ E2E では Electron を xvfb 上で起動します。失敗時は `playwright-re
 
 release job は tag から version を取り出し、build 時に `package.json` の version をその tag に合わせます。その後 `npm run dist` を実行し、生成された `.tar.gz` と `.exe` を GitHub Release に添付します。
 
+配布設定（`package.json` の `build`）の要点:
+
+- `appId` は `io.github.copper-mijinko.task-manage`。Windows の AppUserModelID になる
+- `nsis.guid` は旧 `appId`（`testId`）から electron-builder が導いていた値に固定している。これを変えると、既存のインストールが上書き更新されず別のアプリとして並ぶ
+- `asar: true`。アプリの設定は利用者データ領域に書くので、アプリ本体の中へは書き込まない（[data.md](data.md) § 1）
+- ポータブル版の tar.gz を作るとき、release job は `win-unpacked` に空の `data` フォルダを足してから固める。実行ファイルの隣に `data` があるとポータブル版として動き、設定を `%APPDATA%` ではなくそこへ置く。インストーラー（`.exe`）は `data` を足す前に作られるので、インストーラー版は `%APPDATA%` を使う
+- main プロセスが実行時に読むのは `electron-log` と `marked` だけなので、`dependencies` はこの 2 つに限る。renderer の依存は Vite がまとめるので `devDependencies` に置く（`dependencies` に置くと配布物へ丸ごと入る）
+
 ## リリース用 GitHub App
 
 `main` は Pull Request 必須のため、通常の `GITHUB_TOKEN` では `git push origin HEAD:main` が拒否されます。

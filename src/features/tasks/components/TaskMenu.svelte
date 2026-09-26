@@ -1,20 +1,37 @@
-﻿<script>
+<script>
   import { viewportPopover } from "@lib/actions/viewport_popover";
-  import { createEventDispatcher, onDestroy } from "svelte";
+  import { onDestroy } from "svelte";
 
-  export let menuItems = [];
-  export let position = { x: 0, y: 0, position: "right" };
-  export let show = false;
-  export let taskText = "";
+  /**
+   * @typedef {Object} Props
+   * @property {any} [menuItems]
+   * @property {any} [position]
+   * @property {boolean} [show]
+   * @property {string} [taskText]
+   * @property {(item: any) => void} [onaction] - 選んだ項目（`action` とメニュー項目の中身、`text`）を受け取る
+   * @property {(detail?: any) => void} [onclose]
+   */
 
-  const dispatch = createEventDispatcher();
-  let menuElement;
+  /** @type {Props} */
+  let {
+    menuItems = [],
+    position = { x: 0, y: 0, position: "right" },
+    show = false,
+    taskText = "",
+    onaction,
+    onclose,
+  } = $props();
+
+  let menuElement = $state();
   let listenersAttached = false;
   let focusOrigin;
 
-  $: menuSideClass = position.position === "left" ? "menu-position-left" : "menu-position-right";
-  $: submenuSideClass =
-    position.position === "left" ? "submenu-position-left" : "submenu-position-right";
+  let menuSideClass = $derived(
+    position.position === "left" ? "menu-position-left" : "menu-position-right"
+  );
+  let submenuSideClass = $derived(
+    position.position === "left" ? "submenu-position-left" : "submenu-position-right"
+  );
 
   function handleOutsideEvent(event) {
     if (!show) return;
@@ -26,7 +43,7 @@
     if (target instanceof Element && target.closest("[data-task-menu-trigger]")) {
       return;
     }
-    dispatch("close");
+    onclose?.();
   }
 
   function handleKeydown(event) {
@@ -55,12 +72,12 @@
     if (event.key !== "Escape") return;
     event.preventDefault();
     event.stopPropagation();
-    dispatch("close");
+    onclose?.();
     focusOrigin?.focus();
   }
 
   function handleModalOpen() {
-    if (show) dispatch("close");
+    if (show) onclose?.();
   }
 
   function attachListeners() {
@@ -90,11 +107,13 @@
     listenersAttached = false;
   }
 
-  $: if (show) {
-    attachListeners();
-  } else {
-    detachListeners();
-  }
+  $effect.pre(() => {
+    if (show) {
+      attachListeners();
+    } else {
+      detachListeners();
+    }
+  });
 
   onDestroy(() => {
     detachListeners();
@@ -108,11 +127,11 @@
       return;
     }
 
-    dispatch(item.action, {
+    onaction?.({
       ...item,
       text: taskText,
     });
-    dispatch("close");
+    onclose?.();
   }
 
   function portal(node) {
@@ -157,7 +176,7 @@
               role={item.checked === undefined ? "menuitem" : "menuitemcheckbox"}
               aria-checked={item.checked === undefined ? undefined : item.checked}
               aria-disabled={item.disabled ? "true" : undefined}
-              on:click={(event) => triggerAction(item, event)}
+              onclick={(event) => triggerAction(item, event)}
             >
               <span class="menu-item-content">
                 {#if item.checked !== undefined}
@@ -190,7 +209,7 @@
                         class="task-menu-item"
                         role={child.checked === undefined ? "menuitem" : "menuitemcheckbox"}
                         aria-checked={child.checked === undefined ? undefined : child.checked}
-                        on:click={(event) => triggerAction(child, event)}
+                        onclick={(event) => triggerAction(child, event)}
                       >
                         <span class="menu-item-content">
                           {#if child.icon}

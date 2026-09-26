@@ -138,10 +138,8 @@ out
 dist/
 renderer/
 public/build/
-electron/db.json
 electron/meta.json
 electron/window-state.json
-electron/workspace-state/
 image.png
 # Local-only notes
 開発メモ.md

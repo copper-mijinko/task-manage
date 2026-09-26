@@ -2,13 +2,28 @@
   import Card from "@lib/primitives/Card.svelte";
   import { modalLayer } from "@lib/actions/modal_layer";
 
-  export let show = true;
-  export let toggle;
-  export let width = "90%";
-  export let height = "90%";
-  export let label = undefined;
-  export let labelledBy = undefined;
-  let layer;
+  /**
+   * @typedef {Object} Props
+   * @property {boolean} [show]
+   * @property {any} toggle
+   * @property {string} [width]
+   * @property {string} [height]
+   * @property {any} [label]
+   * @property {any} [labelledBy]
+   * @property {import('svelte').Snippet} [children]
+   */
+
+  /** @type {Props} */
+  let {
+    show = true,
+    toggle,
+    width = "90%",
+    height = "90%",
+    label = undefined,
+    labelledBy = undefined,
+    children,
+  } = $props();
+  let layer = $state();
 
   function handleKeydown(event) {
     if (show && !layer?.hasAttribute("inert") && event.key === "Escape") {
@@ -19,7 +34,7 @@
   }
 </script>
 
-<svelte:window on:keydown|capture={handleKeydown} />
+<svelte:window onkeydowncapture={handleKeydown} />
 
 {#if show}
   <div class="ModalLayer" bind:this={layer} use:modalLayer data-page-search-skip>
@@ -28,7 +43,7 @@
       class="Mask"
       aria-label="ダイアログを閉じる"
       tabindex="-1"
-      on:click={toggle}
+      onclick={toggle}
     ></button>
     <div
       class="Modal"
@@ -40,11 +55,11 @@
       tabindex="-1"
     >
       <Card style="width: 100%; height:100%;">
-        <slot>
+        {#if children}{@render children()}{:else}
           <h1 style="color:var(--theme-color-Sub-main); display:flex; justify-content:center">
             This is default modal.
           </h1>
-        </slot>
+        {/if}
       </Card>
     </div>
   </div>

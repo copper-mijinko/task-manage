@@ -4,7 +4,7 @@ const path = require("path");
 /**
  * メインウィンドウの大きさ・位置・最大化状態を保存し、次回起動時に復元する。
  *
- * 保存先は `db.json` / `meta.json` とは別の小さな専用ファイル。起動時は
+ * 保存先は `meta.json` とは別の小さな専用ファイル。起動時は
  * BrowserWindow を作る前に読む必要があり、そこで meta.json 全体を読むと
  * 起動時間の設計（ウィンドウを先に出す）を崩すため、最小限のファイルを
  * 同期で読む。
@@ -24,11 +24,24 @@ function isFiniteNumber(value) {
 }
 
 /**
+ * @typedef {Object} WindowBounds
+ * @property {number} width
+ * @property {number} height
+ * @property {number} [x]
+ * @property {number} [y]
+ * @property {boolean} isMaximized
+ */
+
+/** @typedef {WindowBounds & { minWidth: number, minHeight: number }} WindowState */
+
+/**
  * 保存済みの状態を、現在のディスプレイ構成に対して安全な値へ丸める。
  *
  * - サイズは最小サイズと作業領域の大きさでクランプする
  * - 位置は、いずれかのディスプレイと十分に重なっている場合だけ採用する
  *   （外部ディスプレイを外した後に画面外へ復元されるのを防ぐ）
+ *
+ * @returns {WindowBounds}
  */
 function sanitizeWindowState(saved, displays, defaults = DEFAULT_STATE) {
   const minWidth = defaults.minWidth ?? DEFAULT_STATE.minWidth;
@@ -120,6 +133,8 @@ function writeWindowStateFile(filePath, state) {
 /**
  * 起動時に使う BrowserWindow の初期オプションを返す。
  * 最大化状態は BrowserWindow 生成後に `applyMaximized` で適用する。
+ *
+ * @returns {WindowState}
  */
 function loadWindowState(filePath, displays, defaults = DEFAULT_STATE) {
   const merged = { ...DEFAULT_STATE, ...defaults };

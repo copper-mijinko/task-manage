@@ -1,4 +1,4 @@
-﻿import { fireEvent, render, screen } from "@testing-library/svelte";
+import { fireEvent, screen } from "@testing-library/svelte";
 import { get } from "svelte/store";
 import { tick } from "svelte";
 import { vi } from "vitest";
@@ -24,42 +24,19 @@ vi.mock("@features/gantt/components/GanttPanel.svelte", async () => {
 });
 
 import ProjectPage from "@pages/MainPage.svelte";
-import { TREEGRID_APPLICATION } from "@features/workspace/application/treegrid";
-import {
-  closed_row_paths,
-  ganttVisible,
-  selected_id,
-  table_selected_id,
-  tree_data,
-  ui_density,
-} from "@stores";
-import { clearSelection, selected_ids } from "@stores/ui";
+import { active_row_path, ganttVisible, table_selected_id, ui_density } from "@stores";
+import { clearSelection, selectOnly, selected_ids } from "@stores/ui";
+import { renderWithGraph, settle } from "../helpers/render_with_graph.js";
 
 function createProjectData() {
   return {
-    headers: [
-      { name: "name", default_ratio: 10 },
-      { name: "status", default_ratio: 4 },
-      { name: "due date", default_ratio: 4 },
-      { name: "memo", default_ratio: 2 },
-    ],
     data: {
       id: "project-1",
-      data: {
-        name: "Sample Project",
-        status: "Open",
-        "due date": undefined,
-        memo: [],
-      },
+      data: { name: "Sample Project", status: "Open" },
       children: [
         {
           id: "task-1",
-          data: {
-            name: "First Task",
-            status: "Open",
-            "due date": undefined,
-            memo: [],
-          },
+          data: { name: "First Task", status: "Open" },
           children: [],
         },
       ],
@@ -67,175 +44,121 @@ function createProjectData() {
   };
 }
 
+let project;
+let backend;
+let app;
+async function renderPage(tree = project) {
+  const result = await renderWithGraph(ProjectPage, { tree });
+  backend = result.backend;
+  app = result.application;
+  return result;
+}
+
+/** 行を選んだのと同じ状態にする（選択と、操作中の行の経路）。 */
+function selectRow(id, path) {
+  selectOnly(id);
+  active_row_path.set(path);
+}
+
 describe("ProjectPage", () => {
-  test.each([true, false, "reject"])(
-    "workspace bulk conversion deduplicates nodes and reports dispatch result %s",
-    async (result) => {
-      const data = createProjectData();
-      data.data.children[0].data.body = { ops: [{ insert: "launch\n" }] };
-      data.data.children[0].data.format = "quill";
-      data.data.children.push(structuredClone(data.data.children[0]));
-      tree_data.set(data);
-      const dispatch =
-        result === "reject"
-          ? vi.fn().mockRejectedValue(new Error("Write failed"))
-          : vi.fn().mockResolvedValue(result);
-      render(ProjectPage, {
-        context: new Map([
-          [
-            TREEGRID_APPLICATION,
-            { tree: tree_data, closed: closed_row_paths, dispatch, isProtected: () => false },
-          ],
-        ]),
-      });
-      await fireEvent.click(screen.getByRole("button", { name: "表示と操作" }));
-      await fireEvent.click(screen.getByRole("menuitem", { name: "全メモをMarkdownへ変換" }));
-      expect(screen.getByText("変換対象（1件）")).toBeInTheDocument();
-      await fireEvent.click(screen.getByRole("button", { name: "変換", exact: true }));
-      await tick();
-      expect(dispatch).toHaveBeenCalledTimes(1);
-      expect(dispatch.mock.calls[0][0]).toHaveLength(1);
-      expect(
-        screen.getByText(result === true ? /OK: First Task/ : /Error: First Task/)
-      ).toBeInTheDocument();
-      if (result === "reject") expect(screen.getByText(/Write failed/)).toBeInTheDocument();
-    }
-  );
   beforeEach(() => {
-    vi.useFakeTimers();
-    Object.defineProperty(window, "electronAPI", {
-      configurable: true,
-      value: {
-        setMetaData: vi.fn(),
-      },
-    });
-    tree_data.set(createProjectData());
-    selected_id.set("project-1");
+    project = createProjectData();
     clearSelection();
-    table_selected_id.set("task-1");
-    closed_row_paths.set(new Set());
+    table_selected_id.set(undefined);
+    active_row_path.set(undefined);
     ganttVisible.set(false);
     ui_density.set("comfortable");
   });
 
-  afterEach(() => {
-    vi.runOnlyPendingTimers();
-    vi.useRealTimers();
-  });
-
-  test("adds a sibling task and selects it", async () => {
-    const { container } = render(ProjectPage);
+  test("adds a sibling node and selects it", async () => {
+    selectRow("task-1", "project-1/task-1");
+    const { container } = await renderPage();
     const buttons = container.querySelectorAll(".TbGroup button");
 
     await fireEvent.click(buttons[0]);
-    await vi.runAllTimersAsync();
-    await tick();
+    await settle();
 
-    expect(get(tree_data).data.children).toHaveLength(2);
-    expect(get(tree_data).data.children[1].data.name).toBe("new_task");
-    expect(get(table_selected_id)).toBe(get(tree_data).data.children[1].id);
-    expect(get(selected_ids)).toEqual(new Set([get(tree_data).data.children[1].id]));
+    const children = backend.childrenOf("project-1");
+    expect(children).toHaveLength(2);
+    expect(backend.node(children[1]).name).toBe("新しいノード");
+    expect(get(table_selected_id)).toBe(children[1]);
+    expect(get(selected_ids)).toEqual(new Set([children[1]]));
   });
 
-  test("adds the first task under the project root when nothing is selected", async () => {
-    const data = createProjectData();
-    data.data.children = [];
-    tree_data.set(data);
-    table_selected_id.set(undefined);
-
-    const { container } = render(ProjectPage);
+  test("adds the first node under the project root when nothing is selected", async () => {
+    project.data.children = [];
+    const { container } = await renderPage();
+    clearSelection();
+    await tick();
     const buttons = container.querySelectorAll(".TbGroup button");
 
     await fireEvent.click(buttons[0]);
-    await vi.runAllTimersAsync();
-    await tick();
+    await settle();
 
-    expect(get(tree_data).data.children).toHaveLength(1);
-    expect(get(tree_data).data.children[0].data.name).toBe("new_task");
-    expect(get(table_selected_id)).toBe(get(tree_data).data.children[0].id);
+    const children = backend.childrenOf("project-1");
+    expect(children).toHaveLength(1);
+    expect(get(table_selected_id)).toBe(children[0]);
   });
 
-  test("adds a top-level task from the primary add button when the root is selected", async () => {
-    const data = createProjectData();
-    data.data.children = [];
-    tree_data.set(data);
-    table_selected_id.set("project-1");
-
-    const { container } = render(ProjectPage);
+  test("adds a top-level node from the primary add button when the root is selected", async () => {
+    project.data.children = [];
+    const { container } = await renderPage();
+    selectRow("project-1", "project-1");
+    await tick();
     const buttons = container.querySelectorAll(".TbGroup button");
 
     await fireEvent.click(buttons[0]);
-    await vi.runAllTimersAsync();
-    await tick();
+    await settle();
 
-    expect(get(tree_data).data.children).toHaveLength(1);
-    expect(get(tree_data).data.children[0].data.name).toBe("new_task");
-    expect(get(table_selected_id)).toBe(get(tree_data).data.children[0].id);
+    const children = backend.childrenOf("project-1");
+    expect(children).toHaveLength(1);
+    expect(get(table_selected_id)).toBe(children[0]);
     expect(document.body.textContent).not.toMatch(/Cannot insert a sibling/);
   });
 
-  test("adds a task under the project root via 子ノード追加 when the root is selected", async () => {
-    const data = createProjectData();
-    data.data.children = [];
-    tree_data.set(data);
-    table_selected_id.set("project-1");
-
-    const { container } = render(ProjectPage);
-    const buttons = container.querySelectorAll(".TbGroup button");
-
-    // buttons[1] is "子ノード追加" (append as child) which is the correct
-    // way to add a child task to the root.
-    await fireEvent.click(buttons[1]);
-    await vi.runAllTimersAsync();
+  test("adds a child node and expands the parent when it was collapsed", async () => {
+    selectRow("task-1", "project-1/task-1");
+    const { container } = await renderPage();
+    app.closed.add("project-1/task-1");
     await tick();
-
-    expect(get(tree_data).data.children).toHaveLength(1);
-    expect(get(tree_data).data.children[0].data.name).toBe("new_task");
-    expect(get(table_selected_id)).toBe(get(tree_data).data.children[0].id);
-  });
-
-  test("adds a child task and expands the parent when it was collapsed", async () => {
-    closed_row_paths.set(new Set(["task-1"]));
-
-    const { container } = render(ProjectPage);
     const buttons = container.querySelectorAll(".TbGroup button");
 
     await fireEvent.click(buttons[1]);
-    await vi.runAllTimersAsync();
-    await tick();
+    await settle();
 
-    expect(get(tree_data).data.children[0].children).toHaveLength(1);
-    expect(get(tree_data).data.children[0].children[0].data.name).toBe("new_task");
-    expect(get(closed_row_paths).has("task-1")).toBe(false);
-    expect(get(table_selected_id)).toBe(get(tree_data).data.children[0].children[0].id);
+    const children = backend.childrenOf("task-1");
+    expect(children).toHaveLength(1);
+    expect(backend.node(children[0]).name).toBe("新しいノード");
+    expect(get(app.closed).has("project-1/task-1")).toBe(false);
+    expect(get(table_selected_id)).toBe(children[0]);
   });
 
-  test("disables archive when the project root is selected", () => {
-    table_selected_id.set("project-1");
-    render(ProjectPage);
+  test("disables archive when the project root is selected", async () => {
+    await renderPage();
+    selectRow("project-1", "project-1");
+    await tick();
 
     // aria-label は「なぜ押せないか」ではなくボタンの名前を持つ。
     // 押せない理由は tooltip 側に出す。
     expect(screen.getByRole("button", { name: "アーカイブ" })).toBeDisabled();
-    expect(get(tree_data).data.children).toHaveLength(1);
   });
 
-  test("disables tree operations that cannot change the selected task", async () => {
-    const data = createProjectData();
-    data.data.children.push({
+  test("disables tree operations that cannot change the selected node", async () => {
+    project.data.children.push({
       id: "task-2",
-      data: { name: "Last Task", status: "Open", "due date": undefined, memo: [] },
+      data: { name: "Last Task", status: "Open" },
       children: [],
     });
-    tree_data.set(data);
-    render(ProjectPage);
+    await renderPage();
+    selectRow("task-1", "project-1/task-1");
+    await tick();
 
     expect(screen.getByRole("button", { name: "上に移動" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "下に移動" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "インデント" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "アウトデント" })).toBeDisabled();
 
-    table_selected_id.set("task-2");
+    selectRow("task-2", "project-1/task-2");
     await tick();
 
     expect(screen.getByRole("button", { name: "上に移動" })).toBeEnabled();
@@ -244,31 +167,31 @@ describe("ProjectPage", () => {
   });
 
   test("keeps common tree operations visible and usable in compact mode", async () => {
-    const data = createProjectData();
-    data.data.children.push({
+    project.data.children.push({
       id: "task-2",
-      data: { name: "Last Task", status: "Open", "due date": undefined, memo: [] },
+      data: { name: "Last Task", status: "Open" },
       children: [],
     });
-    tree_data.set(data);
     ui_density.set("compact");
-    render(ProjectPage);
+    await renderPage();
+    selectRow("task-1", "project-1/task-1");
+    await tick();
 
     expect(screen.getByRole("button", { name: "上に移動" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "下に移動" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "インデント" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "アウトデント" })).toBeDisabled();
 
     await fireEvent.click(screen.getByRole("button", { name: "下に移動" }));
-    await tick();
+    await settle();
 
-    expect(get(tree_data).data.children.map((task) => task.id)).toEqual(["task-2", "task-1"]);
+    expect(backend.childrenOf("project-1")).toEqual(["task-2", "task-1"]);
     expect(screen.getByRole("button", { name: "上に移動" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "下に移動" })).toBeDisabled();
   });
 
-  test("archives the selected task after confirmation (delete button = archive)", async () => {
-    const { container } = render(ProjectPage);
+  test("archives the selected node after confirmation (delete button = archive)", async () => {
+    const { container } = await renderPage();
+    selectRow("task-1", "project-1/task-1");
+    await tick();
     const buttons = container.querySelectorAll(".TbGroup button");
 
     await fireEvent.click(buttons[2]);
@@ -277,16 +200,15 @@ describe("ProjectPage", () => {
     ).toBeInTheDocument();
 
     await fireEvent.click(screen.getByRole("button", { name: "アーカイブする" }));
-    await tick();
+    await settle();
 
     // ノードは物理削除されず archived フラグだけが立つ（論理削除）。
-    expect(get(tree_data).data.children).toHaveLength(1);
-    expect(get(tree_data).data.children[0].archived).toBe(true);
+    expect(backend.node("task-1").archived).toBe(true);
     expect(get(table_selected_id)).toBeUndefined();
   });
 
   test("toggles the right detail pane", async () => {
-    render(ProjectPage);
+    await renderPage();
 
     expect(screen.getByTestId("task-detail-stub")).toBeInTheDocument();
 
@@ -301,15 +223,17 @@ describe("ProjectPage", () => {
     expect(screen.getByTestId("task-detail-stub")).toBeInTheDocument();
   });
 
-  // 一括変換の対象は「本文を持つノード」。メモがノードになったので、
-  // 一覧はメモ名ではなくノード名で並ぶ。
+  // 一括変換の対象は「本文を持つノード」。多親ノードは 1 回だけ数える。
   test("プロジェクト全体の本文を、確認のあと Markdown へ一括変換する", async () => {
-    const data = createProjectData();
-    data.data.children[0].data.body = { ops: [{ insert: "launch\n" }] };
-    data.data.children[0].data.format = "quill";
-    tree_data.set(data);
+    project.data.children[0].data.body = { ops: [{ insert: "launch\n" }] };
+    project.data.children[0].data.format = "quill";
+    project.data.children.push({
+      id: "task-2",
+      data: { name: "Other", status: "Open" },
+      children: [project.data.children[0]],
+    });
 
-    render(ProjectPage);
+    await renderPage();
 
     await fireEvent.click(screen.getByRole("button", { name: "表示と操作" }));
     await fireEvent.click(screen.getByRole("menuitem", { name: "全メモをMarkdownへ変換" }));
@@ -317,21 +241,35 @@ describe("ProjectPage", () => {
     expect(screen.getByText("First Task")).toBeInTheDocument();
     expect(screen.getByText(/情報が損なわれる可能性/)).toBeInTheDocument();
 
-    await fireEvent.click(screen.getByRole("button", { name: "変換" }));
-    await tick();
+    await fireEvent.click(screen.getByRole("button", { name: "変換", exact: true }));
+    await settle();
 
-    const node = get(tree_data).data.children[0].data;
-    expect(node.format).toBe("markdown");
-    expect(node.body).toBe("launch");
+    expect(backend.node("task-1").format).toBe("markdown");
+    expect(backend.node("task-1").body).toBe("launch");
     expect(screen.getByText("変換済み（1件）")).toBeInTheDocument();
     expect(screen.getByText(/OK: First Task/)).toBeInTheDocument();
     expect(screen.getByText("変換が完了しました。")).toBeInTheDocument();
   });
 
+  test("reports a failed bulk conversion", async () => {
+    project.data.children[0].data.body = { ops: [{ insert: "launch\n" }] };
+    project.data.children[0].data.format = "quill";
+    await renderPage();
+    backend.api.wsExecuteGraphCommand.mockRejectedValueOnce(new Error("Write failed"));
+
+    await fireEvent.click(screen.getByRole("button", { name: "表示と操作" }));
+    await fireEvent.click(screen.getByRole("menuitem", { name: "全メモをMarkdownへ変換" }));
+    await fireEvent.click(screen.getByRole("button", { name: "変換", exact: true }));
+    await settle();
+
+    expect(screen.getByText(/Error: First Task/)).toBeInTheDocument();
+    expect(backend.node("task-1").format).toBe("quill");
+  });
+
   test("closes the right detail pane while the gantt panel remains visible", async () => {
     ganttVisible.set(true);
 
-    render(ProjectPage);
+    await renderPage();
 
     expect(screen.getByTestId("gantt-panel-stub")).toBeInTheDocument();
 

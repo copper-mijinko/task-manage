@@ -1,4 +1,4 @@
-﻿import { render, screen } from "@testing-library/svelte";
+import { render, screen } from "@testing-library/svelte";
 import { tick } from "svelte";
 import { waitFor } from "@testing-library/svelte";
 import { vi } from "vitest";
@@ -19,22 +19,13 @@ vi.mock("@features/search/components/PageSearchBox.svelte", async () => {
   const mod = await import("../mocks/PassThroughStub.svelte");
   return { default: mod.default };
 });
-vi.mock("@pages/TaskDetailPage.svelte", async () => {
-  const mod = await import("../mocks/TaskDetailStub.svelte");
-  return { default: mod.default };
-});
 
 import App from "../../src/App.svelte";
-import { get } from "svelte/store";
-import { projectLoading, selected_id, selected_type, tree_data, workspace_store } from "@stores";
+
+import { selected_id, selected_type, workspace_store } from "@stores";
 
 function makeElectronAPI() {
   return {
-    getInitialTreeData: vi.fn().mockResolvedValue(undefined),
-    getProjectIDs: vi.fn().mockResolvedValue([]),
-    wsReadProject: vi.fn().mockResolvedValue(undefined),
-    onProjectDeleted: vi.fn(),
-    onTreeDataUpdated: vi.fn(),
     onThemeChanged: vi.fn(),
     onSaveError: vi.fn(),
     getMetaData: vi.fn().mockResolvedValue(null),
@@ -47,13 +38,9 @@ describe("App - workspace project rendering", () => {
   afterEach(() => {
     selected_type.set(undefined);
     selected_id.set(undefined);
-    projectLoading.set(false);
-    tree_data.resetForLoad();
     workspace_store.set({
       workspaces: [],
       activeWorkspacePath: null,
-      activeProjectDir: null,
-      projects: [],
     });
     delete window.electronAPI;
   });
@@ -76,68 +63,5 @@ describe("App - workspace project rendering", () => {
       expect(screen.getByTestId("node-workspace-stub")).toBeInTheDocument();
       expect(screen.queryByTestId("tree-table-stub")).toBeNull();
     });
-  });
-
-  test("does not run the legacy loader or clear graph selection on Workspace navigation", async () => {
-    let resolveReadProject;
-    const readProject = new Promise((resolve) => {
-      resolveReadProject = resolve;
-    });
-    const api = {
-      ...makeElectronAPI(),
-      wsReadProject: vi.fn().mockReturnValue(readProject),
-    };
-    Object.defineProperty(window, "electronAPI", {
-      configurable: true,
-      value: api,
-    });
-
-    render(App);
-    await tick();
-    await tick();
-
-    workspace_store.set({
-      workspaces: [],
-      activeWorkspacePath: "C:/workspace",
-      activeProjectDir: "C:/workspace/beta",
-      projects: [
-        {
-          name: "Beta",
-          rootId: "root-beta",
-          dirName: "beta",
-          projectDir: "C:/workspace/beta",
-          order: 0,
-        },
-      ],
-    });
-    selected_type.set("WorkspaceProject");
-    selected_id.set("root-beta");
-    await tick();
-    await tick();
-
-    expect(get(projectLoading)).toBe(false);
-    await waitFor(() => expect(screen.getByTestId("node-workspace-stub")).toBeInTheDocument());
-    expect(screen.queryByTestId("tree-table-stub")).toBeNull();
-
-    resolveReadProject({
-      tasks: {
-        "root-beta": {
-          id: "root-beta",
-          name: "Beta",
-          status: "Open",
-          parents: [],
-          createdAt: "2026-01-01",
-        },
-      },
-    });
-    await readProject;
-    await tick();
-    await tick();
-
-    expect(get(projectLoading)).toBe(false);
-    await waitFor(() => {
-      expect(screen.getByTestId("node-workspace-stub")).toBeInTheDocument();
-    });
-    expect(api.wsReadProject).not.toHaveBeenCalled();
   });
 });

@@ -1,15 +1,27 @@
-﻿<script>
+<script>
   import { getNode } from "@features/tasks/utils/tree_control";
-  import { selected_id, tree_data as legacyTree } from "@stores";
+  import { selected_id, active_row_path } from "@stores";
   import { getContext } from "svelte";
-  const tree_data = getContext("task-manage:treegrid-application")?.tree ?? legacyTree;
+  import { TREEGRID_APPLICATION } from "@features/workspace/application/treegrid";
+  const tree_data = getContext(TREEGRID_APPLICATION).tree;
   import Loading from "@lib/primitives/Loading.svelte";
   import TaskDetail from "@features/tasks/components/TaskDetail.svelte";
 
-  export let initialTaskName = "Task Detail";
-  export let initialTaskId = "";
-  export let initialProjectId = "";
-  export let ready = false;
+  /**
+   * @typedef {Object} Props
+   * @property {string} [initialTaskName]
+   * @property {string} [initialTaskId]
+   * @property {string} [initialProjectId]
+   * @property {boolean} [ready]
+   */
+
+  /** @type {Props} */
+  let {
+    initialTaskName = "Task Detail",
+    initialTaskId = "",
+    initialProjectId = "",
+    ready = false,
+  } = $props();
 
   function getNodePathName(targetId, root) {
     const names = [];
@@ -29,21 +41,51 @@
     return root && visit(root) ? names.filter(Boolean).join(" / ") : "";
   }
 
-  $: node = initialTaskId && $tree_data ? getNode(initialTaskId, $tree_data.data) : undefined;
-  $: taskPathName =
-    initialTaskId && $tree_data ? getNodePathName(initialTaskId, $tree_data.data) : "";
-  $: taskName = taskPathName || node?.data?.name || initialTaskName;
-  $: if (ready && taskName && typeof document !== "undefined") {
-    document.title = `${taskName} | Task Detail`;
+  let node = $derived(
+    initialTaskId && $tree_data ? getNode(initialTaskId, $tree_data.data) : undefined
+  );
+  /**
+   * 開いた行の経路（`a/b/c`）に沿った名前。複数の親の下に出るノードは、
+   * id だけで探すと最初に見つかった場所の経路になり、Home の行から開いた
+   * のに見出しが「Work / …」になっていた。経路がもう辿れないとき（移動した
+   * など）は空を返し、id で探す方に任せる。
+   */
+  function getOccurrencePathName(path, targetId, root) {
+    const segments = (path || "").split("/");
+    if (!root || segments.at(-1) !== targetId) return "";
+    let current = segments[0] === root.id ? root : getNode(segments[0], root);
+    const prefix = getNodePathName(segments[0], root);
+    if (!current || !prefix) return "";
+    const names = [prefix];
+    for (const id of segments.slice(1)) {
+      current = current.children?.find((child) => child.id === id);
+      if (!current) return "";
+      names.push(current.data?.name || "");
+    }
+    return names.filter(Boolean).join(" / ");
   }
-  $: isProjectDeleted = ready && initialProjectId && $selected_id !== initialProjectId;
-  $: isTaskDeleted =
+
+  let taskPathName = $derived(
+    initialTaskId && $tree_data
+      ? getOccurrencePathName($active_row_path, initialTaskId, $tree_data.data) ||
+          getNodePathName(initialTaskId, $tree_data.data)
+      : ""
+  );
+  let taskName = $derived(taskPathName || node?.data?.name || initialTaskName);
+  $effect.pre(() => {
+    if (ready && taskName && typeof document !== "undefined") {
+      document.title = `${taskName} | Task Detail`;
+    }
+  });
+  let isProjectDeleted = $derived(ready && initialProjectId && $selected_id !== initialProjectId);
+  let isTaskDeleted = $derived(
     ready &&
-    !isProjectDeleted &&
-    !!initialTaskId &&
-    !!$selected_id &&
-    $selected_id === initialProjectId &&
-    !node;
+      !isProjectDeleted &&
+      !!initialTaskId &&
+      !!$selected_id &&
+      $selected_id === initialProjectId &&
+      !node
+  );
 </script>
 
 <div class="detail-window">

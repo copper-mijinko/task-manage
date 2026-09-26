@@ -3,18 +3,18 @@
   import { tooltip } from "@lib/actions";
   import { filter } from "@stores";
   import { tag_index, active_tag } from "@features/memos/stores/tags";
-  let searchMode = "full_text";
+  let searchMode = $state("full_text");
   function changeMode() {
     terms = [...($filter?.[searchMode] ?? [])];
     search_text = "";
     search_box?.focus();
   }
 
-  let terms = []; // confirmed chips
-  let search_text = ""; // current in-progress typing
-  let search_box; //bind
-  let memoSearchEnabled = false;
-  let root_el; //bind
+  let terms = $state([]); // confirmed chips
+  let search_text = $state(""); // current in-progress typing
+  let search_box = $state(); //bind
+  let memoSearchEnabled = $state(false);
+  let root_el = $state(); //bind
 
   const currentFullText = () => {
     const combined = search_text !== "" ? [...terms, search_text] : [...terms];
@@ -35,7 +35,23 @@
     return result;
   };
 
+  // 入力中は打鍵ごとに絞り込まず、少し止まってから反映する。絞り込みは
+  // ツリー全体をたどるので、大きなワークスペースでは 1 文字ごとに走らせると
+  // 入力がもたつく。確定・削除はすぐ反映する。
+  // 入力欄から離れたときに前倒しで反映はしない。離れるのはたいてい別の
+  // ボタンを押したときで、その mousedown と click の間に絞り込みが変わると
+  // 絞り込みの帯が出入りして表がずれ、押したボタンに click が届かない。
+  const TYPING_DEBOUNCE_MS = 120;
+  let typingTimer;
+  const scheduleFilter = () => {
+    clearTimeout(typingTimer);
+    typingTimer = setTimeout(applyFilter, TYPING_DEBOUNCE_MS);
+  };
+  $effect(() => () => clearTimeout(typingTimer));
+
   const applyFilter = () => {
+    clearTimeout(typingTimer);
+    typingTimer = undefined;
     if (searchMode === "tags" && $active_tag) active_tag.set(null);
     $filter = {
       ...$filter,
@@ -86,7 +102,7 @@
   // ActiveFilterBar) and the box isn't focused. Treat all entries as
   // confirmed chips with no in-progress text to keep things simple and
   // avoid feedback loops with applyFilter() above.
-  $: {
+  $effect.pre(() => {
     // Compare against the RAW stored value first (not deduped): while the
     // user is actively typing, applyFilter() writes [...terms, search_text]
     // verbatim, and search_text may legitimately equal an already-confirmed
@@ -98,7 +114,9 @@
       typeof document !== "undefined" &&
       root_el &&
       (document.activeElement === search_box || root_el.contains(document.activeElement));
-    if (!isFocused) {
+    // 入力の反映待ちのあいだは、ストアが古いのは当然なので外からの変更と
+    // みなさない（みなすと入力中の文字を消してしまう）。
+    if (!isFocused && typingTimer === undefined) {
       const same =
         stored.length === terms.length + (search_text !== "" ? 1 : 0) &&
         stored.every((v, i) => v === (i < terms.length ? terms[i] : search_text));
@@ -118,9 +136,11 @@
         }
       }
     }
-  }
+  });
 
-  $: memoSearchEnabled = ($filter?.search_memo?.length ?? 0) > 0;
+  $effect.pre(() => {
+    memoSearchEnabled = ($filter?.search_memo?.length ?? 0) > 0;
+  });
 
   const params = {
     color: "var(--theme-color-Main-main)",
@@ -136,7 +156,7 @@
     class="SearchMode"
     aria-label="絞り込みの対象"
     bind:value={searchMode}
-    on:change={changeMode}
+    onchange={changeMode}
   >
     <option value="full_text">全文</option><option value="tags">タグ</option>
   </select>
@@ -148,8 +168,8 @@
   <div
     class="SearchChips"
     class:is-empty={terms.length === 0}
-    on:click={(e) => {
-      if (e.target?.closest?.("button")) return;
+    onclick={(e) => {
+      if (e.target instanceof Element && e.target.closest("button")) return;
       search_box?.focus();
     }}
   >
@@ -161,7 +181,10 @@
           class="SearchChipX"
           aria-label={`「${term}」を削除`}
           title={`「${term}」を削除`}
-          on:click|stopPropagation={() => removeChipAt(i)}
+          onclick={(event) => {
+            event.stopPropagation();
+            removeChipAt(i);
+          }}
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M7 7L17 17M17 7L7 17" />
@@ -182,13 +205,11 @@
           : "ノードを絞り込み"
         : ""}
       aria-label="ノード一覧を絞り込み"
-      on:input={() => {
-        applyFilter();
-      }}
-      on:click={(e) => {
+      oninput={scheduleFilter}
+      onclick={(e) => {
         e.stopPropagation();
       }}
-      on:keydown={(e) => {
+      onkeydown={(e) => {
         if (e.isComposing || e.keyCode === 229) return;
         if ("Enter" == e.key) {
           confirmChip();
@@ -203,7 +224,7 @@
     />
   </div>
   <IconButton
-    on:click={() => {
+    onclick={() => {
       confirmChip();
       search_box?.focus();
     }}
@@ -226,7 +247,7 @@
     >
   </IconButton>
   <IconButton
-    on:click={toggleMemoSearch}
+    onclick={toggleMemoSearch}
     ariaLabel={memoSearchEnabled ? "メモ本文を検索対象から外す" : "メモ本文も検索する"}
     ariaPressed={memoSearchEnabled ? "true" : "false"}
     variant="text"
@@ -345,7 +366,7 @@
     width: 0.525rem;
     height: 0.525rem;
     fill: none;
-    stroke: currentColor;
+    stroke: currentcolor;
     stroke-width: 2.5;
     stroke-linecap: round;
     stroke-linejoin: round;

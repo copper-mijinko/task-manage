@@ -1,57 +1,80 @@
-﻿<script>
+<script>
   import { dueDateUrgency, dueDateUrgencyLabel } from "@lib/utils/date_urgency";
   import { tick } from "svelte";
 
-  export let is_dark = false;
-  export let backgroundColor = "var(--theme-color-Main-light)";
-  export let color = "var(--theme-color-Sub-main)";
-  export let disabled = false;
-  export let value = "";
-  export let id = "";
-  export let style = "";
-  export let inheritedDate = "";
-  export let ariaLabel = "日付";
-  export let tabIndex = 0;
-  export let displayOnly = false;
-  let editing = false;
-  let input;
+  let editing = $state(false);
+  let input = $state();
   async function beginEdit() {
     if (disabled) return;
     editing = true;
     await tick();
     input?.focus();
   }
-  /**
-   * true のときだけ期限としての差し迫り具合を枠線と文字色に出す。
-   * 開始日のような「期限ではない日付」は false にする。過ぎた開始日は
-   * 進行中ノードのごく普通の状態で、警告色にすると本当の期限切れが埋もれる。
-   */
-  export let showUrgency = true;
-  /** 期限の色付けを抑えるためのノードステータス（完了 / 中止なら急かさない）。 */
-  export let status = undefined;
 
-  $: displayDate = value || inheritedDate || "";
-  $: isInherited = !value && !!inheritedDate;
-  $: urgency = showUrgency ? dueDateUrgency(displayDate, status) : "none";
-  $: borderColor =
+  /**
+   * @typedef {Object} Props
+   * @property {boolean} [is_dark]
+   * @property {string} [backgroundColor]
+   * @property {string} [color]
+   * @property {boolean} [disabled]
+   * @property {string} [value]
+   * @property {string} [id]
+   * @property {string} [style]
+   * @property {string} [inheritedDate]
+   * @property {string} [ariaLabel]
+   * @property {number} [tabIndex]
+   * @property {boolean} [displayOnly]
+   * @property {boolean} [showUrgency] - true のときだけ期限としての差し迫り具合を枠線と文字色に出す。
+開始日のような「期限ではない日付」は false にする。過ぎた開始日は
+進行中ノードのごく普通の状態で、警告色にすると本当の期限切れが埋もれる。
+   * @property {any} [status] - 期限の色付けを抑えるためのノードステータス（完了 / 中止なら急かさない）。
+   * @property {(detail?: any) => void} [onchange]
+   */
+
+  /** @type {Props} */
+  let {
+    is_dark = false,
+    backgroundColor = "var(--theme-color-Main-light)",
+    color = "var(--theme-color-Sub-main)",
+    disabled = false,
+    value = "",
+    id = "",
+    style = "",
+    inheritedDate = "",
+    ariaLabel = "日付",
+    tabIndex = 0,
+    displayOnly = false,
+    showUrgency = true,
+    status = undefined,
+    onchange,
+  } = $props();
+
+  let displayDate = $derived(value || inheritedDate || "");
+  let isInherited = $derived(!value && !!inheritedDate);
+  let urgency = $derived(showUrgency ? dueDateUrgency(displayDate, status) : "none");
+  let borderColor = $derived(
     urgency === "overdue"
       ? "var(--theme-color-Error-main)"
       : urgency === "today" || urgency === "due-soon"
         ? "var(--theme-color-Warning-main)"
-        : "var(--theme-color-Main-dark)";
+        : "var(--theme-color-Main-dark)"
+  );
   // 枠線は視認しやすい原色のまま（UI 要素は 3:1）、文字だけ AA を満たす
   // 濃さの変種にする。同じ色で両方やると 12px の日付が読めない。
-  $: textColor =
+  let textColor = $derived(
     urgency === "overdue"
       ? "var(--theme-color-Error-text)"
       : urgency === "today" || urgency === "due-soon"
         ? "var(--theme-color-Warning-text)"
-        : color;
-  $: inputTitle = isInherited
-    ? `親ノードの期限: ${inheritedDate}`
-    : showUrgency
-      ? dueDateUrgencyLabel(displayDate, status)
-      : undefined;
+        : color
+  );
+  let inputTitle = $derived(
+    isInherited
+      ? `親ノードの期限: ${inheritedDate}`
+      : showUrgency
+        ? dueDateUrgencyLabel(displayDate, status)
+        : undefined
+  );
 </script>
 
 <div
@@ -71,7 +94,10 @@
       {disabled}
       title={inputTitle}
       aria-label={ariaLabel}
-      on:click|stopPropagation={beginEdit}
+      onclick={(event) => {
+        event.stopPropagation();
+        beginEdit();
+      }}
     >
       {displayDate || "—"}{#if isInherited}<span aria-label="親から継承"> ↳</span>{/if}
     </button>
@@ -87,9 +113,9 @@
       value={displayDate}
       title={inputTitle}
       aria-label={ariaLabel}
-      on:change
-      on:blur={() => (editing = false)}
-      on:click={(e) => {
+      {onchange}
+      onblur={() => (editing = false)}
+      onclick={(e) => {
         e.stopPropagation();
       }}
     />
@@ -173,10 +199,7 @@
   .Date::-webkit-calendar-picker-indicator {
     background: transparent;
     position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    inset: 0;
     width: 100%;
     height: 100%;
     margin: 0;

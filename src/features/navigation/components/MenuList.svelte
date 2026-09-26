@@ -1,4 +1,4 @@
-<script context="module">
+<script module>
   let dragged_id; // Project ID being dragged
   let dragged_section; // Sidebar project section being dragged
 </script>
@@ -8,34 +8,12 @@
     workspaceApplication,
     workspaceNavigation,
   } from "@features/workspace/application/workspace";
-  $: workspaceProjects = $workspaceNavigation?.scopes ?? $workspace_store.projects;
-  import { onMount, afterUpdate, onDestroy } from "svelte";
+  import { onDestroy } from "svelte";
   import { slide } from "svelte/transition";
   import TaskMenu from "@features/tasks/components/TaskMenu.svelte";
-  let projectMenu = null;
-  let projectMenuPosition = { x: 0, y: 0, position: "right" };
+  let projectMenu = $state(null);
+  let projectMenuPosition = $state({ x: 0, y: 0, position: "right" });
   let projectMenuTrigger;
-  $: projectMenuItems = projectMenu
-    ? [
-        {
-          title: "上に移動",
-          action: "up",
-          disabled:
-            getProjectsForSection(projectMenu.section).findIndex(
-              (p) =>
-                getProjectId(p, projectMenu.section) ===
-                getProjectId(projectMenu.project, projectMenu.section)
-            ) <= 0,
-        },
-        {
-          title: "下に移動",
-          action: "down",
-          disabled: getProjectsForSection(projectMenu.section).at(-1) === projectMenu.project,
-        },
-        { type: "separator" },
-        { title: "プロジェクトを削除", action: "remove", disabled: projectMenu.project.protected },
-      ]
-    : [];
   function openProjectMenu(event, project, section) {
     event.stopPropagation();
     projectMenuTrigger = event.currentTarget;
@@ -49,37 +27,26 @@
   }
   function moveProjectFromMenu(delta) {
     const { project, section } = projectMenu;
-    const projects = [...getProjectsForSection(section)];
-    const index = projects.findIndex(
-      (p) => getProjectId(p, section) === getProjectId(project, section)
-    );
+    const projects = [...getProjectsForSection()];
+    const index = projects.findIndex((p) => getProjectId(p) === getProjectId(project));
     if (index < 0 || index + delta < 0 || index + delta >= projects.length) return;
     projects.splice(index, 1);
     projects.splice(index + delta, 0, project);
     saveProjectOrder(section, projects);
   }
   function deleteProjectFromMenu() {
-    const { project, section } = projectMenu;
-    if (section === "WorkspaceProject") {
-      workspace_delete_target = project;
-      show_workspace_delete = true;
-    } else {
-      project_id_confirm = project.id;
-      project_name_confirm = project.name;
-      show_confirm = true;
-    }
+    workspace_delete_target = projectMenu.project;
+    show_workspace_delete = true;
   }
   import IconButton from "@lib/primitives/IconButton.svelte";
   import Dialog from "@lib/primitives/Dialog.svelte";
   import WorkspaceSetup from "@features/workspace/components/WorkspaceSetup.svelte";
   import { ripple, tooltip } from "@lib/actions";
-  import { project_ids, selected_type, selected_id, sidebarCollapsed } from "@stores";
+  import { selected_type, selected_id, sidebarCollapsed } from "@stores";
   import { workspace_store } from "@features/workspace/stores/workspace";
   import { showWorkspaceSetup } from "@stores/ui";
-  import { getDefaultProject } from "@features/tasks/utils/tree_control";
 
   function selectWorkspaceProject(proj) {
-    if (proj.projectDir) workspace_store.setActiveProject(proj.projectDir);
     $selected_type = "WorkspaceProject";
     $selected_id = proj.rootId;
     $sidebarCollapsed = true;
@@ -101,15 +68,10 @@
     }
   }
 
-  let workspace_delete_target = null;
-  let show_workspace_delete = false;
+  let workspace_delete_target = $state(null);
+  let show_workspace_delete = $state(false);
   const toggle_workspace_delete = () => {
     show_workspace_delete = !show_workspace_delete;
-  };
-  const handleDeleteWorkspaceProject = (e, proj) => {
-    e.stopPropagation();
-    workspace_delete_target = proj;
-    show_workspace_delete = true;
   };
   const callback_workspace_delete = async () => {
     if (!workspace_delete_target) return;
@@ -121,12 +83,10 @@
     workspace_delete_target = null;
   };
 
-  let workspace_open_error = "";
-  let project_add_error = "";
-  let adding_in_app_project = false;
+  let workspace_open_error = $state("");
+  let project_add_error = $state("");
   let workspace_open_error_timer;
-  let workspaceProjectsExpanded = true;
-  let inAppProjectsExpanded = true;
+  let workspaceProjectsExpanded = $state(true);
 
   async function handleOpenActiveWorkspace(e) {
     e.stopPropagation();
@@ -141,83 +101,28 @@
     }
   }
 
-  // Dialog
-  let show_confirm = false;
-  let project_id_confirm;
-  let project_name_confirm;
-  const toggle_confirm = () => {
-    show_confirm = !show_confirm;
-  };
-  const callback_confirm = () => {
-    project_ids.deleteProject(project_id_confirm);
-  };
-
-  function select(e, id, section) {
-    e.stopPropagation();
-    $selected_type = section;
-    $selected_id = id;
-    $sidebarCollapsed = true;
-  }
-  // Add
-  const handleAdd = async (e) => {
-    e.stopPropagation();
-    inAppProjectsExpanded = true;
-    if (adding_in_app_project) return;
-    adding_in_app_project = true;
-    project_add_error = "";
-    try {
-      const projectId = await project_ids.addProject();
-      $selected_type = "Projects";
-      $selected_id = projectId;
-      $sidebarCollapsed = true;
-    } catch (error) {
-      project_add_error =
-        error instanceof Error ? error.message : "プロジェクトを追加できませんでした";
-    } finally {
-      adding_in_app_project = false;
-    }
-  };
-  // Delete
-  const handleDelete = (e, project_id) => {
-    e.stopPropagation();
-    project_id_confirm = project_id;
-    project_name_confirm = $project_ids.filter((node, i) => node.id == project_id)[0].name;
-    show_confirm = true;
-  };
-
   // Drag and drop
   let dragOverTarget;
   let dragOverType;
-  const reorderSections = new Set(["Projects", "WorkspaceProject"]);
+  const reorderSections = new Set(["WorkspaceProject"]);
 
   function canReorderSection(section) {
     return reorderSections.has(section);
   }
 
   // Function to get the list of projects
-  function getProjectElements() {
-    return document.querySelectorAll(
-      '.MenuRow[data-section="Projects"], .MenuRow[data-section="WorkspaceProject"]'
-    );
+  function getProjectsForSection() {
+    return workspaceProjects ?? [];
   }
 
-  function getProjectsForSection(section) {
-    return section === "WorkspaceProject" ? (workspaceProjects ?? []) : ($project_ids ?? []);
+  function getProjectId(project) {
+    return project.rootId;
   }
 
-  function getProjectId(project, section) {
-    return section === "WorkspaceProject" ? project.rootId : project.id;
-  }
-
-  function saveProjectOrder(section, projects) {
-    if (section === "WorkspaceProject") {
-      void workspaceApplication
-        .reorderScopes($workspace_store.activeWorkspacePath, projects)
-        .catch((e) => (project_add_error = e.message));
-      return;
-    }
-    project_ids.update(() => projects);
-    project_ids.setProjectOrder(projects);
+  function saveProjectOrder(_section, projects) {
+    void workspaceApplication
+      .reorderScopes($workspace_store.activeWorkspacePath, projects)
+      .catch((e) => (project_add_error = e.message));
   }
 
   // Drag start
@@ -293,9 +198,9 @@
     const section = el.dataset.section;
     if (!canReorderSection(section) || section !== dragged_section || !dragOverType) return;
 
-    const projects = getProjectsForSection(section);
-    const draggedIndex = projects.findIndex((p) => getProjectId(p, section) === dragged_id);
-    const targetIndex = projects.findIndex((p) => getProjectId(p, section) === el.dataset.id);
+    const projects = getProjectsForSection();
+    const draggedIndex = projects.findIndex((p) => getProjectId(p) === dragged_id);
+    const targetIndex = projects.findIndex((p) => getProjectId(p) === el.dataset.id);
 
     if (draggedIndex !== -1 && targetIndex !== -1) {
       // Clone the project array
@@ -327,47 +232,56 @@
   }
 
   // Add cleanup function to prevent duplicate event listeners
-  function cleanupDND(element) {
-    element.removeEventListener("dragstart", dragStart);
-    element.removeEventListener("dragend", dragEnd);
-    element.removeEventListener("dragover", dragOver);
-    element.removeEventListener("dragleave", dragLeave);
-    element.removeEventListener("drop", dragDrop);
+  // 行ごとにドラッグ＆ドロップを付ける action。行が増減しても each が
+  // 付け外しするので、描画のたびに DOM を走査して張り直さなくてよい。
+  function projectDragAndDrop(element) {
+    element.setAttribute("draggable", "true");
+    element.addEventListener("dragstart", dragStart);
+    element.addEventListener("dragend", dragEnd);
+    element.addEventListener("dragover", dragOver);
+    element.addEventListener("dragleave", dragLeave);
+    element.addEventListener("drop", dragDrop);
+    return {
+      destroy() {
+        element.removeEventListener("dragstart", dragStart);
+        element.removeEventListener("dragend", dragEnd);
+        element.removeEventListener("dragover", dragOver);
+        element.removeEventListener("dragleave", dragLeave);
+        element.removeEventListener("drop", dragDrop);
+      },
+    };
   }
-
-  // Setup drag & drop events
-  function setDND() {
-    const projectItems = getProjectElements();
-
-    projectItems.forEach((item) => {
-      // First remove existing event listeners
-      cleanupDND(item);
-
-      // For the dragging side
-      item.setAttribute("draggable", "true");
-      item.addEventListener("dragstart", dragStart);
-      item.addEventListener("dragend", dragEnd);
-
-      // For the drop target side
-      item.addEventListener("dragover", dragOver);
-      item.addEventListener("dragleave", dragLeave);
-      item.addEventListener("drop", dragDrop);
-    });
-  }
-
-  onMount(() => {
-    // Initial drag & drop setup
-    setDND();
-  });
 
   onDestroy(() => {
     if (workspace_open_error_timer) clearTimeout(workspace_open_error_timer);
   });
 
-  afterUpdate(() => {
-    // Update drag & drop settings when project list changes
-    setDND();
-  });
+  let workspaceProjects = $derived($workspaceNavigation?.scopes ?? []);
+  let projectMenuItems = $derived(
+    projectMenu
+      ? [
+          {
+            title: "上に移動",
+            action: "up",
+            disabled:
+              getProjectsForSection().findIndex(
+                (p) => getProjectId(p) === getProjectId(projectMenu.project)
+              ) <= 0,
+          },
+          {
+            title: "下に移動",
+            action: "down",
+            disabled: getProjectsForSection().at(-1) === projectMenu.project,
+          },
+          { type: "separator" },
+          {
+            title: "プロジェクトを削除",
+            action: "remove",
+            disabled: projectMenu.project.protected,
+          },
+        ]
+      : []
+  );
 </script>
 
 <WorkspaceSetup
@@ -395,7 +309,7 @@
   {#if $workspace_store.activeWorkspacePath}
     <button
       class="WorkspaceManageBtn"
-      on:click={async () => {
+      onclick={async () => {
         await workspaceApplication.load($workspace_store.activeWorkspacePath);
         $selected_type = "WorkspaceProject";
         $selected_id = $workspaceNavigation.rootId;
@@ -418,7 +332,7 @@
       <button
         class="WorkspaceIconBtn"
         type="button"
-        on:click={handleOpenActiveWorkspace}
+        onclick={handleOpenActiveWorkspace}
         aria-label="Workspaceをファイルエクスプローラーで開く"
         use:tooltip={{
           color: "var(--on-theme-tooltip-fg)",
@@ -446,7 +360,7 @@
     {/if}
     <button
       class="WorkspaceManageBtn"
-      on:click={() => {
+      onclick={() => {
         $showWorkspaceSetup = true;
       }}
       aria-label="ワークスペースを管理"
@@ -468,7 +382,7 @@
   {/if}
   <br />
   <div class:Section={true}>
-    <svg class="Logo" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" mirror-in-rtl="true"
+    <svg class="Logo" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"
       ><path
         d="M8 6H5c-.553 0-1-.448-1-1s.447-1 1-1h3c.553 0 1 .448 1 1s-.447 1-1 1zM13 10H5c-.553 0-1-.448-1-1s.447-1 1-1h8c.553 0 1 .448 1 1s-.447 1-1 1zM13 14H5c-.553 0-1-.448-1-1s.447-1 1-1h8c.553 0 1 .448 1 1s-.447 1-1 1z"
       ></path><path
@@ -496,7 +410,7 @@
             "Workspaceフォルダに保存されるプロジェクトです。メモはWorkspaceファイルとして管理されます。",
           force: true,
         }}
-        on:click={() => (workspaceProjectsExpanded = !workspaceProjectsExpanded)}
+        onclick={() => (workspaceProjectsExpanded = !workspaceProjectsExpanded)}
       >
         <svg
           class="Chevron"
@@ -524,7 +438,7 @@
             ariaLabel="Workspaceプロジェクトを追加"
             normalColor="var(--canvas-subtle)"
             activeColor="var(--hover-bg)"
-            on:click={addWorkspaceProject}
+            onclick={addWorkspaceProject}
           >
             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
               ><path
@@ -539,6 +453,9 @@
         {/if}
       </div>
     </div>
+    {#if project_add_error}
+      <div class="ProjectAddError" role="alert">{project_add_error}</div>
+    {/if}
     {#if workspaceProjectsExpanded}
       <div id="workspace-project-list" class="Contents ProjectContents">
         {#if workspaceProjects.length > 0}
@@ -548,13 +465,14 @@
               class:Selected={proj.rootId === $selected_id && $selected_type === "WorkspaceProject"}
               data-id={proj.rootId}
               data-section="WorkspaceProject"
+              use:projectDragAndDrop
             >
               <button
                 type="button"
                 class="ProjectSelectButton"
                 use:ripple
                 aria-label={proj.name}
-                on:click={() => selectWorkspaceProject(proj)}
+                onclick={() => selectWorkspaceProject(proj)}
               >
                 <div class="TreeLine" style="flex-shrink: 0"></div>
                 <span
@@ -570,7 +488,7 @@
                 class="ui-action ProjectMenuTrigger"
                 aria-label={proj.name + "の操作"}
                 data-task-menu-trigger
-                on:click={(event) => openProjectMenu(event, proj, "WorkspaceProject")}>…</button
+                onclick={(event) => openProjectMenu(event, proj, "WorkspaceProject")}>…</button
               >
             </div>
           {/each}
@@ -587,120 +505,7 @@
       </div>
     {/if}
   </div>
-  <div class="ProjectSubsection" class:Expanded={inAppProjectsExpanded}>
-    <div class="ProjectSubsectionHeader">
-      <button
-        class="ProjectSubsectionToggle"
-        type="button"
-        aria-expanded={inAppProjectsExpanded}
-        aria-controls="in-app-project-list"
-        aria-label={inAppProjectsExpanded
-          ? "アプリ内プロジェクトを折りたたむ"
-          : "アプリ内プロジェクトを展開"}
-        use:tooltip={{
-          color: "var(--on-theme-tooltip-fg)",
-          backgroundColor: "var(--on-theme-tooltip-bg)",
-          content:
-            "従来のdb.jsonに保存されるアプリ内プロジェクトです。db.jsonは将来的に非推奨予定です。",
-          force: true,
-        }}
-        on:click={() => (inAppProjectsExpanded = !inAppProjectsExpanded)}
-      >
-        <svg
-          class="Chevron"
-          class:Collapsed={!inAppProjectsExpanded}
-          viewBox="0 0 24 24"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          aria-hidden="true"
-        >
-          <path
-            d="M6 9L12 15L18 9"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
-        </svg>
-        <span class="SubsectionLabel TextOverFlow">アプリ内</span>
-        <span class="SubsectionCount">{$project_ids?.length ?? 0}</span>
-      </button>
-      <div class="AddButtonContainer">
-        <IconButton
-          tooltipContent={adding_in_app_project
-            ? "プロジェクトを追加中"
-            : "アプリ内プロジェクトを追加"}
-          ariaLabel={adding_in_app_project ? "プロジェクトを追加中" : "アプリ内プロジェクトを追加"}
-          disabled={adding_in_app_project}
-          normalColor="var(--canvas-subtle)"
-          activeColor="var(--hover-bg)"
-          on:click={(e) => {
-            handleAdd(e);
-          }}
-        >
-          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
-            ><path
-              d="M12 5V19M5 12H19"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            ></path></svg
-          >
-        </IconButton>
-      </div>
-    </div>
-    {#if project_add_error}
-      <div class="ProjectAddError" role="alert">{project_add_error}</div>
-    {/if}
-    {#if inAppProjectsExpanded}
-      <div id="in-app-project-list" class="Contents ProjectContents">
-        {#each $project_ids ?? [] as child (child.id)}
-          <div
-            transition:slide={{ duration: 100 }}
-            class:MenuRow={true}
-            class:Selected={child.id == $selected_id && $selected_type === "Projects"}
-            data-id={child.id}
-            data-section="Projects"
-          >
-            <button
-              type="button"
-              class="ProjectSelectButton"
-              use:ripple
-              aria-label={child.name}
-              on:click={(e) => select(e, child.id, "Projects")}
-            >
-              <div class:TreeLine={true} style="flex-shrink: 0"></div>
-              <span
-                class:TextOverFlow={true}
-                use:tooltip={{
-                  color: "var(--on-theme-tooltip-fg)",
-                  backgroundColor: "var(--on-theme-tooltip-bg)",
-                  content: child.name,
-                }}>{child.name}</span
-              >
-            </button>
-            <button
-              class="ui-action ProjectMenuTrigger"
-              aria-label={child.name + "の操作"}
-              data-task-menu-trigger
-              on:click={(event) => openProjectMenu(event, child, "Projects")}>…</button
-            >
-          </div>
-        {/each}
-      </div>
-    {/if}
-  </div>
 </div>
-<Dialog
-  show={show_confirm}
-  toggle={toggle_confirm}
-  header="プロジェクトの削除"
-  content={`「${project_name_confirm}」を削除しますか？`}
-  ok="削除する"
-  danger={true}
-  callback={callback_confirm}
-/>
 <Dialog
   show={show_workspace_delete}
   toggle={toggle_workspace_delete}
@@ -715,10 +520,12 @@
   show={Boolean(projectMenu)}
   position={projectMenuPosition}
   menuItems={projectMenuItems}
-  on:close={closeProjectMenu}
-  on:up={() => moveProjectFromMenu(-1)}
-  on:down={() => moveProjectFromMenu(1)}
-  on:remove={deleteProjectFromMenu}
+  onclose={closeProjectMenu}
+  onaction={(item) => {
+    if (item.action === "up") moveProjectFromMenu(-1);
+    else if (item.action === "down") moveProjectFromMenu(1);
+    else if (item.action === "remove") deleteProjectFromMenu();
+  }}
 />
 
 <style>
@@ -728,8 +535,7 @@
     width: 100%;
     height: 100%;
     box-sizing: border-box;
-    overflow-y: auto;
-    overflow-x: hidden;
+    overflow: hidden auto;
   }
   .Section {
     display: flex;
@@ -750,8 +556,7 @@
     flex-direction: column;
     width: 100%;
     max-height: 13.5rem;
-    overflow-y: auto;
-    overflow-x: hidden;
+    overflow: hidden auto;
   }
   .ProjectSubsection {
     display: flex;
@@ -835,7 +640,7 @@
   .Logo {
     width: 0.9375rem;
     height: 0.9375rem;
-    fill: currentColor;
+    fill: currentcolor;
     margin-right: var(--sp3);
   }
   .AddButtonContainer {
@@ -951,7 +756,7 @@
     opacity: 0.6;
   }
 
-  .MenuRow:global(.DragOverTop):before {
+  .MenuRow:global(.DragOverTop)::before {
     border-top: 0.15rem solid var(--accent-fg);
     position: absolute;
     content: "";
@@ -963,7 +768,7 @@
     pointer-events: none;
   }
 
-  .MenuRow:global(.DragOverBottom):before {
+  .MenuRow:global(.DragOverBottom)::before {
     border-bottom: 0.15rem solid var(--accent-fg);
     position: absolute;
     content: "";

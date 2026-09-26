@@ -1,45 +1,49 @@
-﻿<script lang="ts">
+<script lang="ts">
   import { viewportPopover } from "@lib/actions/viewport_popover";
-  import { createEventDispatcher, onMount, onDestroy } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import { activePanelId, newPanelId } from "@stores/panel_coordinator";
   import { globalDismiss } from "@lib/actions";
 
-  export let value: string = "";
-  export let anchorRect: DOMRect | null = null;
+  interface Props {
+    value?: string;
+    anchorRect?: DOMRect | null;
+    onchange?: (detail: { name: string }) => void;
+    onclose?: () => void;
+  }
 
-  const dispatch = createEventDispatcher<{
-    change: { name: string };
-    close: void;
-  }>();
-  let panelElement: HTMLElement;
-  let inputElement: HTMLInputElement;
+  let { value = $bindable(""), anchorRect = null, onchange, onclose }: Props = $props();
+
+  let panelElement: HTMLElement | undefined = $state();
+  let inputElement: HTMLInputElement | undefined = $state();
   const myPanelId = newPanelId();
   let unsubPanelCoord: (() => void) | undefined;
 
   onMount(() => {
     activePanelId.set(myPanelId);
     unsubPanelCoord = activePanelId.subscribe((id) => {
-      if (id !== null && id !== myPanelId) dispatch("close");
+      if (id !== null && id !== myPanelId) onclose?.();
     });
   });
   onDestroy(() => unsubPanelCoord?.());
 
-  $: panelStyle = anchorRect ? `top: ${anchorRect.bottom + 2}px; left: ${anchorRect.left}px;` : "";
+  let panelStyle = $derived(
+    anchorRect ? `top: ${anchorRect.bottom + 2}px; left: ${anchorRect.left}px;` : ""
+  );
 
   function handleKeydown(event: KeyboardEvent) {
     event.stopPropagation();
     if (event.key === "Escape") {
-      dispatch("close");
+      onclose?.();
     }
   }
 
   function handleChange() {
-    dispatch("change", { name: value });
+    onchange?.({ name: value });
   }
 
   function handleClear() {
     value = "";
-    dispatch("change", { name: "" });
+    onchange?.({ name: "" });
     inputElement?.focus();
   }
 
@@ -61,11 +65,11 @@
   role="dialog"
   tabindex="-1"
   aria-label="Name フィルター"
-  on:click|stopPropagation
-  on:keydown={handleKeydown}
+  onclick={(event) => event.stopPropagation()}
+  onkeydown={handleKeydown}
   use:portal
   use:viewportPopover={anchorRect}
-  use:globalDismiss={() => dispatch("close")}
+  use:globalDismiss={() => onclose?.()}
 >
   <div class="PanelTitle">Name フィルター</div>
   <label class="TextRow" for="name-filter-input">
@@ -77,11 +81,11 @@
       bind:value
       placeholder="ノード名を絞り込み"
       aria-label="ノード名を絞り込み"
-      on:input={handleChange}
+      oninput={handleChange}
     />
   </label>
   {#if value}
-    <button class="ClearBtn" on:click={handleClear}>クリア</button>
+    <button class="ClearBtn" onclick={handleClear}>クリア</button>
   {/if}
 </div>
 

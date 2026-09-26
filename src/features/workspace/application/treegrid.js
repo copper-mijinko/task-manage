@@ -191,6 +191,25 @@ export function createTreeGridApplication(workspacePath) {
       ordered.splice(start + delta, 0, ...chosen);
     }
     if (!parentId) return;
+    if (direction === "outdent") {
+      // もとの親のすぐ後ろに出す（末尾に回すと、親から離れた位置に飛んで
+      // どこへ行ったか分からなくなる）。祖父母の子を並べ直し、出す行には
+      // 親の付け替えと並び順を同時に指定する。
+      const grandChildren = siblings(parentId).filter((n) => !targets.includes(n.id));
+      const at = grandChildren.findIndex((n) => n.id === anchor.parentId) + 1;
+      const next = [...grandChildren];
+      next.splice(at > 0 ? at : next.length, 0, ...chosen);
+      const outdentCommands = next.map((n, order) => ({
+        type: "move",
+        childId: n.id,
+        fromParentId: chosen.includes(n) ? anchor.parentId : parentId,
+        toParentId: parentId,
+        order,
+      }));
+      await dispatchMove(outdentCommands, anchor.id, path.split("/").slice(0, -2).join("/"));
+      closed_row_paths.expandNodeEverywhere(parentId);
+      return;
+    }
     const commands = ordered
       ? ordered.map((n, order) => ({
           type: "move",
@@ -208,9 +227,7 @@ export function createTreeGridApplication(workspacePath) {
     const parentPath =
       direction === "indent"
         ? `${path.split("/").slice(0, -1).join("/")}/${parentId}`
-        : direction === "outdent"
-          ? path.split("/").slice(0, -2).join("/")
-          : path.split("/").slice(0, -1).join("/");
+        : path.split("/").slice(0, -1).join("/");
     await dispatchMove(commands, anchor.id, parentPath);
     closed_row_paths.expandNodeEverywhere(parentId);
   }
@@ -330,7 +347,6 @@ export function createTreeGridApplication(workspacePath) {
         taskId: nodeId,
         taskName: name,
         occurrencePath: path,
-        selectedType: "WorkspaceProject",
       }),
     /** ノードごとアーカイブ（そのノードの行がすべて片付く）。 */
     archive: (targets = ids(), archived = true) => updateMany({ archived }, targets),

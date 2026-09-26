@@ -1,4 +1,4 @@
-﻿import { fireEvent, render, screen } from "@testing-library/svelte";
+import { fireEvent, render, screen } from "@testing-library/svelte";
 import { tick } from "svelte";
 import { vi } from "vitest";
 import PageSearchBox from "@features/search/components/PageSearchBox.svelte";
@@ -85,8 +85,7 @@ describe("PageSearchBox", () => {
     const handleClose = vi.fn();
 
     render(PageSearchBox, {
-      props: { show: true },
-      events: { close: handleClose },
+      props: { show: true, onclose: handleClose },
     });
 
     const input = screen.getByPlaceholderText("search...");

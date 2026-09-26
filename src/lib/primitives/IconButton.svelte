@@ -1,29 +1,47 @@
-﻿<script>
+<script>
   import { ripple, tooltip } from "@lib/actions";
-  export let activeColor = "var(--theme-color-Info-dark)";
-  export let normalColor = "var(--theme-color-Info-main)";
-  export let rippleColor = "var(--theme-color-Sub-main)";
-  export let style = "";
-  export let disabled = false;
-  export let use_ripple = true;
-  export let variant = "filled"; // "outlined", "text"
-  export let tooltipContent = undefined;
-  export let ariaLabel = undefined;
-  export let ariaPressed = undefined;
-  export let type = "button";
+  /**
+   * @typedef {Object} Props
+   * @property {string} [activeColor]
+   * @property {string} [normalColor]
+   * @property {string} [rippleColor]
+   * @property {string} [style]
+   * @property {boolean} [disabled]
+   * @property {boolean} [use_ripple]
+   * @property {string} [variant] - "outlined", "text"
+   * @property {any} [tooltipContent]
+   * @property {any} [ariaLabel]
+   * @property {any} [ariaPressed]
+   * @property {string} [type]
+   * @property {import('svelte').Snippet} [children]
+   */
+
+  /** @type {Props & { [key: string]: any }} */
+  // カスタム要素としては使わないので、残りの属性（onclick 等）は rest でそのまま渡す。
+  // svelte-ignore custom_element_props_identifier
+  let {
+    activeColor = "var(--theme-color-Info-dark)",
+    normalColor = "var(--theme-color-Info-main)",
+    rippleColor = "var(--theme-color-Sub-main)",
+    style = "",
+    disabled = false,
+    use_ripple = true,
+    variant = "filled",
+    tooltipContent = undefined,
+    ariaLabel = undefined,
+    ariaPressed = undefined,
+    type = "button",
+    children,
+    ...rest
+  } = $props();
   // tooltip — keep reactive so a parent toggling tooltipContent (e.g. the
   // sidebar hamburger flipping its label between "open" and "close") is
   // picked up by the tooltip action's `update()` lifecycle.
-  $: use_tooltip = tooltipContent !== undefined;
-  let afcolor = "gray";
-  let abgcolor = "gray";
-  let abdcolor = "gray";
-  let fcolor = "gray";
-  let bgcolor = "gray";
-  let bdcolor = "gray";
-  let shadow = "0 0.15rem 0.375rem rgba(0,0,0,0.25), 0 .1em 0.1875rem rgba(0,0,0,0);";
+  let use_tooltip = $derived(tooltipContent !== undefined);
 
-  $: {
+  // 変種と無効状態から決まる色。
+  let { afcolor, abgcolor, abdcolor, fcolor, bgcolor, bdcolor, shadow } = $derived.by(() => {
+    let afcolor, abgcolor, abdcolor, fcolor, bgcolor, bdcolor, shadow;
     // Defaults for "filled" variant (used when no variant set)
     afcolor = "var(--theme-color-Main-light)";
     abgcolor = activeColor;
@@ -59,11 +77,12 @@
     if (disabled) {
       shadow = "none";
     }
-  }
+    return { afcolor, abgcolor, abdcolor, fcolor, bgcolor, bdcolor, shadow };
+  });
 </script>
 
 <button
-  {...$$restProps}
+  {...rest}
   class="IconButton"
   {type}
   {disabled}
@@ -82,10 +101,9 @@
     content: tooltipContent,
     force: true,
   }}
-  on:click
   style="--shadow:{shadow}; --activeFontColor: {afcolor}; --activeBorderColor: {abdcolor}; --activeBackgroundColor: {abgcolor}; --backgroundColor: {bgcolor}; --borderColor: {bdcolor}; --fontColor: {fcolor}; {style}"
 >
-  <slot />
+  {@render children?.()}
 </button>
 
 <style>

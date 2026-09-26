@@ -1,26 +1,38 @@
 <script>
-  import { createEventDispatcher } from "svelte";
   import NodeMemoEditor from "./WorkspaceNodeMemoEditor.svelte";
   import TagField from "@lib/primitives/TagField.svelte";
   import * as platform from "@lib/ipc/platform";
-  export let graph;
-  export let nodeId = "";
-  export let sourceParentId = "";
-  export let view = "graph";
-  export let workspacePath = "";
-  const dispatch = createEventDispatcher();
-  let targetParentId = "",
-    copyMode = "node";
-  $: node = graph?.nodes?.[nodeId];
-  $: parents = (node?.parents || []).map((p) => graph.nodes[p.id]).filter(Boolean);
-  $: children = Object.values(graph?.nodes || {}).filter((n) =>
-    (n.parents || []).some((p) => p.id === nodeId)
+  /**
+   * @typedef {Object} Props
+   * @property {any} graph
+   * @property {string} [nodeId]
+   * @property {string} [sourceParentId]
+   * @property {string} [view]
+   * @property {string} [workspacePath]
+   * @property {(detail?: any) => void} [onexecute]
+   */
+
+  /** @type {Props} */
+  let {
+    graph,
+    nodeId = "",
+    sourceParentId = $bindable(""),
+    view = "graph",
+    workspacePath = "",
+    onexecute,
+  } = $props();
+  let targetParentId = $state(""),
+    copyMode = $state("node");
+  let node = $derived(graph?.nodes?.[nodeId]);
+  let parents = $derived((node?.parents || []).map((p) => graph.nodes[p.id]).filter(Boolean));
+  let children = $derived(
+    Object.values(graph?.nodes || {}).filter((n) => (n.parents || []).some((p) => p.id === nodeId))
   );
-  $: tagSuggestions = [
-    ...new Set(Object.values(graph?.nodes || {}).flatMap((item) => item.tags || [])),
-  ].sort();
+  let tagSuggestions = $derived(
+    [...new Set(Object.values(graph?.nodes || {}).flatMap((item) => item.tags || []))].sort()
+  );
   function run(command, origin = view) {
-    dispatch("execute", { command, origin, workspacePath });
+    onexecute?.({ command, origin, workspacePath });
   }
   function patch(changes) {
     run({ type: "update-node", nodeId, changes });
@@ -56,13 +68,14 @@
     }
     return visit(nodeId);
   }
-  $: copyBlocked = copyMode === "subgraph" && view !== "graph" && hasCycle();
-  $: copyHelp =
+  let copyBlocked = $derived(copyMode === "subgraph" && view !== "graph" && hasCycle());
+  let copyHelp = $derived(
     copyMode === "node"
       ? "対象だけを新しいノードにします。子は付きません。"
       : copyMode === "share-children"
         ? "対象を新しく作り、直接の子は同じノードを共有します。"
-        : "到達できる子孫を一度ずつ複製し、共有関係を再現します。";
+        : "到達できる子孫を一度ずつ複製し、共有関係を再現します。"
+  );
   async function addAttachment(event) {
     const file = event.currentTarget.files?.[0];
     if (!file) return;
@@ -79,7 +92,7 @@
   }
   async function openAttachment(item) {
     const result = await platform.wsResolveGraphAsset(workspacePath, nodeId, item.relativePath);
-    await platform.openImageExternal(result.url, item.name);
+    await platform.openImageExternal(result.url);
   }
 </script>
 
@@ -90,18 +103,17 @@
       {#if nodeId === graph.rootId}<span>Workspace root</span>{/if}
     </div>
     <button
-      on:click={() =>
-        run({ type: "create-node", parentId: nodeId, node: { name: "新しいノード" } })}
+      onclick={() => run({ type: "create-node", parentId: nodeId, node: { name: "新しいノード" } })}
       >子ノードを作成</button
     >
     <label
       >名前<input
         value={node.name}
-        on:change={(e) => patch({ name: e.currentTarget.value })}
+        onchange={(e) => patch({ name: e.currentTarget.value })}
       /></label
     >
     <label
-      >ステータス<select value={node.status || ""} on:change={(e) => status(e.currentTarget.value)}
+      >ステータス<select value={node.status || ""} onchange={(e) => status(e.currentTarget.value)}
         ><option value="">ステータスなし</option><option value="Undefined">未定義</option><option
           value="Open">未着手</option
         ><option value="Pending">保留</option><option value="In Progress">進行中</option><option
@@ -114,13 +126,13 @@
         >開始日<input
           type="date"
           value={node.startDate || ""}
-          on:change={(e) => patch({ startDate: e.currentTarget.value || undefined })}
+          onchange={(e) => patch({ startDate: e.currentTarget.value || undefined })}
         /></label
       ><label
         >期限<input
           type="date"
           value={node.dueDate || ""}
-          on:change={(e) => patch({ dueDate: e.currentTarget.value || undefined })}
+          onchange={(e) => patch({ dueDate: e.currentTarget.value || undefined })}
         /></label
       >
     </div>
@@ -128,7 +140,7 @@
       tags={node.tags || []}
       suggestions={tagSuggestions}
       ariaLabel="ノードのタグ"
-      on:change={(event) => patch({ tags: event.detail.tags })}
+      onchange={(event) => patch({ tags: event.tags })}
     />
     <fieldset>
       <legend>配置</legend><label
@@ -147,11 +159,11 @@
       <div class="buttons">
         <button
           disabled={!targetParentId || nodeId === graph.rootId}
-          on:click={() => run({ type: "link", childId: nodeId, parentId: targetParentId })}
+          onclick={() => run({ type: "link", childId: nodeId, parentId: targetParentId })}
           >別の場所にも置く</button
         ><button
           disabled={!sourceParentId || !targetParentId || nodeId === graph.rootId}
-          on:click={() =>
+          onclick={() =>
             run({
               type: "move",
               childId: nodeId,
@@ -160,7 +172,7 @@
             })}>ここから移動</button
         ><button
           disabled={!sourceParentId || nodeId === graph.rootId}
-          on:click={() => run({ type: "detach", childId: nodeId, parentId: sourceParentId })}
+          onclick={() => run({ type: "detach", childId: nodeId, parentId: sourceParentId })}
           >ここから外す</button
         >
       </div>
@@ -176,7 +188,7 @@
           この子孫には循環があるため、子孫ごとのコピーはグラフで実行してください。
         </p>{/if}<button
         disabled={!targetParentId || nodeId === graph.rootId || copyBlocked}
-        on:click={() => run({ type: "copy", nodeId, targetParentId, mode: copyMode })}
+        onclick={() => run({ type: "copy", nodeId, targetParentId, mode: copyMode })}
         >選択した場所へコピー</button
       >
     </fieldset>
@@ -184,11 +196,11 @@
       <legend>添付</legend><input
         aria-label="添付を追加"
         type="file"
-        on:change={addAttachment}
+        onchange={addAttachment}
       />{#each node.attachments || [] as item}<div class="attachment">
-          <button on:click={() => openAttachment(item)}>{item.name}</button><button
+          <button onclick={() => openAttachment(item)}>{item.name}</button><button
             aria-label={`${item.name}を削除`}
-            on:click={() =>
+            onclick={() =>
               patch({ attachments: (node.attachments || []).filter((x) => x.id !== item.id) })}
             >×</button
           >
@@ -197,19 +209,19 @@
     <div class="danger">
       <button
         disabled={nodeId === graph.rootId}
-        on:click={() =>
+        onclick={() =>
           patch({
             archived: !node.archived,
             archivedAt: node.archived ? undefined : new Date().toISOString(),
           })}>{node.archived ? "復元" : "アーカイブ"}</button
-      ><button disabled={nodeId === graph.rootId} on:click={remove}>ノードを削除</button>
+      ><button disabled={nodeId === graph.rootId} onclick={remove}>ノードを削除</button>
     </div>
     <section class="memo" aria-label="本文">
       {#key `${workspacePath}:${nodeId}`}<NodeMemoEditor
           {node}
           {nodeId}
           {workspacePath}
-          on:execute={(event) => dispatch("execute", event.detail)}
+          onexecute={(event) => onexecute?.(event)}
         />{/key}
     </section>
   {:else}<p>ノードを選択してください。</p>{/if}

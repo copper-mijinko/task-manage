@@ -1,7 +1,6 @@
 <script>
-  import { afterUpdate, tick, createEventDispatcher } from "svelte";
+  import { tick } from "svelte";
   import { workspace_store } from "@features/workspace/stores/workspace";
-  import { inbox_store } from "@features/inbox/stores/inbox";
   import {
     workspaceApplication,
     workspaceNavigation,
@@ -9,37 +8,32 @@
   import { modalLayer } from "@lib/actions/modal_layer";
 
   /**
-   * Lightweight quick-capture overlay. Designed for "tap → type → enter →
-   * gone" flow, so this is intentionally simpler than the full Modal
-   * primitive (no Card chrome, no padding-aware layout).
+   * @typedef {Object} Props
+   * @property {boolean} [show] - Lightweight quick-capture overlay. Designed for "tap → type → enter →
+gone" flow, so this is intentionally simpler than the full Modal
+primitive (no Card chrome, no padding-aware layout).
+   * @property {any} [onclose]
    */
-  export let show = false;
 
-  const dispatch = createEventDispatcher();
+  /** @type {Props} */
+  let { show = false, onclose = undefined } = $props();
 
-  let inputEl;
-  let value = "";
-  let recentAdds = [];
-  let busy = false;
-  let errorMessage = "";
-  let lastShow = false;
+  let inputEl = $state();
+  let value = $state("");
+  let recentAdds = $state([]);
+  let busy = $state(false);
+  let errorMessage = $state("");
 
-  $: workspaceReady = Boolean($workspace_store.activeWorkspacePath);
-
-  afterUpdate(async () => {
-    if (show && !lastShow) {
-      // Just opened — reset and focus.
-      value = "";
-      recentAdds = [];
-      errorMessage = "";
-      await tick();
-      inputEl?.focus();
-    }
-    lastShow = show;
-  });
+  async function opened() {
+    value = "";
+    recentAdds = [];
+    errorMessage = "";
+    await tick();
+    inputEl?.focus();
+  }
 
   function close() {
-    dispatch("close");
+    onclose?.();
   }
 
   async function handleAdd(closeAfter) {
@@ -51,9 +45,7 @@
     }
     busy = true;
     errorMessage = "";
-    const result = $workspaceNavigation
-      ? await workspaceApplication.capture($workspace_store.activeWorkspacePath, name)
-      : await inbox_store.addItem({ name });
+    const result = await workspaceApplication.capture($workspace_store.activeWorkspacePath, name);
     busy = false;
     if (!result.success) {
       errorMessage = result.error || "追加に失敗しました";
@@ -87,13 +79,18 @@
       close();
     }
   }
+  let workspaceReady = $derived(Boolean($workspace_store.activeWorkspacePath));
+  // 開いた瞬間に入力をリセットしてフォーカスする。
+  $effect.pre(() => {
+    if (show) void opened();
+  });
 </script>
 
 {#if show}
   <div
     class="QuickCaptureMask"
     use:modalLayer
-    on:mousedown={handleMaskMousedown}
+    onmousedown={handleMaskMousedown}
     role="presentation"
     data-page-search-skip
   >
@@ -121,7 +118,7 @@
           type="button"
           class="CloseBtn"
           data-testid="quick-capture-close"
-          on:click={close}
+          onclick={close}
           aria-label="閉じる"
         >
           ✕
@@ -131,7 +128,7 @@
       <input
         bind:this={inputEl}
         bind:value
-        on:keydown={handleKeydown}
+        onkeydown={handleKeydown}
         placeholder="思いついたことを入力"
         class="QuickCaptureInput"
         data-testid="quick-capture-input"
@@ -148,12 +145,12 @@
         <button
           class="ui-action primary"
           disabled={busy || !workspaceReady || !value.trim()}
-          on:click={() => handleAdd(false)}>追加</button
+          onclick={() => handleAdd(false)}>追加</button
         >
         <button
           class="ui-action"
           disabled={busy || !workspaceReady || !value.trim()}
-          on:click={() => handleAdd(true)}>追加して閉じる</button
+          onclick={() => handleAdd(true)}>追加して閉じる</button
         >
       </div>
       <div class="QuickCaptureMeta">

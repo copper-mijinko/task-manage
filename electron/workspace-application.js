@@ -9,22 +9,9 @@ function createWorkspaceApplication({ authorize, initialize, repository, publish
   }
   return {
     read: prepare,
-    async readInbox(workspacePath) {
-      const graph = await prepare(workspacePath);
-      const root =
-        graph.nodes[graph.inboxId] ??
-        Object.values(graph.nodes).find((node) => node.name.toLowerCase() === "inbox");
-      const tasks = root
-        ? Object.values(graph.nodes).filter(
-            (node) => node.id === root.id || node.parents.some((parent) => parent.id === root.id)
-          )
-        : [];
-      return {
-        rootId: root?.id ?? null,
-        tasks: Object.fromEntries(tasks.map((node) => [node.id, node])),
-      };
-    },
-    async execute({ workspacePath, command, origin = "tree", expectedRevision }) {
+    // `requester` は要求元（Electron では webContents）。結果は戻り値で受け取る
+    // ので、同じグラフを通知で二重に送らない。
+    async execute({ workspacePath, command, origin = "tree", expectedRevision, requester }) {
       await prepare(workspacePath);
       const result = await repository.executeWorkspaceGraphCommand(
         workspacePath,
@@ -32,17 +19,31 @@ function createWorkspaceApplication({ authorize, initialize, repository, publish
         origin,
         expectedRevision
       );
-      publish(workspacePath, result.graph);
+      publish(workspacePath, result.graph, requester);
       return result;
     },
-    async history({ workspacePath, direction, expectedRevision }) {
+    async history({ workspacePath, direction, expectedRevision, requester }) {
       if (direction !== "undo" && direction !== "redo")
         throw new Error("Invalid history direction");
       await prepare(workspacePath);
       const result = await repository[
         direction === "undo" ? "undoWorkspaceGraph" : "redoWorkspaceGraph"
       ](workspacePath, expectedRevision);
-      if (result.changed) publish(workspacePath, result.graph);
+      if (result.changed) publish(workspacePath, result.graph, requester);
+      return result;
+    },
+    async listMarkdownImports(workspacePath) {
+      await prepare(workspacePath);
+      return repository.listMarkdownImportSources(workspacePath);
+    },
+    async importMarkdown({ workspacePath, dirNames, expectedRevision, requester }) {
+      await prepare(workspacePath);
+      const result = await repository.importMarkdownProjects(
+        workspacePath,
+        Array.isArray(dirNames) ? dirNames.map(String) : [],
+        expectedRevision
+      );
+      publish(workspacePath, result.graph, requester);
       return result;
     },
     async saveAsset({ workspacePath, nodeId, fileName, bytes }) {

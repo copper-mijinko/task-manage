@@ -9,14 +9,17 @@
   } from "@stores/preferences";
   import { formatDate, formatTime } from "@lib/utils/datetime_shortcuts";
   import { windowZoom } from "@lib/ipc/platform";
-  let zoomPercent = 100;
-  $: if (show) void windowZoom("get").then((value) => (zoomPercent = value));
+  let zoomPercent = $state(100);
   async function changeZoom(action: "in" | "out" | "reset") {
     zoomPercent = await windowZoom(action);
   }
 
-  export let show = false;
-  export let toggle: () => void;
+  interface Props {
+    show?: boolean;
+    toggle: () => void;
+  }
+
+  let { show = false, toggle }: Props = $props();
 
   type CategoryId = "appearance" | "datetime-format" | "shortcuts" | "about";
 
@@ -106,14 +109,10 @@
   const appVersion = __APP_VERSION__;
   const appName = __APP_NAME__;
 
-  let selected: CategoryId = categories[0].id;
+  let selected: CategoryId = $state(categories[0].id);
 
   // Reset selection + refresh preview every time the modal opens.
-  let now = new Date();
-  $: if (show) {
-    now = new Date();
-    selected = categories[0].id;
-  }
+  let now = $state(new Date());
 
   const formatOptions = [
     { value: "slash", label: "2026/05/26" },
@@ -126,23 +125,31 @@
     { value: "compact", label: "コンパクト" },
   ];
 
-  $: previewDate = formatDate(now, $date_time_format);
-  $: previewTime = formatTime(now, $date_time_format);
-
-  function handleFormatChange(event: CustomEvent<{ value: string }>) {
-    date_time_format.set(event.detail.value as DateFormat);
+  function handleFormatChange(event: { value: string }) {
+    date_time_format.set(event.value as DateFormat);
   }
 
-  function handleDensityChange(event: CustomEvent<{ value: string }>) {
-    ui_density.set(event.detail.value as UiDensity);
+  function handleDensityChange(event: { value: string }) {
+    ui_density.set(event.value as UiDensity);
   }
+  $effect.pre(() => {
+    if (show) void windowZoom("get").then((value) => (zoomPercent = value));
+  });
+  $effect.pre(() => {
+    if (show) {
+      now = new Date();
+      selected = categories[0].id;
+    }
+  });
+  let previewDate = $derived(formatDate(now, $date_time_format));
+  let previewTime = $derived(formatTime(now, $date_time_format));
 </script>
 
 <Modal {show} {toggle} width="80%" height="80%" label="設定">
   <div class="Container">
     <header class="Header">
       <h2 class="Title">設定</h2>
-      <button type="button" class="CloseBtn" on:click={toggle} aria-label="閉じる">
+      <button type="button" class="CloseBtn" onclick={toggle} aria-label="閉じる">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path
             d="M6 6L18 18M18 6L6 18"
@@ -166,7 +173,7 @@
                 class="CategoryRow"
                 class:Selected={selected === cat.id}
                 aria-current={selected === cat.id ? "page" : undefined}
-                on:click={() => (selected = cat.id)}
+                onclick={() => (selected = cat.id)}
               >
                 <span class="CategoryLabel">{cat.label}</span>
                 {#if cat.description}
@@ -195,7 +202,7 @@
               value={$ui_density}
               ariaLabel="表示密度"
               size="md"
-              on:change={handleDensityChange}
+              onchange={handleDensityChange}
             />
           </div>
 
@@ -206,14 +213,14 @@
                  「100%に戻す」が挟まる。1 つの群にまとめて、すぐ上の
                  表示密度の行と同じ「ラベル左・操作右」の形にする。 -->
             <div class="FieldControls">
-              <button class="ui-action" on:click={() => changeZoom("out")}>縮小</button>
-              <button class="ui-action" on:click={() => changeZoom("in")}>拡大</button>
+              <button class="ui-action" onclick={() => changeZoom("out")}>縮小</button>
+              <button class="ui-action" onclick={() => changeZoom("in")}>拡大</button>
               <!-- 100% のときの「100%に戻す」は押しても何も起きない。押せる見た目の
                    ままだと、効かなかったのか操作を間違えたのか区別できない。 -->
               <button
                 class="ui-action"
                 disabled={zoomPercent === 100}
-                on:click={() => changeZoom("reset")}>100%に戻す</button
+                onclick={() => changeZoom("reset")}>100%に戻す</button
               >
             </div>
           </div>
@@ -237,7 +244,7 @@
               value={$date_time_format}
               ariaLabel="日付・時刻フォーマット"
               size="md"
-              on:change={handleFormatChange}
+              onchange={handleFormatChange}
             />
           </div>
 

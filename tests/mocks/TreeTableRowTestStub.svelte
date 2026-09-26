@@ -1,20 +1,49 @@
 <script>
-  import { createEventDispatcher } from "svelte";
+  /**
+   * @typedef {Object} Props
+   * @property {any} row
+   * @property {any} [headers]
+   * @property {boolean} [selected]
+   * @property {boolean} [bulkSelectionActive]
+   * @property {boolean} [isDark]
+   * @property {any} [canDrop]
+   * @property {boolean} [canMoveUp]
+   * @property {boolean} [canMoveDown]
+   * @property {boolean} [canIndent]
+   * @property {boolean} [canOutdent]
+   * @property {boolean} [canOpenTaskFolder]
+   * @property {boolean} [isTabStop]
+   * @property {boolean} [isEchoRow]
+   * @property {boolean} [isPrimaryOccurrence]
+   * @property {(detail?: any) => void} [onnavigate]
+   * @property {(detail?: any) => void} [ontogglecheckbox]
+   * @property {(detail?: any) => void} [onselect]
+   * @property {(detail?: any) => void} [ontoggle]
+   * @property {(detail?: any) => void} [onopentaskfolder]
+   */
 
-  export let row;
-  export let headers = [];
-  export let selected = false;
-  export let bulkSelectionActive = false;
-  export let isDark = false;
-  export let canDrop = () => false;
-  export let canMoveUp = false;
-  export let canMoveDown = false;
-  export let canIndent = false;
-  export let canOutdent = false;
-  export let canOpenTaskFolder = false;
-  export let isTabStop = false;
-  export let isEchoRow = false;
-  export let isPrimaryOccurrence = true;
+  /** @type {Props} */
+  let {
+    row,
+    headers = [],
+    selected = false,
+    bulkSelectionActive = false,
+    isDark = false,
+    canDrop = () => false,
+    canMoveUp = false,
+    canMoveDown = false,
+    canIndent = false,
+    canOutdent = false,
+    canOpenTaskFolder = false,
+    isTabStop = false,
+    isEchoRow = false,
+    isPrimaryOccurrence = true,
+    onnavigate,
+    ontogglecheckbox,
+    onselect,
+    ontoggle,
+    onopentaskfolder,
+  } = $props();
 
   const NAVIGATION_KEYS = new Set([
     "ArrowUp",
@@ -24,8 +53,6 @@
     "Home",
     "End",
   ]);
-
-  const dispatch = createEventDispatcher();
 </script>
 
 <div
@@ -45,9 +72,9 @@
   data-tab-stop={isTabStop ? "true" : "false"}
   data-echo={isEchoRow ? "true" : "false"}
   tabindex={isTabStop ? 0 : -1}
-  on:keydown={(e) => {
+  onkeydown={(e) => {
     if (!NAVIGATION_KEYS.has(e.key) || e.ctrlKey || e.metaKey || e.altKey) return;
-    dispatch("navigate", { id: row.id, path: row.path, key: e.key, shiftKey: e.shiftKey });
+    onnavigate?.({ id: row.id, path: row.path, key: e.key, shiftKey: e.shiftKey });
   }}
 >
   <div class="CheckboxCell" style="width: 28px;">
@@ -56,7 +83,7 @@
         type="checkbox"
         data-testid={"bulk-select-" + row.id}
         checked={bulkSelectionActive && selected}
-        on:click={() => dispatch("toggleCheckbox", { id: row.id })}
+        onclick={() => ontogglecheckbox?.({ id: row.id })}
       />
     {/if}
   </div>
@@ -67,8 +94,8 @@
         <button
           type="button"
           data-testid={"select-" + row.id}
-          on:click={() => {
-            dispatch("select", { id: row.id, path: row.path });
+          onclick={() => {
+            onselect?.({ id: row.id, path: row.path });
           }}
         >
           select
@@ -77,8 +104,8 @@
           <button
             type="button"
             data-testid={"toggle-" + row.id}
-            on:click={() => {
-              dispatch("toggle", { id: row.id, path: row.path });
+            onclick={() => {
+              ontoggle?.({ id: row.id, path: row.path });
             }}
           >
             {row.expanded ? "collapse" : "expand"}
@@ -88,8 +115,8 @@
           <button
             type="button"
             data-testid={"open-folder-" + row.id}
-            on:click={() => {
-              dispatch("openTaskFolder", { id: row.id });
+            onclick={() => {
+              onopentaskfolder?.({ id: row.id });
             }}
           >
             open folder

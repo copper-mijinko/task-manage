@@ -1,20 +1,36 @@
-﻿<script>
+<script>
   import { onDestroy, onMount } from "svelte";
   import * as platform from "@lib/ipc/platform";
 
-  export let defaultRatio = [];
-  export let direction = "horizontal";
   // Collapse policy is opt-in so existing tree/gantt and inbox splits retain
   // their current two-sided mini-pane behaviour. The project tree/detail split
   // uses `end` with a zero-sized pane: the tree always wins when space runs out,
-  // while the boundary remains available to drag the detail pane open again.
-  export let collapsePriority = "both";
-  export let collapseSize = 64;
-  export let collapsedPane = null;
-  export let separatorLabel = "ペインのサイズを変更";
-  export let persistenceKey = "";
 
-  let split_pane_root; // Bind
+  /**
+   * @typedef {Object} Props
+   * @property {any} [defaultRatio]
+   * @property {string} [direction]
+   * @property {string} [collapsePriority] - while the boundary remains available to drag the detail pane open again.
+   * @property {number} [collapseSize]
+   * @property {any} [collapsedPane]
+   * @property {string} [separatorLabel]
+   * @property {string} [persistenceKey]
+   * @property {import('svelte').Snippet} [children]
+   */
+
+  /** @type {Props} */
+  let {
+    defaultRatio = [],
+    direction = "horizontal",
+    collapsePriority = "both",
+    collapseSize = 64,
+    collapsedPane = $bindable(null),
+    separatorLabel = "ペインのサイズを変更",
+    persistenceKey = "",
+    children,
+  } = $props();
+
+  let split_pane_root = $state(); // Bind
 
   // Resize
   let resizers = [];
@@ -22,22 +38,14 @@
   let resize_observer;
   let mutation_observer;
   let paneCount = 0;
-  let mounted = false;
-  let syncedCollapsedPane;
+  let mounted = $state(false);
+  let syncedCollapsedPane = $state();
   let lastOpenSizes = [];
   let restoredRatio = [];
 
   // Min width
-  let minWidth = "auto";
-  let minHeight = "auto";
-
-  $: isVertical = direction === "vertical";
-  $: primaryDimension = isVertical ? "height" : "width";
-  $: primaryClient = isVertical ? "clientY" : "clientX";
-  $: primaryCursor = isVertical ? "row-resize" : "col-resize";
-  $: if (mounted && collapsedPane !== syncedCollapsedPane) {
-    syncCollapsedPane(collapsedPane);
-  }
+  let minWidth = $state("auto");
+  let minHeight = $state("auto");
 
   onMount(() => {
     refreshLayout();
@@ -48,7 +56,7 @@
     mutation_observer = new MutationObserver((mutations) => {
       const paneChanged = mutations.some((mutation) =>
         [...mutation.addedNodes, ...mutation.removedNodes].some(
-          (node) => node.nodeType === Node.ELEMENT_NODE && node.classList?.contains("Pane")
+          (node) => node instanceof Element && node.classList.contains("Pane")
         )
       );
       if (paneChanged) {
@@ -60,15 +68,22 @@
     });
   });
 
-  const isValidPersistedLayout = (value) =>
-    value &&
-    typeof value === "object" &&
-    Array.isArray(value.ratio) &&
-    value.ratio.length === 2 &&
-    value.ratio.every((item) => Number.isFinite(item) && item >= 0) &&
-    (value.collapsedPane === null ||
-      value.collapsedPane === "start" ||
-      value.collapsedPane === "end");
+  /**
+   * @param {unknown} value
+   * @returns {value is { ratio: number[], collapsedPane?: "start" | "end" | null }}
+   */
+  const isValidPersistedLayout = (value) => {
+    if (!value || typeof value !== "object") return false;
+    const layout = /** @type {{ ratio?: unknown, collapsedPane?: unknown }} */ (value);
+    return (
+      Array.isArray(layout.ratio) &&
+      layout.ratio.length === 2 &&
+      layout.ratio.every((item) => Number.isFinite(item) && item >= 0) &&
+      (layout.collapsedPane === null ||
+        layout.collapsedPane === "start" ||
+        layout.collapsedPane === "end")
+    );
+  };
 
   const restorePersistedLayout = async () => {
     if (!persistenceKey) return;
@@ -615,6 +630,15 @@
       }
     });
   };
+  let isVertical = $derived(direction === "vertical");
+  let primaryDimension = $derived(isVertical ? "height" : "width");
+  let primaryClient = $derived(isVertical ? "clientY" : "clientX");
+  let primaryCursor = $derived(isVertical ? "row-resize" : "col-resize");
+  $effect.pre(() => {
+    if (mounted && collapsedPane !== syncedCollapsedPane) {
+      syncCollapsedPane(collapsedPane);
+    }
+  });
 </script>
 
 <div
@@ -624,7 +648,7 @@
   data-persistence-key={persistenceKey || undefined}
   style="--minWidth: {minWidth}; --minHeight: {minHeight}"
 >
-  <slot />
+  {@render children?.()}
 </div>
 
 <style>
@@ -735,7 +759,7 @@
      original child was a Card (which would have applied padding via :has).
      Uses the same --pane-pad token as the normal Card-hosting pane, so flat
      mode collapses both consistently. */
-  .SplitPaneRoot > :global(.Pane.PaneMini) {
+  .SplitPaneRoot > :global(:global(.Pane.PaneMini)) {
     overflow: hidden;
     padding: var(--pane-pad);
   }

@@ -83,8 +83,7 @@ describe("ParentField", () => {
   test("候補を選ぶと親の追加を通知する", async () => {
     const changes = [];
     render(ParentField, {
-      props: createProps(),
-      events: { change: (event) => changes.push(event.detail.parentIds) },
+      props: { ...createProps(), onchange: (detail) => changes.push(detail.parentIds) },
     });
 
     await fireEvent.input(screen.getByLabelText("親ノードを追加"), {

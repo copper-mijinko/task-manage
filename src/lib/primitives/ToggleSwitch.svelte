@@ -1,15 +1,33 @@
-﻿<script>
-  export let left = "left";
-  export let right = "right";
-  export let leftColor = "#727de4";
-  export let leftColorBack = "#75bbff33";
-  export let rightColor = "#ff8d8d";
-  export let rightColorBack = "#ff8d8d33";
-  export let leftTextColor = null;
-  export let rightTextColor = null;
-  export let checked = true;
-  $: leftTextResolved = leftTextColor ?? leftColor;
-  $: rightTextResolved = rightTextColor ?? rightColor;
+<script>
+  /**
+   * @typedef {Object} Props
+   * @property {string} [left]
+   * @property {string} [right]
+   * @property {string} [leftColor]
+   * @property {string} [leftColorBack]
+   * @property {string} [rightColor]
+   * @property {string} [rightColorBack]
+   * @property {any} [leftTextColor]
+   * @property {any} [rightTextColor]
+   * @property {boolean} [checked]
+   * @property {(detail?: any) => void} [onclick]
+   */
+
+  /** @type {Props} */
+  let {
+    left = "left",
+    right = "right",
+    leftColor = "#727de4",
+    leftColorBack = "#75bbff33",
+    rightColor = "#ff8d8d",
+    rightColorBack = "#ff8d8d33",
+    leftTextColor = null,
+    rightTextColor = null,
+    checked = true,
+    onclick,
+  } = $props();
+  let leftTextResolved = $derived(leftTextColor ?? leftColor);
+  let rightTextResolved = $derived(rightTextColor ?? rightColor);
 </script>
 
 <div
@@ -17,7 +35,7 @@
 >
   <span class="Left">{left}</span>
   <label class="ToggleButton">
-    <input type="checkbox" aria-label={`${left} / ${right}`} {checked} on:click />
+    <input type="checkbox" aria-label={`${left} / ${right}`} {checked} {onclick} />
   </label>
   <span class="Right">{right}</span>
 </div>
@@ -43,7 +61,7 @@
     transition: background-color 0.4s;
   }
 
-  .ToggleButton:has(:checked) {
+  .ToggleButton:has(:global(:checked)) {
     background-color: var(--rightColorBack);
   }
 
@@ -58,7 +76,7 @@
     transition: left 0.2s;
   }
 
-  .ToggleButton:has(:checked)::before {
+  .ToggleButton:has(:global(:checked))::before {
     left: 1.5rem;
     background-color: var(--rightColor);
   }
@@ -86,7 +104,7 @@
     opacity: 0;
     cursor: pointer;
   }
-  .ToggleButton:has(input:focus-visible) {
+  .ToggleButton:has(:global(input:focus-visible)) {
     outline: 2px solid var(--accent-fg);
     outline-offset: 3px;
   }

@@ -1,4 +1,4 @@
-﻿<script context="module" lang="ts">
+<script module lang="ts">
   // marked.use() の設定はモジュール読込時に一度だけ行う (下の instance <script> 参照)。
   import { Marked } from "marked";
   const marked = new Marked();
@@ -6,7 +6,7 @@
 </script>
 
 <script lang="ts">
-  import { tick, onDestroy, onMount } from "svelte";
+  import { tick, onDestroy, onMount, untrack } from "svelte";
   import {
     Direction,
     EditorView,
@@ -91,61 +91,52 @@
     );
   }
 
-  export let saveMemo: (content: string) => unknown;
-  export let content: unknown = "";
-  export let readOnly = false;
-  export let memoTitles: string[] = [];
-  export let currentMemoTitle = "";
-  export let openMemoLink: ((title: string) => void) | undefined = undefined;
-  export let workspaceProjectDir: string | null = null;
-  export let taskId: string | null = null;
-  export let saveImage: ((file: File) => Promise<string | null>) | undefined = undefined;
-  export let resolveAsset: ((relativePath: string) => Promise<string | null>) | undefined =
-    undefined;
+  interface Props {
+    saveMemo: (content: string) => unknown;
+    content?: unknown;
+    readOnly?: boolean;
+    memoTitles?: string[];
+    currentMemoTitle?: string;
+    openMemoLink?: ((title: string) => void) | undefined;
+    saveImage?: ((file: File) => Promise<string | null>) | undefined;
+    resolveAsset?: ((relativePath: string) => Promise<string | null>) | undefined;
+  }
 
-  let container: HTMLElement;
+  let {
+    saveMemo,
+    content = "",
+    readOnly = false,
+    memoTitles = [],
+    currentMemoTitle = "",
+    openMemoLink = undefined,
+    saveImage = undefined,
+    resolveAsset = undefined,
+  }: Props = $props();
+
+  let container: HTMLElement | undefined = $state();
   let view: EditorView | null = null;
   let saveTimer: ReturnType<typeof setTimeout>;
-  let isEditing = false;
-  let markdownMode: MarkdownMemoMode = "preview";
-  let hasChanges = false;
-  let saveState: "clean" | "dirty" | "saved" | "saving" | "error" = "clean";
+  let isEditing = $state(false);
+  let markdownMode: MarkdownMemoMode = $state("preview");
+  let hasChanges = $state(false);
+  let saveState: "clean" | "dirty" | "saved" | "saving" | "error" = $state("clean");
 
-  /**
-   * 保存表示はアプリで 1 つにする。
-   *
-   * これまではヘッダーの保存インジケータ（ワークスペースの書き込みしか見て
-   * いない）、メモ自身の保存表示、フロッピー図像の「今すぐ保存」ボタンの
-   * 3 つが同時に画面にあり、しかもヘッダーはメモ編集ではまったく動かなかった。
-   * 「保存されたか」を知りたい利用者にとって、どれを見ればよいか決められない。
-   *
-   * メモの保存状態をヘッダーと同じストアへ流し、メモ側の表示は落とす。
-   */
-  $: saveStatus.set(
-    saveState === "dirty"
-      ? "queued"
-      : saveState === "saving"
-        ? "writing"
-        : saveState === "error"
-          ? "error"
-          : "saved"
-  );
-  let saveError = "";
+  let saveError = $state("");
   let pendingSave: Promise<boolean> | undefined;
   let saveVersion = 0;
-  let currentContent = toMarkdown(content);
-  let renderedHtml = "";
+  let currentContent = $state(untrack(() => toMarkdown(content)));
+  let renderedHtml = $state("");
   let renderSequence = 0;
-  let previewEl: HTMLElement | null = null;
-  let livePreviewEl: HTMLElement | null = null;
-  let editBody: HTMLElement | null = null;
-  let modeDropdownEl: HTMLElement | null = null;
-  let markdownSplitPercent = 55;
-  let currentHeadingLevel = "normal";
-  let modeMenuOpen = false;
+  let previewEl: HTMLElement | null = $state(null);
+  let livePreviewEl: HTMLElement | null = $state(null);
+  let editBody: HTMLElement | null = $state(null);
+  let modeDropdownEl: HTMLElement | null = $state(null);
+  let markdownSplitPercent = $state(55);
+  let currentHeadingLevel = $state("normal");
+  let modeMenuOpen = $state(false);
   /** ツールバーのドロップダウン。開いているものだけを覚える。 */
-  let openToolbarMenu: "heading" | "table" | "more" | null = null;
-  let toolbarEl: HTMLElement | null = null;
+  let openToolbarMenu: "heading" | "table" | "more" | null = $state(null);
+  let toolbarEl: HTMLElement | null = $state(null);
 
   const SPLIT_MIN_PERCENT = 30;
   const SPLIT_MAX_PERCENT = 72;
@@ -365,15 +356,7 @@
     if (!readOnly) void startEdit("edit");
   }
 
-  function canSavePastedImages(): boolean {
-    return Boolean(
-      saveImage ||
-      (workspaceProjectDir && taskId && platform.isPlatformAvailable()) ||
-      !workspaceProjectDir
-    );
-  }
-
-  let imageInput: HTMLInputElement;
+  let imageInput: HTMLInputElement | undefined = $state();
   let imageTarget: EditorView | null = null;
   async function insertChosenImage(event: Event) {
     const input = event.currentTarget as HTMLInputElement;
@@ -382,9 +365,7 @@
     input.value = "";
     if (!file || !target || target !== view) return;
     try {
-      const src = canSavePastedImages()
-        ? await persistPastedImage(file)
-        : await imageToDataUrl(file);
+      const src = await persistPastedImage(file);
       if (src && target === view) {
         insertTextAtSelection(target, `${buildImageMarkdown(src, file.name)}\n`);
         target.focus();
@@ -403,35 +384,14 @@
     });
   }
 
+  /** 貼り付けた画像を保存して、本文に書く参照を返す。保存先が無ければ data URL。 */
   async function persistPastedImage(file: File): Promise<string | null> {
-    if (saveImage) return saveImage(file);
-    if (!workspaceProjectDir || !taskId) {
-      return readFileAsDataUrl(file);
-    }
-
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    const result = await platform.wsSaveMemoImage(
-      workspaceProjectDir,
-      taskId,
-      bytes,
-      file.type || "image/png"
-    );
-
-    return result.success ? (result.path ?? null) : null;
+    return saveImage ? saveImage(file) : readFileAsDataUrl(file);
   }
 
   function buildImageMarkdown(relativePath: string, label = ""): string {
     const alt = label.replace(/\.[^.]+$/, "").trim();
     return alt ? `![${alt}](${relativePath})` : `![](${relativePath})`;
-  }
-
-  function imageToDataUrl(file: File): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = () => reject(new Error("Failed to read image file"));
-      reader.readAsDataURL(file);
-    });
   }
 
   function insertTextAtSelection(editorView: EditorView, text: string) {
@@ -1160,7 +1120,7 @@
         break;
       case "image":
         imageTarget = view;
-        imageInput.click();
+        imageInput?.click();
         return;
       default:
         return;
@@ -1194,9 +1154,7 @@
   }
 
   async function resolveImageSources(html: string): Promise<string> {
-    if (!resolveAsset && (!workspaceProjectDir || !taskId || !platform.isPlatformAvailable())) {
-      return html;
-    }
+    if (!resolveAsset) return html;
 
     const template = document.createElement("template");
     template.innerHTML = html;
@@ -1209,9 +1167,7 @@
           return;
         }
 
-        const resolved = resolveAsset
-          ? await resolveAsset(src)
-          : ((await platform.wsResolveMemoAsset(workspaceProjectDir!, taskId!, src)).url ?? null);
+        const resolved = await resolveAsset(src);
         if (resolved) {
           image.setAttribute("src", resolved);
         } else {
@@ -1731,12 +1687,7 @@
 
           event.preventDefault();
           void (async () => {
-            let imageSrc: string | null;
-            if (canSavePastedImages()) {
-              imageSrc = await persistPastedImage(file);
-            } else {
-              imageSrc = await imageToDataUrl(file);
-            }
+            const imageSrc = await persistPastedImage(file);
             if (!imageSrc || view !== editorView) {
               return;
             }
@@ -2025,36 +1976,68 @@
     }
   }
 
+  /**
+   * 保存表示はアプリで 1 つにする。
+   *
+   * これまではヘッダーの保存インジケータ（ワークスペースの書き込みしか見て
+   * いない）、メモ自身の保存表示、フロッピー図像の「今すぐ保存」ボタンの
+   * 3 つが同時に画面にあり、しかもヘッダーはメモ編集ではまったく動かなかった。
+   * 「保存されたか」を知りたい利用者にとって、どれを見ればよいか決められない。
+   *
+   * メモの保存状態をヘッダーと同じストアへ流し、メモ側の表示は落とす。
+   */
+  $effect.pre(() => {
+    saveStatus.set(
+      saveState === "dirty"
+        ? "queued"
+        : saveState === "saving"
+          ? "writing"
+          : saveState === "error"
+            ? "error"
+            : "saved"
+    );
+  });
+  $effect.pre(() => {
+    isEditing = markdownMode !== "preview";
+  });
+  let normalizedContent = $derived(toMarkdown(content));
+  $effect.pre(() => {
+    if (!isEditing && !hasChanges && normalizedContent !== currentContent) {
+      currentContent = normalizedContent;
+    }
+  });
+  let hasRenderedContent = $derived(Boolean(currentContent.trim()));
   /** 空のプレビュー面がキーボードからも「書き始める」入口になるようにする。 */
-  $: emptyPreviewIsEntry = !readOnly && !hasRenderedContent;
-
-  $: normalizedContent = toMarkdown(content);
-  $: currentHeadingOption =
-    headingOptions.find((option) => option.level === currentHeadingLevel) ?? headingOptions[0];
-  $: currentHeadingLabel = currentHeadingOption.label;
-  $: currentHeadingShortLabel = currentHeadingOption.short;
-  $: isEditing = markdownMode !== "preview";
-  $: currentModeLabel =
-    memoModeOptions.find((mode) => mode.value === markdownMode)?.label ?? "プレビュー";
-  $: hasRenderedContent = Boolean(currentContent.trim());
-  $: if (!isEditing && !hasChanges && normalizedContent !== currentContent) {
-    currentContent = normalizedContent;
-  }
-  $: if (readOnly && isEditing) {
-    stopEdit();
-  }
-  $: if (!isEditing) {
-    void updateRenderedHtml(currentContent || "");
-  }
+  let emptyPreviewIsEntry = $derived(!readOnly && !hasRenderedContent);
+  let currentHeadingOption = $derived(
+    headingOptions.find((option) => option.level === currentHeadingLevel) ?? headingOptions[0]
+  );
+  let currentHeadingLabel = $derived(currentHeadingOption.label);
+  let currentHeadingShortLabel = $derived(currentHeadingOption.short);
+  let currentModeLabel = $derived(
+    memoModeOptions.find((mode) => mode.value === markdownMode)?.label ?? "プレビュー"
+  );
+  $effect.pre(() => {
+    if (readOnly && isEditing) {
+      stopEdit();
+    }
+  });
+  $effect.pre(() => {
+    if (!isEditing) {
+      void updateRenderedHtml(currentContent || "");
+    }
+  });
   // テーマが切り替わったら mermaid を再初期化し、既存ブロックを再レンダリング。
   // setupMermaidTheme は変更が無ければ no-op なので、初回マウントと
   // 切替時のみ updateRenderedHtml が走る。
-  $: if ($theme && setupMermaidTheme($theme) && currentContent.trim()) {
-    void updateRenderedHtml(currentContent);
-  }
+  $effect.pre(() => {
+    if ($theme && setupMermaidTheme($theme) && currentContent.trim()) {
+      void updateRenderedHtml(currentContent);
+    }
+  });
 </script>
 
-<svelte:window on:click={handleWindowClick} />
+<svelte:window onclick={handleWindowClick} />
 
 <div class="wrapper">
   <input
@@ -2062,11 +2045,11 @@
     accept="image/*"
     aria-label="本文に挿入する画像"
     bind:this={imageInput}
-    on:change={insertChosenImage}
+    onchange={insertChosenImage}
     hidden
   />
   {#if saveError}<div role="alert">
-      {saveError}<button class="ui-action" on:click={flush}>再試行</button>
+      {saveError}<button class="ui-action" onclick={flush}>再試行</button>
     </div>{/if}
   {#if isEditing}
     <div class="edit-mode">
@@ -2080,8 +2063,11 @@
               title={`見出し（現在: ${currentHeadingLabel}）`}
               aria-haspopup="menu"
               aria-expanded={openToolbarMenu === "heading"}
-              on:mousedown|preventDefault
-              on:click|stopPropagation={() => toggleToolbarMenu("heading")}
+              onmousedown={(event) => event.preventDefault()}
+              onclick={(event) => {
+                event.stopPropagation();
+                toggleToolbarMenu("heading");
+              }}
             >
               <span class="tool-trigger-label">{currentHeadingShortLabel}</span>
               <!-- eslint-disable-next-line svelte/no-at-html-tags -- Static SVG. -->
@@ -2093,7 +2079,7 @@
                 role="menu"
                 aria-label="見出し"
                 tabindex="-1"
-                on:keydown={handleToolbarMenuKeydown}
+                onkeydown={handleToolbarMenuKeydown}
               >
                 {#each headingOptions as option}
                   <button
@@ -2101,8 +2087,11 @@
                     class="tool-menu-item"
                     class:active={option.level === currentHeadingLevel}
                     role="menuitem"
-                    on:mousedown|preventDefault
-                    on:click|stopPropagation={() => runToolbarCommand(option.command)}
+                    onmousedown={(event) => event.preventDefault()}
+                    onclick={(event) => {
+                      event.stopPropagation();
+                      runToolbarCommand(option.command);
+                    }}
                   >
                     {option.label}
                   </button>
@@ -2116,8 +2105,8 @@
             class="tool-btn tool-bold"
             aria-label="太字"
             title="太字 (Ctrl+B)"
-            on:mousedown|preventDefault
-            on:click={formatBold}
+            onmousedown={(event) => event.preventDefault()}
+            onclick={formatBold}
           >
             <!-- eslint-disable-next-line svelte/no-at-html-tags -- Static SVG from the bundled Quill icon set. -->
             <span class="tool-icon" aria-hidden="true">{@html toolbarIcons.bold}</span>
@@ -2127,8 +2116,8 @@
             class="tool-btn tool-italic"
             aria-label="斜体"
             title="斜体 (Ctrl+I)"
-            on:mousedown|preventDefault
-            on:click={formatItalic}
+            onmousedown={(event) => event.preventDefault()}
+            onclick={formatItalic}
           >
             <!-- eslint-disable-next-line svelte/no-at-html-tags -- Static SVG from the bundled Quill icon set. -->
             <span class="tool-icon" aria-hidden="true">{@html toolbarIcons.italic}</span>
@@ -2138,8 +2127,8 @@
             class="tool-btn tool-code-inline"
             aria-label="インラインコード"
             title="インラインコード"
-            on:mousedown|preventDefault
-            on:click={formatInlineCode}
+            onmousedown={(event) => event.preventDefault()}
+            onclick={formatInlineCode}
           >
             <!-- eslint-disable-next-line svelte/no-at-html-tags -- Static SVG from the bundled Quill icon set. -->
             <span class="tool-icon" aria-hidden="true">{@html toolbarIcons.inlineCode}</span>
@@ -2150,8 +2139,8 @@
             class="tool-btn"
             aria-label="リンク"
             title="リンク (Ctrl+K)"
-            on:mousedown|preventDefault
-            on:click={formatLink}
+            onmousedown={(event) => event.preventDefault()}
+            onclick={formatLink}
           >
             <!-- eslint-disable-next-line svelte/no-at-html-tags -- Static SVG from the bundled Quill icon set. -->
             <span class="tool-icon" aria-hidden="true">{@html toolbarIcons.link}</span>
@@ -2161,8 +2150,8 @@
             class="tool-btn"
             aria-label="箇条書き"
             title="箇条書き"
-            on:mousedown|preventDefault
-            on:click={formatBulletList}
+            onmousedown={(event) => event.preventDefault()}
+            onclick={formatBulletList}
           >
             <!-- eslint-disable-next-line svelte/no-at-html-tags -- Static SVG from the bundled Quill icon set. -->
             <span class="tool-icon" aria-hidden="true">{@html toolbarIcons.bulletList}</span>
@@ -2172,8 +2161,8 @@
             class="tool-btn"
             aria-label="引用"
             title="引用"
-            on:mousedown|preventDefault
-            on:click={formatQuote}
+            onmousedown={(event) => event.preventDefault()}
+            onclick={formatQuote}
           >
             <!-- eslint-disable-next-line svelte/no-at-html-tags -- Static SVG from the bundled Quill icon set. -->
             <span class="tool-icon" aria-hidden="true">{@html toolbarIcons.quote}</span>
@@ -2183,8 +2172,8 @@
             class="tool-btn tool-code-block"
             aria-label="コードブロック"
             title="コードブロック"
-            on:mousedown|preventDefault
-            on:click={formatCodeBlock}
+            onmousedown={(event) => event.preventDefault()}
+            onclick={formatCodeBlock}
           >
             <!-- eslint-disable-next-line svelte/no-at-html-tags -- Static SVG from the bundled Quill icon set. -->
             <span class="tool-icon" aria-hidden="true">{@html toolbarIcons.codeBlock}</span>
@@ -2195,8 +2184,8 @@
             class="tool-btn"
             aria-label="字下げ解除"
             title="字下げ解除"
-            on:mousedown|preventDefault
-            on:click={() => runToolbarCommand("outdent")}
+            onmousedown={(event) => event.preventDefault()}
+            onclick={() => runToolbarCommand("outdent")}
           >
             <!-- eslint-disable-next-line svelte/no-at-html-tags -- Static SVG from the bundled Quill icon set. -->
             <span class="tool-icon" aria-hidden="true">{@html toolbarIcons.outdent}</span>
@@ -2206,8 +2195,8 @@
             class="tool-btn"
             aria-label="字下げ"
             title="字下げ"
-            on:mousedown|preventDefault
-            on:click={() => runToolbarCommand("indent")}
+            onmousedown={(event) => event.preventDefault()}
+            onclick={() => runToolbarCommand("indent")}
           >
             <!-- eslint-disable-next-line svelte/no-at-html-tags -- Static SVG from the bundled Quill icon set. -->
             <span class="tool-icon" aria-hidden="true">{@html toolbarIcons.indent}</span>
@@ -2220,8 +2209,11 @@
               title="表"
               aria-haspopup="menu"
               aria-expanded={openToolbarMenu === "table"}
-              on:mousedown|preventDefault
-              on:click|stopPropagation={() => toggleToolbarMenu("table")}
+              onmousedown={(event) => event.preventDefault()}
+              onclick={(event) => {
+                event.stopPropagation();
+                toggleToolbarMenu("table");
+              }}
             >
               <!-- eslint-disable-next-line svelte/no-at-html-tags -- Static SVG from the bundled Quill icon set. -->
               <span class="tool-icon" aria-hidden="true">{@html toolbarIcons.table}</span>
@@ -2232,7 +2224,7 @@
                 role="menu"
                 aria-label="表"
                 tabindex="-1"
-                on:keydown={handleToolbarMenuKeydown}
+                onkeydown={handleToolbarMenuKeydown}
               >
                 {#each tableMenuEntries as entry}
                   {#if entry.kind === "item"}
@@ -2240,8 +2232,11 @@
                       type="button"
                       class="tool-menu-item"
                       role="menuitem"
-                      on:mousedown|preventDefault
-                      on:click|stopPropagation={() => runToolbarCommand(entry.command)}
+                      onmousedown={(event) => event.preventDefault()}
+                      onclick={(event) => {
+                        event.stopPropagation();
+                        runToolbarCommand(entry.command);
+                      }}
                     >
                       {entry.label}
                     </button>
@@ -2259,8 +2254,11 @@
               title="その他の編集操作"
               aria-haspopup="menu"
               aria-expanded={openToolbarMenu === "more"}
-              on:mousedown|preventDefault
-              on:click|stopPropagation={() => toggleToolbarMenu("more")}
+              onmousedown={(event) => event.preventDefault()}
+              onclick={(event) => {
+                event.stopPropagation();
+                toggleToolbarMenu("more");
+              }}
             >
               <!-- eslint-disable-next-line svelte/no-at-html-tags -- Static SVG. -->
               <span class="tool-icon" aria-hidden="true">{@html moreIconSvg}</span>
@@ -2271,7 +2269,7 @@
                 role="menu"
                 aria-label="その他の編集操作"
                 tabindex="-1"
-                on:keydown={handleToolbarMenuKeydown}
+                onkeydown={handleToolbarMenuKeydown}
               >
                 {#each moreMenuEntries as entry}
                   {#if entry.kind === "group"}
@@ -2281,8 +2279,11 @@
                       type="button"
                       class="tool-menu-item"
                       role="menuitem"
-                      on:mousedown|preventDefault
-                      on:click|stopPropagation={() => runToolbarCommand(entry.command)}
+                      onmousedown={(event) => event.preventDefault()}
+                      onclick={(event) => {
+                        event.stopPropagation();
+                        runToolbarCommand(entry.command);
+                      }}
                     >
                       {entry.label}
                     </button>
@@ -2304,8 +2305,11 @@
               aria-expanded={modeMenuOpen}
               aria-controls={modeMenuId}
               title={currentModeLabel}
-              on:click|stopPropagation={toggleModeMenu}
-              on:keydown={handleModeTriggerKeydown}
+              onclick={(event) => {
+                event.stopPropagation();
+                toggleModeMenu();
+              }}
+              onkeydown={handleModeTriggerKeydown}
             >
               <!-- eslint-disable-next-line svelte/no-at-html-tags -->
               <span class="memo-mode-icon" aria-hidden="true"
@@ -2322,7 +2326,7 @@
                 role="listbox"
                 aria-label="メモ表示モード"
                 tabindex="-1"
-                on:keydown={handleModeMenuKeydown}
+                onkeydown={handleModeMenuKeydown}
               >
                 {#each memoModeOptions as mode}
                   <button
@@ -2332,7 +2336,10 @@
                     data-mode={mode.value}
                     role="option"
                     aria-selected={mode.value === markdownMode}
-                    on:click|stopPropagation={() => selectMarkdownMode(mode.value)}
+                    onclick={(event) => {
+                      event.stopPropagation();
+                      selectMarkdownMode(mode.value);
+                    }}
                   >
                     <!-- eslint-disable-next-line svelte/no-at-html-tags -->
                     <span class="memo-mode-icon" aria-hidden="true"
@@ -2368,15 +2375,15 @@
             aria-valuemax={SPLIT_MAX_PERCENT}
             aria-valuenow={Math.round(markdownSplitPercent)}
             tabindex="0"
-            on:pointerdown={startSplitResize}
-            on:keydown={handleSplitKeydown}
+            onpointerdown={startSplitResize}
+            onkeydown={handleSplitKeydown}
           ></div>
-          <!-- svelte-ignore a11y-no-static-element-interactions -->
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
             class="live-preview"
             aria-label="Markdownプレビュー"
-            on:click={handlePreviewClick}
-            on:keydown={handlePreviewKeydown}
+            onclick={handlePreviewClick}
+            onkeydown={handlePreviewKeydown}
           >
             {#if hasRenderedContent}
               <!-- eslint-disable-next-line svelte/no-at-html-tags -->
@@ -2389,12 +2396,12 @@
       </div>
     </div>
   {:else}
-    <!-- svelte-ignore a11y-no-static-element-interactions -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
       class="preview-mode"
       class:emptyContent={!hasRenderedContent}
-      on:click={handlePreviewClick}
-      on:keydown={handlePreviewKeydown}
+      onclick={handlePreviewClick}
+      onkeydown={handlePreviewKeydown}
     >
       {#if !readOnly}
         <div class="preview-bar">
@@ -2408,8 +2415,11 @@
               aria-expanded={modeMenuOpen}
               aria-controls={modeMenuId}
               title={currentModeLabel}
-              on:click|stopPropagation={toggleModeMenu}
-              on:keydown={handleModeTriggerKeydown}
+              onclick={(event) => {
+                event.stopPropagation();
+                toggleModeMenu();
+              }}
+              onkeydown={handleModeTriggerKeydown}
             >
               <!-- eslint-disable-next-line svelte/no-at-html-tags -->
               <span class="memo-mode-icon" aria-hidden="true"
@@ -2426,7 +2436,7 @@
                 role="listbox"
                 aria-label="メモ表示モード"
                 tabindex="-1"
-                on:keydown={handleModeMenuKeydown}
+                onkeydown={handleModeMenuKeydown}
               >
                 {#each memoModeOptions as mode}
                   <button
@@ -2436,7 +2446,10 @@
                     data-mode={mode.value}
                     role="option"
                     aria-selected={mode.value === markdownMode}
-                    on:click|stopPropagation={() => selectMarkdownMode(mode.value)}
+                    onclick={(event) => {
+                      event.stopPropagation();
+                      selectMarkdownMode(mode.value);
+                    }}
                   >
                     <!-- eslint-disable-next-line svelte/no-at-html-tags -->
                     <span class="memo-mode-icon" aria-hidden="true"
@@ -2461,8 +2474,8 @@
           class="placeholder placeholder-entry"
           role="button"
           tabindex="0"
-          on:click={handlePreviewClick}
-          on:keydown={handlePreviewKeydown}
+          onclick={handlePreviewClick}
+          onkeydown={handlePreviewKeydown}
         >
           本文はまだありません。クリックまたは Enter で書き始めます。
         </div>
@@ -2474,7 +2487,7 @@
 <style>
   .wrapper {
     --memo-editor-font:
-      "BIZ UDゴシック", "BIZ UDGothic", "Cascadia Mono", "Cascadia Code", Consolas, "Courier New",
+      "BIZ UDゴシック", "BIZ UDGothic", "Cascadia Mono", "Cascadia Code", consolas, "Courier New",
       monospace;
     --memo-quill-button-color: var(--theme-color-Sub-light);
     --memo-quill-button-active-color: #06c;
@@ -2592,7 +2605,7 @@
 
   .tool-icon :global(.ql-stroke) {
     fill: none;
-    stroke: currentColor;
+    stroke: currentcolor;
     stroke-linecap: round;
     stroke-linejoin: round;
     stroke-width: 2;
@@ -2600,14 +2613,14 @@
 
   .tool-icon :global(.ql-stroke-miter) {
     fill: none;
-    stroke: currentColor;
+    stroke: currentcolor;
     stroke-miterlimit: 10;
     stroke-width: 2;
   }
 
   .tool-icon :global(.ql-fill),
   .tool-icon :global(.ql-stroke.ql-fill) {
-    fill: currentColor;
+    fill: currentcolor;
   }
 
   .tool-icon :global(.ql-even) {
@@ -2689,7 +2702,7 @@
     width: 100%;
     height: 100%;
     fill: none;
-    stroke: currentColor;
+    stroke: currentcolor;
     stroke-width: 2;
     stroke-linecap: round;
     stroke-linejoin: round;
@@ -2827,7 +2840,7 @@
   .memo-mode-chevron :global(svg) {
     display: block;
     fill: none;
-    stroke: currentColor;
+    stroke: currentcolor;
     stroke-width: 2;
     stroke-linecap: round;
     stroke-linejoin: round;

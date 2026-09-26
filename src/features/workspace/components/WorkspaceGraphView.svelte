@@ -1,16 +1,22 @@
 <script>
-  import { createEventDispatcher } from "svelte";
-  export let graph;
-  export let selectedId = "";
-  const dispatch = createEventDispatcher();
+  /**
+   * @typedef {Object} Props
+   * @property {any} graph
+   * @property {string} [selectedId]
+   * @property {(detail?: any) => void} [onexecute]
+   * @property {(detail?: any) => void} [onselect]
+   */
+
+  /** @type {Props} */
+  let { graph, selectedId = "", onexecute, onselect } = $props();
   const W = 1000,
     H = 650,
     RX = 78,
     RY = 30;
-  let local = {};
-  $: nodes = Object.values(graph?.nodes || {});
-  $: edges = nodes.flatMap((n) =>
-    (n.parents || []).map((p) => ({ parentId: p.id, childId: n.id }))
+  let local = $state({});
+  let nodes = $derived(Object.values(graph?.nodes || {}));
+  let edges = $derived(
+    nodes.flatMap((n) => (n.parents || []).map((p) => ({ parentId: p.id, childId: n.id })))
   );
   function layout() {
     const depth = new Map([[graph.rootId, 0]]),
@@ -42,9 +48,11 @@
     }
     return out;
   }
-  $: defaults = layout();
-  $: positions = Object.fromEntries(
-    nodes.map((n) => [n.id, local[n.id] || graph?.positions?.[n.id] || defaults[n.id]])
+  let defaults = $derived(layout());
+  let positions = $derived(
+    Object.fromEntries(
+      nodes.map((n) => [n.id, local[n.id] || graph?.positions?.[n.id] || defaults[n.id]])
+    )
   );
   function positionFor(id) {
     return (
@@ -79,7 +87,7 @@
       window.removeEventListener("pointerup", up);
       if (!moved) return;
       const q = local[node.id] || positions[node.id];
-      dispatch("execute", {
+      onexecute?.({
         command: { type: "set-position", nodeId: node.id, x: q.x, y: q.y },
         origin: "graph",
       });
@@ -116,11 +124,11 @@
       role="button"
       tabindex="0"
       aria-label={node.name}
-      on:pointerdown={(e) => drag(e, node)}
-      on:click={() => dispatch("select", { nodeId: node.id, parentId: "", occurrenceId: node.id })}
-      on:keydown={(e) =>
+      onpointerdown={(e) => drag(e, node)}
+      onclick={() => onselect?.({ nodeId: node.id, parentId: "", occurrenceId: node.id })}
+      onkeydown={(e) =>
         (e.key === "Enter" || e.key === " ") &&
-        dispatch("select", { nodeId: node.id, parentId: "", occurrenceId: node.id })}
+        onselect?.({ nodeId: node.id, parentId: "", occurrenceId: node.id })}
       ><rect x={-RX} y={-RY} width={RX * 2} height={RY * 2} rx="10" /><text
         text-anchor="middle"
         dominant-baseline="middle">{node.name || "名称未設定"}</text
@@ -137,7 +145,7 @@
     color: var(--theme-color-Sub-main);
   }
   line {
-    stroke: currentColor;
+    stroke: currentcolor;
     stroke-width: 2;
     opacity: 0.65;
   }
@@ -150,7 +158,7 @@
   }
   rect {
     fill: var(--theme-color-Main-main);
-    stroke: currentColor;
+    stroke: currentcolor;
     stroke-width: 2;
   }
   g.selected rect {

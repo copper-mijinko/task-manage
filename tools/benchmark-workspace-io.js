@@ -4,7 +4,7 @@ const path = require("path");
 process.env.TASK_MANAGE_PERF = "1";
 
 const { PerformanceMetrics, performanceMetrics } = require("../electron/performance-metrics");
-const workspace = require("../electron/workspace");
+const workspaceGraph = require("../electron/workspace-graph");
 const { probeEventLoop } = require("./event-loop-probe");
 
 function readOption(name, fallback) {
@@ -25,92 +25,73 @@ function readPositiveInteger(name, fallback) {
   return value;
 }
 
-function buildTasks(projectIndex, taskCount) {
-  const rootId = `project-${projectIndex}`;
+/**
+ * ワークスペースの正本（`.task-manage/graph-v1.json`）を直接作る。
+ * プロジェクト数 × ノード数のノードを持ち、各ノードに短い本文を付ける。
+ */
+async function createFixture(fixtureDir, projectCount, taskCount) {
   const createdAt = "2026-01-01";
-  const tasks = [
-    {
-      id: rootId,
+  const rootId = "workspace-root";
+  const nodes = { [rootId]: { id: rootId, name: "Benchmark", parents: [], createdAt } };
+  for (let projectIndex = 0; projectIndex < projectCount; projectIndex += 1) {
+    const projectId = `project-${projectIndex}`;
+    nodes[projectId] = {
+      id: projectId,
       name: `Performance Project ${projectIndex}`,
       status: "Open",
-      parents: [],
-      memos: [],
+      parents: [{ id: rootId, order: projectIndex }],
       createdAt,
-      order: projectIndex,
-    },
-  ];
-
-  for (let taskIndex = 0; taskIndex < taskCount; taskIndex += 1) {
-    tasks.push({
-      id: `project-${projectIndex}-task-${taskIndex}`,
-      name: `Task ${taskIndex}`,
-      status: taskIndex % 3 === 0 ? "In Progress" : "Open",
-      parents: [rootId],
-      memos: [
-        {
-          id: `memo-${projectIndex}-${taskIndex}`,
-          title: `Memo ${taskIndex}`,
-          format: "markdown",
-          content: `# Memo ${taskIndex}\n\nBenchmark fixture content.`,
-          tags: ["performance"],
-        },
-      ],
-      createdAt,
-      order: taskIndex,
-    });
+    };
+    for (let taskIndex = 0; taskIndex < taskCount; taskIndex += 1) {
+      const id = `${projectId}-task-${taskIndex}`;
+      nodes[id] = {
+        id,
+        name: `Task ${taskIndex}`,
+        status: taskIndex % 3 === 0 ? "In Progress" : "Open",
+        parents: [{ id: projectId, order: taskIndex }],
+        body: `# Task ${taskIndex}\n\nBenchmark fixture content.`,
+        format: "markdown",
+        tags: ["performance"],
+        createdAt,
+      };
+    }
   }
-  return tasks;
+  const graph = { schemaVersion: 1, workspaceId: "benchmark", rootId, revision: 0, nodes };
+  await fs.promises.mkdir(path.join(fixtureDir, ".task-manage"), { recursive: true });
+  await fs.promises.writeFile(
+    workspaceGraph.graphPath(fixtureDir),
+    JSON.stringify({ schemaVersion: 1, graph, undo: [], redo: [] })
+  );
 }
 
-async function createFixture(fixtureDir, projectCount, taskCount) {
-  const projects = [];
-  for (let projectIndex = 0; projectIndex < projectCount; projectIndex += 1) {
-    const rootId = `project-${projectIndex}`;
-    const created = await workspace.createProjectAsync(
+/** イベントループの遅れと所要時間の両方を記録する。 */
+function measure(eventLoopMetrics, name, operation) {
+  return probeEventLoop(eventLoopMetrics, name, () =>
+    performanceMetrics.measureAsync(`graph.${name}`, operation)
+  );
+}
+
+async function runIteration(fixtureDir, eventLoopMetrics, iteration) {
+  const graph = await measure(eventLoopMetrics, "readWorkspaceGraph", () =>
+    workspaceGraph.readWorkspaceGraph(fixtureDir)
+  );
+  const renamed = await measure(eventLoopMetrics, "executeWorkspaceGraphCommand", () =>
+    workspaceGraph.executeWorkspaceGraphCommand(
       fixtureDir,
-      `Performance Project ${projectIndex}`,
-      rootId,
-      projectIndex
-    );
-    const tasks = buildTasks(projectIndex, taskCount);
-    await workspace.writeProjectAsync(created.projectDir, tasks);
-    projects.push({ ...created, tasks });
-  }
-  return projects;
-}
-
-async function runIteration(fixtureDir, selectedProject, eventLoopMetrics, iteration) {
-  const projects = await probeEventLoop(eventLoopMetrics, "listProjectsAsync", () =>
-    workspace.listProjectsAsync(fixtureDir)
+      {
+        type: "update-node",
+        nodeId: "project-0-task-1",
+        changes: { name: `Task 1 iteration ${iteration}` },
+      },
+      "tree",
+      graph.revision
+    )
   );
-  workspace.listProjects(fixtureDir);
-
-  const asyncProject = await probeEventLoop(eventLoopMetrics, "readProjectAsync", () =>
-    workspace.readProjectAsync(selectedProject.projectDir, { includeMemoContent: false })
+  const undone = await measure(eventLoopMetrics, "undoWorkspaceGraph", () =>
+    workspaceGraph.undoWorkspaceGraph(fixtureDir, renamed.graph.revision)
   );
-  workspace.readProject(selectedProject.projectDir, { includeMemoContent: false });
-
-  const taskId = selectedProject.tasks[1].id;
-  await probeEventLoop(eventLoopMetrics, "readTaskMemosAsync", () =>
-    workspace.readTaskMemosAsync(selectedProject.projectDir, taskId, asyncProject.taskDirs)
-  );
-  workspace.readTaskMemos(selectedProject.projectDir, taskId, asyncProject.taskDirs);
-
-  await probeEventLoop(eventLoopMetrics, "writeProjectAsync", () =>
-    workspace.writeProjectAsync(selectedProject.projectDir, selectedProject.tasks)
-  );
-
-  const changedTask = {
-    ...selectedProject.tasks[1],
-    name: `Task 0 iteration ${iteration % 2}`,
-  };
-  await probeEventLoop(eventLoopMetrics, "writeProjectPatchAsync", () =>
-    workspace.writeProjectPatchAsync(selectedProject.projectDir, { tasks: [changedTask] })
-  );
-  selectedProject.tasks[1] = changedTask;
-
-  await probeEventLoop(eventLoopMetrics, "setProjectOrderAsync", () =>
-    workspace.setProjectOrderAsync(fixtureDir, projects)
+  await measure(eventLoopMetrics, "redoWorkspaceGraph", () =>
+    workspaceGraph.redoWorkspaceGraph(fixtureDir, undone.graph.revision)
   );
 }
 
@@ -134,22 +115,21 @@ async function main() {
   }
 
   try {
-    const projects = await createFixture(fixtureDir, projectCount, taskCount);
-    const selectedProject = projects[0];
+    await createFixture(fixtureDir, projectCount, taskCount);
     const eventLoopMetrics = new PerformanceMetrics({ enabled: true });
 
-    await runIteration(fixtureDir, selectedProject, eventLoopMetrics, -1);
+    await runIteration(fixtureDir, eventLoopMetrics, -1);
     performanceMetrics.reset();
     eventLoopMetrics.reset();
 
     for (let iteration = 0; iteration < iterations; iteration += 1) {
-      await runIteration(fixtureDir, selectedProject, eventLoopMetrics, iteration);
+      await runIteration(fixtureDir, eventLoopMetrics, iteration);
     }
 
     process.stdout.write(
       `${JSON.stringify(
         {
-          schemaVersion: 2,
+          schemaVersion: 3,
           fixture: {
             storage: requestedRoot ? "custom-root" : "os-temp",
             iterations,

@@ -14,7 +14,7 @@
 - edge には detach、move、link があります。root 以外の Node は Node 本体とその edge を削除できます。
 - copy には Node only、direct children の共有、subgraph の3モードがあります。
 
-Node には本文、画像・添付ファイル、タグを保存できます。Inbox は素早い入力を受け付け、Agenda は期限を持つ Node をまとめて表示します。
+Node には本文、画像・添付ファイル、タグを保存できます。Inbox は素早い入力を受け付けます。
 
 ## Storage and migration
 
@@ -26,6 +26,8 @@ Node には本文、画像・添付ファイル、タグを保存できます。
 ```
 
 初回読み込み時、既存のプロジェクト Markdown を一度だけ正規 graph に取り込みます。取り込みでは Node ID、親子関係、本文、タグ、画像・添付ファイルを保持します。以後はアプリを正規データの編集に使用してください。後から旧 Markdown を直接編集しても、正規 graph へ自動同期されません。
+
+すでに graph を持つワークスペースにも、ワークスペース管理ダイアログの「Markdown から取り込む」で旧 Markdown のプロジェクトを選んで追加できます（Undo で取り消せます）。元の Markdown ファイルは変更しません。
 
 詳細は [node graph design](docs/node-graph-design.md) と [node graph verification](docs/node-graph-verification.md) を参照してください。
 
@@ -45,7 +47,7 @@ npm ci
 - `npm run build` — renderer の production build を作成します。
 - `npm run start` — build 済みアプリを Electron で起動します。
 - `npm run lint` — ESLint を実行します。
-- `npm run check` — Svelte/TypeScript の診断を実行します。
+- `npm run check` — 型検査を実行します（TS は strict、JS と Electron の main プロセスは checkJs）。
 - `npm run format:check` — Prettier の整形状態を確認します。
 - `npm run test` — Vitest の全テストを実行します。
 - `npm run test:e2e` — build 後に Playwright E2E を実行します。

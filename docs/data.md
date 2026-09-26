@@ -6,537 +6,228 @@
 
 データはローカルファイルとして保存される。
 
-- `electron/db.json`
-  - 標準プロジェクトの本体とタスクツリーを保存する
-- `electron/meta.json`
-  - テーマやノード開閉状態などの UI 用メタデータを保存する。アクティブワークスペースのパスもここに保存する
-- ワークスペースディレクトリ
-  - ユーザが選択した任意のディレクトリ配下に、プロジェクトごとのサブディレクトリと Markdown ファイル群を配置する
-- `electron/window-state.json`
-  - メインウィンドウの大きさ・位置・最大化状態。起動時に BrowserWindow を作る前へ読むため `meta.json` から分離している
-- `electron/workspace-state/<hash>.json`
-  - 各ワークスペースについて、配下ファイルの SHA-256 ハッシュ表を保存するスナップショット。`<hash>` はワークスペースの絶対パスの SHA-256 先頭 16 文字
-  - 起動時およびワークスペース外部書込の取り込み後に更新する
+- ワークスペースディレクトリ（利用者が選んだ任意のフォルダー）
+  - `<workspace>/.task-manage/graph-v1.json` … ノードと親子関係の**正本**（§ 3）
+  - `<workspace>/.task-manage/assets/<nodeId>/...` … 本文に貼った画像と添付ファイル（§ 4）
+- アプリのデータディレクトリ
+  - `meta.json` … テーマ・表示設定・登録済みワークスペースなど、アプリの設定（§ 2）
+  - `window-state.json` … メインウィンドウの大きさ・位置・最大化状態。起動時に BrowserWindow を作る前へ読むため `meta.json` から分離している
 
-`TASK_MANAGE_DATA_DIR` 環境変数が指定されている場合は、上記 `electron/` 配下の保存先と `workspace-state/` 配置先を当該ディレクトリへ切り替える。テスト時にはこの仕組みで保存先を分離する。
+アプリのデータディレクトリは次の順で決まる（`electron/app-paths.js`）。
 
-## 2. db.json
+1. `TASK_MANAGE_DATA_DIR` 環境変数があればそこ。テストとエージェント検証はこれで利用者のデータから切り離す
+2. ポータブル版（配布版で、実行ファイルと同じフォルダに `data` フォルダがある）はその `data`。起動直後に Electron の利用者データ領域ごと `data` へ移すので、設定ファイルに加えて renderer の localStorage・キャッシュ・ログも `data` に入る
+3. インストーラー版は OS の利用者データ領域（`app.getPath("userData")`。Windows なら `%APPDATA%\task-manage`）。インストール先は書き込めないことがあり、更新やアンインストールで消えるので使わない
+4. 開発中（`app.isPackaged` が偽）は `electron/`（git 管理外）
 
-### 2.1 全体構造
+リリースのポータブル版（`task-manage-<version>.tar.gz`）には空の `data` フォルダが入っている。新しい版に移るときは、古い版の `data` フォルダを新しい版のフォルダへ上書きコピーすれば設定を引き継げる。`data` を消すと `%APPDATA%` を使うようになる。
 
-`db.json` は「プロジェクトの配列」である。
-つまり、ファイル全体は 1 個のオブジェクトではなく、`[` で始まる配列になっている。
+0.1.45 までの配布版は設定をアプリのフォルダ（`resources/app/electron/`）に置いていたため、更新のたびに消えていた。
 
-次のような形で保存される。
+以前の版が使っていた `electron/db.json`（アプリ内プロジェクト）は読まない。ワークスペース直下の旧 Markdown プロジェクト（`<dir>/_project.md`）は取り込みの入力としてだけ読む（§ 7）。
 
-```json
-[
-  {
-    "headers": [
-      {
-        "name": "name",
-        "default_ratio": 10
-      },
-      {
-        "name": "status",
-        "default_ratio": 4
-      },
-      {
-        "name": "due date",
-        "default_ratio": 4
-      },
-      {
-        "name": "memo",
-        "default_ratio": 2
-      }
-    ],
-    "data": {
-      "id": "89f8d9b0-c94e-4f9f-80e6-1ef8d9448088",
-      "data": {
-        "name": "new_project",
-        "status": "Open",
-        "memo": []
-      },
-      "children": [
-        {
-          "id": "c2dba063-da65-430a-af15-2cfab466fcd8",
-          "data": {
-            "name": "new_task",
-            "status": "Open",
-            "memo": [
-              {
-                "title": "memo",
-                "content": "",
-                "format": "quill"
-              }
-            ]
-          },
-          "children": []
-        }
-      ]
-    }
-  }
-]
-```
+## 2. meta.json
 
-この構造では、外側の 1 要素が 1 プロジェクトを表す。
-その中の `data` が、プロジェクトのルートノードである。
-さらに `children` の中に子タスクが入り、入れ子でツリー構造になっていく。
-
-### 2.2 プロジェクト
-
-各プロジェクトは次の情報を持つ。
-
-- `headers`
-  - テーブル列定義
-- `data`
-  - ルートタスク
-
-### 2.3 タスク
-
-各タスクは次の情報を持つ。
-
-- `id`
-  - 一意な ID
-- `data.name`
-  - タスク名
-- `data.status`
-  - ステータス
-- `data["due date"]`
-  - 期限日
-- `data.memo`
-  - メモ配列。各エントリは `title` / `content` / `format` を持つ（詳細は § 6 参照）
-- `data.tags`
-  - タスク自身のタグ配列。省略時はタグなしとして扱う
-- `children`
-  - 子タスク配列
-
-## 3. meta.json
-
-`meta.json` は、画面表示のための設定を持つオブジェクトである。
-現在は主にテーマと、各プロジェクトのノード開閉状態を保存している。
-
-次のような形で保存される。
+`meta.json` は、アプリの設定を持つオブジェクトである。main プロセスの `electron/settings-store.js` が起動時に読み、変更は少し待ってまとめて書く（一時ファイルへ書いてから置き換える）。壊れたファイルは消さずに `meta.json.broken-<時刻>` へ退避し、初期値で起動する。
 
 ```json
 {
   "theme": "light",
-  "workspaceConflictPolicy": "ask",
+  "workspaces": [{ "path": "C:\\Users\\me\\Tasks", "label": "Tasks" }],
+  "activeWorkspace": "C:\\Users\\me\\Tasks",
   "preferences.date_time_format": "slash",
-  "closed_paths_8e392450-20f7-479a-a7f2-38bdafb913df": null,
-  "closed_paths_89f8d9b0-c94e-4f9f-80e6-1ef8d9448088": []
+  "closed_paths_8e392450-20f7-479a-a7f2-38bdafb913df": [],
+  "show_archived_8e392450-20f7-479a-a7f2-38bdafb913df": false
 }
 ```
 
-この JSON の見方は次のとおりである。
-
 - `theme`
-  - アプリ全体のテーマ
-- `workspaceConflictPolicy`
-  - ワークスペース保存時に外部書込との競合が検知されたときの挙動。`"ask"`（既定）はバナーで「維持 / 再読込」を問い合わせる。`"prefer-memory"` は問い合わせを行わず、メモリ上の `tree_data` を優先してそのまま上書き保存する（`forceLocal` 経路）
+  - アプリ全体のテーマ（`"dark"` / `"light"`）。変わると開いている他のウィンドウにも反映する
+- `workspaces` / `activeWorkspace`
+  - 登録済みワークスペースと、いま開いているもの。新しいパスはフォルダー選択ダイアログで選ばれたものだけ登録できる（レンダラーが任意のパスを登録することはできない）
 - `preferences.date_time_format`
   - 入力ショートカット（`Ctrl+;` / `Ctrl+:`）でテキスト入力に挿入される書式。`"slash"`（既定、`2026/05/26`）/ `"iso"`（`2026-05-26`）/ `"japanese"`（`2026年5月26日`）のいずれか
-- `closed_paths_<プロジェクトID>`
-  - そのプロジェクトで閉じている**行（経路）**の一覧
+- `closed_paths_<スコープID>`
+  - そのスコープ（開いているプロジェクト）で閉じている**行（経路）**の一覧
+- `show_archived_<スコープID>`
+  - アーカイブ済みを表示するか
 
-ノードは親を複数持てるため、同じノードが親ごとに複数の行として現れる。
-開閉はノードではなく**行＝辺**ごとの状態なので、キーにはノード ID ではなく
-ルートからの経路（`ルートID/親ID/子ID`）を使う。片方の親の下で閉じても、
-もう片方の親の下は開いたままになる。
+ノードは親を複数持てるため、同じノードが親ごとに複数の行として現れる。開閉はノードではなく**行＝辺**ごとの状態なので、キーにはノード ID ではなくルートからの経路（`ルートID/親ID/子ID`）を使う。片方の親の下で閉じても、もう片方の親の下は開いたままになる。
 
-`closed_paths_<プロジェクトID>` の値は、状況によって次のように変わる。
+## 3. graph-v1.json（正本）
 
-- `null`
-  - まだ開閉状態が保存されていない
-- `[]`
-  - 閉じている行が 1 つもない
-- `["root-id/parent-id", "root-id/parent-id/child-id"]`
-  - 指定した経路の行が閉じている
+ワークスペース 1 つにつき 1 ファイル。ノード集合・親子関係・リビジョン・元に戻す／やり直しの履歴を 1 つのスナップショットとして、一時ファイルへ書いてから置き換える（`atomicWriteFile`）。設計の背景は [node-graph-design.md](node-graph-design.md)。
 
-旧版はノード ID の配列を `closed_nodes_<プロジェクトID>` に保存していた。
-意味が変わったのでキーを分けてあり、旧キーは読まない。移行後の初回だけ
-開閉状態が初期化される（データには影響しない）。
-
-## 3a. Inbox
-
-Inbox はワークスペースごとに 1 つ存在する、プロジェクト非依存・フラット構造の特別なバケットである。
-
-### 3a.1 ファイル配置
-
-```
-<workspace>/
-├── _inbox/                     ← Inbox 専用ディレクトリ（_ 接頭辞）
-│   ├── _project.md             ← Inbox のルートマーカー（kind: inbox）
-│   ├── <uuid-a>/
-│   │   ├── _index.md           ← Inbox アイテム
-│   │   └── assets/             ← ペースト画像など
-│   └── <uuid-b>/...
-├── プロジェクトA/
-└── プロジェクトB/
-```
-
-- ディレクトリ名が `_` で始まるため、`listProjects` の通常プロジェクト一覧から自然に除外される
-- `_project.md` のフロントマターには `kind: inbox` を追加し、初回作成時に固定の `id`（UUID）を発行・永続化する。以降この id が Inbox ルートタスクとして扱われる
-- アイテムは `parents: [<inbox-root-id>]` を満たすフラット構造のみ。renderer 側で indent/child 追加は提供しない。main 側の `readInbox` はパース時に `parents` を `[rootId]` にクランプして念のため矛盾を矯正する
-
-### 3a.2 IPC 一覧（main プロセス側 API）
-
-| チャネル | ペイロード | 役割 |
-| --- | --- | --- |
-| `ws:ensure-inbox` | `{ workspacePath }` | `_inbox/` と `_project.md` を必要なら作成し、`{ projectDir, rootId }` を返す |
-| `ws:read-inbox` | `{ workspacePath }` | `ws:read-project` 相当。Inbox の全アイテムを読み出す |
-| `ws:add-inbox-item` | `{ workspacePath, item }` | 1 件追加。書込→再ロード不要にするため `workspace-project-updated` も発火する |
-| `ws:send-inbox-items` | `{ workspacePath, targetProjectDir, targetRootId, targetParentId?, taskIds }` | 指定したアイテムを対象プロジェクトに移動。`targetParentId` を指定するとそのノードの子の末尾に、省略時はプロジェクトのルート直下に追加。ディレクトリごと `rename` するため本文・アセットがそのまま運ばれる |
-
-Inbox 全体の永続化には既存の `ws:write-project(<inbox-projectDir>, items, options)` を再利用する。Inbox ディレクトリは構造的にワークスペースプロジェクトと同等のため、`WorkspaceWriteQueue` / `WorkspaceReconciler` / `wsCache` がそのまま機能する。
-
-### 3a.3 送信処理
-
-`ws:send-inbox-items` は以下の順序でアトミックに振る舞う：
-
-1. ソース（Inbox）とターゲット（プロジェクト）の双方を `readProject` で読み出す
-2. `targetParentId` 指定時はターゲットプロジェクト内に該当 ID が存在することを確認する（不在ならエラー）。省略時はターゲットのルート ID をフォールバックとして用いる
-3. 各 taskId について：
-   - ソース `_inbox/<dir>/` を `fs.rename` で `<projectDir>/<dir>/` へ移動（同一ボリュームなら原子的、`EXDEV` 時は `cp -r` + `rm -rf` にフォールバック）
-   - 移動先のディレクトリ名が衝突する場合は `-2`, `-3` … のサフィックスを付ける
-   - `parents` を解決後の親 ID で書き換え、`order` を解決後親の既存子の末尾に連番採番し、`writeTaskAsync` で `_index.md` を更新
-4. 双方の `wsCache` を最新化し、`workspace-project-updated` を双方の projectDir 向けに送出
-
-本文と assets は `_index.md` と同階層に保存されているため、ディレクトリ移動だけで相対パスは破綻しない。
-
-## 4. ワークスペースプロジェクト
-
-ワークスペースプロジェクトは、通常の `db.json` プロジェクトと同じツリー UI に変換して表示する。
-
-- ワークスペースプロジェクトの root task は、プロジェクト自身を表すルートノードとしてツリー上に表示する
-- root task の `parents` は空配列である
-- `parents` は配列で、**1 つのタスクが複数の親を持てる**（多親）。ファイル形式と読み込みは多親をそのまま扱う
-
-#### 親リンクと並び順
-
-並び順は**辺の属性**なので、親 id と組で子側に持つ。
-
-```yaml
-id: t-w3
-name: トップページ実装
-parents:
-  - id: proj-web
-    order: 1
-  - id: t-w2
-    order: 0
-created: 2026-08-24
+```json
+{
+  "schemaVersion": 1,
+  "graph": {
+    "schemaVersion": 1,
+    "workspaceId": "5b0c...",
+    "rootId": "workspace-5b0c...",
+    "inboxId": "7f1e...",
+    "revision": 42,
+    "nodes": {
+      "workspace-5b0c...": { "id": "workspace-5b0c...", "name": "Tasks", "parents": [], "createdAt": "2026-09-01" },
+      "p-web": {
+        "id": "p-web",
+        "name": "Web サイト",
+        "status": "In Progress",
+        "parents": [{ "id": "workspace-5b0c...", "order": 0 }],
+        "createdAt": "2026-09-01"
+      },
+      "t-top": {
+        "id": "t-top",
+        "name": "トップページ実装",
+        "status": "Open",
+        "dueDate": "2026-10-01",
+        "parents": [{ "id": "p-web", "order": 1 }, { "id": "t-design", "order": 0 }],
+        "body": "# メモ\n\n本文",
+        "format": "markdown",
+        "tags": ["frontend"],
+        "attachments": [],
+        "createdAt": "2026-09-02"
+      }
+    }
+  },
+  "undo": [],
+  "redo": []
+}
 ```
 
-- 同じノードが、**親ごとに違う位置**を取れる（上の例は proj-web の下では 2 番目、t-w2 の下では先頭）。ノードに `order` を 1 つだけ持たせると、片方の親の下で並べ替えたときにもう片方でも動いてしまう
-- タスク直下の `order:` は**ルートタスク（＝プロジェクト自身のワークスペース内での並び順）だけ**が持つ。通常タスクには書かない
-- `order` を書かない辺は「末尾」。並び順が同じ／未指定どうしの兄弟は **id の昇順**で並べる。ファイルの読み取り順に頼ると環境で並びが変わる
-- **読みは 3 つの形を受ける**（後方互換）。
-  - `parents: [{ id, order }]` … 現行
-  - `parents: [id, id]` … 旧形式・手書きの短縮形。タスク直下の `order` を全ての辺に配る（旧来の「どの親の下でも同じ位置」の意味をそのまま保つ）
-  - `parents: id` … 単一のスカラー
-- **書きは現行形式だけ**。旧形式のファイルはそのまま読めて、そのタスクを次に保存したときに現行形式へ移る。移行スクリプトは要らない
-- 正規化は main 側（`electron/workspace.js` の `normalizeParentLinks`）と renderer 側（`src/lib/utils/parent_links.ts`）に同じ仕様で 2 つある。片方だけ直さないこと
-- frontmatter の読み書きは自前実装（`parseFrontmatter` / `stringifyFrontmatter`）で、スカラー配列とマップ配列の両方を扱う。自前パーサなので数値は文字列で返り、正規化側で数値に直す
-- 回帰テストは `tests/unit/multi_parent.test.ts`（親ごとの並び順・往復・タイブレーク）と `tests/unit/workspace.test.js`（往復と旧形式の読み込み）
+### 3.1 ノード
 
-#### 多親と、ツリー表示の関係 — 行は「辺」であってノードではない
+| 欄 | 意味 |
+| --- | --- |
+| `id` | ワークスペース内で一意の不変 ID |
+| `name` | 名前 |
+| `status` | ステータス。省略は「ステータスなし」（§ 5） |
+| `startDate` / `dueDate` | `YYYY-MM-DD`。両方あるときは `startDate <= dueDate` |
+| `parents` | 親への辺の配列 `[{ id, order, archived?, archivedAt? }]`（§ 3.2） |
+| `body` / `format` | 本文（§ 6） |
+| `tags` | タグ。前後の空白・先頭の `#` を落とし、大文字小文字を無視して重複排除する |
+| `attachments` | 添付 `[{ id, name, relativePath, size, modifiedAt? }]`（§ 4） |
+| `archived` / `archivedAt` | ノードごとのアーカイブ（子孫へは伝播しない） |
+| `createdAt` | 作成日 `YYYY-MM-DD` |
+| `assetOwnerId` | このノードが画像・添付を読むディレクトリの持ち主。コピーしたノードは自分の id になる |
+| `importSource` | 取り込んだプロジェクトのルートにだけ付く（例: `markdown:<元のルートID>`）。§ 7 の「取り込み済み」の判定に使う |
 
-ツリーは多親構造の**射影**である。多親ノードは**親ごとに 1 行ずつ**現れる。
+ルート（`rootId`）は親を持たず、削除・移動・複製・アーカイブできない。`inboxId` のノード（Inbox）も削除・アーカイブ・移動できない。
 
-- `workspaceToProjectData` は親ごとに展開する。打ち切るのは**循環だけ**で、判定は「グローバルに一度出したか」ではなく「いま辿っている経路の祖先に含まれるか」で行う。前者だと多親が全域木に潰れ、辺が消える（保存にも波及していた）
-- 病的な構造で固まらないよう、総ノード数に安全弁（`MAX_TREE_NODES`）を置く。通常のデータでは到達しない
-- 同じ id の行が複数あるため、**行の同一性は経路**（`親id/子id/…`）で決まる。`VisibleTreeRow.path` がそれで、Svelte の keyed each の key・行番号・キーボード移動・フォーカス復帰はすべて経路で引く。id を key にすると `each_key_duplicate` で描画が壊れる
-- DOM の `id` 属性は**最初の出現にだけ**付ける（`isPrimaryOccurrence`）。重複 id を作らず、既存の `getElementById` と E2E の `#<taskId>` セレクタはそのまま動く。全出現は `data-node-id` / `data-row-path` で引ける
-- 選択はノード id で行う。したがって**片方の行を選ぶと全出現が選択表示になる**。多親ノードが「同じもの」だと分かる手掛かりになるので、これは意図的。ただし**いま操作している行（辺）は別扱い**で、それ以外の出現は塗りを薄く・左のバーを破線にして弱める（`TreeTable` の `activeRowPath` / `EchoRow`）
-- 折り畳みも**行（辺）ごと**の状態なので、`closed_row_paths` は経路を持つ（永続化キーは `closed_paths_<プロジェクトID>`）。片方の親の下で畳んでも、もう片方の下は開いたまま。インデント／アウトデントで経路が変わるときは `rekey` で状態を移し、ツリーが変わるたびに `pruneMissing` で存在しない経路を捨てる（畳んだノードを動かすと開いてしまう／古い経路が溜まる、という両方を防ぐ）
-- **行に紐づくものはすべて経路で引く**。名前パス（`buildNodePathMap`）、祖先から継承する期限（`buildInheritedDueDateMap`）、スクロール時のパンくず（`buildStickyTrail`）、ガントの行（`GanttPanel` の keyed each）。ノード id で引くと、別の親の下の値が混ざる（ガントは `each_key_duplicate` で描画が壊れる）
-- D&D は「掴んだ辺を外して、落とした行の隣に置く」。`reorderTree` / `addNode` / `rmNode` / `bulkAddNodes` は経路を受け取る
-- 「アーカイブされた扱いか」は、**ルートから archived を通らずに辿り着けるか**で決める（`isNodeEffectivelyArchived`）。片方の親がアーカイブでも、もう片方から生きて辿れるならそのノードは生きている。復元（`restoreNode`）はクリックした行の祖先だけを解除する
-- Shift 選択の範囲も行で決まる。起点は `selection_anchor_path`（id だけだとどの出現が起点か決まらない）
-- 移動・インデント・アウトデントは「どの**辺**を動かすか」の操作なので、**クリックした行の親**に効く（`moveNodeUp` などが取る `rowPath`）。ノード id から親を引くと、最初に見つかった親＝別の行が動いてしまう。ツールバーとショートカットも `active_row_path`（ツリーでいま操作している行）を見る
-- **同じノードの複数の出現は同一オブジェクトを共有する**。`archived` とノードの中身（名前・状態・本文）はノードの属性なので、片方の出現にだけ子が足されるのは誤り（並び順だけは辺の属性で、`parents[].order` に持つ）。共有できるのは経路に依らない部分木だけで、循環を打ち切った部分木は共有しない。ツリーを作り直す関数（`updateNodeDataById` / `bulkUpdateNodeData` / `bulkRemoveNodes`）は同じ入力に同じ出力を返して共有を保つ
+### 3.2 親子関係（辺）
 
-#### 孤児を作らない
+- 辺は子側の `parents` に持つ。子は複数の親を持てる（多親）
+- 並び順は**辺の属性**なので、親 id と組で `order` に持つ。同じノードが親ごとに違う位置を取れる
+- 自己接続と、同じ親子の重複は保存できない
+- 複数ノードからなる循環は保存できる（グラフビューからだけ作れる）。ツリーとファインダーは、いま辿っている経路の祖先に戻った時点で「循環参照」として打ち切る
+- どのノードもルートから辿れる。辺の削除やノード削除で辿れなくなったまとまりには、ルートからの入口になる辺を決定的に補う（`repairRootReachability`）
+- `archived` が付いた辺は「その親の下からだけ片付けた」ことを表す。ノード自体の `archived` とは独立
 
-どのノードも必ず 1 つ以上の親を持つ。保存はツリーを辿って書き出すため、ルートから辿れなくなったタスク（＝孤児）は**ファイルごと消える**。孤児は 2 つの経路で生まれうるので、両方で受け止める。
+### 3.3 リビジョンと履歴
 
-- **削除時**（`reattachOrphans`）。削除は「辺を 1 本切る」操作でしかない。切った先が唯一の親だった子は、その場でルート直下に付け直す。他にも親があるノードは動かさない。まとめて消したノード同士も拾わない
-- **読み込み時**（`workspaceToProjectData`）。存在しない親を指している、親をたどると自分に戻る、といったタスクはアプリの外（エディタ・CLI・同期）で生まれうる。読み込み時に 1 パスで検出してルート直下に付け直す。次の保存で `parents` も直る
-- 循環がファイル側にある場合、木に描けない辺が出る。これは `TreeData.cutParentIds` に載せて保存で書き戻す（木からは導けないので、ここでしか復元できない）。アプリ内では循環を作れない（`canIndentNode` / `canDropTarget` が止める）ので、これは外で作られたデータの受け皿
-- 辺は集合なので、すでに親であるノードの下へ動かしても二重に足さない（`addNode` / `bulkAddNodes`）。二重になると行の経路が衝突して描画が壊れる
-- 回帰テストは `tests/unit/orphans.test.ts`
-- `projectDataToWorkspaceTasks` は同じノードを複数回訪れるので、**ノードごとに 1 件だけ出し、親は全出現の和**を採る。木が全ての辺を見せるようになったため、木の位置から親を正確に導ける。片方の出現だけを動かせばその辺だけが変わり、他の親は残る
-- 回帰テストは `tests/unit/multi_parent.test.ts`
-- root task 配下の通常タスクは、root task の子ノードとして表示する
-- `tree_data` がワークスペース読み込みで更新された場合、検索フィルタの変更を待たずに表示用ツリーも同期する
+- 書き込みはワークスペースごとに 1 本の列に並ぶ（`electron/workspace-graph.js` の `enqueue`）
+- レンダラーは操作のたびに、手元のグラフの `revision` を添えてコマンドを送る。ディスク上の `revision` と違えば `Workspace graph changed` で拒否し、何も書かない。レンダラーは最新を読み直して知らせる
+- `undo` / `redo` の 1 段は「グラフ全体の写し」ではなく「戻すのに要るノードと欄だけ」のパッチ `{ nodes: { [id]: node | null }, fields: { [key]: { value } | null } }`。最大 50 段
+- 新しい操作をするとやり直し履歴は捨てる。元に戻しても `revision` は増やす（古いリビジョンを持つ画面が上書きしないため）
+- 読み出し結果は、ファイルの更新時刻と大きさが変わっていなければ読み直さない。別プロセスや同期ソフトが書き換えたら次の読み出しで取り込む
 
-#### タグ
+### 3.4 操作（コマンド）
 
-ワークスペースタスクのタグは、タスクの `_index.md`（ルートタスクは `_project.md`）の frontmatter に `tags:` リストとして保存する。
+操作はすべて main プロセスのグラフエンジン（`electron/workspace-graph-engine.js`）を通る。レンダラーはツリーや木の形を保存しない。
 
-```yaml
----
-id: 1b2c...
-name: トップページ実装
-status: In Progress
-tags:
-  - frontend
-  - 設計
-created: 2026-09-01
----
-```
+| コマンド | 意味 |
+| --- | --- |
+| `create-node` | 親の下にノードを作る |
+| `update-node` | ノードの欄を変える |
+| `link` / `detach` / `move` | 辺を足す／外す／付け替える（他の親と子孫の関係は残る） |
+| `archive-edge` | その辺だけアーカイブ／復元する |
+| `delete-node` | ノード自身とその辺を消す。子孫は消さない |
+| `copy` | `node`（そのノードだけ）／`share-children`（直下の子を共有）／`subgraph`（子孫ごと） |
+| `set-position` | グラフビューでの座標 |
+| `batch` | 複数のコマンドを 1 つの操作（1 回の「元に戻す」）としてまとめる |
 
-- タグが 1 件もないタスクには `tags:` キー自体を書かない（既存ファイルとの差分を増やさないため）
-- 読み込み時は前後の空白・先頭の `#` を落とし、大文字小文字を無視して重複排除する。ファイルを手で編集して `tags: frontend, 設計` のようにカンマ区切りで書いた場合も配列として読む
-- メモのタグ（各メモファイルの frontmatter）とは独立している。サイドバーの Tags フィルタは両者を 1 つの索引として扱う
+## 4. 画像と添付
 
-#### 添付ファイル
-
-ワークスペースの**ノード**は、任意ファイルを添付として保持できる。添付は `db.json` には保存せず、ノードのディレクトリ配下に実ファイルとして置く。
-
-メモもノードなので、**メモにも添付を付けられる**（統一前はタスクだけが添付の入れ物だった）。添付そのものはノードにしない。バイナリは frontmatter を持てないため、ノード化すると全ての添付にサイドカーの `.md` が要る。少数のための恩恵に、全添付が代償を払う形になる。
-
-```
-<projectDir>/
-├── _project.md
-├── attachments/              ← root task の添付
-│   └── <file>
-└── <task-id>/
-    ├── _index.md
-    ├── <memo-id>.md
-    ├── assets/               ← 本文にペーストした画像
-    └── attachments/          ← 通常タスクの添付
-        └── <file>
-```
-
-- 添付ファイル名は `safeFileName` / `uniqueFileName` で正規化し、同名衝突時は `-2`, `-3` … のサフィックスを付ける
-- `readProject` は各タスクの `attachments/` 直下にある通常ファイルを列挙し、`WorkspaceAttachment { id, name, relativePath, size, modifiedAt }` として返す
-- `relativePath` は `./attachments/<file>` 形式に限定する。`resolveTaskAttachmentFilePath` は `attachments/` 外へのパストラバーサル、絶対パス、NUL 文字を拒否する
-- 添付追加・削除は単発 IPC として実行し、成功時に main 側の `wsCache` と renderer 側の `tree_data` を更新する。タスク本文 `_index.md` には添付一覧を書かない
-- タスクツリーの `attachments` 列は `attachments` 配列の長さを表示する。既存データのように `attachments` が未定義の場合は `0` として扱う
-
-添付関連 IPC:
-
-| チャネル | ペイロード | 役割 |
-| --- | --- | --- |
-| `ws:read-task-body` | `{ projectDir, taskId }` | 1 つのノードの本文と形式を読む。一覧目的の読み出しでは本文を読まないので、開いたときにここで取りに行く |
-| `ws:read-project-bodies` | `{ projectDir }` | プロジェクト全体の本文を読む。全文検索で本文まで探すときの hydration 用 |
-| `ws:save-task-attachment` | `{ projectDir, taskId, fileName, bytes }` | ファイルを対象ノードの `attachments/` へコピーし、作成された `WorkspaceAttachment` を返す |
-| `ws:delete-task-attachment` | `{ projectDir, taskId, attachmentPath }` | `./attachments/<file>` を削除し、削除後の添付一覧を返す |
-| `ws:open-task-attachment` | `{ projectDir, taskId, attachmentPath }` | 添付ファイルを OS の既定アプリで開く |
-| `ws:open-task-attachment-with` | `{ projectDir, taskId, attachmentPath }` | Windows の「プログラムから開く」ダイアログを表示する |
-
-### 4.1 永続化の挙動
-
-Workspace の通常編集では、renderer 側の Svelte store を単一の信頼元とする。
-
-- `tree_data` は現在開いている Workspace プロジェクトのタスクツリー本体であり、保存処理はこのメモリスナップショットを main プロセスへ渡して非同期にディスクへ反映する
-- `workspace_store.projects` はサイドバー用のプロジェクト summary であり、root task 名や並び順など `tree_data` から派生できる情報はメモリ上で同期する。通常操作の直後に `ws:list-projects` でディスクを読み直して UI を補正してはならない
-- `workspace_tasks_cache` は保存時に `createdAt` など tree 表現に含まれないメタデータを保つ補助キャッシュであり、summary 側から task cache へ逆流させない
-- ディスクから renderer のメモリへ取り込むのは、起動、workspace 切替、project 選択、migration/export 後の明示 refresh、外部更新リコンサイル、ユーザーが競合解決で reload を選んだ場合に限る
-- 書込失敗時もディスクを読み戻してメモリ状態を勝手に巻き戻さない。エラー状態を通知し、ユーザー操作または明示的な reload で解決する
-
-ワークスペース保存は、メモリ上の `tree_data` を唯一の正として、main プロセスが非同期にディスクへ反映する形をとる。renderer は保存完了を待たず（fire-and-forget）、状態は main からの IPC push で更新する。
-
-- **差分パッチ保存**: 通常編集では renderer が前回保存時の `tree_data` と現在の `tree_data` を比較し、変更されたタスクと削除された task id だけを `ws:write-project-patch` で main へ送る。前回データがない初回保存や互換経路では、従来どおり `ws:write-project` で全体スナップショットを送る
-- **実ファイルの増分書込**: `electron/workspace.js` の `writeFileIfChanged` が既存ファイルとバイト比較し、内容に差がなければ書込をスキップする。差分パッチの対象になったタスクでも、最終的に内容が同じファイルは書き直さない。OneDrive 等の同期フォルダで、変更のないタスク/メモが無用にアップロードされない
-- **原子的書込**: `atomicWriteFile` が同一ディレクトリ内の一時ファイル（`.<basename>.<pid>.<ts>.<uuid>.tmp`）に書いてから `rename` で確定する。Reconciler はファイル名に `.tmp` を含むイベントを無視する
-- **書込ログ（自前書込フィルタ）**: `atomicWriteFile` は成功直後に optional コールバック `onWritten(filePath, buffer)` を発火する。queue 経由の書込パスはこれを `reconciler.recordWrite(filePath, buffer)` に紐づけ、`knownFileHashes` を同期的にその場で最新ハッシュへ更新する。chokidar の change イベントが届いたとき `knownFileHashes.get(path) === hashFile(path)` が成立すれば「自前書込」として suppress される。これにより、大規模プロジェクトの書込バッチが長時間化しても reconcile タイマーが先に発火して偽陽性 conflict を出すことがなくなる
-- **リトライ**: `retryFileOperation` が `EBUSY` / `EPERM` / `ENOTEMPTY` に対して指数バックオフで 5 回まで再試行する（初期 40ms）。それでも書込が失敗した場合、`forceLocal: true` のジョブは queue の `processLoop` が指数バックオフ（初期 200ms、最大 5 回）で再エンキューし、`saveStatus: "retrying"` を発火する
-- **キューイング**: `WorkspaceWriteQueue`（`electron/workspace-write-queue.js`）が `projectDir` をキーに最新の全体スナップショットまたは差分パッチを保持し、直列に書き出す。同一 projectDir のペンディングパッチはマージし、全体スナップショットが既に待機している場合はそこへパッチを反映する。同時にペンディング可能な projectDir は最大 8 個。renderer の `ws:write-project` / `ws:write-project-patch` IPC は enqueue だけ行い `{ success, queued: true }` を即返す。enqueue は `{ forceLocal? }` オプションを受け付ける
-- **Task Detail 別ウィンドウ同期**: Workspace 編集時は disk queue の完了を待たず、renderer が `ws:broadcast-project-snapshot` で現在のタスクスナップショットを main へ渡す。main はその内容を optimistic な `wsCache` として保持し、他ウィンドウへ `workspace-project-updated (reason: "local-update")` を送る。`ws:read-project` は pending / optimistic 状態の projectDir では disk よりこの cache を優先するため、OneDrive 同期フォルダで書込が遅れていても Task Detail 別ウィンドウは stale な disk ではなくメイン画面と同じ in-memory tree を開く。queue 書込完了後は `workspace-project-updated (reason: "local-write")` を送って確定状態へ揃える
-- **競合の取り扱い**: `workspaceConflictPolicy === "ask"` のときは reconciler が `workspace-conflict` を発火し、saveStatus が `conflict` に遷移する。renderer はバナーで「維持 / 再読込」を問い合わせる。`"prefer-memory"` のときは renderer が `wsWriteProject` / `wsWriteProjectPatch` 呼出に `forceLocal: true` を自動付与し、reconciler は `workspace-notice (kind: "overwritten-external")` のみ発火する。saveStatus は `conflict` には遷移せず、メモリ内容で上書き保存を続行する
-- **保存状態**: 1 回の保存サイクルでステータスは `queued` → `writing` → `saved` を取り、失敗時は `error`、外部書込との衝突時は `conflict`、`forceLocal` のリトライ中は `retrying` をとる。renderer の `saveStatus` ストアはこの状態を `workspace-save-status` イベントで受信する
-- **終了時 flush**: アプリ終了要求時、キューにペンディングが残っていれば `mainWindow` の `close` を `event.preventDefault()` で抑止し、renderer にオーバーレイを表示させたうえで `flush()` の完了を待ってから `mainWindow.destroy()` する。30 秒タイムアウトで「強制終了 / 継続」のダイアログを出す。詳細は [`docs/architecture.md` §8.9](architecture.md#89-ワークスペース永続化パイプライン) 参照
-
-### 4.2 エクスポート（db.json → Workspace）
-
-`db.json` プロジェクトをワークスペースプロジェクトへ一方向に変換する。逆方向（Workspace → `db.json`）のパスは存在しない。
-
-- エクスポート先のワークスペースプロジェクトには新規 UUID を発行する。各メモにも新規 UUID を発行する（ソースの ID は引き継がない）
-- エクスポート時にメモのフォーマットを保持するか、全メモを Markdown に変換するかを選択できる
-- 内部実装はバッチ処理のため、ワークスペースの通常書込（非同期キュー）ではなく同期版 API を使用する
+- 置き場所は `<workspace>/.task-manage/assets/<nodeId>/`。本文に貼った画像も添付も、ノードに属する
+- 本文からは `assets/<nodeId>/...` のワークスペース相対パスで参照する。プレビュー時は main プロセスが画像を読み、`data:` URL にして返す（`ws:resolve-graph-asset`）。画像以外は返さない
+- 添付を一覧から外しても実ファイルは消さない。元に戻したときに添付を戻せるようにするため
+- ノードをコピーすると、画像と添付の実体もコピー先のディレクトリへ写し、本文の参照を書き換える。元のノードを消してもコピーから使える
+- パスは `assets/<assetOwnerId>/` の中だけを許し、外へ出る参照・シンボリックリンク経由の脱出は拒否する
 
 ## 5. ステータス
 
-ステータスは次のいずれかである。
+| 意味 | 保存値 |
+| --- | --- |
+| 進捗管理をしない | 省略（`status` 欄を書かない） |
+| 進捗管理の対象だが、状態は未決定 | `Undefined` |
+| 未着手 / 保留 / 進行中 / 完了 / キャンセル | `Open` / `Pending` / `In Progress` / `Completed` / `Canceled` |
 
-- `Open`
-- `Pending`
-- `In Progress`
-- `Completed`
-- `Canceled`
-- **無し**（`status:` キーを書かない）
+### 5.1 「なし」は既定値ではなく状態のひとつ
 
-### 5.1 「無し」は既定値ではなく状態のひとつ
+同じツリーに「期限とステータスで追跡するノード」と「ただ書いてあるノード」が並ぶ。後者に既定のステータスを与えると、ノート 1 つ 1 つが「未着手」として積み上がり、ステータス列も絞り込みも意味を失う。だから「なし」は `Open` へのフォールバックではなく、対等な状態として扱う。
 
-メモがノードになると、同じツリーに「期限とステータスで追跡するノード」と
-「ただ書いてあるノード」が並ぶ。後者に既定のステータスを与えると、ノート 1 つ
-1 つが「未着手のタスク」として積み上がり、ステータス列も絞り込みも意味を失う。
-だから「無し」は `Open` へのフォールバックではなく、対等な状態として扱う。
-
-- **ファイルでは `status:` キーごと書かない。** 空文字を書くと、次に読んだとき
-  「値がある」と「無い」を区別できなくなる。タグが 0 件のとき `tags:` を書かない
-  のと同じ流儀
-- **読みで `Open` を埋めない。** `data.status || "Open"` のようなフォールバックが
-  1 箇所でも残ると、そこを通ったノードだけ勝手に未着手のタスクになる。読みは
-  main 側の 3 箇所（`readRootTask` / `readTaskDir` / `buildTaskFromFrontmatter`）
-- **renderer 側では空文字**（`NO_STATUS`）で表す。ステータスは選択コントロールの
-  値として往復するため。境界での変換は `workspace_tree.ts` の 2 箇所だけ
-- 既存ファイルは全て `status:` を持つので、今までのタスクは今までどおりに読める。
-  `status:` の無い手書きファイルは「無し」になる（従来は `Open` だった）
-- 絞り込みは**完全一致**で見る。部分一致だと、あらゆる文字列が空文字を含むので
-  「なし」で絞ったときに全行が残ってしまう
-- 選択済みステータスを取り出すときに `filter(Boolean)` を使わないこと。「無し」は
-  空文字なので落ち、選んでもフィルタが効いていないように見える
-- 並べ替えでは「無し」を最後に置く。並べ替えは進み具合を見る操作なので、
-  進み具合を持たないものを間に挟むと列が読みにくくなる
-- 予定ビューでは「終わっていない」側として扱う。追跡していないだけで、片付いた
-  わけではないので、期限があるなら出す
+- **保存では欄ごと書かない。** 空文字を書くと、次に読んだとき「値がある」と「無い」を区別できなくなる
+- **読みで `Open` を埋めない。** 日付を付けてもステータスを自動で付けない
+- **レンダラー側では空文字**（`NO_STATUS`）で表す。ステータスは選択コントロールの値として往復するため。境界での変換は `tree_projection.js` の `projectTreeGrid`（省略 → `""`）と `nodeChanges`（`""` → 省略）の 2 箇所だけ
+- 絞り込みは**完全一致**で見る。部分一致だと、あらゆる文字列が空文字を含むので「なし」で絞ったときに全行が残ってしまう
+- 選択済みステータスを取り出すときに `filter(Boolean)` を使わないこと。「なし」は空文字なので落ちる
+- 並べ替えでは「なし」を最後に置く
 - 回帰テストは `tests/unit/no_status.test.ts`
 
 ## 6. ノードの本文
 
-**1 つのメモ ＝ 1 つのノード。** メモはタスクの属性ではなく、タスクと同じノード空間に住む。ノードは本文を 1 つだけ持ち、複数の記録は子ノードで表す。
-
-各ノードの本文は次の情報で決まる。
+**1 つのメモ ＝ 1 つのノード。** ノードは本文を 1 つだけ持ち、複数の記録は子ノードで表す。
 
 - `body` — 本文そのもの（Markdown なら文字列、Quill なら Delta）
-- `format` — `"markdown"` または `"quill"`
+- `format` — `"markdown"` または `"quill"`。省略時は `"markdown"`。新しく作るノードも `"markdown"`
 
-### 6.0 ファイル上の形
+### 6.1 形式の変換
 
-ノードの本文は `_index.md`（ルートは `_project.md`）の**フロントマターより後ろ**に、そのまま置く。
-
-```yaml
----
-id: n-1
-name: 設計メモ
-parents:
-  - id: t-1
-    order: 3
-tags:
-  - 設計
-created: 2026-09-04
----
-
-この方式にした理由。
-```
-
-- `format:` は既定（`markdown`）のときは**書かない**。既存ファイルに無用な差分を作らないため。タグや `status` と同じ流儀
-- Quill の本文は、フロントマターの `format: quill` と、本文に置いた fenced code block の Delta（JSON）で表す
-- 一覧目的の読み出しでは本文を読まない（`bodyLoaded: false`）。ノードを開いたときに `ws:read-task-body` で 1 件だけ読む。統一でノード数が大きく増えるので、ここを一括読みに戻すと開くたびに全文を読むことになる
-
-> **実装上の注意**：本文のフィールドは 5 箇所で個別に列挙されている。新しいフィールドを足すときは**すべてに追加する**こと。
->
-> 1. `electron/workspace.js` の `nodeBodyFields`（読み。4 つの読み手が共有する）
-> 2. `electron/workspace.js` の `serializeNodeBody` / `taskFrontmatterData`（書き）
-> 3. `src/features/workspace/utils/workspace_tree.ts`（ワークスペース → ツリー）
-> 4. 同ファイルの `nodeBodyFor`（ツリー → ワークスペース）
-> 5. `src/features/tasks/stores/tree.ts` の `comparableWorkspaceTask`（**差分判定**。ここに無いフィールドは「変更なし」と見なされ、ディスクに書かれない）
->
-> 5 が落ちると「画面とキャッシュだけが変わってファイルに書かれない」という形で
-> 壊れる。過去に `kind` で実際に起きた。
-
-**本文を読み込んでいないノードを、空で上書きしないこと。** 一覧目的の読み出しでは本文が空なので、そのまま書き戻すと「開かなかったノードの本文が消える」事故になる。受け止めは 2 箇所にある。
-
-- renderer 側 `nodeBodyFor` … `bodyLoaded === false` のときは既存の本文を残す
-- main 側 `withLoadedNodeBodies` … 書き出しの直前にディスクから本文を取り戻す
-
-### 6.0a 旧メモ（`<task-dir>/<memo-id>.md`）の取り込みと移行
-
-以前はメモをタスクディレクトリ直下の `.md` ファイルとして持っていた。統一後もそのファイルはそのまま読めて、**ノードとして**現れる。
-
-- **読み**（`promoteLegacyMemos`）。各メモファイルを、そのタスクの子ノードとして取り込む。`title` → ノード名、本文 → `body`、`tags` → ノードのタグ。**ステータスは与えない**（メモは進み具合を持たない）
-- 並び順は実タスクの子の後ろ。保存時にツリーから振り直されるので、初期配置だけの値
-- 同じ id のディレクトリが既にあるときは取り込まない。移行の途中で落ちると「新しいディレクトリ」と「消し残した旧ファイル」が並ぶが、そのときは**ディレクトリを正**とする
-- 危険な id（`../` を含むなど）はディレクトリ名にできない。中身は捨てず、**id だけ振り直す**。そのまま通すと保存のたびに例外が出て、プロジェクト全体が保存できなくなる
-- **書き**（移行）。そのノードを次に保存したときに `<node-id>/_index.md` へ移る。差分保存でも起きるので、移行は 1 件ずつ進む。移行スクリプトは要らない
-
-移行は **コピー → 削除の 2 パス**で行う。全ノードを書き終えてから元のファイルを消す。逆順にすると、途中で落ちたときに本文が失われる。
-
-**画像は運ぶ必要がある。** 本文の `./assets/x.png` は**そのノードのディレクトリ相対**で解決され、`..` で外へ出る参照は拒否される（`resolveMemoAssetPathCandidate`）。だから移行のときに、本文が参照している assets を新しいディレクトリへ運ぶ。
-
-- **コピーであって移動ではない。** 同じ画像を親の本文や別のメモも参照していることがあり、動かすとそちらが壊れる。実体は重複するが、失われない
-- 参照していない画像は運ばない
-- 消すのは**ディスク上の実際のファイル名**。id から組み立てると、振り直した id のときに別の場所を指してしまう
-
-**まだ移行していないノードの削除に注意。** 旧メモノードの `taskDirs` は**親**を指している（画像をそこから解決するため）。素直にディレクトリを消すと親とその子が丸ごと消える。`deleteTaskDirAsync` は消す前に `_index.md` の id が一致するかを確かめ、違えばその 1 ファイルだけを消す。
-
-Inbox はフラットなので、`_inbox/` 配下の旧メモは**それぞれ独立した Inbox アイテム**になる（`readInbox` が親をルートにクランプする）。別々の記録が別々の行になるだけで、失われるものは無い。
-
-`db.json` プロジェクトの `memo` 配列も同じ考えで子ノードに直す。生の JSON がそのまま renderer に届くので、入口（`platform.getTreeData`）で 1 回 `promoteLegacyMemosToNodes` を通す。通さないと既存のメモが画面から消える。
-
-回帰テストは `tests/unit/memo_to_node.test.ts`。
-
-### 6.1 フォーマットの決定ルール
-
-フォーマットはノードごとに保持される。省略時のデフォルトはプロジェクトの保存先によって異なる。
-
-- `db.json` プロジェクトで `format` が省略されている場合 → `"quill"` として扱う
-- ワークスペースプロジェクトで `format` が省略されている場合 → `"markdown"` として扱う
-
-新規作成するノードのデフォルトもプロジェクトの保存先に従う。
-
-- `db.json` プロジェクト → `"quill"`
-- ワークスペースプロジェクト → `"markdown"`
-
-### 6.3 フォーマット変換
-
-本文のフォーマットは個別または一括で切り替えられる。
-
-- **個別変換**：タスク詳細の形式切替で Markdown ⇄ Quill を切り替える。中身があるときは、装飾や埋め込みが落ちうることを確認する。**本文が空なら確認を出さない**（落ちるものが無いため）
-- **一括変換**：ツールバーのボタンで、現在開いているプロジェクトの全ノードの本文を変換する。**本文が空のノードは対象にしない**。数えると、まだ何も書いていないノードまで「変換対象」に並び、件数が意味を失う
+- **個別変換**：ノード詳細の「形式を変換」で Markdown ⇄ Quill を切り替える。中身があるときは、装飾や埋め込みが落ちうることを確認する。**本文が空なら確認を出さない**
+- **一括変換**：ツールバーのメニューで、開いているプロジェクトの全ノードの本文を変換する。**本文が空のノードは対象にしない**。多親ノードは 1 回だけ数える
   - 変換内容の警告フェーズと、完了結果フェーズを持つモーダルで確認する
-  - プロジェクト全体の変換は単一の Undo アクションとして記録され、1 回の Undo で元に戻せる
+  - 全体の変換は 1 つの操作として保存され、1 回の「元に戻す」で戻せる
 
-### 6.4 Markdown プレビュー
-
-Markdown 本文のプレビューでは次の表現を扱う。
+### 6.2 Markdown プレビュー
 
 - 見出し、箇条書き、引用、コード、表などの GitHub Flavored Markdown
 - task list / Markdown 画像記法
-- 同じ親の下のノードへの `[[Wiki Link]]` と `[[Wiki Link|Alias]]`
-- 外部 URL への wiki link
+- 子ノードへの `[[Wiki Link]]` と `[[Wiki Link|Alias]]`、外部 URL への wiki link
+- 貼り付けた画像はノードの `assets` に保存し、本文には `![](assets/<nodeId>/<file>)` を挿入する
+- 外部 URL と `data:` URL はそのまま表示する
 
-画像ペーストの保存先は保存モードによって異なる。
+旧 Quill 形式の Delta オブジェクト（`{ ops: [...] }`）が Markdown の本文に残っている場合は、表示時に `ops[].insert` を連結してプレーンテキストへ変換する。それ以外の非文字列値は後方互換用に JSON 文字列として表示する。
 
-- ワークスペースプロジェクト：画像を対象ノード配下の `assets/` に保存し、本文には `![](./assets/<file>)` の相対パスを挿入する
-- `db.json` プロジェクト：対応するノードディレクトリがないため、画像を `data:image/...;base64,...` の data URL として本文に埋め込む
-- プレビュー時、外部 URL と `data:` URL はそのまま表示し、ワークスペース内の相対画像パスは Electron 側で file URL へ解決する
+## 7. 旧 Markdown 形式からの取り込み
 
-旧 Quill 形式の Delta オブジェクト（`{ ops: [...] }`）が文字列フィールドに残っている場合は、表示時に `ops[].insert` を連結してプレーンテキストへ変換する。それ以外の非文字列値は後方互換用に JSON 文字列として表示する。
+以前の版は、ワークスペース直下にプロジェクトごとのディレクトリを作り、ノードを Markdown ファイルとして持っていた。この形式は**読むだけ**で、もう書かない。
 
-## 7. 外部書込とコンフリクト解決
+```
+<workspace>/
+├── .task-manage/             ← 正本（グラフ）
+└── <project-dir>/
+    ├── _project.md           ← プロジェクトのルート（frontmatter に id / name / order）
+    ├── attachments/
+    └── <node-dir>/
+        ├── _index.md         ← ノード（frontmatter に id / name / parents / status / tags ...、本文は後ろ）
+        ├── <memo-id>.md      ← 旧メモ。取り込むとこのノードの子ノードになる
+        ├── assets/
+        └── attachments/
+```
 
-ワークスペース配下のファイルが、本アプリ以外（OneDrive 同期、手動編集、別エディタなど）によって書き換えられたケースに対応する。
+取り込みは 2 つの経路がある。どちらも元のファイルは書き換えない。
 
-`WorkspaceReconciler`（`electron/workspace-reconciler.js`）が、アクティブワークスペース直下を `chokidar` で監視している。
+- **初回の自動取り込み**：`graph-v1.json` が無いワークスペースを開いたとき、直下の旧プロジェクトをすべて取り込んでグラフを作る（`importLegacyGraph`）
+- **「Markdown から取り込む」**：ワークスペース管理画面から、グラフを作った後に置かれた（別の PC や別のワークスペースから写した）プロジェクトを選んで、既存のグラフのルート直下へ足す（`importMarkdownProjects`）。1 回の取り込みは 1 つの操作で、「元に戻す」で取り消せる。すでに入っているプロジェクト（同じルート ID のノードがある、または `importSource` が一致する）は「取り込み済み」と表示する。取り込み直すと新しい id の別ノードになる
 
-- **自前書込の除外**: `atomicWriteFile` の `onWritten` フックから `reconciler.recordWrite(filePath, buffer)` が同期的に呼ばれ、`knownFileHashes` が常に最新ハッシュを保つ。chokidar が発火した change イベントについて、`hashFile(path) === knownFileHashes.get(path)` が成立すれば「自分の書込」として無視する。これにより、書込みごとに per-file 単位で偽陽性が発生しないことが保証される
-- **OneDrive 等の待機**: `awaitWriteFinish: { stabilityThreshold: 150, pollInterval: 50 }` でファイルサイズが安定するまで待つ
-- **デバウンス**: 同一プロジェクトへの連続イベントは 100ms でデバウンスしてから `reconcileProject` を呼ぶ
+読みの規則（`electron/workspace.js`）:
 
-`reconcileProject` の挙動は次のとおりである。
+- `parents` は `[{ id, order }]`・`[id, id]`（ノード直下の `order` を全ての辺に配る）・単一のスカラーの 3 つの形を受ける
+- `status:` の無いファイルは「ステータスなし」として読む
+- 旧メモ（`<node-dir>/<memo-id>.md`）はそのノードの子ノードになる。`title` → 名前（無ければ先頭の見出し、それも無ければ `memo`）、本文 → `body`、`tags` → タグ。ステータスは与えない。並びは実ノードの子の後ろ
+- 危険な id（`../` を含むなど）のメモは、中身を捨てずに id だけ振り直す
+- プロジェクトの中でだけ一意だった id が別プロジェクトと重なったときは、後から来た側に新しい id を振る
+- 画像と添付は正本の置き場所（§ 4）へ写し、本文の相対参照（`./assets/...`・`attachments/...`）を書き換える
+- 一覧目的の読み出しでは本文を読まず、取り込みの直前にまとめて読む（`loadNodeBodiesAsync`）
 
-- ローカルにペンディング書込がある（`workspaceWriteQueue.hasPending(projectDir)` が真）
-  - 現在進行中のジョブが `forceLocal: true` の場合
-    - `workspace-conflict` は発火しない。代わりに `workspace-notice (kind: "overwritten-external")` を発火し、ユーザに「外部変更を検知したがメモリ優先設定で上書きした」ことを通知する
-    - saveStatus は `conflict` に遷移しない
-  - それ以外（`forceLocal: false` の通常時）
-    - `workspace-conflict` イベントを発火し、`saveStatus` を `conflict` にする
-    - 取り込みは行わない。renderer 側でユーザに「維持 / 再読込」を選ばせる
-- ペンディングがない
-  - ディスクを再読込し、`workspace-project-updated` を発火する
-  - main の `wsCache` を新しい `tasks` / `taskDirs` で更新し、renderer の `tree_data` も同期する
-  - `workspace-notice (kind: "workspace-updated")` 通知バナーを表示する
-
-ファイル名に `conflicted copy` を含む変更を検知した場合は、内容は触らず `workspace-notice (kind: "conflicted-copy")` を発火してユーザに知らせる。自動マージは行わない。
-
-renderer がコンフリクトを解決するには、`ws:resolve-conflict` IPC に次のいずれかを渡す。
-
-- `action: "keep-local"`
-  - キュー内のペンディング書込をそのまま継続。次の保存で外部変更を上書きすることになる
-- `action: "reload"`
-  - キュー内のペンディング書込を破棄してディスクを再読込し、renderer に `workspace-project-updated (reason: "conflict-reload")` を push する
-  - ただし当該プロジェクトの保存ジョブが既に `writing` 中の場合はリロードを拒否する
+回帰テストは `tests/unit/legacy-markdown-reader.test.js`・`tests/unit/workspace-graph-import.test.js`・`tests/unit/workspace-graph-persistence.test.js`。

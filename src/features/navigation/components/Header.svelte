@@ -32,11 +32,17 @@
     pageSearchCurrentIndex,
   } from "@features/search/utils/page_search_highlighter";
 
-  export let title = "Task Manage";
-  let searchInputEl;
-  let queryText = "";
-  let isMaximized = false;
-  let showSettings = false;
+  /**
+   * @typedef {Object} Props
+   * @property {string} [title]
+   */
+
+  /** @type {Props} */
+  let { title = "Task Manage" } = $props();
+  let searchInputEl = $state();
+  let queryText = $state("");
+  let isMaximized = $state(false);
+  let showSettings = $state(false);
 
   onMount(async () => {
     try {
@@ -106,14 +112,12 @@
   }
 
   function isSavePending(status) {
-    return status === "queued" || status === "writing" || status === "retrying";
+    return status === "queued" || status === "writing";
   }
 
   function saveStatusLabel(status) {
     if (status === "error") return "保存失敗";
-    if (status === "conflict") return "競合";
     if (status === "queued") return "保存待ち";
-    if (status === "retrying") return "再試行中";
     if (status === "writing") return "保存中...";
     return "保存済み";
   }
@@ -131,10 +135,15 @@
   // さらに `selected_id` のセンチネルはページ側が受け取った直後に実ノードの
   // id へ書き換えるので、センチネルとの比較だけでも 1 microtask しか当たらない。
   // ページと同じ解決規則 (resolveInboxNodeId) を使って実 id と突き合わせる。
-  $: resolvedInboxId = resolveInboxNodeId($workspaceNavigation);
-  $: inboxActive =
+  let resolvedInboxId = $derived(resolveInboxNodeId($workspaceNavigation));
+  let inboxActive = $derived(
     $selected_id === INBOX_SELECTED_ID ||
-    (resolvedInboxId !== undefined && $selected_id === resolvedInboxId);
+      (resolvedInboxId !== undefined &&
+        // Inbox ノードが無いワークスペースではルートが受け皿になる。そのときに
+        // ルートを見ているだけで「Inbox を開いている」と表示しない。
+        resolvedInboxId !== $workspaceNavigation?.rootId &&
+        $selected_id === resolvedInboxId)
+  );
 
   function openAgendaView() {
     if (!$workspace_store.activeWorkspacePath) return;
@@ -147,15 +156,15 @@
   /* 880px を切ったら保存状態のラベルを視覚的にだけ畳み、ドットだけ残す。
      display:none にすると aria-live の読み上げまで消えるので、
      .visually-hidden-narrow で視覚的にだけ隠す。 */
-  let headerWidth = typeof window !== "undefined" ? window.innerWidth : 1280;
-  $: compactHeader = headerWidth <= 880;
+  let headerWidth = $state(typeof window !== "undefined" ? window.innerWidth : 1280);
+  let compactHeader = $derived(headerWidth <= 880);
 </script>
 
-<svelte:window on:keydown={handleGlobalKeydown} bind:innerWidth={headerWidth} />
+<svelte:window onkeydown={handleGlobalKeydown} bind:innerWidth={headerWidth} />
 
 <div class="Container" class:webRuntime={!isElectronRuntime} data-page-search-skip>
   <IconButton
-    on:click={() => {
+    onclick={() => {
       $sidebarCollapsed = !$sidebarCollapsed;
     }}
     ariaLabel={$sidebarCollapsed ? "サイドバーを表示" : "サイドバーを隠す"}
@@ -207,7 +216,7 @@
       aria-label="戻る"
       title="戻る (Alt+←)"
       data-testid="nav-history-back"
-      on:click={goBack}
+      onclick={goBack}
       disabled={!$canGoBack}
     >
       <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -227,7 +236,7 @@
       aria-label="進む"
       title="進む (Alt+→)"
       data-testid="nav-history-forward"
-      on:click={goForward}
+      onclick={goForward}
       disabled={!$canGoForward}
     >
       <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -257,8 +266,8 @@
       class="SearchInput"
       placeholder="画面内をハイライト検索…"
       value={queryText}
-      on:input={handleSearchInput}
-      on:keydown={handleSearchKeydown}
+      oninput={handleSearchInput}
+      onkeydown={handleSearchKeydown}
       aria-label="画面内を検索してハイライト"
     />
     {#if queryText}
@@ -274,7 +283,7 @@
         class="SearchNavBtn"
         aria-label="前の一致へ"
         title="前の一致へ (Shift+Enter)"
-        on:click={prevMatch}
+        onclick={prevMatch}
         disabled={$pageSearchMatchCount === 0}
       >
         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -293,7 +302,7 @@
         class="SearchNavBtn"
         aria-label="次の一致へ"
         title="次の一致へ (Enter)"
-        on:click={nextMatch}
+        onclick={nextMatch}
         disabled={$pageSearchMatchCount === 0}
       >
         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -312,7 +321,7 @@
         class="SearchNavBtn"
         aria-label="検索をクリア"
         title="クリア (Esc)"
-        on:click={() => applyQuery("")}
+        onclick={() => applyQuery("")}
       >
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path
@@ -342,7 +351,7 @@
       class:Disabled={!$workspace_store.activeWorkspacePath}
       disabled={!$workspace_store.activeWorkspacePath}
       data-testid="open-agenda"
-      on:click={openAgendaView}
+      onclick={openAgendaView}
       aria-label="予定を開く"
       title={$workspace_store.activeWorkspacePath
         ? "予定を開く（全プロジェクトの期限）"
@@ -375,7 +384,7 @@
     class:Disabled={!$workspace_store.activeWorkspacePath}
     disabled={!$workspace_store.activeWorkspacePath}
     data-testid="open-inbox"
-    on:click={openInboxView}
+    onclick={openInboxView}
     aria-label="Inboxを開く"
     aria-pressed={inboxActive}
     title={$workspace_store.activeWorkspacePath
@@ -409,14 +418,14 @@
     title="Inboxへクイック追加"
     style="white-space: nowrap; flex-shrink: 0;"
     disabled={!$workspace_store.activeWorkspacePath}
-    on:click={() => ($showQuickCapture = true)}>クイック追加</button
+    onclick={() => ($showQuickCapture = true)}>クイック追加</button
   >
   <div class="HeaderRight">
     <div
       class="SaveIndicator"
       class:saved={$saveStatus === "saved" || $saveStatus === "idle"}
       class:pending={isSavePending($saveStatus)}
-      class:error={$saveStatus === "error" || $saveStatus === "conflict"}
+      class:error={$saveStatus === "error"}
       role="status"
       aria-live="polite"
       aria-atomic="true"
@@ -440,7 +449,7 @@
         leftColorBack="rgba(0,0,0,0.5)"
         rightColorBack="rgba(255,255,255,0.5)"
         checked={$theme == "light"}
-        on:click={() => {
+        onclick={() => {
           $theme = $theme == "dark" ? "light" : "dark";
         }}
       />
@@ -449,7 +458,7 @@
     <button
       type="button"
       class="SettingsBtn"
-      on:click={() => (showSettings = true)}
+      onclick={() => (showSettings = true)}
       aria-label="設定を開く"
       title="設定"
     >
@@ -472,7 +481,7 @@
         class="WinCtrlBtn"
         aria-label="最小化"
         title="最小化"
-        on:click={handleMinimize}
+        onclick={handleMinimize}
       >
         <svg viewBox="0 0 12 12" aria-hidden="true">
           <path d="M2 6 L10 6" stroke="currentColor" stroke-width="1.5" fill="none" />
@@ -483,7 +492,7 @@
         class="WinCtrlBtn"
         aria-label={isMaximized ? "元のサイズに戻す" : "最大化"}
         title={isMaximized ? "元のサイズに戻す" : "最大化"}
-        on:click={handleToggleMaximize}
+        onclick={handleToggleMaximize}
       >
         {#if isMaximized}
           <svg viewBox="0 0 12 12" aria-hidden="true">
@@ -525,7 +534,7 @@
         class="WinCtrlBtn Close"
         aria-label="閉じる"
         title="閉じる"
-        on:click={handleClose}
+        onclick={handleClose}
       >
         <svg viewBox="0 0 12 12" aria-hidden="true">
           <path
@@ -645,7 +654,7 @@
     fill: none;
   }
   svg {
-    fill: currentColor;
+    fill: currentcolor;
   }
 
   /* Search field — actual input */
@@ -677,7 +686,7 @@
     width: 0.75rem;
     height: 0.75rem;
     fill: none;
-    stroke: currentColor;
+    stroke: currentcolor;
     stroke-width: 2;
     stroke-linecap: round;
     stroke-linejoin: round;
@@ -701,7 +710,7 @@
     color: var(--fg-muted);
   }
   .SearchInput::-webkit-search-cancel-button {
-    -webkit-appearance: none;
+    appearance: none;
   }
   .SearchShortcut {
     font-size: var(--font-label-sm);

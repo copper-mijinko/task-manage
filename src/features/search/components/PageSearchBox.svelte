@@ -1,18 +1,23 @@
-﻿<script>
-  import { onMount, onDestroy, createEventDispatcher, tick } from "svelte";
+<script>
+  import { onMount, onDestroy, tick } from "svelte";
   import IconButton from "@lib/primitives/IconButton.svelte";
   import { pageSearchQuery } from "@features/search/stores/search";
   import * as platform from "@lib/ipc/platform";
 
-  export let show = false;
+  /**
+   * @typedef {Object} Props
+   * @property {boolean} [show]
+   * @property {(detail?: any) => void} [onclose]
+   */
 
-  let searchInputElement; // bind element
-  let searchText = ""; //bind value
-  let matchCount = 0;
-  let activeMatchOrdinal = 0;
-  let lastSearchText = "";
+  /** @type {Props} */
+  let { show = $bindable(false), onclose } = $props();
 
-  const dispatch = createEventDispatcher();
+  let searchInputElement = $state(); // bind element
+  let searchText = $state(""); //bind value
+  let matchCount = $state(0);
+  let activeMatchOrdinal = $state(0);
+  let lastSearchText = $state("");
 
   export async function focusInput() {
     await tick();
@@ -20,9 +25,11 @@
   }
 
   // focus when the search box is shown.
-  $: if (show) {
-    focusInput();
-  }
+  $effect.pre(() => {
+    if (show) {
+      focusInput();
+    }
+  });
 
   // 検索実行前に実際に検索テキストがあるか確認
   function checkAndExecuteSearch() {
@@ -34,14 +41,18 @@
   }
 
   // clear in closing the search box.
-  $: if (show === false) {
-    searchText = ""; // search box内をクリア
-    lastSearchText = ""; // ステータスをクリア
-    pageSearchQuery.set("");
-    platform.stopFindInPage(); // matchCount, activeMatchOrdinalはMainから0が通知される
-  }
+  $effect.pre(() => {
+    if (show === false) {
+      searchText = ""; // search box内をクリア
+      lastSearchText = ""; // ステータスをクリア
+      pageSearchQuery.set("");
+      platform.stopFindInPage(); // matchCount, activeMatchOrdinalはMainから0が通知される
+    }
+  });
 
-  $: pageSearchQuery.set(show && searchText.trim() ? searchText.trim() : "");
+  $effect.pre(() => {
+    pageSearchQuery.set(show && searchText.trim() ? searchText.trim() : "");
+  });
 
   // search
   async function executeSearch() {
@@ -105,7 +116,7 @@
   function closeSearch() {
     platform.stopFindInPage();
     show = false;
-    dispatch("close");
+    onclose?.();
   }
 
   // 検索結果をクリア - シンプル版
@@ -142,12 +153,12 @@
           type="text"
           bind:this={searchInputElement}
           bind:value={searchText}
-          on:keydown={handleKeydown}
+          onkeydown={handleKeydown}
           placeholder="search..."
           autocomplete="off"
           spellcheck="false"
         />
-        <button class="search-button" on:click={handleSearchButtonClick}> Search </button>
+        <button class="search-button" onclick={handleSearchButtonClick}> Search </button>
       </div>
 
       <div class="count-display">
@@ -162,7 +173,7 @@
 
       <div class="controls">
         <IconButton
-          on:click={findPrevious}
+          onclick={findPrevious}
           tooltipContent="Prev"
           ariaLabel="Previous match"
           style="width: 24px; height: 24px; padding: 0;"
@@ -181,7 +192,7 @@
         </IconButton>
 
         <IconButton
-          on:click={findNext}
+          onclick={findNext}
           tooltipContent="Next"
           ariaLabel="Next match"
           style="width: 24px; height: 24px; padding: 0;"
@@ -200,7 +211,7 @@
         </IconButton>
 
         <IconButton
-          on:click={clearSearch}
+          onclick={clearSearch}
           tooltipContent="Clear"
           ariaLabel="Clear search"
           style="width: 24px; height: 24px; padding: 0;"
@@ -226,7 +237,7 @@
         </IconButton>
 
         <IconButton
-          on:click={closeSearch}
+          onclick={closeSearch}
           tooltipContent="Close(Esc)"
           ariaLabel="Close search"
           style="width: 24px; height: 24px; padding: 0;"

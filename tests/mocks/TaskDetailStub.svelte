@@ -1,6 +1,12 @@
 <script>
-  export let titleOverride = "";
-  export let showOpenWindowAction = true;
+  /**
+   * @typedef {Object} Props
+   * @property {string} [titleOverride]
+   * @property {boolean} [showOpenWindowAction]
+   */
+
+  /** @type {Props} */
+  let { titleOverride = "", showOpenWindowAction = true } = $props();
 </script>
 
 <div

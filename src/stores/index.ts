@@ -10,29 +10,22 @@ export * from "./navigation_history";
 
 // Feature stores も互換性のため再エクスポート
 // 新規コードは @features/* から直接 import を推奨
-export * from "@features/tasks/stores/tree";
 export * from "@features/tasks/stores/column_settings";
 export * from "@features/tasks/stores/sort";
 export * from "@features/memos/stores/tags";
 export * from "@features/gantt/stores/gantt";
 export * from "@features/workspace/stores/workspace";
-export * from "@features/workspace/stores/policy";
-export * from "@features/projects/stores/project";
 export * from "@features/search/stores/search";
 export * from "@features/inbox/stores/inbox";
 
 import { get } from "svelte/store";
-import { tree_data } from "@features/tasks/stores/tree";
-import { project_ids } from "@features/projects/stores/project";
-import { selected_id, selected_type, closed_row_paths, show_archived } from "./ui";
+import { selected_id, selected_type, show_archived } from "./ui";
 import { filter } from "@features/search/stores/search";
 import { theme } from "./theme";
 import { column_settings } from "@features/tasks/stores/column_settings";
 import { workspace_store } from "@features/workspace/stores/workspace";
-import { workspace_conflict_policy } from "@features/workspace/stores/policy";
 import { active_tag } from "@features/memos/stores/tags";
 import { sort_state } from "@features/tasks/stores/sort";
-import { inbox_store } from "@features/inbox/stores/inbox";
 import { date_time_format, ui_density } from "./preferences";
 import { navigation_history } from "./navigation_history";
 
@@ -40,20 +33,14 @@ let initStoreReady: Promise<void> | null = null;
 let initDetailStoreReady: Promise<void> | null = null;
 
 /**
- * Initialise only the stores needed by the standalone task-detail renderer.
- * The main app also loads project navigation, Inbox, filtering and column
- * settings; doing that in every detail window causes avoidable IPC and a full
- * workspace project-list scan on cloud-backed folders.
+ * ノード詳細ウィンドウに要るストアだけを初期化する。ナビゲーションや
+ * 絞り込み・列設定は本体ウィンドウだけのもの。
  */
 export function init_detail_store(): Promise<void> {
   if (initDetailStoreReady) return initDetailStoreReady;
-
-  tree_data.init();
   theme.init();
-  workspace_conflict_policy.init();
   date_time_format.init();
   ui_density.init();
-
   initDetailStoreReady = Promise.resolve();
   return initDetailStoreReady;
 }
@@ -61,32 +48,14 @@ export function init_detail_store(): Promise<void> {
 export function init_store(): Promise<void> {
   if (initStoreReady) return initStoreReady;
 
-  const isTaskDetailWindow =
-    typeof window !== "undefined" && window.location.hash === "#task-detail-window";
-
-  tree_data.init();
-  const projectIdsReady = project_ids.init();
-  if (!isTaskDetailWindow) {
-    selected_id.init();
-  }
   sort_state.init();
-  filter.init();
   theme.init();
-  closed_row_paths.init();
   show_archived.init();
   column_settings.init();
   const workspaceReady = workspace_store.init();
-  workspace_conflict_policy.init();
-  inbox_store.init();
   date_time_format.init();
   ui_density.init();
-
-  // 履歴記録は selected_type / selected_id への subscribe を張る。
-  // ノード詳細サブウィンドウ (`#task-detail-window`) では戻る/進むの概念が
-  // 不要なため、メインウィンドウのときだけ初期化する。
-  if (!isTaskDetailWindow) {
-    navigation_history.init();
-  }
+  navigation_history.init();
 
   active_tag.subscribe((tag) => {
     filter.update((f) => {
@@ -100,38 +69,19 @@ export function init_store(): Promise<void> {
     });
   });
 
-  initStoreReady = Promise.all([projectIdsReady, workspaceReady]).then(() => undefined);
+  initStoreReady = workspaceReady;
   return initStoreReady;
 }
 
 /**
- * After init_store() resolves, pick the top-most project to land on:
- * Workspace projects take precedence over InApp (db.json) projects.
- * No-op when a project is already selected (e.g. task-detail window).
+ * 起動時、ワークスペースが登録済みならそれを開く。選ぶプロジェクトは
+ * ページ（`WorkspaceTreeGridPage`）がグラフを読んでから決める。
  */
 export async function autoSelectInitialProject(): Promise<void> {
   await init_store();
-
   if (get(selected_type) !== undefined) return;
-
-  const workspaceProjects = get(workspace_store).projects ?? [];
-  if (workspaceProjects.length > 0) {
-    const first = workspaceProjects[0];
-    workspace_store.setActiveProject(first.projectDir);
-    selected_type.set("WorkspaceProject");
-    selected_id.set(first.rootId);
-    return;
-  }
-
   if (get(workspace_store).activeWorkspacePath) {
     selected_type.set("WorkspaceProject");
     selected_id.set(undefined);
-    return;
-  }
-
-  const inAppProjects = get(project_ids) ?? [];
-  if (inAppProjects.length > 0) {
-    selected_type.set("Projects");
-    selected_id.set(inAppProjects[0].id);
   }
 }

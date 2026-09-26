@@ -1,21 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import fs from "fs";
-import path from "path";
-import os from "os";
+import { describe, it, expect } from "vitest";
+
 // @ts-expect-error -- main プロセス側は JS のまま
-import {
-  createProject,
-  readProject,
-  writeTask,
-  parseFrontmatter,
-} from "../../electron/workspace.js";
+
 import { filterTree, sortTree, NO_STATUS } from "../../src/features/tasks/utils/tree_control";
-import type { ProjectData, TreeData } from "../../src/features/tasks/utils/tree_control";
-import {
-  workspaceToProjectData,
-  projectDataToWorkspaceTasks,
-} from "../../src/features/workspace/utils/workspace_tree";
-import type { WorkspaceTask } from "../../src/types/workspace";
+import type { TreeData } from "../../src/features/tasks/utils/tree_control";
 
 /**
  * ステータス「無し」は既定値ではなく**状態のひとつ**である。
@@ -42,134 +30,6 @@ function node(id: string, status: string, children: TreeData[] = []): TreeData {
     children,
   };
 }
-
-describe("ステータス無し: ツリー ⇄ ワークスペースの往復", () => {
-  it("status を持たないタスクは、ツリーでも「無し」のまま（Open にしない）", () => {
-    const tasks: Record<string, WorkspaceTask> = {
-      root: { id: "root", name: "P", parents: [], createdAt: "2026-09-04" },
-      n1: {
-        id: "n1",
-        name: "ただの記録",
-        parents: [{ id: "root", order: 0 }],
-        createdAt: "2026-09-04",
-      },
-      n2: {
-        id: "n2",
-        name: "追跡するタスク",
-        status: "In Progress",
-        parents: [{ id: "root", order: 1 }],
-        createdAt: "2026-09-04",
-      },
-    };
-
-    const tree = workspaceToProjectData(tasks, "root");
-    const [statusless, tracked] = tree.data.children;
-
-    expect(statusless.data.status).toBe(NO_STATUS);
-    expect(tracked.data.status).toBe("In Progress");
-  });
-
-  it("「無し」のノードを書き戻しても Open にならない", () => {
-    const project: ProjectData = {
-      headers: [],
-      data: node("root", NO_STATUS, [node("n1", NO_STATUS), node("n2", "Pending")]),
-    };
-
-    const tasks = projectDataToWorkspaceTasks(project, {});
-    const byId = Object.fromEntries(tasks.map((task) => [task.id, task]));
-
-    expect(byId.n1.status).toBeUndefined();
-    expect(byId.n2.status).toBe("Pending");
-  });
-
-  it("ワークスペース → ツリー → ワークスペース で「無し」が保たれる", () => {
-    const tasks: Record<string, WorkspaceTask> = {
-      root: { id: "root", name: "P", parents: [], createdAt: "2026-09-04" },
-      n1: {
-        id: "n1",
-        name: "記録",
-        parents: [{ id: "root", order: 0 }],
-        createdAt: "2026-09-04",
-      },
-    };
-
-    const roundTripped = projectDataToWorkspaceTasks(workspaceToProjectData(tasks, "root"), tasks);
-
-    expect(roundTripped.find((task) => task.id === "n1")?.status).toBeUndefined();
-  });
-});
-
-describe("ステータス無し: ファイル形式", () => {
-  let tmpDir: string;
-
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ws-nostatus-"));
-  });
-
-  afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  });
-
-  it("ステータス無しのタスクは `status:` キーごと書かない", () => {
-    const { projectDir } = createProject(tmpDir, "P", "root-id");
-    writeTask(
-      projectDir,
-      {
-        id: "n1",
-        name: "記録",
-        parents: [{ id: "root-id", order: 0 }],
-        createdAt: "2026-09-04",
-      },
-      new Map()
-    );
-
-    const taskFile = fs
-      .readdirSync(projectDir, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => path.join(projectDir, entry.name, "_index.md"))
-      .find((file) => fs.existsSync(file))!;
-    const raw = fs.readFileSync(taskFile, "utf8");
-
-    // 空文字を書くと、次に読んだとき「値がある」と「無い」を区別できなくなる。
-    expect(raw).not.toMatch(/^status:/m);
-    expect(parseFrontmatter(raw).data.status).toBeUndefined();
-  });
-
-  it("`status:` の無いファイルは「無し」として読む（Open で埋めない）", () => {
-    const { projectDir } = createProject(tmpDir, "P", "root-id");
-    writeTask(
-      projectDir,
-      {
-        id: "n1",
-        name: "記録",
-        parents: [{ id: "root-id", order: 0 }],
-        createdAt: "2026-09-04",
-      },
-      new Map()
-    );
-
-    const { tasks } = readProject(projectDir);
-
-    expect(tasks.get("n1").status).toBeUndefined();
-  });
-
-  it("既存タスクの status はそのまま読める（後方互換）", () => {
-    const { projectDir } = createProject(tmpDir, "P", "root-id");
-    writeTask(
-      projectDir,
-      {
-        id: "n1",
-        name: "タスク",
-        status: "Completed",
-        parents: [{ id: "root-id", order: 0 }],
-        createdAt: "2026-09-04",
-      },
-      new Map()
-    );
-
-    expect(readProject(projectDir).tasks.get("n1").status).toBe("Completed");
-  });
-});
 
 describe("ステータス無し: 絞り込みと並べ替え", () => {
   const tree = (): TreeData =>
