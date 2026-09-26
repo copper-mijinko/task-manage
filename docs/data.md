@@ -9,12 +9,17 @@
 - ワークスペースディレクトリ（利用者が選んだ任意のフォルダー）
   - `<workspace>/.task-manage/graph-v1.json` … ノードと親子関係の**正本**（§ 3）
   - `<workspace>/.task-manage/assets/<nodeId>/...` … 本文に貼った画像と添付ファイル（§ 4）
-- `electron/meta.json`
-  - テーマ・表示設定・登録済みワークスペースなど、アプリの設定（§ 2）
-- `electron/window-state.json`
-  - メインウィンドウの大きさ・位置・最大化状態。起動時に BrowserWindow を作る前へ読むため `meta.json` から分離している
+- アプリのデータディレクトリ
+  - `meta.json` … テーマ・表示設定・登録済みワークスペースなど、アプリの設定（§ 2）
+  - `window-state.json` … メインウィンドウの大きさ・位置・最大化状態。起動時に BrowserWindow を作る前へ読むため `meta.json` から分離している
 
-`TASK_MANAGE_DATA_DIR` 環境変数が指定されている場合は、`electron/` 配下の保存先を当該ディレクトリへ切り替える。テスト時にはこの仕組みで保存先を分離する。
+アプリのデータディレクトリは次の順で決まる（`electron/app-paths.js`）。
+
+1. `TASK_MANAGE_DATA_DIR` 環境変数があればそこ。テストとエージェント検証はこれで利用者のデータから切り離す
+2. 配布版は OS の利用者データ領域（`app.getPath("userData")`。Windows なら `%APPDATA%\task-manage`）。インストール先は書き込めないことがあり、更新やアンインストールで消えるので使わない
+3. 開発中（`app.isPackaged` が偽）は `electron/`（git 管理外）
+
+0.1.45 までの配布版は設定をインストール先（`resources/app/electron/`）に置いていたため、更新のたびに消えていた。この版からは利用者データ領域に残る。
 
 以前の版が使っていた `electron/db.json`（アプリ内プロジェクト）は読まない。ワークスペース直下の旧 Markdown プロジェクト（`<dir>/_project.md`）は取り込みの入力としてだけ読む（§ 7）。
 

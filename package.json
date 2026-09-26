@@ -1,7 +1,7 @@
 {
   "name": "task-manage",
   "version": "0.1.45",
-  "description": "task manage",
+  "description": "ワークスペース単位でノード（プロジェクト・タスク・メモ）をグラフとして管理するデスクトップアプリ",
   "author": "akai",
   "private": true,
   "main": "electron/index.js",
@@ -10,11 +10,13 @@
   },
   "build": {
     "productName": "task-manage",
-    "appId": "testId",
-    "asar": "false",
+    "appId": "io.github.copper-mijinko.task-manage",
+    "asar": true,
     "files": [
       "renderer/**/*",
-      "electron/**/*"
+      "electron/**/*",
+      "!electron/meta.json",
+      "!electron/window-state.json"
     ],
     "win": {
       "target": "nsis",
@@ -22,7 +24,8 @@
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "guid": "766e19bf-7a3b-53ad-9fd4-fda9cd1fd602"
     },
     "publish": null
   },
@@ -51,7 +54,13 @@
     "perf:workspace": "node tools/benchmark-workspace-io.js"
   },
   "devDependencies": {
-    "@editorjs/editorjs": "^2.31.6",
+    "@codemirror/autocomplete": "^6.20.1",
+    "@codemirror/commands": "^6.10.3",
+    "@codemirror/lang-markdown": "^6.5.0",
+    "@codemirror/language-data": "^6.5.2",
+    "@codemirror/search": "^6.7.0",
+    "@codemirror/state": "^6.6.0",
+    "@codemirror/view": "^6.41.1",
     "@eslint/js": "^9.0.0",
     "@playwright/mcp": "0.0.79",
     "@playwright/test": "^1.59.1",
@@ -60,15 +69,20 @@
     "@testing-library/svelte": "^5.3.1",
     "@tsconfig/svelte": "^5.0.8",
     "@types/lodash": "^4.17.24",
+    "dompurify": "^3.4.14",
     "electron": "^41.10.6",
     "electron-builder": "^26.15.3",
     "eslint": "^9.0.0",
     "eslint-plugin-svelte": "^2.46.1",
     "globals": "^16.0.0",
+    "highlight.js": "^11.11.1",
     "jsdom": "^29.0.2",
-    "picomatch": "^4.0.4",
+    "lodash": "^4.18.1",
+    "marked-highlight": "^2.2.4",
+    "mermaid": "^11.17.0",
     "prettier": "^3.0.0",
     "prettier-plugin-svelte": "^3.0.0",
+    "quill": "^2.0.3",
     "stylelint": "^16.0.0",
     "stylelint-config-html": "^1.1.0",
     "stylelint-config-standard": "^36.0.0",
@@ -82,23 +96,7 @@
     "vitest": "^4.1.4"
   },
   "dependencies": {
-    "@codemirror/autocomplete": "^6.20.1",
-    "@codemirror/commands": "^6.10.3",
-    "@codemirror/lang-markdown": "^6.5.0",
-    "@codemirror/language-data": "^6.5.2",
-    "@codemirror/search": "^6.7.0",
-    "@codemirror/state": "^6.6.0",
-    "@codemirror/view": "^6.41.1",
-    "dompurify": "^3.4.14",
     "electron-log": "^5.4.3",
-    "highlight.js": "^11.11.1",
-    "lodash": "^4.18.1",
-    "marked": "^18.0.2",
-    "marked-highlight": "^2.2.4",
-    "mermaid": "^11.17.0",
-    "quill": "^2.0.3",
-    "quill-delta-to-html": "^0.12.1",
-    "turndown": "^7.2.1",
-    "turndown-plugin-gfm": "^1.0.2"
+    "marked": "^18.0.2"
   }
 }
