@@ -1,5 +1,6 @@
 <script>
   import { getContext, tick } from "svelte";
+  import { STATUS_VALUES, statusLabel } from "@lib/utils/status_labels";
   import { TREEGRID_APPLICATION } from "@features/workspace/application/treegrid";
   const application = getContext(TREEGRID_APPLICATION);
   import { filter } from "@stores";
@@ -69,25 +70,7 @@
 
   // 「なし」（空文字）は他の状態と同格の選択肢。ステータスを持たないノードは
   // 統一後ふつうに存在するので、絞り込めないと数の多いほうが探せなくなる。
-  const NO_STATUS = "";
-  const STATUS_LABELS = {
-    [NO_STATUS]: "なし",
-    Undefined: "未定義",
-    Open: "未着手",
-    Pending: "保留",
-    "In Progress": "進行中",
-    Completed: "完了",
-    Canceled: "キャンセル",
-  };
-  const STATUS_OPTIONS = [
-    NO_STATUS,
-    "Undefined",
-    "Open",
-    "Pending",
-    "In Progress",
-    "Completed",
-    "Canceled",
-  ];
+  const STATUS_OPTIONS = [...STATUS_VALUES];
 
   /**
    * 選択済みステータスの取り出し。
@@ -241,7 +224,7 @@
     }
     if (headerName === "status") {
       const statusValues = selectedStatuses(currentFilter);
-      if (statusValues.length === 1) return STATUS_LABELS[statusValues[0]] ?? statusValues[0];
+      if (statusValues.length === 1) return statusLabel(statusValues[0]);
       if (statusValues.length > 1) return `${statusValues.length} selected.`;
       return EMPTY_FILTER_LABEL;
     }

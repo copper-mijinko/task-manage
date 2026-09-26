@@ -1,5 +1,6 @@
 <script>
   import { getContext, onDestroy, tick } from "svelte";
+  import { statusLabel } from "@lib/utils/status_labels";
   import { get } from "svelte/store";
   import debounce from "lodash/debounce";
   import { TREEGRID_APPLICATION } from "@features/workspace/application/treegrid";
@@ -77,14 +78,6 @@
 
   const detailDateStyle =
     "border: 0; padding: 0 var(--sp7) 0 var(--sp2); font-size: 0.75rem; background-color: transparent;";
-  const statusLabels = {
-    Open: "未着手",
-    Pending: "保留",
-    "In Progress": "進行中",
-    Completed: "完了",
-    Canceled: "キャンセル",
-    Undefined: "未定義",
-  };
   let activeTab = $state("overview");
   let editingProperties = $state(false);
   let editingBody = $state(false);
@@ -535,7 +528,7 @@
                     onchange={(event) => changeTaskField("status", event.value)}
                   />
                 {:else}<span class="detail-value"
-                    >{statusLabels[node.data.status] || node.data.status || "未設定"}</span
+                    >{node.data.status ? statusLabel(node.data.status) : "未設定"}</span
                   >{/if}
               </div>
             </label>

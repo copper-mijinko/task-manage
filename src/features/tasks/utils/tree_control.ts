@@ -752,10 +752,10 @@ export function sortTree(
     } else if (column === "start date" || column === "due date") {
       const aVal = (a.data[column] as string | undefined) ?? "";
       const bVal = (b.data[column] as string | undefined) ?? "";
-      if (!aVal && !bVal) result = 0;
-      else if (!aVal) result = 1;
-      else if (!bVal) result = -1;
-      else result = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+      // 日付の無い行は向きに関係なく最後に置く。向きの反転に含めると、
+      // 最初のクリック（降順）で期限の無い行が先頭に集まってしまう。
+      if (!aVal || !bVal) return aVal ? -1 : bVal ? 1 : 0;
+      result = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
     }
 
     return direction === "desc" ? -result : result;

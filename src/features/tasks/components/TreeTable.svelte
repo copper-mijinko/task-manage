@@ -1042,7 +1042,7 @@
       application.copy();
     } else if ((e.ctrlKey || e.metaKey) && (e.key === "v" || e.key === "V")) {
       e.preventDefault();
-      handlePasteTask({ detail: { id: $table_selected_id } });
+      handlePasteTask({ id: $table_selected_id });
     }
   }
 

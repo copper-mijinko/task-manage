@@ -1,6 +1,7 @@
 <script lang="ts">
   import { viewportPopover } from "@lib/actions/viewport_popover";
   import { onMount, onDestroy } from "svelte";
+  import { STATUS_LABELS } from "@lib/utils/status_labels";
   import { activePanelId, newPanelId } from "@stores/panel_coordinator";
   import { globalDismiss } from "@lib/actions";
 
@@ -37,16 +38,6 @@
     "In Progress": "var(--theme-color-Info-main)",
     Completed: "var(--theme-color-Success-main)",
     Canceled: "var(--theme-color-Sub-main)",
-  };
-  const STATUS_LABEL: Record<string, string> = {
-    // 「なし」は空文字。ラベルが無いと選択肢が空欄で並ぶ。
-    "": "なし",
-    Undefined: "未定義",
-    Open: "未着手",
-    Pending: "保留",
-    "In Progress": "進行中",
-    Completed: "完了",
-    Canceled: "キャンセル",
   };
 
   onMount(() => {
@@ -106,7 +97,7 @@
         <input type="checkbox" checked={selected.includes(opt)} onchange={() => toggle(opt)} />
         {#if showDots}<span class="StatusDot" style="--dot: {STATUS_DOT_COLOR[opt] ?? '#888'};"
           ></span>{/if}
-        <span class="OptionLabel">{(labels ?? STATUS_LABEL)[opt] ?? opt}</span>
+        <span class="OptionLabel">{(labels ?? STATUS_LABELS)[opt] ?? opt}</span>
       </label>
     {/each}
   </div>

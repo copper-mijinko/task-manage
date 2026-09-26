@@ -2,6 +2,7 @@
   import { filter } from "@features/search/stores/search";
   import { active_tag } from "@features/memos/stores/tags";
   import { tokenizeFullTextQuery } from "@features/tasks/utils/tree_control";
+  import { statusLabel } from "@lib/utils/status_labels";
   const labels: Record<string, string> = {
     full_text: "検索",
     name: "ノード名",
@@ -30,7 +31,11 @@
         index,
         label: key === "full_text" && $filter.search_memo?.length ? "検索(メモ含む)" : labels[key],
         value:
-          key === "full_text" ? tokenizeFullTextQuery(value.trim()).join(" ") : value || "未設定",
+          key === "full_text"
+            ? tokenizeFullTextQuery(value.trim()).join(" ")
+            : key === "status"
+              ? statusLabel(value)
+              : value || "未設定",
       }));
     })
   );

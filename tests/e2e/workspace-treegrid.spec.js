@@ -664,7 +664,7 @@ test("shared node edits, atomic bulk undo and graph persistence across restart",
     await select(page, "root/alpha/implementation", ["Control"]);
     await expect(page.getByRole("toolbar", { name: "一括操作" })).toBeVisible();
     await page.getByRole("button", { name: "ステータス変更", exact: true }).click();
-    await page.getByRole("option", { name: "Completed", exact: true }).click();
+    await page.getByRole("option", { name: "完了", exact: true }).click();
     await expect
       .poll(() => [graphOf(app).nodes.review.status, graphOf(app).nodes.implementation.status])
       .toEqual(["Completed", "Completed"]);
