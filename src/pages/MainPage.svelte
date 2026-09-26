@@ -118,7 +118,9 @@
   let detailAutoCollapsed = $state(false);
   let ganttAutoHidden = $state(false);
   let show_memo_format_confirm = $state(false);
-  let bulkMemoTargetFormat = $state(/** @type {import("@features/memos/utils/memo_utils").MemoFormat} */ ("markdown"));
+  let bulkMemoTargetFormat = $state(
+    /** @type {import("@features/memos/utils/memo_utils").MemoFormat} */ ("markdown")
+  );
   let bulkMemoPhase = $state("ready");
   let bulkMemoItems = $state([]);
 
