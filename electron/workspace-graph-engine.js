@@ -23,17 +23,23 @@ function reachableFromRoot(graph) {
   const children = childrenIndex(graph);
   const seen = new Set();
   const queue = [graph.rootId];
-  while (queue.length) {
-    const id = queue.shift();
+  // shift() は配列を詰め直すので、ノード数の 2 乗になる。読み位置で進める。
+  for (let head = 0; head < queue.length; head += 1) {
+    const id = queue[head];
     if (seen.has(id) || !graph.nodes[id]) continue;
     seen.add(id);
-    queue.push(...(children.get(id) || []));
+    for (const child of children.get(id) || []) if (!seen.has(child)) queue.push(child);
   }
   return seen;
 }
 
-/** Attach one deterministic entry node for each root-unreachable weak component. */
-function repairRootReachability(graph) {
+/**
+ * Attach one deterministic entry node for each root-unreachable weak component.
+ *
+ * `writable(id)` はそのノードを書き換えてよい写しを返す。エンジンからは
+ * 書き換えるノードだけを複製するために渡す。省略時はその場で書き換える。
+ */
+function repairRootReachability(graph, writable = (id) => graph.nodes[id]) {
   while (true) {
     const reachable = reachableFromRoot(graph);
     const entry = Object.keys(graph.nodes)
@@ -42,8 +48,11 @@ function repairRootReachability(graph) {
     if (!entry) return;
     const links = graph.nodes[entry].parents || [];
     if (!links.some((link) => link.id === graph.rootId)) {
-      links.push({ id: graph.rootId, order: nextOrder(graph, graph.rootId) });
-      graph.nodes[entry].parents = links;
+      const node = writable(entry);
+      node.parents = [
+        ...(node.parents || []),
+        { id: graph.rootId, order: nextOrder(graph, graph.rootId) },
+      ];
     }
   }
 }
@@ -61,8 +70,8 @@ function pathExists(graph, fromId, targetId) {
   const children = childrenIndex(graph);
   const seen = new Set();
   const queue = [fromId];
-  while (queue.length) {
-    const id = queue.shift();
+  for (let head = 0; head < queue.length; head += 1) {
+    const id = queue[head];
     if (id === targetId) return true;
     if (seen.has(id)) continue;
     seen.add(id);
@@ -120,7 +129,23 @@ function executeGraphCommand(input, command, origin = "graph") {
     return { graph, selectedNodeIds: [...new Set(selectedNodeIds)], copiedFrom };
   }
   if (!new Set(["graph", "tree", "finder"]).has(origin)) throw new Error("Invalid command origin");
-  const graph = clone(input);
+  // 渡されたグラフは書き換えない。ただし全体を複製すると 1 回の操作ごとに
+  // ノード数ぶんの仕事になるので、ノードの表だけを浅く写し、書き換える
+  // ノードはその直前に `writable` で複製する（変わらないノードは共有する）。
+  const graph = { ...input, nodes: { ...input.nodes } };
+  if (input.positions) graph.positions = { ...input.positions };
+  const ownNodes = new Set();
+  const writable = (id) => {
+    if (!ownNodes.has(id)) {
+      const current = graph.nodes[id];
+      graph.nodes[id] = {
+        ...current,
+        parents: (current.parents || []).map((parent) => ({ ...parent })),
+      };
+      ownNodes.add(id);
+    }
+    return graph.nodes[id];
+  };
   const selectedNodeIds = [];
   const copiedFrom = {};
   identifyInbox(graph);
@@ -214,7 +239,7 @@ function executeGraphCommand(input, command, origin = "graph") {
     selectedNodeIds.push(command.nodeId);
   } else if (command.type === "link") {
     assertEdgeAllowed(graph, command.childId, command.parentId, origin);
-    graph.nodes[command.childId].parents.push({
+    writable(command.childId).parents.push({
       id: command.parentId,
       order: Number.isFinite(command.order) ? command.order : nextOrder(graph, command.parentId),
     });
@@ -222,12 +247,11 @@ function executeGraphCommand(input, command, origin = "graph") {
   } else if (command.type === "detach") {
     if (command.childId === graph.rootId) throw new Error("The workspace root is protected");
     assertNode(graph, command.childId);
-    const before = graph.nodes[command.childId].parents.length;
-    graph.nodes[command.childId].parents = graph.nodes[command.childId].parents.filter(
-      (parent) => parent.id !== command.parentId
-    );
-    if (before === graph.nodes[command.childId].parents.length) throw new Error("Edge not found");
-    repairRootReachability(graph);
+    const child = writable(command.childId);
+    const before = child.parents.length;
+    child.parents = child.parents.filter((parent) => parent.id !== command.parentId);
+    if (before === child.parents.length) throw new Error("Edge not found");
+    repairRootReachability(graph, writable);
     selectedNodeIds.push(command.childId);
   } else if (command.type === "archive-edge") {
     // 辺だけのアーカイブ。ノードは残るので、他の親の下では今までどおり見える。
@@ -251,7 +275,7 @@ function executeGraphCommand(input, command, origin = "graph") {
     selectedNodeIds.push(command.childId);
   } else if (command.type === "move") {
     assertNode(graph, command.childId);
-    const movingNode = graph.nodes[command.childId];
+    const movingNode = writable(command.childId);
     if (!(movingNode.parents || []).some((p) => p.id === command.fromParentId))
       throw new Error("Edge not found");
     movingNode.parents = movingNode.parents.filter((p) => p.id !== command.fromParentId);
@@ -260,16 +284,17 @@ function executeGraphCommand(input, command, origin = "graph") {
       id: command.toParentId,
       order: Number.isFinite(command.order) ? command.order : nextOrder(graph, command.toParentId),
     });
-    repairRootReachability(graph);
+    repairRootReachability(graph, writable);
     selectedNodeIds.push(command.childId);
   } else if (command.type === "delete-node") {
     if (command.nodeId === graph.rootId) throw new Error("The workspace root is protected");
     delete graph.nodes[command.nodeId];
     if (graph.positions) delete graph.positions[command.nodeId];
     for (const child of Object.values(graph.nodes)) {
-      child.parents = (child.parents || []).filter((parent) => parent.id !== command.nodeId);
+      if ((child.parents || []).some((parent) => parent.id === command.nodeId))
+        writable(child.id).parents = child.parents.filter((parent) => parent.id !== command.nodeId);
     }
-    repairRootReachability(graph);
+    repairRootReachability(graph, writable);
   } else if (command.type === "copy") {
     assertNode(graph, command.targetParentId);
     if (command.nodeId === graph.rootId) throw new Error("The workspace root cannot be copied");
@@ -336,7 +361,7 @@ function executeGraphCommand(input, command, origin = "graph") {
         const sourceOrder = graph.nodes[childId].parents.find(
           (p) => p.id === command.nodeId
         )?.order;
-        graph.nodes[childId].parents.push({ id: newRootId, order: sourceOrder });
+        writable(childId).parents.push({ id: newRootId, order: sourceOrder });
       }
     } else if (command.mode === "subgraph") {
       for (const sourceId of sourceIds) {
@@ -352,7 +377,12 @@ function executeGraphCommand(input, command, origin = "graph") {
     selectedNodeIds.push(...idMap.values());
   } else throw new Error("Unknown graph command");
 
-  validateGraph(graph);
+  // 親子関係を変えない操作は、触ったノードだけ確かめれば足りる（全体の
+  // 到達可能性は変わらない。新しいノードは既存の親の下に付く）。
+  if (command.type === "update-node") validateGraph(graph, [command.nodeId]);
+  else if (command.type === "create-node") validateGraph(graph, selectedNodeIds);
+  else if (command.type === "set-position") validateGraph(graph, []);
+  else validateGraph(graph);
   graph.revision = (input.revision || 0) + 1;
   return { graph, selectedNodeIds, copiedFrom };
 }
@@ -372,7 +402,16 @@ function copyName(graph, baseName, parentId, exceptId) {
   }
 }
 
-function validateGraph(graph) {
+/**
+ * グラフの整合性を確かめる。
+ *
+ * `onlyIds` を渡すと、そのノードの中身だけを確かめ、全体の到達可能性は
+ * 見ない。親子関係を変えない操作の後に、変えたノードだけを確かめるため。
+ *
+ * @param {object} graph
+ * @param {string[]} [onlyIds]
+ */
+function validateGraph(graph, onlyIds) {
   if (!graph || graph.schemaVersion !== 1 || !graph.nodes || !graph.nodes[graph.rootId])
     throw new Error("Invalid workspace graph");
   if ((graph.nodes[graph.rootId].parents || []).length)
@@ -397,7 +436,10 @@ function validateGraph(graph) {
       date.getUTCDate() === day
     );
   };
-  for (const [recordId, node] of Object.entries(graph.nodes)) {
+  const records = onlyIds
+    ? onlyIds.map((id) => [id, graph.nodes[id]])
+    : Object.entries(graph.nodes);
+  for (const [recordId, node] of records) {
     if (
       !node ||
       node.id !== recordId ||
@@ -424,6 +466,7 @@ function validateGraph(graph) {
   }
   if (graph.nodes[graph.rootId].archived || graph.nodes[graph.rootId].archivedAt)
     throw new Error("The workspace root cannot be archived");
+  if (onlyIds) return;
   if (reachableFromRoot(graph).size !== Object.keys(graph.nodes).length)
     throw new Error("Every node must be reachable from the workspace root");
 }

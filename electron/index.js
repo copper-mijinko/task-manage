@@ -133,6 +133,16 @@ app.on("ready", () => {
   }
   if (shouldOpenDevTools()) mainWindow.webContents.openDevTools();
 
+  // 画面の読み込みと並行して、開いているワークスペースのグラフを先に読む。
+  // 読んだ結果は main 側で保持されるので、画面からの最初の要求はそれを使う。
+  // 失敗しても、画面からの要求で改めて読んでエラーを出すので、ここでは記録だけ。
+  const activeWorkspace = settings.get("activeWorkspace");
+  if (typeof activeWorkspace === "string" && activeWorkspace) {
+    workspaceApplication.read(activeWorkspace).catch((err) => {
+      log.warn("Could not prefetch the active workspace graph:", err.message);
+    });
+  }
+
   mainWindow.on("closed", () => {
     mainWindow = null;
     detailWindows.closeAll();

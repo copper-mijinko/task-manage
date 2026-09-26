@@ -1,4 +1,4 @@
-import { derived, get, writable } from "svelte/store";
+import { derived, get, readable, writable, type Readable } from "svelte/store";
 import * as platform from "@lib/ipc/platform";
 import { saveStatus } from "@stores/save_status";
 import type {
@@ -23,14 +23,43 @@ const state = writable<GraphStoreState>({
 let operation = Promise.resolve<unknown>(undefined);
 let generation = 0;
 
+/**
+ * 条件を満たすときだけ状態を置き換える。
+ *
+ * `state.update(() => current)` と書くと、中身が同じでも Svelte のストアは
+ * オブジェクトを「変わった」とみなして購読者へ通知し、ツリーの射影が
+ * 丸ごと作り直される。何もしないときは通知そのものを出さない。
+ */
+function replaceIf(next: (current: GraphStoreState) => GraphStoreState | null) {
+  const current = get(state);
+  const replacement = next(current);
+  if (replacement && replacement !== current) state.set(replacement);
+}
+
 platform.onWorkspaceGraphUpdated((event) => {
-  state.update((current) =>
+  replaceIf((current) =>
     current.workspacePath === event.workspacePath &&
     (!current.graph || event.graph.revision > current.graph.revision)
       ? { ...current, graph: event.graph, error: null }
-      : current
+      : null
   );
 });
+
+/** `select` の結果が同じオブジェクトなら通知しない派生ストア。 */
+function distinct<T>(select: (value: GraphStoreState) => T): Readable<T> {
+  return readable(select(get(state)), (set) => {
+    // 購読が始まった時点の値を渡す（作った時点の値のままにしない）。
+    let last = select(get(state));
+    set(last);
+    return state.subscribe((value) => {
+      const next = select(value);
+      if (next !== last) {
+        last = next;
+        set(next);
+      }
+    });
+  });
+}
 
 /**
  * 書き込み操作を 1 本の列に並べる。ヘッダーの保存状態もここで知らせる
@@ -54,7 +83,7 @@ async function run<T>(fn: () => Promise<T>): Promise<T> {
   return next;
 }
 
-export const workspace_graph = derived(state, ($state) => $state.graph);
+export const workspace_graph = distinct(($state) => $state.graph);
 
 /**
  * 元に戻す / やり直しが実際に効くか。main プロセスが graph に添えてくる
@@ -157,12 +186,12 @@ function history(direction: "undo" | "redo") {
 }
 
 function applyResult(workspacePath: string, operationGeneration: number, graph: WorkspaceGraph) {
-  state.update((current) =>
+  replaceIf((current) =>
     current.workspacePath === workspacePath &&
     operationGeneration === generation &&
     (!current.graph || graph.revision > current.graph.revision)
       ? { ...current, graph, error: null }
-      : current
+      : null
   );
 }
 

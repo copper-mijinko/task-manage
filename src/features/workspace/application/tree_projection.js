@@ -23,11 +23,13 @@ export function projectTreeGrid(graph, rootId) {
         status: node.status ?? "",
         "start date": node.startDate,
         "due date": node.dueDate,
-        body: structuredClone(node.body),
+        // グラフの値をそのまま渡す（下流では書き換えない）。深く複製すると、
+        // 変更のたびに全ノードの本文と添付を写すことになる。
+        body: node.body,
         format: node.format,
         bodyLoaded: true,
-        tags: [...(node.tags || [])],
-        attachments: structuredClone(node.attachments || []),
+        tags: node.tags || [],
+        attachments: node.attachments || [],
       },
       children: [],
     };

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/svelte";
+import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { tick } from "svelte";
 import { get } from "svelte/store";
 import SearchBox from "@lib/primitives/SearchBox.svelte";
@@ -13,11 +13,24 @@ describe("SearchBox", () => {
     render(SearchBox);
 
     const input = screen.getByLabelText("ノード一覧を絞り込み");
+    await fireEvent.input(input, { target: { value: "rel" } });
     await fireEvent.input(input, { target: { value: "release" } });
 
-    expect(get(filter)).toEqual({
-      full_text: ["release"],
-    });
+    // 打鍵ごとではなく、入力が止まってから 1 回だけ反映する。
+    expect(get(filter)).toEqual({});
+    await waitFor(() => expect(get(filter)).toEqual({ full_text: ["release"] }));
+  });
+
+  test("keeps the typed text when focus leaves before the update is applied", async () => {
+    render(SearchBox);
+
+    const input = screen.getByLabelText("ノード一覧を絞り込み");
+    await fireEvent.input(input, { target: { value: "release" } });
+    await fireEvent.blur(input);
+
+    expect(input).toHaveValue("release");
+    await waitFor(() => expect(get(filter)).toEqual({ full_text: ["release"] }));
+    expect(input).toHaveValue("release");
   });
 
   test("confirms a chip on Enter and keeps typing further AND terms", async () => {
@@ -37,9 +50,11 @@ describe("SearchBox", () => {
 
     // Typing a second term narrows further (AND) before it's confirmed.
     await fireEvent.input(input, { target: { value: "urgent" } });
-    expect(get(filter)).toEqual({
-      full_text: ["release", "urgent"],
-    });
+    await waitFor(() =>
+      expect(get(filter)).toEqual({
+        full_text: ["release", "urgent"],
+      })
+    );
 
     await fireEvent.keyDown(input, { key: "Enter" });
     await tick();

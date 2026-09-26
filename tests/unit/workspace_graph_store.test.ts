@@ -1,6 +1,6 @@
 import { get } from "svelte/store";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { workspace_graph_store } from "@features/workspace/stores/graph";
+import { workspace_graph, workspace_graph_store } from "@features/workspace/stores/graph";
 import { saveStatus } from "@stores/save_status";
 
 const mocks = vi.hoisted(() => ({
@@ -37,6 +37,29 @@ describe("workspace graph store races", () => {
     mocks.executeGraphCommand.mockReset();
     mocks.undoGraph.mockReset();
     mocks.redoGraph.mockReset();
+  });
+
+  it("does not notify graph subscribers when a broadcast or result carries the same revision", async () => {
+    mocks.readGraph.mockResolvedValue(graph("same", 1));
+    await workspace_graph_store.load("same");
+    const next = graph("same", 2);
+    mocks.executeGraphCommand.mockResolvedValue({ graph: next });
+    let notifications = 0;
+    const unsubscribe = workspace_graph.subscribe(() => notifications++);
+    notifications = 0;
+
+    // 通知が先に届き、そのあと同じ版が戻り値で届く（逆順もありうる）。
+    mocks.graphUpdated?.({ workspacePath: "same", graph: next });
+    await workspace_graph_store.execute({
+      type: "update-node",
+      nodeId: "root",
+      changes: {},
+    } as never);
+    mocks.graphUpdated?.({ workspacePath: "same", graph: { ...next } });
+
+    expect(notifications).toBe(1);
+    expect(get(workspace_graph)).toBe(next);
+    unsubscribe();
   });
 
   it("guards stale successful and failed loads", async () => {

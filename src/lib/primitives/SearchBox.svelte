@@ -35,7 +35,23 @@
     return result;
   };
 
+  // 入力中は打鍵ごとに絞り込まず、少し止まってから反映する。絞り込みは
+  // ツリー全体をたどるので、大きなワークスペースでは 1 文字ごとに走らせると
+  // 入力がもたつく。確定・削除はすぐ反映する。
+  // 入力欄から離れたときに前倒しで反映はしない。離れるのはたいてい別の
+  // ボタンを押したときで、その mousedown と click の間に絞り込みが変わると
+  // 絞り込みの帯が出入りして表がずれ、押したボタンに click が届かない。
+  const TYPING_DEBOUNCE_MS = 120;
+  let typingTimer;
+  const scheduleFilter = () => {
+    clearTimeout(typingTimer);
+    typingTimer = setTimeout(applyFilter, TYPING_DEBOUNCE_MS);
+  };
+  $effect(() => () => clearTimeout(typingTimer));
+
   const applyFilter = () => {
+    clearTimeout(typingTimer);
+    typingTimer = undefined;
     if (searchMode === "tags" && $active_tag) active_tag.set(null);
     $filter = {
       ...$filter,
@@ -98,7 +114,9 @@
       typeof document !== "undefined" &&
       root_el &&
       (document.activeElement === search_box || root_el.contains(document.activeElement));
-    if (!isFocused) {
+    // 入力の反映待ちのあいだは、ストアが古いのは当然なので外からの変更と
+    // みなさない（みなすと入力中の文字を消してしまう）。
+    if (!isFocused && typingTimer === undefined) {
       const same =
         stored.length === terms.length + (search_text !== "" ? 1 : 0) &&
         stored.every((v, i) => v === (i < terms.length ? terms[i] : search_text));
@@ -187,9 +205,7 @@
           : "ノードを絞り込み"
         : ""}
       aria-label="ノード一覧を絞り込み"
-      oninput={() => {
-        applyFilter();
-      }}
+      oninput={scheduleFilter}
       onclick={(e) => {
         e.stopPropagation();
       }}

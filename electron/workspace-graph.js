@@ -182,7 +182,9 @@ async function importDuplicateLegacyMemos(projectDir, loaded, duplicateMemos) {
 }
 
 async function atomicWriteJson(filePath, value) {
-  await workspace.atomicWriteFile(filePath, JSON.stringify(value, null, 2) + "\n", "utf8");
+  // 字下げはしない。編集のたびにファイル全体を書くので、字下げの分（約 35%）
+  // だけ書き込みと同期（OneDrive など）の量が増える。
+  await workspace.atomicWriteFile(filePath, JSON.stringify(value) + "\n", "utf8");
 }
 
 function enqueue(workspacePath, operation) {
@@ -538,7 +540,9 @@ async function mutate(workspacePath, expectedRevision, action) {
     const history = { undo: document.undo, redo: document.redo };
     try {
       const result = await action(document);
-      validateGraph(document.graph);
+      // エンジンを通った操作はエンジンが確かめ済み。ここで全体をもう一度
+      // 確かめると、1 回の操作ごとにノード数ぶんの仕事が増える。
+      if (!result?.validated) validateGraph(document.graph);
       // 変わったノードだけ JSON を通した写しに差し替え、読み出し結果を
       // ディスク上の内容と同じ形に保つ。
       const changed = changedParts(before, document.graph);
@@ -546,7 +550,8 @@ async function mutate(workspacePath, expectedRevision, action) {
       document.undo = [...document.undo, patchFrom(before, changed)].slice(-HISTORY_LIMIT);
       document.redo = [];
       await writeDocument(workspacePath, document);
-      return { ...result, graph: withHistoryDepth(document) };
+      const { validated: _validated, ...rest } = result ?? {};
+      return { ...rest, graph: withHistoryDepth(document) };
     } catch (error) {
       // 読み出し結果を共有しているので、失敗したら手元の変更も戻す。
       document.graph = before;
@@ -581,7 +586,7 @@ async function executeWorkspaceGraphCommand(workspacePath, command, origin, expe
       }));
       copy.assetOwnerId = copyId;
     }
-    return { selectedNodeIds: result.selectedNodeIds };
+    return { selectedNodeIds: result.selectedNodeIds, validated: true };
   });
 }
 
@@ -596,7 +601,9 @@ async function changeHistory(workspacePath, direction, expectedRevision) {
     const before = document.graph;
     const history = { undo: document.undo, redo: document.redo };
     try {
-      const restored = structuredClone(before);
+      // パッチはノードの表と最上位の欄を置き換えるだけなので、浅い写しで
+      // 足りる（もとのグラフは書き換えない）。
+      const restored = { ...before, nodes: { ...before.nodes } };
       const patch = source[source.length - 1];
       const inverse = applyGraphPatch(restored, patch);
       restored.revision = before.revision + 1;
