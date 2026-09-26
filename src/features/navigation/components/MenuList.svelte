@@ -28,9 +28,7 @@
   function moveProjectFromMenu(delta) {
     const { project, section } = projectMenu;
     const projects = [...getProjectsForSection()];
-    const index = projects.findIndex(
-      (p) => getProjectId(p) === getProjectId(project)
-    );
+    const index = projects.findIndex((p) => getProjectId(p) === getProjectId(project));
     if (index < 0 || index + delta < 0 || index + delta >= projects.length) return;
     projects.splice(index, 1);
     projects.splice(index + delta, 0, project);
@@ -267,9 +265,7 @@
             action: "up",
             disabled:
               getProjectsForSection().findIndex(
-                (p) =>
-                  getProjectId(p) ===
-                  getProjectId(projectMenu.project)
+                (p) => getProjectId(p) === getProjectId(projectMenu.project)
               ) <= 0,
           },
           {
