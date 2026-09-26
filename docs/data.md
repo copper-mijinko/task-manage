@@ -16,10 +16,13 @@
 アプリのデータディレクトリは次の順で決まる（`electron/app-paths.js`）。
 
 1. `TASK_MANAGE_DATA_DIR` 環境変数があればそこ。テストとエージェント検証はこれで利用者のデータから切り離す
-2. 配布版は OS の利用者データ領域（`app.getPath("userData")`。Windows なら `%APPDATA%\task-manage`）。インストール先は書き込めないことがあり、更新やアンインストールで消えるので使わない
-3. 開発中（`app.isPackaged` が偽）は `electron/`（git 管理外）
+2. ポータブル版（配布版で、実行ファイルと同じフォルダに `data` フォルダがある）はその `data`。起動直後に Electron の利用者データ領域ごと `data` へ移すので、設定ファイルに加えて renderer の localStorage・キャッシュ・ログも `data` に入る
+3. インストーラー版は OS の利用者データ領域（`app.getPath("userData")`。Windows なら `%APPDATA%\task-manage`）。インストール先は書き込めないことがあり、更新やアンインストールで消えるので使わない
+4. 開発中（`app.isPackaged` が偽）は `electron/`（git 管理外）
 
-0.1.45 までの配布版は設定をインストール先（`resources/app/electron/`）に置いていたため、更新のたびに消えていた。この版からは利用者データ領域に残る。
+リリースのポータブル版（`task-manage-<version>.tar.gz`）には空の `data` フォルダが入っている。新しい版に移るときは、古い版の `data` フォルダを新しい版のフォルダへ上書きコピーすれば設定を引き継げる。`data` を消すと `%APPDATA%` を使うようになる。
+
+0.1.45 までの配布版は設定をアプリのフォルダ（`resources/app/electron/`）に置いていたため、更新のたびに消えていた。
 
 以前の版が使っていた `electron/db.json`（アプリ内プロジェクト）は読まない。ワークスペース直下の旧 Markdown プロジェクト（`<dir>/_project.md`）は取り込みの入力としてだけ読む（§ 7）。
 

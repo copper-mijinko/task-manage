@@ -89,6 +89,10 @@ jobs:
           VERSION=${{ steps.extract_tag.outputs.version }}
           ls dist
           mv dist/win-unpacked dist/task-manage-$VERSION
+          # ポータブル版の印。実行ファイルの隣に data があると、設定や
+          # キャッシュを %APPDATA% ではなくこのフォルダに置く。
+          # インストーラー（.exe）はこの前に作られているので入らない。
+          mkdir -p dist/task-manage-$VERSION/data
           cd dist && tar -cvzf task-manage-$VERSION.tar.gz task-manage-$VERSION
           sleep 2
 
