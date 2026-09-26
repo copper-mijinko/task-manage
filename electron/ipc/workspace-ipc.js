@@ -37,8 +37,9 @@ function registerWorkspaceIpc(ipc, { settings, workspaceAuthorizer, knownWorkspa
     authorize: (workspacePath) => workspaceAuthorizer.assertKnownWorkspace(workspacePath),
     initialize: (workspacePath) => workspaceGraph.readWorkspaceGraph(workspacePath),
     repository: workspaceGraph,
-    publish: (workspacePath, graph) =>
-      broadcast("workspace-graph-updated", { workspacePath, graph }),
+    // 要求元のウィンドウは結果を戻り値で受け取るので送らない。
+    publish: (workspacePath, graph, requester) =>
+      broadcast("workspace-graph-updated", { workspacePath, graph }, requester),
     openAsset: async (resolvedPath, chooseProgram) => {
       if (chooseProgram) return openPathWithProgramPicker(resolvedPath);
       const error = await shell.openPath(resolvedPath);
@@ -115,18 +116,20 @@ function registerWorkspaceIpc(ipc, { settings, workspaceAuthorizer, knownWorkspa
   });
 
   ipc.handle("ws:read-graph", (_event, { workspacePath }) => application.read(workspacePath));
-  ipc.handle("ws:execute-graph-command", (_event, request) => application.execute(request));
-  ipc.handle("ws:undo-graph", (_event, request) =>
-    application.history({ ...request, direction: "undo" })
+  ipc.handle("ws:execute-graph-command", (event, request) =>
+    application.execute({ ...request, requester: event.sender })
   );
-  ipc.handle("ws:redo-graph", (_event, request) =>
-    application.history({ ...request, direction: "redo" })
+  ipc.handle("ws:undo-graph", (event, request) =>
+    application.history({ ...request, direction: "undo", requester: event.sender })
+  );
+  ipc.handle("ws:redo-graph", (event, request) =>
+    application.history({ ...request, direction: "redo", requester: event.sender })
   );
   ipc.handle("ws:list-markdown-imports", (_event, { workspacePath }) =>
     application.listMarkdownImports(workspacePath)
   );
-  ipc.handle("ws:import-markdown-projects", (_event, request) =>
-    application.importMarkdown(request)
+  ipc.handle("ws:import-markdown-projects", (event, request) =>
+    application.importMarkdown({ ...request, requester: event.sender })
   );
   ipc.handle("ws:open-graph-asset", (_event, request) => application.openAsset(request));
   ipc.handle("ws:save-graph-asset", (_event, { workspacePath, nodeId, fileName, bytes }) =>

@@ -60,6 +60,18 @@ describe("Canonical workspace application", () => {
     });
     expect(events).toEqual(["authorize", "initialize", ["update-node", "tree", 3], "publish"]);
   });
+  it("tells publish who asked, so the requester is not sent the same graph twice", async () => {
+    const publish = vi.fn();
+    const requester = { id: "window-1" };
+    const app = applicationModule.createWorkspaceApplication({
+      authorize: async () => {},
+      initialize: async () => {},
+      repository: { executeWorkspaceGraphCommand: vi.fn(async () => ({ graph: fixture() })) },
+      publish,
+    });
+    await app.execute({ workspacePath: "w", command: { type: "update-node" }, requester });
+    expect(publish).toHaveBeenCalledWith("w", expect.anything(), requester);
+  });
   it("does not dispatch an unauthorized request", async () => {
     const initialize = vi.fn(),
       publish = vi.fn();

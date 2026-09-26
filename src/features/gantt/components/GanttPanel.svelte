@@ -3,6 +3,7 @@
   import { TREEGRID_APPLICATION } from "@features/workspace/application/treegrid";
   import { ganttScrollTop, ganttScale, theme } from "@stores";
   import { flattenVisibleTree, buildInheritedDueDateMap } from "@features/tasks/utils/tree_control";
+  import { buildRenderItems, visibleRowRange } from "@features/tasks/utils/virtual_rows";
 
   const application = getContext(TREEGRID_APPLICATION);
   const closed_row_paths = application.closed;
@@ -15,6 +16,23 @@
   let locale =
     typeof navigator !== "undefined" && navigator.language ? navigator.language : undefined;
   let prevTimelineStartTs = null;
+
+  // ── 見えている行だけ描く ─────────────────────────────────────────
+  // ツリーと同じく、行の高さは --tree-row-height で固定なので、縦の
+  // スクロール位置から描く範囲を出せる。描かない行は同じ高さの空白に
+  // 置き換える（スクロールの長さと各行の位置は変わらない）。
+  const OVERSCAN_ROWS = 8;
+  const FALLBACK_ALL_ROWS = 200;
+  const FALLBACK_WINDOW_ROWS = 60;
+  let bodyScrollTop = $state(0);
+  let bodyHeight = $state(0);
+  let rowHeightProbe = $state();
+  let rowHeightPx = $state(0);
+  function measureRows() {
+    rowHeightPx = rowHeightProbe?.offsetHeight || 0;
+    bodyHeight = bodyEl?.clientHeight || 0;
+    bodyScrollTop = bodyEl?.scrollTop || 0;
+  }
 
   // ── Timeline range ──────────────────────────────────────────────
 
@@ -654,6 +672,7 @@
   }
 
   function handleBodyScroll(event) {
+    bodyScrollTop = event.currentTarget.scrollTop;
     if (dragState) {
       headerScrollLeft = event.currentTarget.scrollLeft;
       dragState = {
@@ -704,6 +723,11 @@
   onMount(() => {
     updateRootFontSizePx();
     window.addEventListener("resize", updateRootFontSizePx);
+    // ペインの大きさと、密度の切り替えで変わる行の高さを測り直す。
+    measureRows();
+    const rowObserver = new ResizeObserver(() => measureRows());
+    if (bodyEl) rowObserver.observe(bodyEl);
+    if (rowHeightProbe) rowObserver.observe(rowHeightProbe);
 
     // Position today on first paint. tick + 2 rAFs makes sure
     // GanttBodyInner has its real width / scrollWidth before we read them.
@@ -748,6 +772,7 @@
 
     return () => {
       window.removeEventListener("resize", updateRootFontSizePx);
+      rowObserver.disconnect();
       scaleUnsub?.();
     };
   });
@@ -758,6 +783,23 @@
   });
   let rows = $derived($filtered_data ? flattenVisibleTree($filtered_data, $closed_row_paths) : []);
   let inheritedMap = $derived(buildInheritedDueDateMap(rows));
+  let rowRange = $derived(
+    visibleRowRange({
+      rowCount: rows.length,
+      scrollTop: bodyScrollTop,
+      viewportHeight: bodyHeight,
+      rowHeight: rowHeightPx,
+      rowsOffset: 0,
+      overscan: OVERSCAN_ROWS,
+      fallbackAllRows: FALLBACK_ALL_ROWS,
+      fallbackWindowRows: FALLBACK_WINDOW_ROWS,
+    })
+  );
+  // ドラッグ中の行は、画面外へスクロールしても描いておく（操作が途切れない）。
+  let pinnedRowIndices = $derived(
+    dragState ? rows.flatMap((row, index) => (row.id === dragState.id ? [index] : [])) : []
+  );
+  let renderItems = $derived(buildRenderItems(rows.length, rowRange, pinnedRowIndices));
   // Sync scroll position from TreeTable
   $effect.pre(() => {
     if (bodyEl && !dragState) bodyEl.scrollTop = $ganttScrollTop;
@@ -941,73 +983,83 @@
         <div class="TodayDayBody" style="left:{todayRem}rem; width:{remPerDay}rem;"></div>
         <div class="TodayLineFull" style="left:{todayRem}rem;"></div>
       {/if}
+      <div class="RowHeightProbe" bind:this={rowHeightProbe} aria-hidden="true"></div>
       <!-- key は経路。多親ノードは親ごとに複数行に出るので id では重複する。 -->
-      {#each rows as row (row.path)}
-        {@const bar = getBarStyle(row, dragState, remPerDay, todayRem, todayTs, timelineStart)}
-        {@const preview = getCreatePreview(row, dragState, remPerDay, timelineStart)}
-        <div
-          class="GanttRow"
-          data-row-id={row.id}
-          data-row-path={row.path}
-          role="presentation"
-          onpointerdown={(event) => startCreateDrag(event, row)}
-          ondblclick={(event) => createRange(event, row, bar)}
-        >
-          {#if preview}
-            <div
-              class="CreatePreview"
-              style="left:{preview.leftRem}rem; width:{preview.widthRem}rem;"
-              aria-hidden="true"
-            >
-              <span class="PreviewEdge StartEdge"></span>
-              <span class="PreviewEdge EndEdge"></span>
-            </div>
-          {/if}
-          {#if bar}
-            <button
-              type="button"
-              class="Bar"
-              class:DueMarker={bar.isDue}
-              class:StartMarker={bar.isStartOnly}
-              class:Inherited={bar.isInherited}
-              class:DraggingBar={dragState?.id === row.id && dragState.mode !== "create"}
-              style="left:{bar.leftRem}rem; width:{bar.widthRem}rem; background:{bar.color}; opacity:{bar.opacity};"
-              aria-label={bar.isDue
-                ? "期限日を変更"
-                : bar.isStartOnly
-                  ? "開始日を変更"
-                  : "期間を移動"}
-              title={bar.isDue ? "期限日を変更" : bar.isStartOnly ? "開始日を変更" : "期間を移動"}
-              disabled={bar.isInherited}
-              onpointerdown={(event) =>
-                startDrag(event, row, bar.isStartOnly ? "start" : "move", bar)}
-            ></button>
-            {#if bar.overdue}
+      {#each renderItems as item (item.kind === "row" ? rows[item.index].path : `gap:${item.start}`)}
+        {#if item.kind === "gap"}
+          <div
+            class="RowGap"
+            aria-hidden="true"
+            style:height={`calc(var(--tree-row-height, 36px) * ${item.count})`}
+          ></div>
+        {:else}
+          {@const row = rows[item.index]}
+          {@const bar = getBarStyle(row, dragState, remPerDay, todayRem, todayTs, timelineStart)}
+          {@const preview = getCreatePreview(row, dragState, remPerDay, timelineStart)}
+          <div
+            class="GanttRow"
+            data-row-id={row.id}
+            data-row-path={row.path}
+            role="presentation"
+            onpointerdown={(event) => startCreateDrag(event, row)}
+            ondblclick={(event) => createRange(event, row, bar)}
+          >
+            {#if preview}
               <div
-                class="OverdueSegment"
-                style="left:{bar.overdue.leftRem}rem; width:{bar.overdue
-                  .widthRem}rem; background:{bar.overdue.color}; opacity:{bar.opacity};"
+                class="CreatePreview"
+                style="left:{preview.leftRem}rem; width:{preview.widthRem}rem;"
                 aria-hidden="true"
-              ></div>
+              >
+                <span class="PreviewEdge StartEdge"></span>
+                <span class="PreviewEdge EndEdge"></span>
+              </div>
             {/if}
-            {#if !bar.isDue && !bar.isStartOnly && !bar.isInherited}
+            {#if bar}
               <button
-                class="BarHandle StartHandle"
-                aria-label="開始日を変更"
-                title="開始日を変更"
-                style="left:{bar.leftRem}rem;"
-                onpointerdown={(event) => startDrag(event, row, "start", bar)}
+                type="button"
+                class="Bar"
+                class:DueMarker={bar.isDue}
+                class:StartMarker={bar.isStartOnly}
+                class:Inherited={bar.isInherited}
+                class:DraggingBar={dragState?.id === row.id && dragState.mode !== "create"}
+                style="left:{bar.leftRem}rem; width:{bar.widthRem}rem; background:{bar.color}; opacity:{bar.opacity};"
+                aria-label={bar.isDue
+                  ? "期限日を変更"
+                  : bar.isStartOnly
+                    ? "開始日を変更"
+                    : "期間を移動"}
+                title={bar.isDue ? "期限日を変更" : bar.isStartOnly ? "開始日を変更" : "期間を移動"}
+                disabled={bar.isInherited}
+                onpointerdown={(event) =>
+                  startDrag(event, row, bar.isStartOnly ? "start" : "move", bar)}
               ></button>
-              <button
-                class="BarHandle EndHandle"
-                aria-label="期限日を変更"
-                title="期限日を変更"
-                style="left:{bar.leftRem + bar.widthRem}rem;"
-                onpointerdown={(event) => startDrag(event, row, "end", bar)}
-              ></button>
+              {#if bar.overdue}
+                <div
+                  class="OverdueSegment"
+                  style="left:{bar.overdue.leftRem}rem; width:{bar.overdue
+                    .widthRem}rem; background:{bar.overdue.color}; opacity:{bar.opacity};"
+                  aria-hidden="true"
+                ></div>
+              {/if}
+              {#if !bar.isDue && !bar.isStartOnly && !bar.isInherited}
+                <button
+                  class="BarHandle StartHandle"
+                  aria-label="開始日を変更"
+                  title="開始日を変更"
+                  style="left:{bar.leftRem}rem;"
+                  onpointerdown={(event) => startDrag(event, row, "start", bar)}
+                ></button>
+                <button
+                  class="BarHandle EndHandle"
+                  aria-label="期限日を変更"
+                  title="期限日を変更"
+                  style="left:{bar.leftRem + bar.widthRem}rem;"
+                  onpointerdown={(event) => startDrag(event, row, "end", bar)}
+                ></button>
+              {/if}
             {/if}
-          {/if}
-        </div>
+          </div>
+        {/if}
       {/each}
     </div>
   </div>
@@ -1268,6 +1320,13 @@
     z-index: 5;
   }
 
+  .RowHeightProbe {
+    position: absolute;
+    visibility: hidden;
+    pointer-events: none;
+    width: 1px;
+    height: var(--tree-row-height, 36px);
+  }
   .GanttRow {
     height: var(--tree-row-height, 36px);
     min-height: var(--tree-row-height, 36px);
