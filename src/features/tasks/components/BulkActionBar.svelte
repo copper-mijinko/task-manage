@@ -1,12 +1,27 @@
 <script>
-  import { createEventDispatcher, tick } from "svelte";
+  import { tick } from "svelte";
   import { fly } from "svelte/transition";
   import IconButton from "@lib/primitives/IconButton.svelte";
 
-  /** Number of selected rows. Bar is hidden when 0. */
-  export let count = 0;
+  /**
+   * @typedef {Object} Props
+   * @property {number} [count] - Number of selected rows. Bar is hidden when 0.
+   * @property {(detail?: any) => void} [onbulkstatus]
+   * @property {(detail?: any) => void} [onbulksetdate]
+   * @property {(detail?: any) => void} [onbulkcleardate]
+   * @property {(detail?: any) => void} [onbulkcopy]
+   * @property {(detail?: any) => void} [onclearselection]
+   */
 
-  const dispatch = createEventDispatcher();
+  /** @type {Props} */
+  let {
+    count = 0,
+    onbulkstatus,
+    onbulksetdate,
+    onbulkcleardate,
+    onbulkcopy,
+    onclearselection,
+  } = $props();
 
   const STATUSES = ["", "Undefined", "Open", "Pending", "In Progress", "Completed", "Canceled"];
   const STATUS_COLOR = {
@@ -17,21 +32,21 @@
     Canceled: "var(--theme-color-Sub-main)",
   };
 
-  let statusButtonEl;
-  let statusPopupEl;
-  let statusOpen = false;
-  let statusPopupStyle = "";
+  let statusButtonEl = $state();
+  let statusPopupEl = $state();
+  let statusOpen = $state(false);
+  let statusPopupStyle = $state("");
 
-  let dateMenuButtonEl;
-  let dateMenuEl;
-  let dateMenuOpen = false;
-  let dateMenuStyle = "";
+  let dateMenuButtonEl = $state();
+  let dateMenuEl = $state();
+  let dateMenuOpen = $state(false);
+  let dateMenuStyle = $state("");
 
-  let datePopupEl;
-  let dateOpen = null; // "start date" | "due date" | null
+  let datePopupEl = $state();
+  let dateOpen = $state(null); // "start date" | "due date" | null
   let dateAnchorEl = null;
-  let datePopupStyle = "";
-  let pendingDateValue = "";
+  let datePopupStyle = $state("");
+  let pendingDateValue = $state("");
 
   async function toggleStatus(e) {
     e.stopPropagation();
@@ -49,7 +64,7 @@
 
   function pickStatus(value) {
     statusOpen = false;
-    dispatch("bulkStatus", { value });
+    onbulkstatus?.({ value });
   }
 
   /**
@@ -98,14 +113,14 @@
   function applyDate() {
     if (!dateOpen) return;
     if (pendingDateValue) {
-      dispatch("bulkSetDate", { key: dateOpen, value: pendingDateValue });
+      onbulksetdate?.({ key: dateOpen, value: pendingDateValue });
     }
     closeDate();
   }
 
   function clearDate(key) {
     dateMenuOpen = false;
-    dispatch("bulkClearDate", { key });
+    onbulkcleardate?.({ key });
   }
 
   function handleWindowClick(e) {
@@ -151,7 +166,7 @@
   }
 </script>
 
-<svelte:window on:click={handleWindowClick} on:keydown={handleKeydown} />
+<svelte:window onclick={handleWindowClick} onkeydown={handleKeydown} />
 
 {#if count > 1}
   <div
@@ -169,7 +184,7 @@
       bind:this={statusButtonEl}
       aria-haspopup="listbox"
       aria-expanded={statusOpen}
-      on:click={toggleStatus}
+      onclick={toggleStatus}
     >
       ステータス変更
       <svg viewBox="0 0 12 12" aria-hidden="true" class="Caret">
@@ -189,7 +204,7 @@
       bind:this={dateMenuButtonEl}
       aria-haspopup="menu"
       aria-expanded={dateMenuOpen}
-      on:click={toggleDateMenu}
+      onclick={toggleDateMenu}
     >
       日付
       <svg viewBox="0 0 12 12" aria-hidden="true" class="Caret">
@@ -208,7 +223,7 @@
       variant="text"
       ariaLabel="コピー"
       tooltipContent="クリップボードへコピー（右クリック→Ctrl+V でペースト）"
-      on:click={() => dispatch("bulkCopy")}
+      onclick={() => onbulkcopy?.()}
       style="margin: 0; width: 1.5rem; height: 1.5rem; box-shadow: none;"
     >
       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -223,7 +238,7 @@
       variant="text"
       ariaLabel="選択を解除"
       tooltipContent="選択を解除"
-      on:click={() => dispatch("clearSelection")}
+      onclick={() => onclearselection?.()}
       style="margin: 0; width: 1.5rem; height: 1.5rem; box-shadow: none;"
     >
       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -254,7 +269,7 @@
           role="option"
           aria-selected="false"
           class="StatusOptionButton"
-          on:click={() => pickStatus(opt)}
+          onclick={() => pickStatus(opt)}
         >
           <span class="StatusDot" style="background: {STATUS_COLOR[opt]}"></span>
           <span class="StatusLabel"
@@ -275,17 +290,17 @@
     style={dateMenuStyle}
     use:portal
   >
-    <button type="button" role="menuitem" on:click={(e) => toggleDate(e, "start date")}>
+    <button type="button" role="menuitem" onclick={(e) => toggleDate(e, "start date")}>
       開始日を設定
     </button>
-    <button type="button" role="menuitem" on:click={(e) => toggleDate(e, "due date")}>
+    <button type="button" role="menuitem" onclick={(e) => toggleDate(e, "due date")}>
       期限日を設定
     </button>
     <span class="DateMenuSep" aria-hidden="true"></span>
-    <button type="button" role="menuitem" on:click={() => clearDate("start date")}>
+    <button type="button" role="menuitem" onclick={() => clearDate("start date")}>
       開始日をクリア
     </button>
-    <button type="button" role="menuitem" on:click={() => clearDate("due date")}>
+    <button type="button" role="menuitem" onclick={() => clearDate("due date")}>
       期限日をクリア
     </button>
   </div>
@@ -303,11 +318,11 @@
     <input
       type="date"
       bind:value={pendingDateValue}
-      on:keydown={(e) => {
+      onkeydown={(e) => {
         if (e.key === "Enter") applyDate();
       }}
     />
-    <button type="button" class="DateApply" disabled={!pendingDateValue} on:click={applyDate}>
+    <button type="button" class="DateApply" disabled={!pendingDateValue} onclick={applyDate}>
       適用
     </button>
   </div>

@@ -85,8 +85,7 @@ describe("PageSearchBox", () => {
     const handleClose = vi.fn();
 
     render(PageSearchBox, {
-      props: { show: true },
-      events: { close: handleClose },
+      props: { show: true, onclose: handleClose },
     });
 
     const input = screen.getByPlaceholderText("search...");

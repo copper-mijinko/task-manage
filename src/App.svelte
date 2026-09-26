@@ -21,10 +21,10 @@
   import { sidebarCollapsed } from "@stores";
   import { startAutoRescan, stopAutoRescan } from "@features/search/utils/page_search_highlighter";
   import { registerDateTimeShortcuts } from "@lib/utils/datetime_shortcuts";
-  let saveErrorMessage = null;
+  let saveErrorMessage = $state(null);
   let unregisterDateTimeShortcuts = null;
-  let WorkspaceTreeGridPageComponent = null;
-  let QuickCaptureComponent = null;
+  let WorkspaceTreeGridPageComponent = $state(null);
+  let QuickCaptureComponent = $state(null);
   let workspaceTreeGridPageLoading = null;
   let quickCaptureLoading = null;
 
@@ -37,8 +37,8 @@
    * CSS 側の @media (min-width: 1000px) と同じ閾値。スクリムの有無は
    * マークアップで決める必要があるので、こちらでも幅を見る。
    */
-  let viewportWidth = typeof window !== "undefined" ? window.innerWidth : 1280;
-  $: wideLayout = viewportWidth >= 1000;
+  let viewportWidth = $state(typeof window !== "undefined" ? window.innerWidth : 1280);
+  let wideLayout = $derived(viewportWidth >= 1000);
 
   function loadWorkspaceTreeGridPage() {
     if (WorkspaceTreeGridPageComponent || workspaceTreeGridPageLoading)
@@ -60,8 +60,12 @@
     return quickCaptureLoading;
   }
 
-  $: if ($selected_type === "WorkspaceProject") void loadWorkspaceTreeGridPage();
-  $: if ($showQuickCapture) void loadQuickCapture();
+  $effect.pre(() => {
+    if ($selected_type === "WorkspaceProject") void loadWorkspaceTreeGridPage();
+  });
+  $effect.pre(() => {
+    if ($showQuickCapture) void loadQuickCapture();
+  });
 
   // capture-phase で window keydown を捕まえているため、CodeMirror や Quill、
   // ネイティブの input / textarea / contenteditable にフォーカスがある状態で
@@ -218,7 +222,7 @@
       <div class="save-error-banner" role="alert">
         <span>{saveErrorMessage}</span>
         <button
-          on:click={() => {
+          onclick={() => {
             saveErrorMessage = null;
             $saveStatus = "idle";
           }}>×</button
@@ -250,7 +254,7 @@
           <p>保存先のフォルダーを設定すると、プロジェクトとメモを作成できます。</p>
           <button
             type="button"
-            on:click={() => {
+            onclick={() => {
               $sidebarCollapsed = false;
               $showWorkspaceSetup = true;
             }}>ワークスペースを設定</button
@@ -271,7 +275,7 @@
           type="button"
           class="SidebarMask"
           aria-label="サイドバーを閉じる"
-          on:click={() => ($sidebarCollapsed = true)}
+          onclick={() => ($sidebarCollapsed = true)}
         ></button>
       {/if}
     </div>
@@ -281,7 +285,7 @@
 <!-- 検索ボックスを直接body直下に配置（他の要素と独立して） -->
 <PageSearchBox
   show={$showPageSearch}
-  on:close={() => {
+  onclose={() => {
     $showPageSearch = false;
   }}
 />
@@ -289,7 +293,7 @@
 {#if QuickCaptureComponent}
   <QuickCaptureComponent
     show={$showQuickCapture}
-    on:close={() => {
+    onclose={() => {
       $showQuickCapture = false;
     }}
   />

@@ -1,61 +1,78 @@
 ﻿<script>
+  import { untrack } from "svelte";
+
   import { viewportPopover } from "@lib/actions/viewport_popover";
-  import { createEventDispatcher } from "svelte";
   import IconButton from "@lib/primitives/IconButton.svelte";
   import { ripple } from "@lib/actions";
   import { activePanelId, newPanelId } from "@stores/panel_coordinator";
 
   const myPanelId = newPanelId();
 
-  export let list = ["first", "second", "third"];
-  export let selected = [];
-  export let placeholder = "Not selected.";
-  export let summary = "";
+  /**
+   * @typedef {Object} Props
+   * @property {any} [list]
+   * @property {any} [selected]
+   * @property {string} [placeholder]
+   * @property {string} [summary]
+   * @property {(detail?: any) => void} [onchange]
+   */
 
-  let checked = Array.from(list).fill(false);
-  let expanded = false;
-  let containerElement;
-  let listElement;
-  let anchorRect = null;
+  /** @type {Props} */
+  let {
+    list = ["first", "second", "third"],
+    selected = $bindable([]),
+    placeholder = "Not selected.",
+    summary = "",
+    onchange,
+  } = $props();
+
+  let checked = $state(untrack(() => Array.from(list).fill(false)));
+  let expanded = $state(false);
+  let containerElement = $state();
+  let listElement = $state();
+  let anchorRect = $state(null);
   let selectedKey = "";
-
-  const dispatch = createEventDispatcher();
 
   function keyOf(values) {
     return (values ?? []).join("\u001f");
   }
 
-  $: {
+  $effect.pre(() => {
     const nextKey = keyOf(selected);
     if (nextKey !== selectedKey) {
       checked = list.map((elm) => selected.includes(elm));
       selectedKey = nextKey;
     }
-  }
+  });
 
-  $: selectionLabel =
+  let selectionLabel = $derived(
     summary ||
-    (selected.length == 0
-      ? placeholder
-      : selected.length == 1
-        ? selected[0]
-        : `${selected.length} selected.`);
+      (selected.length == 0
+        ? placeholder
+        : selected.length == 1
+          ? selected[0]
+          : `${selected.length} selected.`)
+  );
 
-  $: listStyle = anchorRect
-    ? `top: ${anchorRect.bottom + 2}px; left: ${anchorRect.left}px; min-width: max(${anchorRect.width}px, 10.5rem);`
-    : "";
+  let listStyle = $derived(
+    anchorRect
+      ? `top: ${anchorRect.bottom + 2}px; left: ${anchorRect.left}px; min-width: max(${anchorRect.width}px, 10.5rem);`
+      : ""
+  );
 
   function updateSelected() {
     const next = list.filter((elm, i) => checked[i]);
     selected = next;
     selectedKey = keyOf(next);
-    dispatch("change", { selected: next });
+    onchange?.({ selected: next });
   }
 
   // Close when another panel becomes active
-  $: if ($activePanelId !== null && $activePanelId !== myPanelId && expanded) {
-    expanded = false;
-  }
+  $effect.pre(() => {
+    if ($activePanelId !== null && $activePanelId !== myPanelId && expanded) {
+      expanded = false;
+    }
+  });
 
   function toggleExpanded(event) {
     event.stopPropagation();
@@ -94,11 +111,11 @@
   }
 </script>
 
-<svelte:window on:click={handleWindowClick} on:keydown={handleWindowKeydown} />
+<svelte:window onclick={handleWindowClick} onkeydown={handleWindowKeydown} />
 
 <div class="container" bind:this={containerElement}>
   <div class="selectContainer">
-    <button on:click={toggleExpanded} use:ripple>
+    <button onclick={toggleExpanded} use:ripple>
       <div class="svgContainer">
         <svg
           class:emphasized={selected.length > 0}
@@ -118,7 +135,7 @@
         <IconButton
           style={"margin: 0rem; padding: var(--sp1); margin-left: auto; width: 1.125rem; height: 1.125rem; flex-shrink: 0;"}
           ariaLabel="Clear filter selection"
-          on:click={(e) => {
+          onclick={(e) => {
             expanded = false;
             checked = list.map(() => false);
             updateSelected();
@@ -153,7 +170,7 @@
             id={`multi-select-${i}`}
             type="checkbox"
             bind:checked={checked[i]}
-            on:change={updateSelected}
+            onchange={updateSelected}
           />
           <span>{elm}</span>
         </label>

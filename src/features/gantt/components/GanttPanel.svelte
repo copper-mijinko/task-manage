@@ -8,19 +8,13 @@
   const closed_row_paths = application.closed;
   const filtered_data = application.filtered;
 
-  let bodyEl;
-  let headerScrollLeft = 0;
-  let dragState;
-  let rootFontSizePx = 16;
+  let bodyEl = $state();
+  let headerScrollLeft = $state(0);
+  let dragState = $state();
+  let rootFontSizePx = $state(16);
   let locale =
     typeof navigator !== "undefined" && navigator.language ? navigator.language : undefined;
   let prevTimelineStartTs = null;
-
-  $: rows = $filtered_data ? flattenVisibleTree($filtered_data, $closed_row_paths) : [];
-  $: inheritedMap = buildInheritedDueDateMap(rows);
-
-  // Sync scroll position from TreeTable
-  $: if (bodyEl && !dragState) bodyEl.scrollTop = $ganttScrollTop;
 
   // ── Timeline range ──────────────────────────────────────────────
 
@@ -61,68 +55,8 @@
     return new Intl.DateTimeFormat(locale, options).format(date);
   }
 
-  let timelineStart = new Date();
-  let timelineEnd = new Date();
-
-  $: {
-    let minTs = null;
-    let maxTs = null;
-    for (const row of rows) {
-      const sd = parseDate(row.node.data["start date"]);
-      const dd = parseDate(row.node.data["due date"]) || parseDate(inheritedMap.get(row.path));
-      for (const ts of [sd, dd]) {
-        if (!ts) continue;
-        if (minTs === null || ts < minTs) minTs = ts;
-        if (maxTs === null || ts > maxTs) maxTs = ts;
-      }
-    }
-    const today = startOfDay();
-    const startBaseTs = minTs === null ? today : Math.min(today, minTs);
-    const endBaseTs = maxTs === null ? today : maxTs;
-    const desiredStart = new Date(startOfDay(startBaseTs - TIMELINE_START_PADDING_DAYS * DAY_MS));
-    const desiredEndTs = Math.max(
-      today + TIMELINE_TODAY_FUTURE_DAYS * DAY_MS,
-      endBaseTs + TIMELINE_END_PADDING_DAYS * DAY_MS
-    );
-    const desiredEnd = new Date(startOfDay(desiredEndTs) + DAY_MS);
-
-    // Only grow the window — never shrink it. This keeps the user's current
-    // view from jumping around when they enter or clear a single date.
-    const nextStart =
-      timelineStart instanceof Date && timelineStart.getTime() <= desiredStart.getTime()
-        ? timelineStart
-        : desiredStart;
-    const nextEnd =
-      timelineEnd instanceof Date && timelineEnd.getTime() >= desiredEnd.getTime()
-        ? timelineEnd
-        : desiredEnd;
-
-    if (!dragState) {
-      // Preserve the user's scroll position relative to the timeline when the
-      // start shifts earlier (everything shifts right in pixel space).
-      const previousStartTs = prevTimelineStartTs;
-      const nextStartTs = nextStart.getTime();
-      if (
-        bodyEl &&
-        previousStartTs !== null &&
-        previousStartTs !== nextStartTs &&
-        rootFontSizePx > 0
-      ) {
-        const deltaDays = Math.round((previousStartTs - nextStartTs) / DAY_MS);
-        const deltaPx = deltaDays * remPerDay * rootFontSizePx;
-        if (Number.isFinite(deltaPx) && deltaPx !== 0) {
-          const currentScrollLeft = bodyEl.scrollLeft;
-          requestAnimationFrame(() => {
-            bodyEl.scrollLeft = currentScrollLeft + deltaPx;
-            headerScrollLeft = bodyEl.scrollLeft;
-          });
-        }
-      }
-      timelineStart = nextStart;
-      timelineEnd = nextEnd;
-      prevTimelineStartTs = nextStartTs;
-    }
-  }
+  let timelineStart = $state(new Date());
+  let timelineEnd = $state(new Date());
 
   // ── Scale helpers ────────────────────────────────────────────────
 
@@ -153,20 +87,6 @@
   function remFromDate(date, scaleRemPerDay = remPerDay, rangeStart = timelineStart) {
     return dayOffset(date, rangeStart) * scaleRemPerDay;
   }
-
-  $: remPerDay =
-    $ganttScale === "day"
-      ? CELL_REM.day
-      : $ganttScale === "week"
-        ? CELL_REM.week / 7
-        : CELL_REM.month / 30;
-
-  $: totalDays = Math.ceil((timelineEnd.getTime() - timelineStart.getTime()) / DAY_MS);
-  $: totalWidthRem = totalDays * remPerDay;
-  $: todayTs = startOfDay();
-  // remPerDay も依存に含めて、スケール (日/週/月) 切替時に再計算されるようにする。
-  // (remFromDate の default 引数で間接参照すると Svelte の reactive 解析対象外)
-  $: todayRem = dayOffset(todayTs, timelineStart) * remPerDay;
 
   // ── Header cells ─────────────────────────────────────────────────
 
@@ -221,8 +141,6 @@
     }
     return cells;
   }
-
-  $: headerCells = buildHeaderCells($ganttScale, timelineStart, timelineEnd);
 
   // ── Bar helpers ──────────────────────────────────────────────────
 
@@ -838,6 +756,99 @@
     removeDragListeners();
     stopDrag();
   });
+  let rows = $derived($filtered_data ? flattenVisibleTree($filtered_data, $closed_row_paths) : []);
+  let inheritedMap = $derived(buildInheritedDueDateMap(rows));
+  // Sync scroll position from TreeTable
+  $effect.pre(() => {
+    if (bodyEl && !dragState) bodyEl.scrollTop = $ganttScrollTop;
+  });
+  let remPerDay = $derived(
+    $ganttScale === "day"
+      ? CELL_REM.day
+      : $ganttScale === "week"
+        ? CELL_REM.week / 7
+        : CELL_REM.month / 30
+  );
+  $effect.pre(() => {
+    let minTs = null;
+    let maxTs = null;
+    for (const row of rows) {
+      const sd = parseDate(row.node.data["start date"]);
+      const dd = parseDate(row.node.data["due date"]) || parseDate(inheritedMap.get(row.path));
+      for (const ts of [sd, dd]) {
+        if (!ts) continue;
+        if (minTs === null || ts < minTs) minTs = ts;
+        if (maxTs === null || ts > maxTs) maxTs = ts;
+      }
+    }
+    const today = startOfDay();
+    const startBaseTs = minTs === null ? today : Math.min(today, minTs);
+    const endBaseTs = maxTs === null ? today : maxTs;
+    const desiredStart = new Date(startOfDay(startBaseTs - TIMELINE_START_PADDING_DAYS * DAY_MS));
+    const desiredEndTs = Math.max(
+      today + TIMELINE_TODAY_FUTURE_DAYS * DAY_MS,
+      endBaseTs + TIMELINE_END_PADDING_DAYS * DAY_MS
+    );
+    const desiredEnd = new Date(startOfDay(desiredEndTs) + DAY_MS);
+
+    // Only grow the window — never shrink it. This keeps the user's current
+    // view from jumping around when they enter or clear a single date.
+    const nextStart =
+      timelineStart instanceof Date && timelineStart.getTime() <= desiredStart.getTime()
+        ? timelineStart
+        : desiredStart;
+    const nextEnd =
+      timelineEnd instanceof Date && timelineEnd.getTime() >= desiredEnd.getTime()
+        ? timelineEnd
+        : desiredEnd;
+
+    if (!dragState) {
+      // Preserve the user's scroll position relative to the timeline when the
+      // start shifts earlier (everything shifts right in pixel space).
+      const previousStartTs = prevTimelineStartTs;
+      const nextStartTs = nextStart.getTime();
+      if (
+        bodyEl &&
+        previousStartTs !== null &&
+        previousStartTs !== nextStartTs &&
+        rootFontSizePx > 0
+      ) {
+        const deltaDays = Math.round((previousStartTs - nextStartTs) / DAY_MS);
+        const deltaPx = deltaDays * remPerDay * rootFontSizePx;
+        if (Number.isFinite(deltaPx) && deltaPx !== 0) {
+          const currentScrollLeft = bodyEl.scrollLeft;
+          requestAnimationFrame(() => {
+            bodyEl.scrollLeft = currentScrollLeft + deltaPx;
+            headerScrollLeft = bodyEl.scrollLeft;
+          });
+        }
+      }
+      timelineStart = nextStart;
+      timelineEnd = nextEnd;
+      prevTimelineStartTs = nextStartTs;
+    }
+  });
+  let totalDays = $derived(Math.ceil((timelineEnd.getTime() - timelineStart.getTime()) / DAY_MS));
+  let totalWidthRem = $derived(totalDays * remPerDay);
+  let todayTs = $derived(startOfDay());
+  // remPerDay も依存に含めて、スケール (日/週/月) 切替時に再計算されるようにする。
+  // (remFromDate の default 引数で間接参照すると Svelte の reactive 解析対象外)
+  let todayRem = $derived(dayOffset(todayTs, timelineStart) * remPerDay);
+  let headerCells = $derived(buildHeaderCells($ganttScale, timelineStart, timelineEnd));
+
+  // 横スクロールに変えるため preventDefault したいので、wheel は passive にしない。
+  function nonPassiveWheel(node, handler) {
+    const listener = (event) => handler(event);
+    node.addEventListener("wheel", listener, { passive: false });
+    return {
+      update(next) {
+        handler = next;
+      },
+      destroy() {
+        node.removeEventListener("wheel", listener);
+      },
+    };
+  }
 </script>
 
 <div class="GanttRoot" class:DraggingTimeline={!!dragState} class:DarkTheme={$theme === "dark"}>
@@ -853,7 +864,7 @@
           aria-label="日表示"
           aria-pressed={$ganttScale === "day"}
           title="日表示"
-          on:click={() => ($ganttScale = "day")}>日</button
+          onclick={() => ($ganttScale = "day")}>日</button
         >
         <button
           type="button"
@@ -862,7 +873,7 @@
           aria-label="週表示"
           aria-pressed={$ganttScale === "week"}
           title="週表示"
-          on:click={() => ($ganttScale = "week")}>週</button
+          onclick={() => ($ganttScale = "week")}>週</button
         >
         <button
           type="button"
@@ -871,7 +882,7 @@
           aria-label="月表示"
           aria-pressed={$ganttScale === "month"}
           title="月表示"
-          on:click={() => ($ganttScale = "month")}>月</button
+          onclick={() => ($ganttScale = "month")}>月</button
         >
       </div>
     </div>
@@ -908,8 +919,8 @@
   <div
     class="GanttBody"
     bind:this={bodyEl}
-    on:scroll={handleBodyScroll}
-    on:wheel|nonpassive={handleBodyWheel}
+    onscroll={handleBodyScroll}
+    use:nonPassiveWheel={handleBodyWheel}
   >
     <div
       class="GanttBodyInner"
@@ -939,8 +950,8 @@
           data-row-id={row.id}
           data-row-path={row.path}
           role="presentation"
-          on:pointerdown={(event) => startCreateDrag(event, row)}
-          on:dblclick={(event) => createRange(event, row, bar)}
+          onpointerdown={(event) => startCreateDrag(event, row)}
+          ondblclick={(event) => createRange(event, row, bar)}
         >
           {#if preview}
             <div
@@ -968,7 +979,7 @@
                   : "期間を移動"}
               title={bar.isDue ? "期限日を変更" : bar.isStartOnly ? "開始日を変更" : "期間を移動"}
               disabled={bar.isInherited}
-              on:pointerdown={(event) =>
+              onpointerdown={(event) =>
                 startDrag(event, row, bar.isStartOnly ? "start" : "move", bar)}
             ></button>
             {#if bar.overdue}
@@ -985,14 +996,14 @@
                 aria-label="開始日を変更"
                 title="開始日を変更"
                 style="left:{bar.leftRem}rem;"
-                on:pointerdown={(event) => startDrag(event, row, "start", bar)}
+                onpointerdown={(event) => startDrag(event, row, "start", bar)}
               ></button>
               <button
                 class="BarHandle EndHandle"
                 aria-label="期限日を変更"
                 title="期限日を変更"
                 style="left:{bar.leftRem + bar.widthRem}rem;"
-                on:pointerdown={(event) => startDrag(event, row, "end", bar)}
+                onpointerdown={(event) => startDrag(event, row, "end", bar)}
               ></button>
             {/if}
           {/if}

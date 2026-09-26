@@ -6,15 +6,15 @@
 
   // TaskName が読むのはクリップボードだけ。
   setContext(TREEGRID_APPLICATION, { copied: writable([]) });
-  let clickCount = 0;
+  let clickCount = $state(0);
 </script>
 
 <div
   data-testid="row"
   role="button"
   tabindex="0"
-  on:click={() => (clickCount += 1)}
-  on:keydown={(e) => {
+  onclick={() => (clickCount += 1)}
+  onkeydown={(e) => {
     if (e.key === "Enter" || e.key === " ") {
       clickCount += 1;
     }

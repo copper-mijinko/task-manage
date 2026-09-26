@@ -1,6 +1,4 @@
 <script lang="ts">
-  import { createEventDispatcher } from "svelte";
-
   type SegmentOption = {
     value: string;
     label: string;
@@ -9,19 +7,29 @@
     className?: string;
   };
 
-  export let options: SegmentOption[] = [];
-  export let value = "";
-  export let disabled = false;
-  export let ariaLabel = "Segmented control";
-  export let size: "sm" | "md" = "sm";
+  interface Props {
+    options?: SegmentOption[];
+    value?: string;
+    disabled?: boolean;
+    ariaLabel?: string;
+    size?: "sm" | "md";
+    onchange?: (detail: { value: string }) => void;
+  }
 
-  const dispatch = createEventDispatcher<{ change: { value: string } }>();
+  let {
+    options = [],
+    value = "",
+    disabled = false,
+    ariaLabel = "Segmented control",
+    size = "sm",
+    onchange,
+  }: Props = $props();
 
   function choose(option: SegmentOption) {
     if (disabled || option.disabled || option.value === value) {
       return;
     }
-    dispatch("change", { value: option.value });
+    onchange?.({ value: option.value });
   }
 </script>
 
@@ -40,7 +48,7 @@
       aria-pressed={option.value === value}
       aria-label={option.ariaLabel ?? option.label}
       disabled={disabled || option.disabled}
-      on:click={() => choose(option)}
+      onclick={() => choose(option)}
     >
       {option.label}
     </button>

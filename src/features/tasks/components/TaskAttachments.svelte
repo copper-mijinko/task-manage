@@ -6,28 +6,34 @@
 
   const application = getContext(TREEGRID_APPLICATION);
 
-  export let attachments = [];
-  export let taskId = null;
-  export let readOnly = false;
+  /**
+   * @typedef {Object} Props
+   * @property {any} [attachments]
+   * @property {any} [taskId]
+   * @property {boolean} [readOnly]
+   */
 
-  let fileInput;
-  let isBusy = false;
-  let isFileDragActive = false;
-  let errorMessage = "";
-  let attachmentMenu = {
+  /** @type {Props} */
+  let { attachments = [], taskId = null, readOnly = false } = $props();
+
+  let fileInput = $state();
+  let isBusy = $state(false);
+  let isFileDragActive = $state(false);
+  let errorMessage = $state("");
+  let attachmentMenu = $state({
     show: false,
     attachment: null,
     position: { x: 0, y: 0, position: "right" },
-  };
+  });
 
-  $: attachmentList = Array.isArray(attachments) ? attachments : [];
-  $: canUseAttachments = Boolean(taskId);
-  $: attachmentMenuItems = [
+  let attachmentList = $derived(Array.isArray(attachments) ? attachments : []);
+  let canUseAttachments = $derived(Boolean(taskId));
+  let attachmentMenuItems = $derived([
     { title: "開く", action: "open" },
     { title: "プログラムから開く", action: "openWith" },
-  ];
-  $: attachTooltip = canUseAttachments ? "添付を追加" : "ノードを選ぶと添付できます";
-  $: isDense = attachmentList.length > 8;
+  ]);
+  let attachTooltip = $derived(canUseAttachments ? "添付を追加" : "ノードを選ぶと添付できます");
+  let isDense = $derived(attachmentList.length > 8);
 
   function attachmentPath(attachment) {
     return attachment?.relativePath || attachment?.path || attachment?.id || "";
@@ -187,10 +193,10 @@
   role="group"
   aria-label="添付"
   data-testid="task-attachments"
-  on:dragenter={handleDragEnter}
-  on:dragover={handleDragOver}
-  on:dragleave={handleDragLeave}
-  on:drop={handleDrop}
+  ondragenter={handleDragEnter}
+  ondragover={handleDragOver}
+  ondragleave={handleDragLeave}
+  ondrop={handleDrop}
 >
   <!-- 0 件のときはタブが「添付 (0)」と言っていて、入口は下の領域の
        「ファイルを選択」がある。件数とクリップ記号をここで繰り返さない。 -->
@@ -209,7 +215,7 @@
       disabled={!canUseAttachments || isBusy || readOnly}
       activeColor={"var(--theme-color-Primary-main)"}
       normalColor={"var(--theme-color-Sub-main)"}
-      on:click={chooseFiles}
+      onclick={chooseFiles}
     >
       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path
@@ -227,7 +233,7 @@
       type="file"
       multiple
       class="attachment-input"
-      on:change={attachFiles}
+      onchange={attachFiles}
     />
   </div>
 
@@ -243,8 +249,8 @@
             class="attachment-open"
             title={attachment.name}
             disabled={!canUseAttachments || isBusy}
-            on:click={() => openAttachment(attachment)}
-            on:contextmenu={(event) => openAttachmentMenu(event, attachment)}
+            onclick={() => openAttachment(attachment)}
+            oncontextmenu={(event) => openAttachmentMenu(event, attachment)}
           >
             <span class="file-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none">
@@ -271,7 +277,7 @@
             class="ui-action"
             aria-label={attachment.name + "の操作"}
             data-task-menu-trigger
-            on:click={(event) => openAttachmentMenu(event, attachment)}>…</button
+            onclick={(event) => openAttachmentMenu(event, attachment)}>…</button
           >
           <span class="attachment-delete">
             <IconButton
@@ -281,7 +287,7 @@
               disabled={!canUseAttachments || isBusy || readOnly}
               activeColor={"var(--theme-color-Error-main)"}
               normalColor={"var(--theme-color-Sub-main)"}
-              on:click={() => deleteAttachment(attachment)}
+              onclick={() => deleteAttachment(attachment)}
             >
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 <path
@@ -304,7 +310,7 @@
        すぐ下のドロップ領域と点線の箱が 2 つ縦に並んでいた。件数はタブが
        言っているので、ここは受け口だけを出す。
        ドロップを受けるのは実際にはこの帯ではなく添付欄ぜんたい
-       (.attachments-field の on:drop) なので、文言もそう書く。 -->
+       (.attachments-field の ondrop) なので、文言もそう書く。 -->
   {#if canUseAttachments && !readOnly}
     <div
       class="attachment-drop-hint"
@@ -321,7 +327,7 @@
           />
         </svg>
         <span>この欄にファイルをドロップ</span>
-        <button type="button" class="ui-action" disabled={isBusy} on:click={chooseFiles}
+        <button type="button" class="ui-action" disabled={isBusy} onclick={chooseFiles}
           >ファイルを選択</button
         >
       {:else}
@@ -337,9 +343,9 @@
     menuItems={attachmentMenuItems}
     position={attachmentMenu.position}
     show={attachmentMenu.show}
-    on:open={handleAttachmentMenuOpen}
-    on:openWith={handleAttachmentMenuOpenWith}
-    on:close={closeAttachmentMenu}
+    onaction={(item) =>
+      item.action === "openWith" ? handleAttachmentMenuOpenWith() : handleAttachmentMenuOpen()}
+    onclose={closeAttachmentMenu}
   />
 </div>
 

@@ -1,47 +1,58 @@
 ﻿<script lang="ts">
   import { viewportPopover } from "@lib/actions/viewport_popover";
-  import { createEventDispatcher, onMount, onDestroy } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import { activePanelId, newPanelId } from "@stores/panel_coordinator";
   import { globalDismiss } from "@lib/actions";
 
-  export let column: string;
-  export let from: string = "";
-  export let to: string = "";
-  export let anchorRect: DOMRect | null = null;
+  interface Props {
+    column: string;
+    from?: string;
+    to?: string;
+    anchorRect?: DOMRect | null;
+    onchange?: (detail: { from: string; to: string }) => void;
+    onclose?: () => void;
+  }
 
-  const dispatch = createEventDispatcher<{
-    change: { from: string; to: string };
-    close: void;
-  }>();
-  let panelElement: HTMLElement;
+  let {
+    column,
+    from = $bindable(""),
+    to = $bindable(""),
+    anchorRect = null,
+    onchange,
+    onclose,
+  }: Props = $props();
+
+  let panelElement: HTMLElement | undefined = $state();
   const myPanelId = newPanelId();
   let unsubPanelCoord: (() => void) | undefined;
 
   onMount(() => {
     activePanelId.set(myPanelId);
     unsubPanelCoord = activePanelId.subscribe((id) => {
-      if (id !== null && id !== myPanelId) dispatch("close");
+      if (id !== null && id !== myPanelId) onclose?.();
     });
   });
   onDestroy(() => unsubPanelCoord?.());
 
-  $: panelStyle = anchorRect ? `top: ${anchorRect.bottom + 2}px; left: ${anchorRect.left}px;` : "";
+  let panelStyle = $derived(
+    anchorRect ? `top: ${anchorRect.bottom + 2}px; left: ${anchorRect.left}px;` : ""
+  );
 
   function handleKeydown(event: KeyboardEvent) {
     event.stopPropagation();
     if (event.key === "Escape") {
-      dispatch("close");
+      onclose?.();
     }
   }
 
   function handleChange() {
-    dispatch("change", { from, to });
+    onchange?.({ from, to });
   }
 
   function handleClear() {
     from = "";
     to = "";
-    dispatch("change", { from: "", to: "" });
+    onchange?.({ from: "", to: "" });
   }
 
   function portal(node: HTMLElement) {
@@ -61,11 +72,11 @@
   role="dialog"
   tabindex="-1"
   aria-label="{column} 日付フィルター"
-  on:click|stopPropagation
-  on:keydown={handleKeydown}
+  onclick={(event) => event.stopPropagation()}
+  onkeydown={handleKeydown}
   use:portal
   use:viewportPopover={anchorRect}
-  use:globalDismiss={() => dispatch("close")}
+  use:globalDismiss={() => onclose?.()}
 >
   <div class="PanelTitle">{column} フィルター</div>
   <div class="DateRow">
@@ -74,7 +85,7 @@
       id="dr-from-{column.replace(' ', '-')}"
       type="date"
       bind:value={from}
-      on:change={handleChange}
+      onchange={handleChange}
     />
   </div>
   <div class="DateRow">
@@ -83,11 +94,11 @@
       id="dr-to-{column.replace(' ', '-')}"
       type="date"
       bind:value={to}
-      on:change={handleChange}
+      onchange={handleChange}
     />
   </div>
   {#if from || to}
-    <button class="ClearBtn" on:click={handleClear}>クリア</button>
+    <button class="ClearBtn" onclick={handleClear}>クリア</button>
   {/if}
 </div>
 

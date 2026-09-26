@@ -5,19 +5,18 @@
   import { filter } from "@stores";
   import { tag_index } from "@features/memos/stores/tags";
   import { viewportPopover } from "@lib/actions/viewport_popover";
-  let openTagPanel = false;
-  let tagAnchorRect = null;
-  $: tagOptions = [...new Set(["", ...$tag_index.keys(), ...($filter.tags ?? [])])];
+  let openTagPanel = $state(false);
+  let tagAnchorRect = $state(null);
   import { column_settings } from "@features/tasks/stores/column_settings";
   import { readColumnWidths, saveColumnWidths } from "@features/tasks/stores/column_layout";
   let panelTrigger;
-  let widths = readColumnWidths();
+  let widths = $state(readColumnWidths());
   function setWidth(id, event) {
     const width = Number(event.target.value);
     if (!Number.isFinite(width) || width < 32 || width > 4000) return;
     saveColumnWidths({ [id]: width });
     widths = readColumnWidths();
-    headerSelectionDispatch("columnWidth", { id, width });
+    oncolumnwidth?.({ id, width });
   }
   function closePanel() {
     showPanel = false;
@@ -27,10 +26,6 @@
   import { activePanelId, newPanelId } from "@stores/panel_coordinator";
 
   const columnSettingsPanelId = newPanelId();
-  // Auto-close column settings when another panel opens
-  $: if ($activePanelId !== null && $activePanelId !== columnSettingsPanelId && showPanel) {
-    showPanel = false;
-  }
   import { ripple, globalDismiss } from "@lib/actions";
   import IconButton from "@lib/primitives/IconButton.svelte";
   import DateRangePanel from "@features/search/components/DateRangePanel.svelte";
@@ -38,30 +33,37 @@
   import StatusFilterPanel from "@features/search/components/StatusFilterPanel.svelte";
   import NumberRangePanel from "@features/search/components/NumberRangePanel.svelte";
 
-  import { createEventDispatcher } from "svelte";
-  const headerSelectionDispatch = createEventDispatcher();
+  /**
+   * @typedef {Object} Props
+   * @property {any} headers
+   * @property {any} [allHeaders]
+   * @property {number} [selectedCount] - Number of selected rows. Drives header checkbox state (unchecked / indeterminate / checked).
+   * @property {number} [selectableCount] - Number of selectable visible rows (excluding root).
+   * @property {(detail: { id: string, width: number }) => void} [oncolumnwidth]
+   * @property {() => void} [onselectall]
+   * @property {() => void} [onclearselection]
+   */
 
-  export let headers;
-  export let allHeaders = [];
-  /** Number of selected rows. Drives header checkbox state (unchecked / indeterminate / checked). */
-  export let selectedCount = 0;
-  /** Number of selectable visible rows (excluding root). */
-  export let selectableCount = 0;
+  /** @type {Props} */
+  let {
+    headers,
+    allHeaders = [],
+    selectedCount = 0,
+    selectableCount = 0,
+    oncolumnwidth,
+    onselectall,
+    onclearselection,
+  } = $props();
 
-  $: headerChecked = selectableCount > 0 && selectedCount >= selectableCount;
-  $: headerIndeterminate = selectedCount > 0 && selectedCount < selectableCount;
-  $: headerCheckboxLabel = headerChecked || headerIndeterminate ? "選択を解除" : "すべて選択";
-
-  let headerCheckboxEl;
-  $: if (headerCheckboxEl) headerCheckboxEl.indeterminate = headerIndeterminate;
+  let headerCheckboxEl = $state();
 
   function onHeaderCheckboxClick(e) {
     e.stopPropagation();
     // unchecked → select all; indeterminate or checked → clear.
     if (headerChecked || headerIndeterminate) {
-      headerSelectionDispatch("clearSelection");
+      onclearselection?.();
     } else {
-      headerSelectionDispatch("selectAll");
+      onselectall?.();
     }
   }
 
@@ -97,25 +99,24 @@
   const selectedStatuses = (currentFilter) =>
     (currentFilter?.status ?? []).filter((value) => value != null);
 
-  let openCountPanel = null;
-  let countPanelAnchorRect = null;
+  let openCountPanel = $state(null);
+  let countPanelAnchorRect = $state(null);
   const EMPTY_FILTER_LABEL = "条件なし";
   const FILTER_ICON_PATH =
     "M3 7C3 6.44772 3.44772 6 4 6H20C20.5523 6 21 6.44772 21 7C21 7.55228 20.5523 8 20 8H4C3.44772 8 3 7.55228 3 7ZM6 12C6 11.4477 6.44772 11 7 11H17C17.5523 11 18 11.4477 18 12C18 12.5523 17.5523 13 17 13H7C6.44772 13 6 12.5523 6 12ZM9 17C9 16.4477 9.44772 16 10 16H14C14.5523 16 15 16.4477 15 17C15 17.5523 14.5523 18 14 18H10C9.44772 18 9 17.5523 9 17Z";
   const FILTER_CLEAR_ICON_PATH =
     "M9.291,10.352l-4-4-4.005,4A.75.75,0,1,1,.22,9.291l4.005-4L.22,1.281A.75.75,0,0,1,1.281.22L5.286,4.225l4-4.005a.75.75,0,1,1,1.061,1.061l-4,4.005,4,4a.75.75,0,0,1-1.061,1.061Z";
 
-  let statusSelected = [];
-  let showPanel = false;
-  let panelElement;
-  let panelStyle = "";
+  let showPanel = $state(false);
+  let panelElement = $state();
+  let panelStyle = $state("");
 
-  let openDatePanel = null;
-  let datePanelAnchorRect = null;
-  let openNamePanel = false;
-  let namePanelAnchorRect = null;
-  let openStatusPanel = false;
-  let statusPanelAnchorRect = null;
+  let openDatePanel = $state(null);
+  let datePanelAnchorRect = $state(null);
+  let openNamePanel = $state(false);
+  let namePanelAnchorRect = $state(null);
+  let openStatusPanel = $state(false);
+  let statusPanelAnchorRect = $state(null);
 
   function toggleStatusPanel(e) {
     openTagPanel = false;
@@ -127,25 +128,6 @@
     statusPanelAnchorRect = e.currentTarget.getBoundingClientRect();
     openStatusPanel = !openStatusPanel;
   }
-
-  $: availableIds = new Set(allHeaders.map((h) => h.name));
-
-  $: startDateFilter = $filter["start date"] ?? ["", ""];
-  $: dueDateFilter = $filter["due date"] ?? ["", ""];
-  $: nameFilterValue = $filter?.name?.[0] ?? "";
-  $: statusSelected = selectedStatuses($filter);
-  $: filterSummaries = Object.fromEntries(
-    (headers ?? []).map((header) => [header.name, getFilterSummary(header.name, $filter)])
-  );
-  $: filterActive = Object.fromEntries(
-    (headers ?? []).map((header) => [header.name, isFilterActive(header.name, $filter)])
-  );
-  $: sortDirections = Object.fromEntries(
-    (headers ?? []).map((h) => [
-      h.name,
-      $sort_state?.column === h.name ? $sort_state?.direction : null,
-    ])
-  );
 
   function isDateColumn(headerName) {
     return headerName === "start date" || headerName === "due date";
@@ -389,6 +371,44 @@
       },
     };
   }
+  let tagOptions = $derived([...new Set(["", ...$tag_index.keys(), ...($filter.tags ?? [])])]);
+  // Auto-close column settings when another panel opens
+  $effect.pre(() => {
+    if ($activePanelId !== null && $activePanelId !== columnSettingsPanelId && showPanel) {
+      showPanel = false;
+    }
+  });
+  let headerChecked = $derived(selectableCount > 0 && selectedCount >= selectableCount);
+  let headerIndeterminate = $derived(selectedCount > 0 && selectedCount < selectableCount);
+  let headerCheckboxLabel = $derived(
+    headerChecked || headerIndeterminate ? "選択を解除" : "すべて選択"
+  );
+  $effect.pre(() => {
+    if (headerCheckboxEl) headerCheckboxEl.indeterminate = headerIndeterminate;
+  });
+  let availableIds = $derived(new Set(allHeaders.map((h) => h.name)));
+  let startDateFilter = $derived($filter["start date"] ?? ["", ""]);
+  let dueDateFilter = $derived($filter["due date"] ?? ["", ""]);
+  let nameFilterValue = $derived($filter?.name?.[0] ?? "");
+  let statusSelected = $derived(selectedStatuses($filter));
+  let filterSummaries = $derived(
+    Object.fromEntries(
+      (headers ?? []).map((header) => [header.name, getFilterSummary(header.name, $filter)])
+    )
+  );
+  let filterActive = $derived(
+    Object.fromEntries(
+      (headers ?? []).map((header) => [header.name, isFilterActive(header.name, $filter)])
+    )
+  );
+  let sortDirections = $derived(
+    Object.fromEntries(
+      (headers ?? []).map((h) => [
+        h.name,
+        $sort_state?.column === h.name ? $sort_state?.direction : null,
+      ])
+    )
+  );
 </script>
 
 <div class:TableRow={true} role="row">
@@ -404,7 +424,7 @@
         checked={headerChecked}
         aria-label={headerCheckboxLabel}
         title={headerCheckboxLabel}
-        on:click={onHeaderCheckboxClick}
+        onclick={onHeaderCheckboxClick}
       />
     </label>
   </div>
@@ -422,7 +442,7 @@
               activeColor={"var(--theme-color-Primary-main)"}
               ariaLabel={getSortButtonLabel(header.name)}
               tooltipContent={getSortButtonLabel(header.name)}
-              on:click={(e) => {
+              onclick={(e) => {
                 e.stopPropagation();
                 handleSortClick(e, header.name);
               }}
@@ -465,7 +485,10 @@
             <button
               class="HeaderFilterControl"
               class:active={filterActive[header.name]}
-              on:click|stopPropagation={toggleStatusPanel}
+              onclick={(event) => {
+                event.stopPropagation();
+                toggleStatusPanel(event);
+              }}
               aria-label="ステータスフィルター"
               aria-expanded={openStatusPanel}
               title="ステータスフィルター"
@@ -484,7 +507,7 @@
               <IconButton
                 style={"margin: 0rem; padding: var(--sp1); margin-left: auto; width: 1.125rem; height: 1.125rem; flex-shrink: 0;"}
                 ariaLabel="ステータスフィルターをクリア"
-                on:click={(e) => {
+                onclick={(e) => {
                   clearColumnFilter(header.name);
                   e.stopPropagation();
                 }}
@@ -508,7 +531,8 @@
               class:active={filterActive.tags}
               aria-label="タグフィルター"
               aria-expanded={openTagPanel}
-              on:click|stopPropagation={(event) => {
+              onclick={(event) => {
+                event.stopPropagation();
                 openStatusPanel = false;
                 openNamePanel = false;
                 openDatePanel = null;
@@ -530,7 +554,7 @@
                 activeColor="var(--accent-fg)"
                 style="margin:0; width:1.125rem; height:1.125rem;"
                 ariaLabel="タグフィルターをクリア"
-                on:click={(e) => {
+                onclick={(e) => {
                   e.stopPropagation();
                   clearColumnFilter("tags");
                 }}
@@ -549,7 +573,10 @@
             <button
               class="HeaderFilterControl"
               class:active={filterActive[header.name]}
-              on:click|stopPropagation={toggleNamePanel}
+              onclick={(event) => {
+                event.stopPropagation();
+                toggleNamePanel(event);
+              }}
               aria-label="ノード名フィルター"
               aria-expanded={openNamePanel}
               title="ノード名フィルター"
@@ -568,7 +595,7 @@
               <IconButton
                 style={"margin: 0rem; padding: var(--sp1); margin-left: auto; width: 1.125rem; height: 1.125rem; flex-shrink: 0;"}
                 ariaLabel="ノード名フィルターをクリア"
-                on:click={(e) => {
+                onclick={(e) => {
                   clearColumnFilter(header.name);
                   e.stopPropagation();
                 }}
@@ -590,7 +617,10 @@
             <button
               class="HeaderFilterControl"
               class:active={filterActive[header.name]}
-              on:click|stopPropagation={(e) => toggleCountPanel(e, header.name)}
+              onclick={(e) => {
+                e.stopPropagation();
+                toggleCountPanel(e, header.name);
+              }}
               aria-label={`${COUNT_COLUMN_LABELS[header.name]}フィルター`}
               aria-expanded={openCountPanel === header.name}
               title={`${COUNT_COLUMN_LABELS[header.name]}フィルター`}
@@ -609,7 +639,7 @@
               <IconButton
                 style={"margin: 0rem; padding: var(--sp1); margin-left: auto; width: 1.125rem; height: 1.125rem; flex-shrink: 0;"}
                 ariaLabel={`${COUNT_COLUMN_LABELS[header.name]}フィルターをクリア`}
-                on:click={(e) => {
+                onclick={(e) => {
                   clearColumnFilter(header.name);
                   e.stopPropagation();
                 }}
@@ -631,7 +661,10 @@
             <button
               class="HeaderFilterControl"
               class:active={filterActive[header.name]}
-              on:click|stopPropagation={(e) => toggleDatePanel(e, header.name)}
+              onclick={(e) => {
+                e.stopPropagation();
+                toggleDatePanel(e, header.name);
+              }}
               aria-label={`${getColumnLabel(header.name)}フィルター`}
               aria-expanded={openDatePanel === header.name}
               title="日付フィルター"
@@ -650,7 +683,7 @@
               <IconButton
                 style={"margin: 0rem; padding: var(--sp1); margin-left: auto; width: 1.125rem; height: 1.125rem; flex-shrink: 0;"}
                 ariaLabel={`${getColumnLabel(header.name)}フィルターをクリア`}
-                on:click={(e) => {
+                onclick={(e) => {
                   clearColumnFilter(header.name);
                   e.stopPropagation();
                 }}
@@ -690,7 +723,7 @@
               <IconButton
                 style={"margin: 0rem; padding: var(--sp1); margin-left: auto; width: 1.125rem; height: 1.125rem; flex-shrink: 0;"}
                 ariaLabel={`${getColumnLabel(header.name)}フィルターをクリア`}
-                on:click={(e) => {
+                onclick={(e) => {
                   clearColumnFilter(header.name);
                   e.stopPropagation();
                 }}
@@ -761,7 +794,7 @@
               type="checkbox"
               id={`col-vis-${setting.id}`}
               checked={setting.visible}
-              on:change={() => column_settings.toggle(setting.id)}
+              onchange={() => column_settings.toggle(setting.id)}
             />
             <label for={`col-vis-${setting.id}`} class="ColumnLabel">{setting.label}</label>
             <div class="MoveButtons">
@@ -772,7 +805,10 @@
                 class="MoveBtn"
                 aria-label="{setting.label}を上へ"
                 disabled={index <= 1}
-                on:click|stopPropagation={() => column_settings.moveUp(setting.id)}
+                onclick={(event) => {
+                  event.stopPropagation();
+                  column_settings.moveUp(setting.id);
+                }}
               >
                 <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
                   <path d="M12 5l-7 7h4v7h6v-7h4z" />
@@ -782,7 +818,10 @@
                 class="MoveBtn"
                 aria-label="{setting.label}を下へ"
                 disabled={index >= $column_settings.length - 1}
-                on:click|stopPropagation={() => column_settings.moveDown(setting.id)}
+                onclick={(event) => {
+                  event.stopPropagation();
+                  column_settings.moveDown(setting.id);
+                }}
               >
                 <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
                   <path d="M12 19l7-7h-4V5h-6v7H5z" />
@@ -799,7 +838,7 @@
             value={widths[setting.id] || ""}
             placeholder="自動"
             style="width:3.75rem"
-            on:change={(event) => setWidth(setting.id, event)}
+            onchange={(event) => setWidth(setting.id, event)}
           />
         </div>
       {/if}
@@ -813,8 +852,8 @@
     from={startDateFilter[0]}
     to={startDateFilter[1]}
     anchorRect={datePanelAnchorRect}
-    on:change={(e) => handleDateRangeChange("start date", e.detail)}
-    on:close={() => (openDatePanel = null)}
+    onchange={(e) => handleDateRangeChange("start date", e)}
+    onclose={() => (openDatePanel = null)}
   />
 {/if}
 
@@ -824,8 +863,8 @@
     from={dueDateFilter[0]}
     to={dueDateFilter[1]}
     anchorRect={datePanelAnchorRect}
-    on:change={(e) => handleDateRangeChange("due date", e.detail)}
-    on:close={() => (openDatePanel = null)}
+    onchange={(e) => handleDateRangeChange("due date", e)}
+    onclose={() => (openDatePanel = null)}
   />
 {/if}
 
@@ -833,8 +872,8 @@
   <NameFilterPanel
     value={nameFilterValue}
     anchorRect={namePanelAnchorRect}
-    on:change={(e) => handleNameFilterChange(e.detail)}
-    on:close={() => (openNamePanel = false)}
+    onchange={(e) => handleNameFilterChange(e)}
+    onclose={() => (openNamePanel = false)}
   />
 {/if}
 
@@ -844,8 +883,8 @@
     min={$filter[openCountPanel]?.[0] ?? ""}
     max={$filter[openCountPanel]?.[1] ?? ""}
     anchorRect={countPanelAnchorRect}
-    on:change={(e) => handleCountFilterChange(openCountPanel, e.detail)}
-    on:close={() => (openCountPanel = null)}
+    onchange={(e) => handleCountFilterChange(openCountPanel, e)}
+    onclose={() => (openCountPanel = null)}
   />
 {/if}
 
@@ -857,8 +896,8 @@
     selected={$filter.tags ?? []}
     options={tagOptions}
     anchorRect={tagAnchorRect}
-    on:change={(event) => filter.update((value) => ({ ...value, tags: event.detail.selected }))}
-    on:close={() => (openTagPanel = false)}
+    onchange={(event) => filter.update((value) => ({ ...value, tags: event.selected }))}
+    onclose={() => (openTagPanel = false)}
   />
 {/if}
 
@@ -867,8 +906,8 @@
     selected={statusSelected}
     options={STATUS_OPTIONS}
     anchorRect={statusPanelAnchorRect}
-    on:change={(e) => handleStatusFilterChange(e.detail)}
-    on:close={() => (openStatusPanel = false)}
+    onchange={(e) => handleStatusFilterChange(e)}
+    onclose={() => (openStatusPanel = false)}
   />
 {/if}
 
@@ -948,7 +987,7 @@
   }
   .TableHeader:hover .HeaderControlRow,
   .TableHeader:focus-within .HeaderControlRow,
-  .HeaderControlRow:has(.active) {
+  .HeaderControlRow:has(:global(.active)) {
     opacity: 1;
   }
   .TableHeader[data-column="name"] {

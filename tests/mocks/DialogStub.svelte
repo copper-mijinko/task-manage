@@ -1,9 +1,21 @@
 <script>
-  export let show = false;
-  export let header = "";
-  export let content = "";
-  export let callback = () => {};
-  export let toggle = () => {};
+  /**
+   * @typedef {Object} Props
+   * @property {boolean} [show]
+   * @property {string} [header]
+   * @property {string} [content]
+   * @property {any} [callback]
+   * @property {any} [toggle]
+   */
+
+  /** @type {Props} */
+  let {
+    show = false,
+    header = "",
+    content = "",
+    callback = () => {},
+    toggle = () => {},
+  } = $props();
 </script>
 
 {#if show}
@@ -12,13 +24,13 @@
     <p>{content}</p>
     <button
       type="button"
-      on:click={() => {
+      onclick={() => {
         callback();
         toggle();
       }}
     >
       ok
     </button>
-    <button type="button" on:click={toggle}>cancel</button>
+    <button type="button" onclick={toggle}>cancel</button>
   </div>
 {/if}

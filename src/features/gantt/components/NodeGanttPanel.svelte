@@ -7,28 +7,41 @@
     type NodeScheduleRow,
   } from "@features/gantt/utils/node_schedule";
 
-  export let nodes: Record<string, WorkspaceTask> = {};
-  export let rootId = "";
-  export let selectedId: string | undefined = undefined;
-  export let onSelect: (id: string) => void = () => {};
-  export let onUpdate: (
-    id: string,
-    patch: { startDate?: string; dueDate?: string }
-  ) => Promise<void> | void = () => {};
-  export let showArchived = false;
+  interface Props {
+    nodes?: Record<string, WorkspaceTask>;
+    rootId?: string;
+    selectedId?: string | undefined;
+    onSelect?: (id: string) => void;
+    onUpdate?: (
+      id: string,
+      patch: { startDate?: string; dueDate?: string }
+    ) => Promise<void> | void;
+    showArchived?: boolean;
+  }
 
-  let message = "";
-  let updating = new Set<string>();
+  let {
+    nodes = {},
+    rootId = "",
+    selectedId = undefined,
+    onSelect = () => {},
+    onUpdate = () => {},
+    showArchived = false,
+  }: Props = $props();
 
-  $: rows = buildNodeSchedule(nodes, rootId, { showArchived });
-  $: datedRows = rows.filter((row) => row.kind === "bar" || row.kind === "point");
-  $: statusRows = rows.filter((row) => row.kind === "status-only");
-  $: dates = datedRows
-    .flatMap((row) => [row.startDate, row.dueDate].filter(Boolean) as string[])
-    .filter(isValidIsoDate)
-    .sort();
-  $: rangeStart = dates[0];
-  $: rangeEnd = dates[dates.length - 1];
+  let message = $state("");
+  let updating = $state(new Set<string>());
+
+  let rows = $derived(buildNodeSchedule(nodes, rootId, { showArchived }));
+  let datedRows = $derived(rows.filter((row) => row.kind === "bar" || row.kind === "point"));
+  let statusRows = $derived(rows.filter((row) => row.kind === "status-only"));
+  let dates = $derived(
+    datedRows
+      .flatMap((row) => [row.startDate, row.dueDate].filter(Boolean) as string[])
+      .filter(isValidIsoDate)
+      .sort()
+  );
+  let rangeStart = $derived(dates[0]);
+  let rangeEnd = $derived(dates[dates.length - 1]);
 
   function datePosition(date: string | undefined): number {
     if (!date || !rangeStart || !rangeEnd) return 0;
@@ -86,7 +99,7 @@
         {/if}
         {#each rows.filter((row) => row.kind !== "status-only") as row (row.id)}
           <article class:selected={row.id === selectedId} class="NodeGanttRow" data-row-id={row.id}>
-            <button class="NodeGanttName" type="button" on:click={() => onSelect(row.id)}
+            <button class="NodeGanttName" type="button" onclick={() => onSelect(row.id)}
               >{row.task.name}</button
             >
             <div class="NodeGanttDates">
@@ -96,7 +109,7 @@
                   type="date"
                   value={row.startDate ?? ""}
                   disabled={updating.has(row.id)}
-                  on:change={(event) => updateDate(row, "startDate", event.currentTarget.value)}
+                  onchange={(event) => updateDate(row, "startDate", event.currentTarget.value)}
                 /></label
               >
               <label
@@ -105,7 +118,7 @@
                   type="date"
                   value={row.dueDate ?? ""}
                   disabled={updating.has(row.id)}
-                  on:change={(event) => updateDate(row, "dueDate", event.currentTarget.value)}
+                  onchange={(event) => updateDate(row, "dueDate", event.currentTarget.value)}
                 /></label
               >
             </div>
@@ -137,7 +150,7 @@
               class="NodeGanttRow"
               data-row-id={row.id}
             >
-              <button class="NodeGanttName" type="button" on:click={() => onSelect(row.id)}
+              <button class="NodeGanttName" type="button" onclick={() => onSelect(row.id)}
                 >{row.task.name}</button
               >
               <div class="NodeGanttDates">
@@ -147,7 +160,7 @@
                     type="date"
                     value=""
                     disabled={updating.has(row.id)}
-                    on:change={(event) => updateDate(row, "startDate", event.currentTarget.value)}
+                    onchange={(event) => updateDate(row, "startDate", event.currentTarget.value)}
                   /></label
                 >
                 <label
@@ -156,7 +169,7 @@
                     type="date"
                     value=""
                     disabled={updating.has(row.id)}
-                    on:change={(event) => updateDate(row, "dueDate", event.currentTarget.value)}
+                    onchange={(event) => updateDate(row, "dueDate", event.currentTarget.value)}
                   /></label
                 >
               </div>

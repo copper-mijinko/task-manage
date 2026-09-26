@@ -1,5 +1,5 @@
 <script>
-  import { getContext, tick, createEventDispatcher } from "svelte";
+  import { getContext, tick, untrack } from "svelte";
   import { writable } from "svelte/store";
   import { TREEGRID_APPLICATION } from "@features/workspace/application/treegrid";
   const application = getContext(TREEGRID_APPLICATION);
@@ -10,37 +10,55 @@
   import { pending_rename_id } from "@stores/ui";
   import { activePanelId } from "@stores/panel_coordinator";
 
-  export let text;
-  export let color = "var(--theme-color-Sub-main)";
-  export let backgroundColor = "transparent";
-  export let hasChildren = false;
-  export let expanded = false;
-  export let isRoot = false;
-  export let canMoveUp = false;
-  export let canMoveDown = false;
-  export let canIndent = false;
-  export let canOutdent = false;
-  export let nodePath = "";
-  /** この行が指すノードの id。作成直後の rename ハンドオフ照合に使う。 */
-  export let nodeId = "";
   /**
-   * この行のコントロールが Tab の停留点になるか。treegrid では「いま操作して
-   * いる行」だけが停留点で、他の行の中身は矢印キーで行を移ってから辿る。
+   * @typedef {Object} Props
+   * @property {any} text
+   * @property {string} [color]
+   * @property {string} [backgroundColor]
+   * @property {boolean} [hasChildren]
+   * @property {boolean} [expanded]
+   * @property {boolean} [isRoot]
+   * @property {boolean} [canMoveUp]
+   * @property {boolean} [canMoveDown]
+   * @property {boolean} [canIndent]
+   * @property {boolean} [canOutdent]
+   * @property {string} [nodePath]
+   * @property {string} [nodeId] - この行が指すノードの id。作成直後の rename ハンドオフ照合に使う。
+   * @property {number} [cellTabIndex] - この行のコントロールが Tab の停留点になるか。treegrid では「いま操作して
+いる行」だけが停留点で、他の行の中身は矢印キーで行を移ってから辿る。
+   * @property {number} [selectionCount] - When >1, the menu acts on the whole multi-selection (label gets count prefix).
+   * @property {boolean} [archived] - 行が archived 状態かどうか。true のときメニューは
+delete (= archive) ではなく restore / permanently delete を出す。
    */
-  export let cellTabIndex = 0;
-  /** When >1, the menu acts on the whole multi-selection (label gets count prefix). */
-  export let selectionCount = 1;
-  /**
-   * 行が archived 状態かどうか。true のときメニューは
-   * delete (= archive) ではなく restore / permanently delete を出す。
-   */
-  export let archived = false;
-  $: countPrefix = selectionCount > 1 ? `${selectionCount}件 ` : "";
-  let draftText = text ?? "";
-  let input;
-  let isEditing = false;
-  let showMenu = false;
-  let menuPosition = { x: 0, y: 0 };
+
+  /** @type {Props} */
+  let {
+    text,
+    color = "var(--theme-color-Sub-main)",
+    backgroundColor = "transparent",
+    hasChildren = false,
+    expanded = false,
+    isRoot = false,
+    canMoveUp = false,
+    canMoveDown = false,
+    canIndent = false,
+    canOutdent = false,
+    nodePath = "",
+    nodeId = "",
+    cellTabIndex = 0,
+    selectionCount = 1,
+    archived = false,
+    oncommit,
+    onmenuvisibilitychange,
+    onaction,
+  } = $props();
+  let countPrefix = $derived(selectionCount > 1 ? `${selectionCount}件 ` : "");
+  // 編集中の下書き。編集していないあいだは下の effect で text に追随させる。
+  let draftText = $state(untrack(() => text ?? ""));
+  let input = $state();
+  let isEditing = $state(false);
+  let showMenu = $state(false);
+  let menuPosition = $state({ x: 0, y: 0 });
   const menuOwnerId = Math.random().toString(36).slice(2);
 
   // メニュー項目の定義（7グループ。空グループは区切り線が連続しないよう自動的にスキップ）
@@ -54,184 +72,188 @@
     return result;
   }
 
-  $: isMulti = selectionCount > 1;
+  let isMulti = $derived(selectionCount > 1);
 
-  $: menuItems = withSeparators([
-    // 1. Rename — anchor-only; disabled in multi-select / archived.
-    [
-      {
-        title: "名前を変更",
-        action: "rename",
-        disabled: isMulti || archived,
-        icon: {
-          viewBox: "-4 -4 32 32",
-          path: "M18.111,2.293,9.384,11.021a.977.977,0,0,0-.241.39L8.052,14.684A1,1,0,0,0,9,16a.987.987,0,0,0,.316-.052l3.273-1.091a.977.977,0,0,0,.39-.241l8.728-8.727a1,1,0,0,0,0-1.414L19.525,2.293A1,1,0,0,0,18.111,2.293Z",
-        },
-      },
-    ],
-    // 2. Add — anchor-only; disabled in multi-select / archived.
-    [
-      ...(!isRoot
-        ? [
-            {
-              title: "下にノードを追加",
-              action: "addBelow",
-              disabled: isMulti || archived,
-              icon: {
-                viewBox: "0 0 24 24",
-                path: "M12 5V19M5 12H19",
-              },
-            },
-          ]
-        : []),
-      {
-        title: "子ノードを追加",
-        action: "addChild",
-        disabled: isMulti || archived,
-        icon: {
-          viewBox: "0 0 24 24",
-          path: "M5 5V14H15M11 10L15 14L11 18M19 5V9M17 7H21",
-        },
-      },
-    ],
-    // 3. Clipboard — copy is bulk-aware; paste disallowed onto archived
-    // (archived は読み取り専用なので子追加が禁止扱い)。
-    [
-      {
-        title: `${countPrefix}コピー`,
-        action: "copyTask",
-        icon: {
-          viewBox: "0 0 24 24",
-          path: "M8 4v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7.242a2 2 0 0 0-.602-1.43L16.083 2.57A2 2 0 0 0 14.685 2H10a2 2 0 0 0-2 2ZM4 8H2v12a2 2 0 0 0 2 2h8v-2H4Z",
-        },
-      },
-
-      {
-        title: "子ノードとして貼り付け",
-        action: "pasteTask",
-        disabled: archived || $applicationClipboard.length === 0,
-        icon: {
-          viewBox: "0 0 24 24",
-          path: "M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2",
-        },
-      },
-    ],
-    // 4. Expand/collapse — single-row only; disabled in multi.
-    hasChildren
-      ? [
-          {
-            title: expanded ? "折りたたむ" : "展開",
-            action: "toggleExpand",
-            disabled: isMulti,
-            icon: {
-              viewBox: "0 0 24 24",
-              path: expanded ? "M6 9L12 15L18 9" : "M9 6L15 12L9 18",
-            },
+  let menuItems = $derived(
+    withSeparators([
+      // 1. Rename — anchor-only; disabled in multi-select / archived.
+      [
+        {
+          title: "名前を変更",
+          action: "rename",
+          disabled: isMulti || archived,
+          icon: {
+            viewBox: "-4 -4 32 32",
+            path: "M18.111,2.293,9.384,11.021a.977.977,0,0,0-.241.39L8.052,14.684A1,1,0,0,0,9,16a.987.987,0,0,0,.316-.052l3.273-1.091a.977.977,0,0,0,.39-.241l8.728-8.727a1,1,0,0,0,0-1.414L19.525,2.293A1,1,0,0,0,18.111,2.293Z",
           },
-        ]
-      : [],
-    // 5. Move — bulk-aware when the row is part of the multi-selection.
-    // archived 行はツリー位置の変更も禁止。
-    [
-      {
-        title: `${countPrefix}上に移動`,
-        action: "moveUp",
-        disabled: !canMoveUp || archived,
-        icon: {
-          viewBox: "0 0 24 24",
-          path: "M12 5L6 11H10V19H14V11H18L12 5Z",
         },
-      },
-      {
-        title: `${countPrefix}下に移動`,
-        action: "moveDown",
-        disabled: !canMoveDown || archived,
-        icon: {
-          viewBox: "0 0 24 24",
-          path: "M12 19L18 13H14V5H10V13H6L12 19Z",
+      ],
+      // 2. Add — anchor-only; disabled in multi-select / archived.
+      [
+        ...(!isRoot
+          ? [
+              {
+                title: "下にノードを追加",
+                action: "addBelow",
+                disabled: isMulti || archived,
+                icon: {
+                  viewBox: "0 0 24 24",
+                  path: "M12 5V19M5 12H19",
+                },
+              },
+            ]
+          : []),
+        {
+          title: "子ノードを追加",
+          action: "addChild",
+          disabled: isMulti || archived,
+          icon: {
+            viewBox: "0 0 24 24",
+            path: "M5 5V14H15M11 10L15 14L11 18M19 5V9M17 7H21",
+          },
         },
-      },
-      {
-        title: `${countPrefix}インデント`,
-        action: "indentTask",
-        disabled: !canIndent || archived,
-        icon: {
-          viewBox: "0 0 24 24",
-          path: "M4 6H14V8H4V6ZM4 11H14V13H4V11ZM4 16H14V18H4V16ZM12 9L17 14L12 19V16H8V12H12V9Z",
+      ],
+      // 3. Clipboard — copy is bulk-aware; paste disallowed onto archived
+      // (archived は読み取り専用なので子追加が禁止扱い)。
+      [
+        {
+          title: `${countPrefix}コピー`,
+          action: "copyTask",
+          icon: {
+            viewBox: "0 0 24 24",
+            path: "M8 4v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7.242a2 2 0 0 0-.602-1.43L16.083 2.57A2 2 0 0 0 14.685 2H10a2 2 0 0 0-2 2ZM4 8H2v12a2 2 0 0 0 2 2h8v-2H4Z",
+          },
         },
-      },
-      {
-        title: `${countPrefix}アウトデント`,
-        action: "outdentTask",
-        disabled: !canOutdent || archived,
-        icon: {
-          viewBox: "0 0 24 24",
-          path: "M10 9L5 14L10 19V16H16V12H10V9ZM10 6H20V8H10V6ZM10 16H20V18H10V16Z",
+
+        {
+          title: "子ノードとして貼り付け",
+          action: "pasteTask",
+          disabled: archived || $applicationClipboard.length === 0,
+          icon: {
+            viewBox: "0 0 24 24",
+            path: "M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2",
+          },
         },
-      },
-    ],
-    // 7. Delete / Restore — bulk-aware when the row is part of the multi-selection.
-    // archived 行では「復元」「完全に削除」を出す。それ以外は通常の delete
-    // （実体としては archive に振り替えられる）。
-    !isRoot
-      ? archived
+      ],
+      // 4. Expand/collapse — single-row only; disabled in multi.
+      hasChildren
         ? [
             {
-              title: `${countPrefix}復元`,
-              action: "restoreTask",
+              title: expanded ? "折りたたむ" : "展開",
+              action: "toggleExpand",
+              disabled: isMulti,
               icon: {
                 viewBox: "0 0 24 24",
-                path: "M3 12a9 9 0 1 1 3.6 7.2M3 12V6M3 12h6",
-              },
-            },
-            {
-              title: `${countPrefix}完全に削除`,
-              action: "permanentDeleteTask",
-              icon: {
-                viewBox: "0 0 48 48",
-                path: "M13.05 42q-1.25 0-2.125-.875T10.05 39V10.5H8v-3h9.4V6h13.2v1.5H40v3h-2.05V39q0 1.2-.9 2.1-.9.9-2.1.9Zm21.9-31.5h-21.9V39h21.9Zm-16.6 24.2h3V14.75h-3Zm8.3 0h3V14.75h-3Zm-13.6-24.2V39Z",
+                path: expanded ? "M6 9L12 15L18 9" : "M9 6L15 12L9 18",
               },
             },
           ]
-        : [
-            {
-              title: `${countPrefix}アーカイブ`,
-              action: "deleteTask",
-              icon: {
-                viewBox: "0 0 48 48",
-                path: "M13.05 42q-1.25 0-2.125-.875T10.05 39V10.5H8v-3h9.4V6h13.2v1.5H40v3h-2.05V39q0 1.2-.9 2.1-.9.9-2.1.9Zm21.9-31.5h-21.9V39h21.9Zm-16.6 24.2h3V14.75h-3Zm8.3 0h3V14.75h-3Zm-13.6-24.2V39Z",
+        : [],
+      // 5. Move — bulk-aware when the row is part of the multi-selection.
+      // archived 行はツリー位置の変更も禁止。
+      [
+        {
+          title: `${countPrefix}上に移動`,
+          action: "moveUp",
+          disabled: !canMoveUp || archived,
+          icon: {
+            viewBox: "0 0 24 24",
+            path: "M12 5L6 11H10V19H14V11H18L12 5Z",
+          },
+        },
+        {
+          title: `${countPrefix}下に移動`,
+          action: "moveDown",
+          disabled: !canMoveDown || archived,
+          icon: {
+            viewBox: "0 0 24 24",
+            path: "M12 19L18 13H14V5H10V13H6L12 19Z",
+          },
+        },
+        {
+          title: `${countPrefix}インデント`,
+          action: "indentTask",
+          disabled: !canIndent || archived,
+          icon: {
+            viewBox: "0 0 24 24",
+            path: "M4 6H14V8H4V6ZM4 11H14V13H4V11ZM4 16H14V18H4V16ZM12 9L17 14L12 19V16H8V12H12V9Z",
+          },
+        },
+        {
+          title: `${countPrefix}アウトデント`,
+          action: "outdentTask",
+          disabled: !canOutdent || archived,
+          icon: {
+            viewBox: "0 0 24 24",
+            path: "M10 9L5 14L10 19V16H16V12H10V9ZM10 6H20V8H10V6ZM10 16H20V18H10V16Z",
+          },
+        },
+      ],
+      // 7. Delete / Restore — bulk-aware when the row is part of the multi-selection.
+      // archived 行では「復元」「完全に削除」を出す。それ以外は通常の delete
+      // （実体としては archive に振り替えられる）。
+      !isRoot
+        ? archived
+          ? [
+              {
+                title: `${countPrefix}復元`,
+                action: "restoreTask",
+                icon: {
+                  viewBox: "0 0 24 24",
+                  path: "M3 12a9 9 0 1 1 3.6 7.2M3 12V6M3 12h6",
+                },
               },
-            },
-          ]
-      : [],
-  ]);
-
-  const dispatch = createEventDispatcher();
+              {
+                title: `${countPrefix}完全に削除`,
+                action: "permanentDeleteTask",
+                icon: {
+                  viewBox: "0 0 48 48",
+                  path: "M13.05 42q-1.25 0-2.125-.875T10.05 39V10.5H8v-3h9.4V6h13.2v1.5H40v3h-2.05V39q0 1.2-.9 2.1-.9.9-2.1.9Zm21.9-31.5h-21.9V39h21.9Zm-16.6 24.2h3V14.75h-3Zm8.3 0h3V14.75h-3Zm-13.6-24.2V39Z",
+                },
+              },
+            ]
+          : [
+              {
+                title: `${countPrefix}アーカイブ`,
+                action: "deleteTask",
+                icon: {
+                  viewBox: "0 0 48 48",
+                  path: "M13.05 42q-1.25 0-2.125-.875T10.05 39V10.5H8v-3h9.4V6h13.2v1.5H40v3h-2.05V39q0 1.2-.9 2.1-.9.9-2.1.9Zm21.9-31.5h-21.9V39h21.9Zm-16.6 24.2h3V14.75h-3Zm8.3 0h3V14.75h-3Zm-13.6-24.2V39Z",
+                },
+              },
+            ]
+        : [],
+    ])
+  );
 
   let lastSubmittedText = null;
-  $: if (!isEditing) {
-    draftText = text ?? "";
-  }
-  $: if ((text ?? "") === lastSubmittedText) {
-    lastSubmittedText = null;
-  }
+  $effect.pre(() => {
+    if (!isEditing) {
+      draftText = text ?? "";
+    }
+  });
+  $effect.pre(() => {
+    if ((text ?? "") === lastSubmittedText) {
+      lastSubmittedText = null;
+    }
+  });
 
   // ノードパス ("root / a / b / current") をツールチップで表示。
   // nodePath が空のときは従来挙動 (truncated 時のみ value/textContent を表示) に戻す。
-  $: params = {
+  let params = $derived({
     color: "var(--theme-color-Main-main)",
     backgroundColor: "var(--theme-color-Sub-main)",
     wrapped: true,
     content: nodePath || undefined,
     force: !!nodePath,
-  };
+  });
 
-  $: spanTooltipParams = {
+  let spanTooltipParams = $derived({
     color: "var(--theme-color-Main-main)",
     backgroundColor: "var(--theme-color-Sub-main)",
     content: nodePath || undefined,
     force: !!nodePath,
-  };
+  });
 
   function splitHighlight(str, query) {
     if (!query) return [{ t: str ?? "", h: false }];
@@ -252,8 +274,9 @@
     return parts;
   }
 
-  $: highlightParts =
-    !isEditing && $pageSearchQuery ? splitHighlight(text, $pageSearchQuery) : null;
+  let highlightParts = $derived(
+    !isEditing && $pageSearchQuery ? splitHighlight(text, $pageSearchQuery) : null
+  );
 
   const dispatchCommitIfChanged = () => {
     if (!draftText.trim()) {
@@ -265,7 +288,7 @@
     }
 
     lastSubmittedText = draftText;
-    dispatch("commit", { value: draftText });
+    oncommit?.({ value: draftText });
   };
 
   const toggle = async () => {
@@ -284,14 +307,16 @@
    * 同じノードが複数経路に現れる場合に多重発火しないよう、拾った側が
    * すぐにストアを空に戻す。
    */
-  $: if (nodeId && $pending_rename_id === nodeId && !archived && !isEditing) {
-    pending_rename_id.set(undefined);
-    isEditing = true;
-    void tick().then(() => {
-      input?.focus();
-      input?.select();
-    });
-  }
+  $effect.pre(() => {
+    if (nodeId && $pending_rename_id === nodeId && !archived && !isEditing) {
+      pending_rename_id.set(undefined);
+      isEditing = true;
+      void tick().then(() => {
+        input?.focus();
+        input?.select();
+      });
+    }
+  });
 
   const flushCommit = () => {
     if (!draftText.trim()) {
@@ -330,7 +355,7 @@
     }
 
     showMenu = open;
-    dispatch("menuVisibilityChange", { open });
+    onmenuvisibilitychange?.({ open });
   };
 
   const closeMenu = () => {
@@ -338,9 +363,11 @@
   };
 
   // Close this menu when another panel/menu becomes active
-  $: if ($activePanelId !== null && $activePanelId !== menuOwnerId && showMenu) {
-    closeMenu();
-  }
+  $effect.pre(() => {
+    if ($activePanelId !== null && $activePanelId !== menuOwnerId && showMenu) {
+      closeMenu();
+    }
+  });
 
   export async function openMenuAt(position) {
     // ホバーしたままクリックすると、トリガーのツールチップが残ってメニューの
@@ -380,12 +407,11 @@
   };
 
   // メニューイベントハンドラ
-  function handleMenuAction(event) {
-    const data = event.detail;
-    if (data && data.action === "rename") {
+  function handleMenuAction(data) {
+    if (data?.action === "rename") {
       toggle();
     } else if (data?.action) {
-      dispatch(data.action, data);
+      onaction?.(data);
     }
   }
 </script>
@@ -407,22 +433,22 @@
     disabled={!isEditing}
     draggable="true"
     class:hidden-by-highlight={highlightParts}
-    on:blur={() => {
+    onblur={() => {
       if (!isEditing) {
         return;
       }
       flushCommit();
       isEditing = false;
     }}
-    on:input={(e) => {
+    oninput={(e) => {
       draftText = e.currentTarget.value;
     }}
-    on:click={(e) => {
+    onclick={(e) => {
       if (isEditing) {
         e.stopPropagation();
       }
     }}
-    on:keydown={(e) => {
+    onkeydown={(e) => {
       if (e.isComposing || e.keyCode === 229) return;
       if (!isEditing) {
         return;
@@ -435,19 +461,19 @@
         isEditing = false;
       }
     }}
-    on:dragstart={(e) => {
+    ondragstart={(e) => {
       if (isEditing) {
         e.preventDefault();
         e.stopPropagation();
       }
     }}
-    on:drag={(e) => {
+    ondrag={(e) => {
       if (isEditing) {
         e.preventDefault();
         e.stopPropagation();
       }
     }}
-    on:dragend={(e) => {
+    ondragend={(e) => {
       if (isEditing) {
         e.preventDefault();
         e.stopPropagation();
@@ -462,7 +488,7 @@
     aria-label="ノード操作を開く"
     data-task-menu-trigger={menuOwnerId}
     use:ripple={{ duration: 350, color: color }}
-    on:click={openMenu}
+    onclick={openMenu}
   >
     <svg height="100%" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
       <circle cx="5" cy="12" r="2" />
@@ -476,20 +502,8 @@
     position={menuPosition}
     show={showMenu}
     taskText={draftText}
-    on:rename={handleMenuAction}
-    on:addBelow={handleMenuAction}
-    on:addChild={handleMenuAction}
-    on:toggleExpand={handleMenuAction}
-    on:moveUp={handleMenuAction}
-    on:moveDown={handleMenuAction}
-    on:indentTask={handleMenuAction}
-    on:outdentTask={handleMenuAction}
-    on:deleteTask={handleMenuAction}
-    on:restoreTask={handleMenuAction}
-    on:permanentDeleteTask={handleMenuAction}
-    on:copyTask={handleMenuAction}
-    on:pasteTask={handleMenuAction}
-    on:close={closeMenu}
+    onaction={handleMenuAction}
+    onclose={closeMenu}
   />
 </div>
 

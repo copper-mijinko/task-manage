@@ -6,23 +6,23 @@
   import { workspace_graph } from "@features/workspace/stores/graph";
   import type { MarkdownImportSource } from "@app-types/app";
 
-  export let show = false;
-  export let toggle: () => void;
+  interface Props {
+    show?: boolean;
+    toggle: () => void;
+  }
 
-  let pendingPath: string | null = null;
-  let pendingLabel = "";
-  let errorMessage = "";
+  let { show = false, toggle }: Props = $props();
+
+  let pendingPath: string | null = $state(null);
+  let pendingLabel = $state("");
+  let errorMessage = $state("");
 
   // ワークスペース直下の旧 Markdown プロジェクトの取り込み。グラフを作った
   // 後から置かれたプロジェクトを、既存のグラフへ足す。
-  let importSources: MarkdownImportSource[] | null = null;
-  let importSelection = new Set<string>();
-  let importBusy = false;
-  let importMessage = "";
-
-  $: activeWorkspacePath = $workspace_store.activeWorkspacePath;
-  // 開き直したとき・ワークスペースを切り替えたときは一覧を読み直させる。
-  $: resetImport(show, activeWorkspacePath);
+  let importSources: MarkdownImportSource[] | null = $state(null);
+  let importSelection = $state(new Set<string>());
+  let importBusy = $state(false);
+  let importMessage = $state("");
 
   // 引数は依存を $: に拾わせるためだけのもの。
   function resetImport(..._deps: unknown[]) {
@@ -103,6 +103,11 @@
   function handleRemove(path: string) {
     workspace_store.removeWorkspace(path);
   }
+  let activeWorkspacePath = $derived($workspace_store.activeWorkspacePath);
+  // 開き直したとき・ワークスペースを切り替えたときは一覧を読み直させる。
+  $effect.pre(() => {
+    resetImport(show, activeWorkspacePath);
+  });
 </script>
 
 <Modal {show} {toggle} width="33rem" height="auto">
@@ -125,7 +130,7 @@
               </div>
               <div class="ws-actions">
                 {#if ws.path !== $workspace_store.activeWorkspacePath}
-                  <button class="action-btn set-active" on:click={() => handleSetActive(ws.path)}>
+                  <button class="action-btn set-active" onclick={() => handleSetActive(ws.path)}>
                     切り替え
                   </button>
                 {:else}
@@ -138,7 +143,7 @@
                   style="height:1.5rem; width:1.5rem; margin:0; box-shadow:none;"
                   normalColor="var(--theme-color-Error-main)"
                   activeColor="var(--theme-color-Error-dark)"
-                  on:click={() => handleRemove(ws.path)}
+                  onclick={() => handleRemove(ws.path)}
                 >
                   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path
@@ -161,11 +166,11 @@
       <!-- Add new workspace -->
       <p class="section-label">追加</p>
       <div class="add-area">
-        <button class="select-dir-btn" on:click={handleSelectDirectory}> フォルダを選択... </button>
+        <button class="select-dir-btn" onclick={handleSelectDirectory}> フォルダを選択... </button>
         {#if pendingPath}
           <span class="pending-path">{pendingPath}</span>
           <input class="label-input" bind:value={pendingLabel} placeholder="ラベル（省略可）" />
-          <button class="action-btn confirm-btn" on:click={handleAdd}>追加</button>
+          <button class="action-btn confirm-btn" onclick={handleAdd}>追加</button>
         {/if}
       </div>
       {#if errorMessage}
@@ -179,7 +184,7 @@
             使用中のワークスペースに置かれた旧形式（Markdown）のプロジェクトを取り込みます。元のファイルは変更しません。
           </p>
           {#if importSources === null}
-            <button class="migrate-link-btn" on:click={loadImportSources}>
+            <button class="migrate-link-btn" onclick={loadImportSources}>
               取り込めるプロジェクトを探す...
             </button>
           {:else if importSources.length === 0}
@@ -192,7 +197,7 @@
                     <input
                       type="checkbox"
                       checked={importSelection.has(source.dirName)}
-                      on:change={(event) =>
+                      onchange={(event) =>
                         toggleImport(source.dirName, event.currentTarget.checked)}
                     />
                     <span>{source.name}</span>
@@ -204,7 +209,7 @@
             <button
               class="action-btn confirm-btn"
               disabled={importSelection.size === 0 || importBusy}
-              on:click={runImport}
+              onclick={runImport}
             >
               {importBusy ? "取り込み中..." : `選んだ ${importSelection.size} 件を取り込む`}
             </button>
@@ -215,7 +220,7 @@
     </div>
 
     <div class="footer">
-      <button class="close-btn" on:click={toggle}>閉じる</button>
+      <button class="close-btn" onclick={toggle}>閉じる</button>
     </div>
   </div>
 </Modal>

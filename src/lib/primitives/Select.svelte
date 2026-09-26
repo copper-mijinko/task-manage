@@ -1,10 +1,26 @@
 ﻿<script>
-  export let disabled = false;
-  export let id;
-  export let value;
-  export let style = "";
-  export let backgroundColor = "var(--theme-color-Main-light)";
-  export let color = "var(--theme-color-Sub-main)";
+  /**
+   * @typedef {Object} Props
+   * @property {boolean} [disabled]
+   * @property {any} id
+   * @property {any} value
+   * @property {string} [style]
+   * @property {string} [backgroundColor]
+   * @property {string} [color]
+   * @property {import('svelte').Snippet} [children]
+   */
+
+  /** @type {Props} */
+  let {
+    disabled = false,
+    id,
+    value,
+    style = "",
+    backgroundColor = "var(--theme-color-Main-light)",
+    color = "var(--theme-color-Sub-main)",
+    children,
+    onchange,
+  } = $props();
 </script>
 
 <div class="select" style="--backgroundColor: {backgroundColor}; --color: {color}; {style}">
@@ -12,12 +28,12 @@
     {id}
     {value}
     {disabled}
-    on:change
-    on:click={(e) => {
+    {onchange}
+    onclick={(e) => {
       e.stopPropagation();
     }}
   >
-    <slot />
+    {@render children?.()}
   </select>
   <svg viewBox="-12 0 32 32" version="1.1" xmlns="http://www.w3.org/2000/svg"
     ><path

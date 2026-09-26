@@ -1,6 +1,12 @@
 <script>
-  export let headers = [];
-  export let selectedCount = 0;
+  /**
+   * @typedef {Object} Props
+   * @property {any} [headers]
+   * @property {number} [selectedCount]
+   */
+
+  /** @type {Props} */
+  let { headers = [], selectedCount = 0 } = $props();
 </script>
 
 <div class="TableRow" data-testid="tree-table-header-stub" data-selected-count={selectedCount}>

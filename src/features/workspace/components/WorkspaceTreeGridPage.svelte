@@ -18,45 +18,58 @@
   const projection = application.tree;
   let previousScope = "";
   void workspaceApplication.load(workspacePath).catch((e) => error.set(e.message));
-  $: navigation = $workspaceNavigation;
-  $: if (navigation && !$selected_id) $selected_id = navigation.rootId;
-  $: if (navigation && $selected_id === AGENDA_SELECTED_ID) {
-    $ganttVisible = true;
-    $selected_id = navigation.rootId;
-  }
-  $: if (navigation && $selected_id === INBOX_SELECTED_ID) {
-    // 解決規則はヘッダーの Inbox ボタンと共有する。ここだけで解決していたため、
-    // ヘッダー側は「いま Inbox を開いているか」を判定できなかった。
-    $selected_id = resolveInboxNodeId(navigation) ?? navigation.rootId;
-  }
-  $: rootId = navigation?.names[$selected_id] !== undefined ? $selected_id : navigation?.rootId;
-  $: if (rootId && previousScope !== rootId) {
-    previousScope = rootId;
-    application.scope.set(rootId);
-    clearSelection();
-    selectOnly(rootId);
-    $active_row_path = rootId;
-    if (pendingTaskDetailSelection?.projectId === rootId) {
-      selectOnly(pendingTaskDetailSelection.taskId);
-      $active_row_path = pendingTaskDetailSelection.occurrencePath || rootId;
-      const parts = ($active_row_path || "").split("/");
-      for (let i = 1; i < parts.length; i++) application.closed.delete(parts.slice(0, i).join("/"));
-      clearPendingTaskDetailSelection();
+  let navigation = $derived($workspaceNavigation);
+  $effect.pre(() => {
+    if (navigation && !$selected_id) $selected_id = navigation.rootId;
+  });
+  $effect.pre(() => {
+    if (navigation && $selected_id === AGENDA_SELECTED_ID) {
+      $ganttVisible = true;
+      $selected_id = navigation.rootId;
     }
-  }
-  $: if ($projection) {
-    const index = new Map();
-    const visit = (node) => {
-      for (const value of node.data.tags) {
-        const tag = value.toLowerCase();
-        if (!index.has(tag)) index.set(tag, new Set());
-        index.get(tag).add(node.id);
+  });
+  $effect.pre(() => {
+    if (navigation && $selected_id === INBOX_SELECTED_ID) {
+      // 解決規則はヘッダーの Inbox ボタンと共有する。ここだけで解決していたため、
+      // ヘッダー側は「いま Inbox を開いているか」を判定できなかった。
+      $selected_id = resolveInboxNodeId(navigation) ?? navigation.rootId;
+    }
+  });
+  let rootId = $derived(
+    navigation?.names[$selected_id] !== undefined ? $selected_id : navigation?.rootId
+  );
+  $effect.pre(() => {
+    if (rootId && previousScope !== rootId) {
+      previousScope = rootId;
+      application.scope.set(rootId);
+      clearSelection();
+      selectOnly(rootId);
+      $active_row_path = rootId;
+      if (pendingTaskDetailSelection?.projectId === rootId) {
+        selectOnly(pendingTaskDetailSelection.taskId);
+        $active_row_path = pendingTaskDetailSelection.occurrencePath || rootId;
+        const parts = ($active_row_path || "").split("/");
+        for (let i = 1; i < parts.length; i++)
+          application.closed.delete(parts.slice(0, i).join("/"));
+        clearPendingTaskDetailSelection();
       }
-      node.children.forEach(visit);
-    };
-    visit($projection.data);
-    tag_index.set(index);
-  }
+    }
+  });
+  $effect.pre(() => {
+    if ($projection) {
+      const index = new Map();
+      const visit = (node) => {
+        for (const value of node.data.tags) {
+          const tag = value.toLowerCase();
+          if (!index.has(tag)) index.set(tag, new Set());
+          index.get(tag).add(node.id);
+        }
+        node.children.forEach(visit);
+      };
+      visit($projection.data);
+      tag_index.set(index);
+    }
+  });
   onDestroy(() => {
     application.dispose();
   });
@@ -64,8 +77,7 @@
 
 <main class="workspace-treegrid" aria-label="ノード一覧と詳細">
   {#if $error}<div class="operation-error" role="alert">
-      <span>{$error}</span><button aria-label="通知を閉じる" on:click={() => error.set("")}
-        >×</button
+      <span>{$error}</span><button aria-label="通知を閉じる" onclick={() => error.set("")}>×</button
       >
     </div>{/if}
   {#if $projection?.truncated}<div role="status">

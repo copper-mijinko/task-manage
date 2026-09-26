@@ -40,19 +40,20 @@
   const records = application.records;
   const defaultMemoFormat = "markdown";
 
-  export let titleOverride = "";
-  export let showOpenWindowAction = true;
+  /**
+   * @typedef {Object} Props
+   * @property {string} [titleOverride]
+   * @property {boolean} [showOpenWindowAction]
+   */
 
-  let relationTarget = "";
-  let copyMode = "node";
-  let relationAction = "";
-  let relationBusy = false;
+  /** @type {Props} */
+  let { titleOverride = "", showOpenWindowAction = true } = $props();
+
+  let relationTarget = $state("");
+  let copyMode = $state("node");
+  let relationAction = $state("");
+  let relationBusy = $state(false);
   let relationNodeId;
-  $: if (relationNodeId !== $table_selected_id) {
-    relationNodeId = $table_selected_id;
-    relationAction = "";
-    relationTarget = "";
-  }
   function openRelation(action) {
     application.error.set("");
     relationTarget = "";
@@ -74,22 +75,6 @@
     }
   }
 
-  $: extraSelectedCount = Math.max(0, $selected_ids.size - 1);
-  $: is_selected = $table_selected_id ? true : false;
-  $: node =
-    $table_selected_id && $tree_data ? getNode($table_selected_id, $tree_data.data) : undefined;
-  $: name = node ? node.data["name"] : "Select Task";
-  $: cardTitle = titleOverride || name;
-  $: nodeBody = node ? (node.data["body"] ?? "") : "";
-  $: bodyFormat = normalizeMemoFormat(node?.data?.["format"], defaultMemoFormat);
-  // `[[…]]` の補完候補。自分の子ノードの名前（旧メモは子ノードになる）。
-  $: siblingNodeNames = (node?.children ?? [])
-    .map((child) => child?.data?.name)
-    .filter((childName) => Boolean(childName) && childName !== node?.data?.name);
-  $: attachments = node ? (node.data["attachments"] ?? []) : [];
-  $: isArchived = isNodeEffectivelyArchived($table_selected_id, $tree_data?.data);
-
-  $: isDark = $theme === "dark";
   const detailDateStyle =
     "border: 0; padding: 0 var(--sp7) 0 var(--sp2); font-size: 0.75rem; background-color: transparent;";
   const statusLabels = {
@@ -100,18 +85,28 @@
     Canceled: "キャンセル",
     Undefined: "未定義",
   };
-  let activeTab = "overview";
-  let editingProperties = false;
-  let editingBody = false;
-  let bodyVisited = false;
-  let memoEditor;
-  let detailMenu = false;
+  let activeTab = $state("overview");
+  let editingProperties = $state(false);
+  let editingBody = $state(false);
+  let bodyVisited = $state(false);
+  let memoEditor = $state();
+  let detailMenu = $state(false);
   let detailTrigger;
-  let detailMenuPosition = { x: 0, y: 0, position: "left" };
-  let parentEditing = false;
-  let parentNotice = "";
-  let blockedParent = "";
-  let dangerTarget = null;
+  let detailMenuPosition = $state({ x: 0, y: 0, position: "left" });
+  let parentEditing = $state(false);
+  let parentNotice = $state("");
+  let blockedParent = $state("");
+  let dangerTarget = $state(null);
+  function handleDetailMenuAction(item) {
+    if (item.action === "danger") requestDanger();
+    else if (item.action === "restore") application.archive([node.id], false);
+    else if (item.action === "move") openRelation("move");
+    else if (item.action === "copy") openRelation("copy");
+    else if (item.action === "window") openTaskDetailInWindow();
+    else if (item.action === "format")
+      requestBodyFormat(bodyFormat === "markdown" ? "quill" : "markdown");
+  }
+
   const requestDanger = () => {
     dangerTarget = { id: node.id, name, permanent: isArchived };
   };
@@ -123,36 +118,6 @@
     if (target.permanent) await application.remove([target.id]);
     else await application.archive([target.id]);
   }
-  $: detailMenuItems = [
-    ...(node
-      ? [
-          {
-            title: "配置を変更",
-            action: "move",
-            disabled: isArchived || application.isProtected(node.id),
-          },
-          { title: "コピー先を指定", action: "copy", disabled: isArchived },
-          ...(isArchived
-            ? [
-                {
-                  title: "アーカイブから復元",
-                  action: "restore",
-                  disabled: application.isProtected(node.id),
-                },
-              ]
-            : []),
-          {
-            title: isArchived ? "完全削除…" : "アーカイブ…",
-            action: "danger",
-            disabled: application.isProtected(node.id),
-          },
-        ]
-      : []),
-    ...(showOpenWindowAction ? [{ title: "別Windowで開く", action: "window" }] : []),
-    ...(activeTab === "body"
-      ? [{ title: "形式を変換", action: "format", disabled: isArchived }]
-      : []),
-  ];
   function toggleDetailMenu(event) {
     detailTrigger = event.currentTarget;
     const box = detailTrigger.getBoundingClientRect();
@@ -213,25 +178,9 @@
     return getNode(editContext.tableSelectedId, liveTreeData.data);
   };
 
-  $: editContextKey = [$selected_type ?? "", $selected_id ?? "", $table_selected_id ?? ""].join(
-    ":"
-  );
-
-  $: if (editContextKey !== previousEditContextKey) {
-    changeDataDebounce.cancel();
-    previousEditContextKey = editContextKey;
-    editingProperties = false;
-    editingBody = false;
-    parentEditing = false;
-    parentNotice = "";
-    blockedParent = "";
-  }
-
   onDestroy(() => {
     changeDataDebounce.cancel();
   });
-  $: allTags = [...$tag_index.keys()].sort();
-  $: taskTags = normalizeTagList(node?.data?.tags);
 
   const saveTaskTags = (nextTags) => {
     changeTaskField("tags", normalizeTagList(nextTags));
@@ -258,8 +207,8 @@
     return application.update(target.id, { body }).then(Boolean);
   };
 
-  let show_format_confirm = false;
-  let pendingBodyFormat = null;
+  let show_format_confirm = $state(false);
+  let pendingBodyFormat = $state(null);
 
   const toggle_format_confirm = () => {
     show_format_confirm = !show_format_confirm;
@@ -306,32 +255,6 @@
     return true;
   };
 
-  $: isProjectRoot = Boolean(node && !$records[node.id]?.parents.length);
-  $: currentParentIds = parentIdsOf($records[node?.id]?.parents);
-
-  /** id → 名前。チップと候補の表示に使う。 */
-  $: nodeNameById = Object.fromEntries(
-    Object.values($records ?? {}).map((record) => [record.id, record.name])
-  );
-
-  /**
-   * 親の候補。自分自身だけを除外し、子孫へのリンクも許可する（循環は
-   * グラフが保存できる）。既に親になっているものは ParentField 側で外れる。
-   */
-  $: parentCandidates =
-    node && $tree_data?.data
-      ? Object.values($records ?? {})
-          .filter((record) => record.id !== node.id)
-          .map((record) => ({
-            id: record.id,
-            name: record.name,
-            path: nodePathById[record.id] ?? "",
-          }))
-      : [];
-
-  /** 候補に出す補助情報（ルートからの経路）。同名ノードの見分けに要る。 */
-  $: nodePathById = buildNodePathLabels($tree_data?.data);
-
   function buildNodePathLabels(root) {
     const labels = {};
     if (!root) return labels;
@@ -377,6 +300,100 @@
   function openTaskDetailInWindow() {
     if (node) application.openDetail(node.id, name);
   }
+  $effect.pre(() => {
+    if (relationNodeId !== $table_selected_id) {
+      relationNodeId = $table_selected_id;
+      relationAction = "";
+      relationTarget = "";
+    }
+  });
+  let extraSelectedCount = $derived(Math.max(0, $selected_ids.size - 1));
+  let is_selected = $derived($table_selected_id ? true : false);
+  let node = $derived(
+    $table_selected_id && $tree_data ? getNode($table_selected_id, $tree_data.data) : undefined
+  );
+  let name = $derived(node ? node.data["name"] : "Select Task");
+  let cardTitle = $derived(titleOverride || name);
+  let nodeBody = $derived(node ? (node.data["body"] ?? "") : "");
+  let bodyFormat = $derived(normalizeMemoFormat(node?.data?.["format"], defaultMemoFormat));
+  // `[[…]]` の補完候補。自分の子ノードの名前（旧メモは子ノードになる）。
+  let siblingNodeNames = $derived(
+    (node?.children ?? [])
+      .map((child) => child?.data?.name)
+      .filter((childName) => Boolean(childName) && childName !== node?.data?.name)
+  );
+  let attachments = $derived(node ? (node.data["attachments"] ?? []) : []);
+  let isArchived = $derived(isNodeEffectivelyArchived($table_selected_id, $tree_data?.data));
+  let isDark = $derived($theme === "dark");
+  let detailMenuItems = $derived([
+    ...(node
+      ? [
+          {
+            title: "配置を変更",
+            action: "move",
+            disabled: isArchived || application.isProtected(node.id),
+          },
+          { title: "コピー先を指定", action: "copy", disabled: isArchived },
+          ...(isArchived
+            ? [
+                {
+                  title: "アーカイブから復元",
+                  action: "restore",
+                  disabled: application.isProtected(node.id),
+                },
+              ]
+            : []),
+          {
+            title: isArchived ? "完全削除…" : "アーカイブ…",
+            action: "danger",
+            disabled: application.isProtected(node.id),
+          },
+        ]
+      : []),
+    ...(showOpenWindowAction ? [{ title: "別Windowで開く", action: "window" }] : []),
+    ...(activeTab === "body"
+      ? [{ title: "形式を変換", action: "format", disabled: isArchived }]
+      : []),
+  ]);
+  let editContextKey = $derived(
+    [$selected_type ?? "", $selected_id ?? "", $table_selected_id ?? ""].join(":")
+  );
+  $effect.pre(() => {
+    if (editContextKey !== previousEditContextKey) {
+      changeDataDebounce.cancel();
+      previousEditContextKey = editContextKey;
+      editingProperties = false;
+      editingBody = false;
+      parentEditing = false;
+      parentNotice = "";
+      blockedParent = "";
+    }
+  });
+  let allTags = $derived([...$tag_index.keys()].sort());
+  let taskTags = $derived(normalizeTagList(node?.data?.tags));
+  let isProjectRoot = $derived(Boolean(node && !$records[node.id]?.parents.length));
+  let currentParentIds = $derived(parentIdsOf($records[node?.id]?.parents));
+  /** id → 名前。チップと候補の表示に使う。 */
+  let nodeNameById = $derived(
+    Object.fromEntries(Object.values($records ?? {}).map((record) => [record.id, record.name]))
+  );
+  /** 候補に出す補助情報（ルートからの経路）。同名ノードの見分けに要る。 */
+  let nodePathById = $derived(buildNodePathLabels($tree_data?.data));
+  /**
+   * 親の候補。自分自身だけを除外し、子孫へのリンクも許可する（循環は
+   * グラフが保存できる）。既に親になっているものは ParentField 側で外れる。
+   */
+  let parentCandidates = $derived(
+    node && $tree_data?.data
+      ? Object.values($records ?? {})
+          .filter((record) => record.id !== node.id)
+          .map((record) => ({
+            id: record.id,
+            name: record.name,
+            path: nodePathById[record.id] ?? "",
+          }))
+      : []
+  );
 </script>
 
 {#if is_selected && node}
@@ -392,7 +409,7 @@
           tooltipContent={editingProperties ? "編集終了" : "編集"}
           style="margin:0; width:1.6875rem; height:1.6875rem;"
           disabled={isArchived}
-          on:click={async () => {
+          onclick={async () => {
             if ((await memoEditor?.flush()) === false) return;
             flushNameChange();
             editingProperties = !editingProperties;
@@ -418,7 +435,7 @@
           aria-expanded={detailMenu}
           data-task-menu-trigger
           style="margin:0; width:1.6875rem; height:1.6875rem;"
-          on:click={toggleDetailMenu}
+          onclick={toggleDetailMenu}
           ><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"
             ><circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle
               cx="19"
@@ -433,13 +450,8 @@
       show={detailMenu}
       position={detailMenuPosition}
       menuItems={detailMenuItems}
-      on:danger={requestDanger}
-      on:restore={() => application.archive([node.id], false)}
-      on:close={closeDetailMenu}
-      on:move={() => openRelation("move")}
-      on:copy={() => openRelation("copy")}
-      on:window={openTaskDetailInWindow}
-      on:format={() => requestBodyFormat(bodyFormat === "markdown" ? "quill" : "markdown")}
+      onaction={handleDetailMenuAction}
+      onclose={closeDetailMenu}
     />
     <div class="detail-tabs" role="tablist" aria-label="ノードの内容">
       {#each [{ id: "overview", label: "概要" }, { id: "attachments", label: "添付 (" + attachments.length + ")" }, { id: "body", label: "本文" }] as tab}
@@ -449,8 +461,8 @@
           aria-controls={"detail-panel-" + tab.id}
           aria-selected={activeTab === tab.id}
           tabindex={activeTab === tab.id ? 0 : -1}
-          on:click={() => changeTab(tab.id)}
-          on:keydown={(event) => {
+          onclick={() => changeTab(tab.id)}
+          onkeydown={(event) => {
             const ids = ["overview", "attachments", "body"];
             let index = ids.indexOf(activeTab);
             if (event.key === "ArrowRight") index = (index + 1) % 3;
@@ -505,8 +517,8 @@
                     type="text"
                     value={name}
                     aria-label="ノード名"
-                    on:input={handleNameInput}
-                    on:blur={flushNameChange}
+                    oninput={handleNameInput}
+                    onblur={flushNameChange}
                   />
                 {:else}<span class="detail-value">{name || "未設定"}</span>{/if}
               </div>
@@ -520,7 +532,7 @@
                     status={node.data.status ?? ""}
                     ariaLabel="ステータス"
                     style="height: 100%; font-size: var(--font-body-md);"
-                    on:change={(event) => changeTaskField("status", event.detail.value)}
+                    onchange={(event) => changeTaskField("status", event.value)}
                   />
                 {:else}<span class="detail-value"
                     >{statusLabels[node.data.status] || node.data.status || "未設定"}</span
@@ -540,7 +552,7 @@
                     value={node.data["start date"] ?? ""}
                     ariaLabel="開始日"
                     showUrgency={false}
-                    on:change={(event) =>
+                    onchange={(event) =>
                       changeTaskField("start date", event.target.value || undefined)}
                   />
                 {:else}<span class="detail-value">{node.data["start date"] || "未設定"}</span>{/if}
@@ -559,7 +571,7 @@
                     value={node.data["due date"] ?? ""}
                     ariaLabel="期限日"
                     status={node.data["status"]}
-                    on:change={(event) =>
+                    onchange={(event) =>
                       changeTaskField("due date", event.target.value || undefined)}
                   />
                 {:else}<span class="detail-value">{node.data["due date"] || "未設定"}</span>{/if}
@@ -574,7 +586,7 @@
                   disabled={isArchived}
                   showLabels={false}
                   ariaLabel="ノードのタグ"
-                  on:change={(event) => saveTaskTags(event.detail.tags)}
+                  onchange={(event) => saveTaskTags(event.tags)}
                 />{:else}<div class="detail-control reading">
                   <span class="detail-value">{taskTags.join(" · ") || "未設定"}</span>
                 </div>{/if}
@@ -585,7 +597,7 @@
               <h3>所属する場所</h3>
               {#each currentParentIds as parentId}
                 <div class="parent-location">
-                  <button class="parent-link" on:click={() => visitParent(parentId)}
+                  <button class="parent-link" onclick={() => visitParent(parentId)}
                     >{nodeNameById[parentId] || parentId}</button
                   >
                   <small class="parent-path" title={parentId}
@@ -603,7 +615,7 @@
                     disabled={isArchived ||
                       currentParentIds.length < 2 ||
                       application.isProtected(node.id)}
-                    on:click={() => {
+                    onclick={() => {
                       relationTarget = parentId;
                       parentEditing = true;
                     }}
@@ -622,7 +634,7 @@
                       activeColor="var(--accent-fg)"
                       content="この所属を外す"
                       disabled={isArchived || currentParentIds.length < 2}
-                      on:click={() => saveParents(currentParentIds.filter((id) => id !== parentId))}
+                      onclick={() => saveParents(currentParentIds.filter((id) => id !== parentId))}
                     />
                   {/if}
                 </div>
@@ -633,7 +645,7 @@
                   normalColor="var(--fg-default)"
                   activeColor="var(--accent-fg)"
                   content="絞り込みを解除して表示"
-                  on:click={() => visitParent(blockedParent, true)}
+                  onclick={() => visitParent(blockedParent, true)}
                 />{/if}
               <Button
                 variant="text"
@@ -641,7 +653,7 @@
                 activeColor="var(--accent-fg)"
                 content="所属先を追加"
                 disabled={isArchived || application.isProtected(node.id)}
-                on:click={() => {
+                onclick={() => {
                   parentEditing = !parentEditing;
                   relationTarget = "";
                 }}
@@ -652,7 +664,7 @@
                   candidates={parentCandidates}
                   nameById={nodeNameById}
                   disabled={isArchived || application.isProtected(node.id)}
-                  on:change={(event) => saveParents(event.detail.parentIds)}
+                  onchange={(event) => saveParents(event.parentIds)}
                 />
               {/if}
             </section>
@@ -686,7 +698,7 @@
                 normalColor="var(--fg-default)"
                 activeColor="var(--accent-fg)"
                 disabled={isArchived}
-                on:click={toggleBodyEditing}
+                onclick={toggleBodyEditing}
                 content={editingBody ? "プレビュー" : "編集"}
               />
             {/if}
@@ -797,12 +809,12 @@
           </select>
         </label>
       {/if}
-      <button disabled={relationBusy} on:click={() => (relationAction = "")}>キャンセル</button>
+      <button disabled={relationBusy} onclick={() => (relationAction = "")}>キャンセル</button>
       <button
         disabled={relationBusy ||
           (relationAction !== "detach" && !relationTarget) ||
           (relationAction !== "copy" && !($active_row_path || "").includes("/"))}
-        on:click={submitRelation}
+        onclick={submitRelation}
       >
         {relationAction === "copy" ? "コピー" : relationAction === "detach" ? "配置を外す" : "移動"}
       </button>

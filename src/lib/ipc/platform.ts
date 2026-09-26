@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   ElectronAPI,
   FindInPageResult,
   MarkdownImportSource,
@@ -23,6 +23,27 @@ function api(): Partial<ElectronAPI> | undefined {
   return typeof window !== "undefined" ? window.electronAPI : undefined;
 }
 
+/**
+ * IPC に渡す値を素のオブジェクト・配列へ写す。
+ *
+ * Svelte 5 の `$state` に入れたオブジェクトは Proxy になり、structured clone
+ * できない（"An object could not be cloned"）。どこかの状態から来た値でも
+ * 送れるよう、境界でまとめて写す。`undefined` の値（フィールドを消す指示）は
+ * 残す。
+ */
+function plain<T>(value: T): T {
+  if (Array.isArray(value)) return value.map(plain) as T;
+  if (value && typeof value === "object") {
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype === Object.prototype || prototype === null) {
+      return Object.fromEntries(
+        Object.entries(value).map(([key, item]) => [key, plain(item)])
+      ) as T;
+    }
+  }
+  return value;
+}
+
 export function message(msg: string): void {
   api()?.message?.(msg);
 }
@@ -36,7 +57,7 @@ export function getMetaData(key: string): Promise<unknown> {
 }
 
 export function setMetaData(key: string, value: unknown): void {
-  api()?.setMetaData?.(key, value);
+  api()?.setMetaData?.(key, plain(value));
 }
 
 export function deleteMetaData(key: string): void {
@@ -65,7 +86,7 @@ export function openImageExternal(
 }
 
 export function openTaskDetailWindow(detailData: TaskDetailWindowData): void {
-  api()?.openTaskDetailWindow?.({ ...detailData, requestedAtEpochMs: Date.now() });
+  api()?.openTaskDetailWindow?.(plain({ ...detailData, requestedAtEpochMs: Date.now() }));
 }
 
 export function reportPerformanceMilestone(payload: PerformanceMilestone): void {
@@ -162,7 +183,7 @@ export function wsSetWorkspaces(config: {
   workspaces: WorkspaceInfo[];
   activeWorkspace?: string;
 }): void {
-  api()?.wsSetWorkspaces?.(config);
+  api()?.wsSetWorkspaces?.(plain(config));
 }
 
 export function wsOpenWorkspace(
@@ -197,7 +218,7 @@ export function wsExecuteGraphCommand(
 ): Promise<WorkspaceGraphCommandResult> {
   const fn = api()?.wsExecuteGraphCommand;
   if (!fn) return Promise.reject(new Error("Workspace graph API unavailable"));
-  return fn(workspacePath, command, origin, expectedRevision);
+  return fn(workspacePath, plain(command), origin, expectedRevision);
 }
 
 export function wsUndoGraph(
@@ -237,7 +258,7 @@ export function wsImportMarkdownProjects(
 ): Promise<WorkspaceGraphCommandResult> {
   const fn = api()?.wsImportMarkdownProjects;
   if (!fn) return Promise.reject(new Error("Workspace graph API unavailable"));
-  return fn(workspacePath, dirNames, expectedRevision);
+  return fn(workspacePath, plain(dirNames), expectedRevision);
 }
 
 export function wsSaveGraphAsset(

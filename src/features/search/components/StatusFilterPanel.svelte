@@ -1,21 +1,32 @@
 <script lang="ts">
   import { viewportPopover } from "@lib/actions/viewport_popover";
-  import { createEventDispatcher, onMount, onDestroy } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import { activePanelId, newPanelId } from "@stores/panel_coordinator";
   import { globalDismiss } from "@lib/actions";
 
-  export let selected: string[] = [];
-  export let options: string[] = [];
-  export let anchorRect: DOMRect | null = null;
-  export let title = "ステータスフィルター";
-  export let labels: Record<string, string> | null = null;
-  export let showDots = true;
+  interface Props {
+    selected?: string[];
+    options?: string[];
+    anchorRect?: DOMRect | null;
+    title?: string;
+    labels?: Record<string, string> | null;
+    showDots?: boolean;
+    onchange?: (detail: { selected: string[] }) => void;
+    onclose?: () => void;
+  }
 
-  const dispatch = createEventDispatcher<{
-    change: { selected: string[] };
-    close: void;
-  }>();
-  let panelElement: HTMLElement;
+  let {
+    selected = [],
+    options = [],
+    anchorRect = null,
+    title = "ステータスフィルター",
+    labels = null,
+    showDots = true,
+    onchange,
+    onclose,
+  }: Props = $props();
+
+  let panelElement: HTMLElement | undefined = $state();
   const myPanelId = newPanelId();
   let unsubPanelCoord: (() => void) | undefined;
 
@@ -41,29 +52,31 @@
   onMount(() => {
     activePanelId.set(myPanelId);
     unsubPanelCoord = activePanelId.subscribe((id) => {
-      if (id !== null && id !== myPanelId) dispatch("close");
+      if (id !== null && id !== myPanelId) onclose?.();
     });
   });
   onDestroy(() => unsubPanelCoord?.());
 
-  $: panelStyle = anchorRect ? `top: ${anchorRect.bottom + 2}px; left: ${anchorRect.left}px;` : "";
+  let panelStyle = $derived(
+    anchorRect ? `top: ${anchorRect.bottom + 2}px; left: ${anchorRect.left}px;` : ""
+  );
 
   function handleKeydown(event: KeyboardEvent) {
     event.stopPropagation();
-    if (event.key === "Escape") dispatch("close");
+    if (event.key === "Escape") onclose?.();
   }
 
   function toggle(opt: string) {
     const next = selected.includes(opt) ? selected.filter((s) => s !== opt) : [...selected, opt];
-    dispatch("change", { selected: next });
+    onchange?.({ selected: next });
   }
 
   function clear() {
-    dispatch("change", { selected: [] });
+    onchange?.({ selected: [] });
   }
 
   function selectAll() {
-    dispatch("change", { selected: [...options] });
+    onchange?.({ selected: [...options] });
   }
 
   function portal(node: HTMLElement) {
@@ -76,7 +89,7 @@
   }
 </script>
 
-<svelte:window on:keydown={handleKeydown} />
+<svelte:window onkeydown={handleKeydown} />
 
 <div
   class="StatusFilterPanel"
@@ -84,13 +97,13 @@
   style={panelStyle}
   use:portal
   use:viewportPopover={anchorRect}
-  use:globalDismiss={() => dispatch("close")}
+  use:globalDismiss={() => onclose?.()}
 >
   <div class="PanelHeader">{title}</div>
   <div class="PanelBody">
     {#each options as opt}
       <label class="OptionRow">
-        <input type="checkbox" checked={selected.includes(opt)} on:change={() => toggle(opt)} />
+        <input type="checkbox" checked={selected.includes(opt)} onchange={() => toggle(opt)} />
         {#if showDots}<span class="StatusDot" style="--dot: {STATUS_DOT_COLOR[opt] ?? '#888'};"
           ></span>{/if}
         <span class="OptionLabel">{(labels ?? STATUS_LABEL)[opt] ?? opt}</span>
@@ -98,8 +111,8 @@
     {/each}
   </div>
   <div class="PanelActions">
-    <button type="button" class="LinkButton" on:click={selectAll}>すべて選択</button>
-    <button type="button" class="LinkButton" on:click={clear}>フィルター解除</button>
+    <button type="button" class="LinkButton" onclick={selectAll}>すべて選択</button>
+    <button type="button" class="LinkButton" onclick={clear}>フィルター解除</button>
   </div>
 </div>
 

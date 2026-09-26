@@ -14,7 +14,7 @@
   const occurrencePath = search.get("occurrencePath") || "";
   const performanceRunId = search.get("performanceRunId") || undefined;
 
-  let saveErrorMessage = null;
+  let saveErrorMessage = $state(null);
   let unregisterDateTimeShortcuts = null;
 
   init_detail_store();
@@ -40,7 +40,7 @@
   {#if saveErrorMessage}
     <div class="banner error" role="alert">
       <span>{saveErrorMessage}</span>
-      <button type="button" on:click={() => (saveErrorMessage = null)}>×</button>
+      <button type="button" onclick={() => (saveErrorMessage = null)}>×</button>
     </div>
   {/if}
 

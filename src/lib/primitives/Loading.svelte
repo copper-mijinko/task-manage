@@ -1,6 +1,10 @@
 <script lang="ts">
-  export let variant: "h1" | "h2" | "note" = "h1";
-  export let text: string = "読み込み中...";
+  interface Props {
+    variant?: "h1" | "h2" | "note";
+    text?: string;
+  }
+
+  let { variant = "h1", text = "読み込み中..." }: Props = $props();
 </script>
 
 {#if variant === "h1"}

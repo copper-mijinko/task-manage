@@ -1,21 +1,35 @@
 <script>
-  import { setContext, onMount, onDestroy, tick } from "svelte";
+  import { setContext, onMount, onDestroy, tick, untrack } from "svelte";
   import * as platform from "@lib/ipc/platform";
   import { createTreeGridApplication, TREEGRID_APPLICATION } from "../application/treegrid";
   import { workspaceApplication } from "../application/workspace";
   import { selected_id, selected_type, selectOnly, active_row_path } from "@stores/ui";
   import TaskDetailPage from "@pages/TaskDetailPage.svelte";
-  export let workspacePath;
-  export let taskId;
-  export let taskName;
-  export let projectId;
-  export let occurrencePath;
-  /** 起動時間の計測用（`TASK_MANAGE_PERF`）。main プロセスが URL に載せてくる。 */
-  export let performanceRunId = undefined;
-  const application = createTreeGridApplication(workspacePath);
+
+  /**
+   * @typedef {Object} Props
+   * @property {any} workspacePath
+   * @property {any} taskId
+   * @property {any} taskName
+   * @property {any} projectId
+   * @property {any} occurrencePath
+   * @property {any} [performanceRunId] - 起動時間の計測用（`TASK_MANAGE_PERF`）。main プロセスが URL に載せてくる。
+   */
+
+  /** @type {Props} */
+  let {
+    workspacePath,
+    taskId,
+    taskName,
+    projectId,
+    occurrencePath,
+    performanceRunId = undefined,
+  } = $props();
+  // 詳細ウィンドウは 1 つのワークスペースを開いたまま使うので、作成時のパスで作る。
+  const application = createTreeGridApplication(untrack(() => workspacePath));
   setContext(TREEGRID_APPLICATION, application);
   const error = application.error;
-  let ready = false;
+  let ready = $state(false);
   onMount(async () => {
     try {
       const graph = await workspaceApplication.load(workspacePath);
@@ -61,7 +75,7 @@
   onDestroy(application.dispose);
 </script>
 
-<svelte:window on:keydown={history} />
+<svelte:window onkeydown={history} />
 {#if $error}<p role="alert">{$error}</p>{/if}
 <TaskDetailPage
   initialTaskName={taskName}
