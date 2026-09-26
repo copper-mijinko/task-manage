@@ -1,22 +1,74 @@
-﻿<script lang="ts">
+<script lang="ts">
   import Modal from "@lib/primitives/Modal.svelte";
   import IconButton from "@lib/primitives/IconButton.svelte";
-  import MigrationWizard from "@features/workspace/components/MigrationWizard.svelte";
+  import * as platform from "@lib/ipc/platform";
   import { workspace_store } from "@features/workspace/stores/workspace";
-  import { workspace_conflict_policy } from "@features/workspace/stores/policy";
-  import type { WorkspaceConflictPolicy } from "@app-types/app";
+  import { workspace_graph } from "@features/workspace/stores/graph";
+  import type { MarkdownImportSource } from "@app-types/app";
 
   export let show = false;
   export let toggle: () => void;
 
-  function setPolicy(next: WorkspaceConflictPolicy) {
-    workspace_conflict_policy.set(next);
-  }
-
   let pendingPath: string | null = null;
   let pendingLabel = "";
   let errorMessage = "";
-  let showMigration = false;
+
+  // ワークスペース直下の旧 Markdown プロジェクトの取り込み。グラフを作った
+  // 後から置かれたプロジェクトを、既存のグラフへ足す。
+  let importSources: MarkdownImportSource[] | null = null;
+  let importSelection = new Set<string>();
+  let importBusy = false;
+  let importMessage = "";
+
+  $: activeWorkspacePath = $workspace_store.activeWorkspacePath;
+  // 開き直したとき・ワークスペースを切り替えたときは一覧を読み直させる。
+  $: resetImport(show, activeWorkspacePath);
+
+  // 引数は依存を $: に拾わせるためだけのもの。
+  function resetImport(..._deps: unknown[]) {
+    importSources = null;
+    importSelection = new Set();
+    importMessage = "";
+  }
+
+  async function loadImportSources() {
+    if (!activeWorkspacePath) return;
+    importMessage = "";
+    try {
+      importSources = await platform.wsListMarkdownImports(activeWorkspacePath);
+      importSelection = new Set(
+        importSources.filter((source) => !source.imported).map((source) => source.dirName)
+      );
+    } catch (error) {
+      importMessage = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  function toggleImport(dirName: string, checked: boolean) {
+    const next = new Set(importSelection);
+    if (checked) next.add(dirName);
+    else next.delete(dirName);
+    importSelection = next;
+  }
+
+  async function runImport() {
+    if (!activeWorkspacePath || importSelection.size === 0 || importBusy) return;
+    importBusy = true;
+    importMessage = "";
+    try {
+      const result = await platform.wsImportMarkdownProjects(
+        activeWorkspacePath,
+        [...importSelection],
+        $workspace_graph?.revision
+      );
+      await loadImportSources();
+      importMessage = `${result.selectedNodeIds.length} 件のプロジェクトを取り込みました。「元に戻す」で取り消せます。`;
+    } catch (error) {
+      importMessage = error instanceof Error ? error.message : String(error);
+    } finally {
+      importBusy = false;
+    }
+  }
 
   async function handleSelectDirectory() {
     errorMessage = "";
@@ -120,50 +172,46 @@
         <p class="error">{errorMessage}</p>
       {/if}
 
-      <!-- Conflict policy -->
-      <p class="section-label">外部変更との競合時の挙動</p>
-      <div class="policy-area">
-        <label class="policy-option">
-          <input
-            type="radio"
-            name="conflictPolicy"
-            value="ask"
-            checked={$workspace_conflict_policy === "ask"}
-            on:change={() => setPolicy("ask")}
-          />
-          <span class="policy-text">
-            <strong>ユーザに確認する</strong>
-            <span class="policy-note"
-              >外部で変更が検出された場合、上書きするか再読込するかをバナーで確認します。</span
+      {#if activeWorkspacePath}
+        <p class="section-label">Markdown から取り込む</p>
+        <div class="migrate-area">
+          <p class="migrate-note">
+            使用中のワークスペースに置かれた旧形式（Markdown）のプロジェクトを取り込みます。元のファイルは変更しません。
+          </p>
+          {#if importSources === null}
+            <button class="migrate-link-btn" on:click={loadImportSources}>
+              取り込めるプロジェクトを探す...
+            </button>
+          {:else if importSources.length === 0}
+            <p class="empty-note">取り込める Markdown プロジェクトはありません。</p>
+          {:else}
+            <ul class="import-list">
+              {#each importSources as source (source.dirName)}
+                <li>
+                  <label class="import-option">
+                    <input
+                      type="checkbox"
+                      checked={importSelection.has(source.dirName)}
+                      on:change={(event) =>
+                        toggleImport(source.dirName, event.currentTarget.checked)}
+                    />
+                    <span>{source.name}</span>
+                    {#if source.imported}<span class="import-badge">取り込み済み</span>{/if}
+                  </label>
+                </li>
+              {/each}
+            </ul>
+            <button
+              class="action-btn confirm-btn"
+              disabled={importSelection.size === 0 || importBusy}
+              on:click={runImport}
             >
-          </span>
-        </label>
-        <label class="policy-option">
-          <input
-            type="radio"
-            name="conflictPolicy"
-            value="prefer-memory"
-            checked={$workspace_conflict_policy === "prefer-memory"}
-            on:change={() => setPolicy("prefer-memory")}
-          />
-          <span class="policy-text">
-            <strong>画面のメモリ表示を優先する（自動上書き）</strong>
-            <span class="policy-note"
-              >競合時の確認バナーは出さず、画面に表示中の内容で上書きします。書込失敗時は内部で最大
-              5 回まで自動リトライします。</span
-            >
-          </span>
-        </label>
-      </div>
-
-      <!-- Migration -->
-      <p class="section-label">移行</p>
-      <div class="migrate-area">
-        <p class="migrate-note">既存の db.json プロジェクトをワークスペース形式に変換します。</p>
-        <button class="migrate-link-btn" on:click={() => (showMigration = true)}>
-          レガシーデータを移行...
-        </button>
-      </div>
+              {importBusy ? "取り込み中..." : `選んだ ${importSelection.size} 件を取り込む`}
+            </button>
+          {/if}
+          {#if importMessage}<p class="migrate-note" role="status">{importMessage}</p>{/if}
+        </div>
+      {/if}
     </div>
 
     <div class="footer">
@@ -171,8 +219,6 @@
     </div>
   </div>
 </Modal>
-
-<MigrationWizard show={showMigration} toggle={() => (showMigration = !showMigration)} />
 
 <style>
   .container {
@@ -364,36 +410,29 @@
   .migrate-link-btn:hover {
     opacity: 0.75;
   }
-  .policy-area {
+  .import-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--sp2);
+    gap: var(--sp1);
   }
-  .policy-option {
+  .import-option {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     gap: var(--sp2);
     cursor: pointer;
-    padding: var(--sp2);
+    padding: var(--sp1) var(--sp2);
     border-radius: var(--shape-xs);
-  }
-  .policy-option:hover {
-    background-color: color-mix(in srgb, var(--theme-color-Sub-main) 6%, transparent);
-  }
-  .policy-option input[type="radio"] {
-    margin-top: 0.1875rem;
-    flex-shrink: 0;
-  }
-  .policy-text {
-    display: flex;
-    flex-direction: column;
-    gap: 0.1875rem;
     font-size: var(--font-body-md);
     color: var(--theme-color-Sub-main);
   }
-  .policy-note {
+  .import-option:hover {
+    background-color: color-mix(in srgb, var(--theme-color-Sub-main) 6%, transparent);
+  }
+  .import-badge {
     font-size: var(--font-body-sm);
     color: var(--theme-color-Sub-dark);
-    opacity: 0.85;
   }
 </style>

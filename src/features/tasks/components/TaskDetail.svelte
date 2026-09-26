@@ -1,9 +1,48 @@
-﻿<script>
-  import { getContext } from "svelte";
+<script>
+  import { getContext, onDestroy, tick } from "svelte";
+  import { get } from "svelte/store";
+  import debounce from "lodash/debounce";
   import { TREEGRID_APPLICATION } from "@features/workspace/application/treegrid";
+  import { getNode, isNodeEffectivelyArchived } from "@features/tasks/utils/tree_control";
+  import {
+    active_row_path,
+    selected_ids,
+    selected_id,
+    selected_type,
+    table_selected_id,
+  } from "@stores/ui";
+  import { tag_index } from "@features/memos/stores/tags";
+  import { theme } from "@stores/theme";
+  import Memo from "@features/memos/components/Memo.svelte";
+  import IconButton from "@lib/primitives/IconButton.svelte";
+  import Button from "@lib/primitives/Button.svelte";
+  import Dialog from "@lib/primitives/Dialog.svelte";
+  import Modal from "@lib/primitives/Modal.svelte";
+  import TaskMenu from "./TaskMenu.svelte";
+  import StatusSelect from "@features/tasks/components/StatusSelect.svelte";
+  import TaskAttachments from "@features/tasks/components/TaskAttachments.svelte";
+  import DateInput from "@lib/primitives/DateInput.svelte";
+  import TagField from "@lib/primitives/TagField.svelte";
+  import ParentField from "@features/tasks/components/ParentField.svelte";
+  import { normalizeTagList } from "@lib/utils/tags";
+  import { parentIdsOf } from "@lib/utils/parent_links";
+  import {
+    convertMemoContent,
+    isEmptyMemoContent,
+    isQuillDelta,
+    normalizeMemoFormat,
+  } from "@features/memos/utils/memo_utils";
+
   const application = getContext(TREEGRID_APPLICATION);
-  const relationError = application?.error ?? writable("");
-  import { active_row_path } from "@stores/ui";
+  const relationError = application.error;
+  const tree_data = application.tree;
+  /** id → グラフのノード（親子関係を含む）。 */
+  const records = application.records;
+  const defaultMemoFormat = "markdown";
+
+  export let titleOverride = "";
+  export let showOpenWindowAction = true;
+
   let relationTarget = "";
   let copyMode = "node";
   let relationAction = "";
@@ -34,61 +73,6 @@
       relationBusy = false;
     }
   }
-  const tree_data = application?.tree ?? legacy_tree_data;
-  const workspace_tasks_cache = application?.records ?? legacy_workspace_tasks_cache;
-
-  import {
-    getNode,
-    isChild,
-    isNodeEffectivelyArchived,
-    updateNodeDataById,
-  } from "@features/tasks/utils/tree_control";
-  import { uuidV4 } from "@lib/utils/uuid";
-  import {
-    tree_data as legacy_tree_data,
-    table_selected_id,
-    cancelPendingOperations,
-    selected_type,
-    selected_id,
-    workspace_store,
-    workspace_tasks_cache as legacy_workspace_tasks_cache,
-    tag_index,
-    theme,
-  } from "@stores";
-  import { selected_ids } from "@stores/ui";
-  import debounce from "lodash/debounce";
-  import { onDestroy } from "svelte";
-  import { get, writable } from "svelte/store";
-  import Memo from "@features/memos/components/Memo.svelte";
-
-  import IconButton from "@lib/primitives/IconButton.svelte";
-  import Button from "@lib/primitives/Button.svelte";
-  import Dialog from "@lib/primitives/Dialog.svelte";
-  import Modal from "@lib/primitives/Modal.svelte";
-  import TaskMenu from "./TaskMenu.svelte";
-  import { tick } from "svelte";
-
-  import StatusSelect from "@features/tasks/components/StatusSelect.svelte";
-  import TaskAttachments from "@features/tasks/components/TaskAttachments.svelte";
-  import DateInput from "@lib/primitives/DateInput.svelte";
-  import TagField from "@lib/primitives/TagField.svelte";
-  import ParentField from "@features/tasks/components/ParentField.svelte";
-  import { normalizeTagList } from "@lib/utils/tags";
-  import * as platform from "@lib/ipc/platform";
-  import { parentIdsOf } from "@lib/utils/parent_links";
-  import {
-    projectDataToWorkspaceTasks,
-    workspaceToProjectData,
-  } from "@features/workspace/utils/workspace_tree";
-  import {
-    convertMemoContent,
-    isEmptyMemoContent,
-    isQuillDelta,
-    normalizeMemoFormat,
-  } from "@features/memos/utils/memo_utils";
-
-  export let titleOverride = "";
-  export let showOpenWindowAction = true;
 
   $: extraSelectedCount = Math.max(0, $selected_ids.size - 1);
   $: is_selected = $table_selected_id ? true : false;
@@ -98,17 +82,12 @@
   $: cardTitle = titleOverride || name;
   $: nodeBody = node ? (node.data["body"] ?? "") : "";
   $: bodyFormat = normalizeMemoFormat(node?.data?.["format"], defaultMemoFormat);
-  // `[[…]]` の補完候補。統一後は「同じノードのメモ」ではなく、自分の子ノードが
-  // それにあたる（旧メモは子ノードになる）。
+  // `[[…]]` の補完候補。自分の子ノードの名前（旧メモは子ノードになる）。
   $: siblingNodeNames = (node?.children ?? [])
     .map((child) => child?.data?.name)
     .filter((childName) => Boolean(childName) && childName !== node?.data?.name);
   $: attachments = node ? (node.data["attachments"] ?? []) : [];
-  $: projectTree = $tree_data?.data ?? null;
   $: isArchived = isNodeEffectivelyArchived($table_selected_id, $tree_data?.data);
-  $: isWorkspaceProject = $selected_type === "WorkspaceProject";
-  $: workspaceProjectDir = isWorkspaceProject ? $workspace_store.activeProjectDir : null;
-  $: defaultMemoFormat = isWorkspaceProject ? "markdown" : "quill";
 
   $: isDark = $theme === "dark";
   const detailDateStyle =
@@ -145,7 +124,7 @@
     else await application.archive([target.id]);
   }
   $: detailMenuItems = [
-    ...(application && node
+    ...(node
       ? [
           {
             title: "配置を変更",
@@ -171,7 +150,7 @@
       : []),
     ...(showOpenWindowAction ? [{ title: "別Windowで開く", action: "window" }] : []),
     ...(activeTab === "body"
-      ? [{ title: "形式を変換", action: "format", disabled: isArchived || bodyLoading }]
+      ? [{ title: "形式を変換", action: "format", disabled: isArchived }]
       : []),
   ];
   function toggleDetailMenu(event) {
@@ -204,87 +183,23 @@
     blockedParent = result?.filtered ? id : "";
   }
 
+  // 編集した時点で開いていたノードを覚えておき、遅れて届いた保存が別の
+  // ノードへ書き込まれないようにする。
   const getEditContext = () => ({
     selectedType: $selected_type,
     selectedId: $selected_id,
     tableSelectedId: $table_selected_id,
-    activeProjectDir: $workspace_store.activeProjectDir,
   });
 
   const contextMatches = (context) =>
     context &&
     context.selectedType === $selected_type &&
     context.selectedId === $selected_id &&
-    context.tableSelectedId === $table_selected_id &&
-    context.activeProjectDir === $workspace_store.activeProjectDir;
+    context.tableSelectedId === $table_selected_id;
 
-  let bodyHydrationKey = "";
-  let bodyLoading = false;
-
-  /**
-   * 開いたノードの本文だけを読みに行く。
-   *
-   * プロジェクト読み出しは一覧目的なので本文を読まない（`bodyLoaded: false`）。
-   * 統一でノード数が大きく増えるため、ここを一括読みに戻すと開くたびに全文を
-   * 読むことになる。
-   */
-  async function hydrateWorkspaceNodeBody(taskId, editContext = getEditContext()) {
-    if (!editContext.activeProjectDir || !taskId) return;
-    const key = `${editContext.activeProjectDir}:${taskId}`;
-    if (bodyHydrationKey === key) return;
-
-    bodyHydrationKey = key;
-    bodyLoading = true;
-    try {
-      const result = await platform.wsReadTaskBody(editContext.activeProjectDir, taskId);
-      if (!contextMatches(editContext) || !result || result.error) return;
-
-      const liveTreeData = get(tree_data);
-      if (!liveTreeData?.data) return;
-      if (!getNode(taskId, liveTreeData.data)) return;
-
-      const loaded = { body: result.body, format: result.format, bodyLoaded: true };
-      const data = updateNodeDataById(liveTreeData.data, taskId, loaded);
-      if (data !== liveTreeData.data) {
-        tree_data.setFromSource({ ...liveTreeData, data });
-      }
-      workspace_tasks_cache.update((cache) => {
-        const cachedTask = cache[taskId];
-        if (!cachedTask) return cache;
-        return { ...cache, [taskId]: { ...cachedTask, ...loaded } };
-      });
-    } finally {
-      if (contextMatches(editContext)) {
-        bodyLoading = false;
-      }
-      if (bodyHydrationKey === key) {
-        bodyHydrationKey = "";
-      }
-    }
-  }
-
-  $: if (isWorkspaceProject && workspaceProjectDir && node?.id && node.data?.bodyLoaded === false) {
-    hydrateWorkspaceNodeBody(node.id);
-  }
-
-  const changeData = (node, key, value, editContext = getEditContext()) => {
-    if (application) {
-      if (node && contextMatches(editContext)) return application.update(node.id, { [key]: value });
-      return;
-    }
-    if (!contextMatches(editContext)) {
-      return;
-    }
-    if (!node) {
-      return;
-    }
-    const liveTreeData = get(tree_data);
-    if (!liveTreeData?.data) {
-      return;
-    }
-    const data = updateNodeDataById(liveTreeData.data, node.id, { [key]: value });
-    if (data !== liveTreeData.data) {
-      tree_data.set({ ...liveTreeData, data });
+  const changeData = (target, key, value, editContext = getEditContext()) => {
+    if (target && contextMatches(editContext)) {
+      return application.update(target.id, { [key]: value });
     }
   };
   const changeDataDebounce = debounce(changeData, 500);
@@ -298,12 +213,9 @@
     return getNode(editContext.tableSelectedId, liveTreeData.data);
   };
 
-  $: editContextKey = [
-    $selected_type ?? "",
-    $selected_id ?? "",
-    $table_selected_id ?? "",
-    $workspace_store.activeProjectDir ?? "",
-  ].join(":");
+  $: editContextKey = [$selected_type ?? "", $selected_id ?? "", $table_selected_id ?? ""].join(
+    ":"
+  );
 
   $: if (editContextKey !== previousEditContextKey) {
     changeDataDebounce.cancel();
@@ -315,13 +227,8 @@
     blockedParent = "";
   }
 
-  const unsubscribeCancelPending = cancelPendingOperations.subscribe(() => {
-    changeDataDebounce.cancel();
-  });
-
   onDestroy(() => {
     changeDataDebounce.cancel();
-    unsubscribeCancelPending();
   });
   $: allTags = [...$tag_index.keys()].sort();
   $: taskTags = normalizeTagList(node?.data?.tags);
@@ -339,28 +246,16 @@
   const assetSaver = (id) => (file) => application.saveAsset(id, file);
   const assetResolver = (id) => (path) => application.resolveAsset(id, path);
   // Capture the identity before an editor can finish an asynchronous save.
-  const bodySaveCallback = (target, editContext) => (editedContent) => {
+  const bodySaveCallback = (target) => (editedContent) => {
     if (!target) return false;
-    const currentTarget = application
-      ? get(application.records)[target.id]
-      : getNode(target.id, get(tree_data)?.data)?.data;
+    const currentTarget = get(records)[target.id];
     const targetFormat = normalizeMemoFormat(
       currentTarget?.format ?? target.data.format,
       defaultMemoFormat
     );
     const sourceFormat = isQuillDelta(editedContent) ? "quill" : "markdown";
     const body = convertMemoContent(editedContent, sourceFormat, targetFormat);
-    if (application) return application.update(target.id, { body }).then(Boolean);
-    if (
-      editContext.selectedType !== $selected_type ||
-      editContext.selectedId !== $selected_id ||
-      editContext.activeProjectDir !== $workspace_store.activeProjectDir
-    )
-      return false;
-    const current = get(tree_data);
-    if (!current?.data) return false;
-    tree_data.set({ ...current, data: updateNodeDataById(current.data, target.id, { body }) });
-    return true;
+    return application.update(target.id, { body }).then(Boolean);
   };
 
   let show_format_confirm = false;
@@ -398,86 +293,39 @@
 
   /** 本文の形式を切り替える。中身も合わせて変換する。 */
   const applyBodyFormat = (nextFormat) => {
-    if (application) {
-      const current = getLiveNode();
-      if (!current) return false;
-      void application.update(current.id, {
-        body: convertMemoContent(
-          current.data.body,
-          current.data.format || defaultMemoFormat,
-          nextFormat
-        ),
-        format: nextFormat,
-      });
-      return true;
-    }
-    const editContext = getEditContext();
-    const liveNode = getLiveNode(editContext);
-    if (!liveNode) return false;
-    const currentFormat = normalizeMemoFormat(liveNode.data.format, defaultMemoFormat);
-    if (currentFormat === nextFormat) return false;
-    changeData(
-      liveNode,
-      "body",
-      convertMemoContent(liveNode.data.body, currentFormat, nextFormat),
-      editContext
-    );
-    changeData(liveNode, "format", nextFormat, editContext);
+    const current = getLiveNode();
+    if (!current) return false;
+    void application.update(current.id, {
+      body: convertMemoContent(
+        current.data.body,
+        current.data.format || defaultMemoFormat,
+        nextFormat
+      ),
+      format: nextFormat,
+    });
     return true;
   };
 
-  const saveAttachments = (nextAttachments) => {
-    const editContext = getEditContext();
-    const liveNode = getLiveNode(editContext);
-    if (!liveNode) return false;
-    changeData(liveNode, "attachments", nextAttachments, editContext);
-    return true;
-  };
-  /**
-   * 親の付け外し。
-   *
-   * Graphではfacadeからlink/detachをdispatchする。互換モデルを保存し直さない。
-   * 従来プロジェクトの経路だけは既存キャッシュとツリーの変換を使う。
-   */
-  $: isProjectRoot = Boolean(
-    node &&
-    (application
-      ? !$workspace_tasks_cache[node.id]?.parents.length
-      : node.id === $tree_data?.data?.id)
-  );
-  $: currentParentIds = parentIdsOf($workspace_tasks_cache[node?.id]?.parents);
-
-  /** 追加する親の下での並び順。その親の既存の子の末尾に置く。 */
-  function nextOrderUnder(tasks, parentId) {
-    let max = -1;
-    for (const task of Object.values(tasks ?? {})) {
-      for (const link of task.parents ?? []) {
-        if (link.id === parentId && typeof link.order === "number") {
-          max = Math.max(max, link.order);
-        }
-      }
-    }
-    return max + 1;
-  }
+  $: isProjectRoot = Boolean(node && !$records[node.id]?.parents.length);
+  $: currentParentIds = parentIdsOf($records[node?.id]?.parents);
 
   /** id → 名前。チップと候補の表示に使う。 */
   $: nodeNameById = Object.fromEntries(
-    Object.values($workspace_tasks_cache ?? {}).map((task) => [task.id, task.name])
+    Object.values($records ?? {}).map((record) => [record.id, record.name])
   );
 
   /**
-   * 親の候補。Graphでは自分自身だけを除外し、子孫へのlinkも許可する。
-   * 既に親になっているものは ParentField 側で外れる。
+   * 親の候補。自分自身だけを除外し、子孫へのリンクも許可する（循環は
+   * グラフが保存できる）。既に親になっているものは ParentField 側で外れる。
    */
   $: parentCandidates =
     node && $tree_data?.data
-      ? Object.values($workspace_tasks_cache ?? {})
-          .filter((task) => task.id !== node.id)
-          .filter((task) => application || !isChild(task.id, node.id, $tree_data.data))
-          .map((task) => ({
-            id: task.id,
-            name: task.name,
-            path: nodePathById[task.id] ?? "",
+      ? Object.values($records ?? {})
+          .filter((record) => record.id !== node.id)
+          .map((record) => ({
+            id: record.id,
+            name: record.name,
+            path: nodePathById[record.id] ?? "",
           }))
       : [];
 
@@ -505,38 +353,12 @@
   }
 
   function saveParents(nextParentIds) {
-    if (application) return application.parents(node.id, nextParentIds);
-    if (!node || !isWorkspaceProject || !workspaceProjectDir) return;
-    const normalized = (Array.isArray(nextParentIds) ? nextParentIds : []).filter(
-      (id) => typeof id === "string" && id
-    );
-    // 孤児は作らない。空になる操作は受け付けない。
-    if (normalized.length === 0) return;
-
-    const cached = $workspace_tasks_cache[node.id];
-    if (!cached) return;
-
-    // 並び順は辺の属性。残る親の順序はそのまま、増えた親は末尾に置く。
-    const existingLinks = new Map((cached.parents ?? []).map((link) => [link.id, link]));
-    const nextParents = normalized.map(
-      (id) => existingLinks.get(id) ?? { id, order: nextOrderUnder($workspace_tasks_cache, id) }
-    );
-    const nextTask = { ...cached, parents: nextParents };
-    const nextTasks = { ...$workspace_tasks_cache, [node.id]: nextTask };
-    workspace_tasks_cache.set(nextTasks);
-
-    const rootId = $tree_data?.data?.id;
-    if (!rootId) return;
-    tree_data.set(workspaceToProjectData(nextTasks, rootId));
+    return application.parents(node.id, nextParentIds);
   }
 
   const changeTaskField = (key, value, debounceChange = false) => {
-    if (!node) {
-      return;
-    }
-
+    if (!node) return;
     const editContext = getEditContext();
-    if (!application) node.data[key] = value;
     if (debounceChange) {
       changeDataDebounce(node, key, value, editContext);
     } else {
@@ -553,28 +375,7 @@
   };
 
   function openTaskDetailInWindow() {
-    if (application && node) {
-      application.openDetail(node.id, name);
-      return;
-    }
-    if (!node || !$selected_id || !$table_selected_id) return;
-
-    if (isWorkspaceProject && workspaceProjectDir && $tree_data?.data) {
-      const tasks = projectDataToWorkspaceTasks($tree_data, $workspace_tasks_cache);
-      platform.wsBroadcastProjectSnapshot(
-        workspaceProjectDir,
-        Object.fromEntries(tasks.map((task) => [task.id, task]))
-      );
-      tree_data.flushPendingPersist();
-    }
-
-    platform.openTaskDetailWindow({
-      projectId: $selected_id,
-      taskId: node.id,
-      taskName: name,
-      selectedType: isWorkspaceProject ? "WorkspaceProject" : "Projects",
-      projectDir: isWorkspaceProject ? ($workspace_store.activeProjectDir ?? undefined) : undefined,
-    });
+    if (node) application.openDetail(node.id, name);
   }
 </script>
 
@@ -779,17 +580,14 @@
                 </div>{/if}
             </div>
           </div>
-          {#if isWorkspaceProject && !isProjectRoot}
+          {#if !isProjectRoot}
             <section class="parent-context" aria-label="所属する場所">
               <h3>所属する場所</h3>
               {#each currentParentIds as parentId}
                 <div class="parent-location">
-                  {#if application}<button
-                      class="parent-link"
-                      on:click={() => visitParent(parentId)}
-                      >{nodeNameById[parentId] || parentId}</button
-                    >
-                  {:else}<span class="parent-name">{nodeNameById[parentId] || parentId}</span>{/if}
+                  <button class="parent-link" on:click={() => visitParent(parentId)}
+                    >{nodeNameById[parentId] || parentId}</button
+                  >
                   <small class="parent-path" title={parentId}
                     >{nodePathById[parentId] || "Workspace内の所属先"}</small
                   >
@@ -804,7 +602,7 @@
                     ariaLabel={(nodeNameById[parentId] || parentId) + "の所属操作"}
                     disabled={isArchived ||
                       currentParentIds.length < 2 ||
-                      application?.isProtected(node.id)}
+                      application.isProtected(node.id)}
                     on:click={() => {
                       relationTarget = parentId;
                       parentEditing = true;
@@ -842,7 +640,7 @@
                 normalColor="var(--fg-default)"
                 activeColor="var(--accent-fg)"
                 content="所属先を追加"
-                disabled={isArchived || application?.isProtected(node.id)}
+                disabled={isArchived || application.isProtected(node.id)}
                 on:click={() => {
                   parentEditing = !parentEditing;
                   relationTarget = "";
@@ -853,7 +651,7 @@
                   parentIds={currentParentIds}
                   candidates={parentCandidates}
                   nameById={nodeNameById}
-                  disabled={isArchived || application?.isProtected(node.id)}
+                  disabled={isArchived || application.isProtected(node.id)}
                   on:change={(event) => saveParents(event.detail.parentIds)}
                 />
               {/if}
@@ -869,14 +667,7 @@
         aria-labelledby="detail-tab-attachments"
         hidden={activeTab !== "attachments"}
       >
-        <TaskAttachments
-          {attachments}
-          readOnly={isArchived}
-          {isWorkspaceProject}
-          {workspaceProjectDir}
-          taskId={$table_selected_id ?? null}
-          onAttachmentsChange={saveAttachments}
-        />
+        <TaskAttachments {attachments} readOnly={isArchived} taskId={$table_selected_id ?? null} />
       </div>
 
       <div
@@ -894,7 +685,7 @@
                 variant="text"
                 normalColor="var(--fg-default)"
                 activeColor="var(--accent-fg)"
-                disabled={isArchived || bodyLoading}
+                disabled={isArchived}
                 on:click={toggleBodyEditing}
                 content={editingBody ? "プレビュー" : "編集"}
               />
@@ -910,20 +701,15 @@
                 <Memo
                   bind:this={memoEditor}
                   freezeTarget={true}
-                  draftKey={`${$workspace_store.activeWorkspacePath || workspaceProjectDir || $selected_id}:${node.id}`}
-                  saveImage={application ? assetSaver(node.id) : undefined}
-                  resolveAsset={application ? assetResolver(node.id) : undefined}
-                  saveMemo={bodySaveCallback(node, getEditContext())}
+                  draftKey={`${application.workspacePath}:${node.id}`}
+                  saveImage={assetSaver(node.id)}
+                  resolveAsset={assetResolver(node.id)}
+                  saveMemo={bodySaveCallback(node)}
                   content={nodeBody}
-                  readOnly={isArchived ||
-                    bodyLoading ||
-                    (bodyFormat !== "markdown" && !editingBody)}
+                  readOnly={isArchived || (bodyFormat !== "markdown" && !editingBody)}
                   memoTitles={siblingNodeNames}
                   currentMemoTitle={node?.data?.name ?? ""}
-                  {isWorkspaceProject}
                   format={bodyFormat}
-                  {workspaceProjectDir}
-                  taskId={$table_selected_id ?? null}
                 />
               {/key}
             {/if}
@@ -1133,10 +919,6 @@
   /* 名前は 1 行目の左、チップはその隣、メニューは 1 行目の右端、
      経路は 2 行目に回す。 */
   .parent-location :global(.parent-link),
-  .parent-location .parent-name {
-    grid-column: 1;
-    grid-row: 1;
-  }
   .parent-location .parent-chip {
     grid-column: 2;
     grid-row: 1;

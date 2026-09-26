@@ -6,6 +6,7 @@ import { workspace_store } from "@features/workspace/stores/workspace";
 import { canGoBack, canGoForward, navigation_history } from "@stores/navigation_history";
 import { INBOX_SELECTED_ID } from "@features/inbox/stores/inbox";
 import { AGENDA_SELECTED_ID } from "@features/agenda/stores/agenda";
+import type { SelectedType } from "@app-types/app";
 
 /**
  * 履歴記録は selected_type / selected_id への subscribe を microtask で
@@ -16,18 +17,11 @@ async function flushMicrotask() {
   await Promise.resolve();
 }
 
-async function navigateTo(type: "Projects" | "WorkspaceProject" | "Info" | "Inbox", id: string) {
-  selected_type.set(type);
+// 履歴はページの種類を区別できることだけを見る。実アプリの種類は
+// "WorkspaceProject" だけだが、区別の検証には別の値も使う。
+async function navigateTo(type: string, id: string) {
+  selected_type.set(type as SelectedType);
   selected_id.set(id);
-  await flushMicrotask();
-}
-
-async function navigateToWorkspaceProject(rootId: string, projectDir: string) {
-  // MenuList.selectWorkspaceProject() と同じ順序：先に activeProjectDir、
-  // 続けて selected_type / selected_id を更新する。
-  workspace_store.setActiveProject(projectDir);
-  selected_type.set("WorkspaceProject");
-  selected_id.set(rootId);
   await flushMicrotask();
 }
 
@@ -37,12 +31,7 @@ describe("navigation_history store", () => {
     selected_type.set(undefined);
     selected_id.set(undefined);
     table_selected_id.set(undefined);
-    workspace_store.set({
-      workspaces: [],
-      activeWorkspacePath: null,
-      activeProjectDir: null,
-      projects: [],
-    });
+    workspace_store.set({ workspaces: [], activeWorkspacePath: null });
     navigation_history.init();
   });
 
@@ -135,7 +124,7 @@ describe("navigation_history store", () => {
   });
 
   test("selected_type だけ変わって id 据え置きの遷移も 1 エントリで済む", async () => {
-    selected_type.set("Projects");
+    selected_type.set("Other" as SelectedType);
     selected_id.set("shared-id");
     await flushMicrotask();
     selected_type.set("WorkspaceProject");
@@ -145,55 +134,18 @@ describe("navigation_history store", () => {
     const state = get(navigation_history);
     expect(state.entries).toEqual([
       {
-        selectedType: "Projects",
+        selectedType: "Other",
         selectedId: "shared-id",
-        projectDir: null,
         workspacePath: null,
         tableSelectedId: undefined,
       },
       {
         selectedType: "WorkspaceProject",
         selectedId: "shared-id",
-        projectDir: null,
         workspacePath: null,
         tableSelectedId: undefined,
       },
     ]);
-  });
-
-  test("WorkspaceProject の back は activeProjectDir も復元する", async () => {
-    // ワークスペースプロジェクト A → B と移って戻ったとき、
-    // workspace_store.activeProjectDir も A に巻き戻らないと
-    // loadWorkspaceData が B のタスクを A の rootId で読んでしまい
-    // unknown ノードが出る。
-    await navigateToWorkspaceProject("root-A", "/ws/projectA");
-    await navigateToWorkspaceProject("root-B", "/ws/projectB");
-
-    expect(get(workspace_store).activeProjectDir).toBe("/ws/projectB");
-
-    navigation_history.back();
-    await flushMicrotask();
-
-    expect(get(selected_id)).toBe("root-A");
-    expect(get(workspace_store).activeProjectDir).toBe("/ws/projectA");
-
-    navigation_history.forward();
-    await flushMicrotask();
-
-    expect(get(selected_id)).toBe("root-B");
-    expect(get(workspace_store).activeProjectDir).toBe("/ws/projectB");
-  });
-
-  test("非 WorkspaceProject の back は activeProjectDir に触らない", async () => {
-    workspace_store.setActiveProject("/ws/sticky");
-    await navigateTo("Projects", "A");
-    await navigateTo("Projects", "B");
-
-    navigation_history.back();
-    await flushMicrotask();
-
-    // Projects 間の遷移なので activeProjectDir は変えない。
-    expect(get(workspace_store).activeProjectDir).toBe("/ws/sticky");
   });
 
   test("type と id の同時セットは中間状態を履歴に残さない", async () => {
@@ -365,15 +317,15 @@ describe("navigation_history store", () => {
     ]);
   });
 
-  test("workspace_store の non-navigation 変更（projects 一覧更新など）は履歴を伸ばさない", async () => {
+  test("workspace_store の non-navigation 変更（登録一覧の更新など）は履歴を伸ばさない", async () => {
     workspace_store.update((s) => ({ ...s, activeWorkspacePath: "/ws/x" }));
     await navigateTo("Projects", "A");
     expect(get(navigation_history).entries).toHaveLength(1);
 
-    // projects 一覧だけ更新する（async setActive の load 完了等の挙動を模す）。
+    // 登録一覧だけ更新する。
     workspace_store.update((s) => ({
       ...s,
-      projects: [{ name: "p", rootId: "r", dirName: "d", projectDir: "/ws/x/p" }],
+      workspaces: [{ path: "/ws/x", label: "x" }],
     }));
     await flushMicrotask();
 

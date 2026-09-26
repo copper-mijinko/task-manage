@@ -1,25 +1,12 @@
-﻿<script>
-  import { getContext } from "svelte";
+<script>
+  import { getContext, onDestroy, onMount } from "svelte";
   import { TREEGRID_APPLICATION } from "@features/workspace/application/treegrid";
-  const application = getContext(TREEGRID_APPLICATION);
-  const closed_row_paths = application?.closed ?? legacy_closed_row_paths;
-  const tree_data = application?.tree ?? legacy_tree_data;
-  const filtered_data = application?.filtered ?? legacy_filtered_data;
+  import { ganttScrollTop, ganttScale, theme } from "@stores";
+  import { flattenVisibleTree, buildInheritedDueDateMap } from "@features/tasks/utils/tree_control";
 
-  import { onDestroy, onMount } from "svelte";
-  import {
-    filtered_data as legacy_filtered_data,
-    closed_row_paths as legacy_closed_row_paths,
-    ganttScrollTop,
-    ganttScale,
-    theme,
-    tree_data as legacy_tree_data,
-  } from "@stores";
-  import {
-    flattenVisibleTree,
-    buildInheritedDueDateMap,
-    updateNodeDataById,
-  } from "@features/tasks/utils/tree_control";
+  const application = getContext(TREEGRID_APPLICATION);
+  const closed_row_paths = application.closed;
+  const filtered_data = application.filtered;
 
   let bodyEl;
   let headerScrollLeft = 0;
@@ -466,15 +453,7 @@
   }
 
   function commitTaskDates(id, patch) {
-    if (application) return application.update(id, patch);
-    if (!$tree_data?.data) {
-      return;
-    }
-
-    const data = updateNodeDataById($tree_data.data, id, patch);
-    if (data !== $tree_data.data) {
-      $tree_data = { ...$tree_data, data };
-    }
+    return application.update(id, patch);
   }
 
   function dateFromClientX(clientX) {

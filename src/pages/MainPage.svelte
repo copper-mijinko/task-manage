@@ -3,8 +3,8 @@
   import { dismissAllTooltips } from "@lib/actions";
   import { TREEGRID_APPLICATION } from "@features/workspace/application/treegrid";
   const application = getContext(TREEGRID_APPLICATION);
-  const closed_row_paths = application?.closed ?? legacy_closed_row_paths;
-  const tree_data = application?.tree ?? legacy_tree_data;
+  const closed_row_paths = application.closed;
+  const tree_data = application.tree;
 
   import Pane from "@lib/layouts/Pane.svelte";
   import SplitPanes from "@lib/layouts/SplitPanes.svelte";
@@ -19,15 +19,7 @@
   import ActiveFilterBar from "@features/search/components/ActiveFilterBar.svelte";
   import TaskMenu from "@features/tasks/components/TaskMenu.svelte";
   import ArchiveScopeDialog from "@features/tasks/components/ArchiveScopeDialog.svelte";
-  import { tick } from "svelte";
-  import {
-    table_selected_id,
-    tree_data as legacy_tree_data,
-    closed_row_paths as legacy_closed_row_paths,
-    active_row_path,
-    ganttVisible,
-    selected_type,
-  } from "@stores";
+  import { table_selected_id, active_row_path, ganttVisible } from "@stores";
   import {
     convertMemoContent,
     isEmptyMemoContent,
@@ -35,49 +27,19 @@
   } from "@features/memos/utils/memo_utils";
   import {
     getNode,
-    addNode,
-    rmNode,
     getParent,
-    moveNodeUp,
-    moveNodeDown,
-    indentNode,
-    outdentNode,
-    bulkRemoveNodes,
-    reattachOrphans,
-    bulkMoveUp,
-    bulkMoveDown,
-    bulkIndent,
-    bulkOutdent,
     areAllSiblings,
     isContiguousSiblingBlock,
     isNodeEffectivelyArchived,
-    archiveNode,
-    restoreNode,
-    bulkArchiveNodes,
-    bulkRestoreNodes,
     canIndentNode,
     getNodeByPath,
     parentPathOf,
-    pathLeafId,
   } from "@features/tasks/utils/tree_control";
-  import { getDefaultNode } from "@features/tasks/utils/tree_control";
-  import {
-    undoHistory,
-    redoHistory,
-    canUndoLegacy,
-    canRedoLegacy,
-  } from "@features/tasks/stores/tree";
   import {
     can_undo_graph as canUndoGraph,
     can_redo_graph as canRedoGraph,
   } from "@features/workspace/stores/graph";
-  import {
-    selected_ids,
-    clearSelection,
-    selectOnly,
-    show_archived,
-    pending_rename_id,
-  } from "@stores/ui";
+  import { selected_ids, clearSelection, show_archived } from "@stores/ui";
 
   // ページ内検索はstoresから共有
 
@@ -110,61 +72,21 @@
   let bulk_confirm_count = 0;
 
   const callback_confirm = () => {
-    if (application) {
-      const archives = is_bulk_confirm
-        ? archive_target_ids
-        : confirm_mode === "archive"
-          ? [$table_selected_id]
-          : [];
-      const removes = is_bulk_confirm
-        ? permanent_target_ids
-        : confirm_mode === "permanent"
-          ? [$table_selected_id]
-          : [];
-      void application.dispatch([
-        ...archives.map((nodeId) => ({ type: "update-node", nodeId, changes: { archived: true } })),
-        ...removes.map((nodeId) => ({ type: "delete-node", nodeId })),
-      ]);
-      clearSelection();
-      return;
-    }
-    if (!$tree_data?.data) return;
-    if (is_bulk_confirm) {
-      let data = $tree_data.data;
-      if (archive_target_ids.length > 0) {
-        data = bulkArchiveNodes(data, new Set(archive_target_ids));
-      }
-      if (permanent_target_ids.length > 0) {
-        // 削除で最後の親を失うノードを拾うため、消す前にノードを掴んでおく。
-        const removedNodes = permanent_target_ids
-          .map((id) => getNode(id, data))
-          .filter((node) => node);
-        const removed = bulkRemoveNodes(data, new Set(permanent_target_ids));
-        if (removed) data = removed;
-        reattachOrphans(data, removedNodes);
-      }
-      $tree_data = { ...$tree_data, data };
-      clearSelection();
-      is_bulk_confirm = false;
-      bulk_confirm_count = 0;
-      confirm_mode = "archive";
-      archive_target_ids = [];
-      permanent_target_ids = [];
-      return;
-    }
-    if (!$table_selected_id) return;
-    if (confirm_mode === "permanent") {
-      const removedNode = getNode($table_selected_id, $tree_data.data);
-      $tree_data.data = rmNode($table_selected_id, $tree_data.data);
-      // 消したノードの子が他に親を持たないなら、ルート直下へ付け直す（孤児を作らない）。
-      if (removedNode) reattachOrphans($tree_data.data, [removedNode]);
-      $tree_data = { ...$tree_data, data: $tree_data.data };
-    } else {
-      $tree_data.data = archiveNode($table_selected_id, $tree_data.data);
-      $tree_data = { ...$tree_data, data: $tree_data.data };
-    }
+    const archives = is_bulk_confirm
+      ? archive_target_ids
+      : confirm_mode === "archive"
+        ? [$table_selected_id]
+        : [];
+    const removes = is_bulk_confirm
+      ? permanent_target_ids
+      : confirm_mode === "permanent"
+        ? [$table_selected_id]
+        : [];
+    void application.dispatch([
+      ...archives.map((nodeId) => ({ type: "update-node", nodeId, changes: { archived: true } })),
+      ...removes.map((nodeId) => ({ type: "delete-node", nodeId })),
+    ]);
     clearSelection();
-    confirm_mode = "archive";
   };
 
   $: confirmDialogHeader = (() => {
@@ -199,12 +121,12 @@
         lines.push(`${permanent_target_ids.length} 件を完全削除`);
       const body = lines.join(" / ");
       if (permanent_target_ids.length > 0) {
-        return `${body} します。\n${application ? "Workspaceの履歴に残っている間は「元に戻す」で復元できます。" : "完全削除分は取り消せません。"}`;
+        return `${body} します。\nWorkspaceの履歴に残っている間は「元に戻す」で復元できます。`;
       }
       return `${body} します。\n後でアーカイブ表示から復元できます。`;
     }
     if (confirm_mode === "permanent") {
-      return `"${name_confirm}" を完全に削除しますか？\n${application ? "Workspaceの履歴に残っている間は「元に戻す」で復元できます。" : "この操作は取り消せません。"}`;
+      return `"${name_confirm}" を完全に削除しますか？\nWorkspaceの履歴に残っている間は「元に戻す」で復元できます。`;
     }
     return `"${name_confirm}" をアーカイブしますか？\n後でアーカイブ表示から復元できます。`;
   })();
@@ -335,9 +257,8 @@
   let bulkMemoPhase = "ready";
   let bulkMemoItems = [];
 
-  $: defaultMemoFormat = $selected_type === "WorkspaceProject" ? "markdown" : "quill";
+  const defaultMemoFormat = "markdown";
   $: projectName = $tree_data?.data?.data?.name || "Task Tree";
-  $: projectStorageLabel = $selected_type === "WorkspaceProject" ? "Workspace" : "InApp";
   $: bulkMemoTargetLabel = getMemoFormatLabel(bulkMemoTargetFormat);
   $: successfulBulkMemoItems = bulkMemoItems.filter((item) => item.status === "ok");
   $: failedBulkMemoItems = bulkMemoItems.filter((item) => item.status === "error");
@@ -408,34 +329,6 @@
     );
   }
 
-  function convertNodeMemosToFormatWithResults(node, targetFormat, fallbackFormat, resultMap) {
-    const currentFormat = normalizeMemoFormat(node.data.format, fallbackFormat);
-    let data = node.data;
-
-    if (currentFormat !== targetFormat && !isEmptyMemoContent(node.data.body)) {
-      const result = resultMap.get(node.id);
-      try {
-        const body = convertMemoContent(node.data.body, currentFormat, targetFormat);
-        if (result) result.status = "ok";
-        data = { ...node.data, format: targetFormat, body };
-      } catch (error) {
-        if (result) {
-          result.status = "error";
-          result.error = error instanceof Error ? error.message : String(error);
-        }
-        data = { ...node.data, format: currentFormat };
-      }
-    }
-
-    return {
-      ...node,
-      data,
-      children: (node.children ?? []).map((child) =>
-        convertNodeMemosToFormatWithResults(child, targetFormat, fallbackFormat, resultMap)
-      ),
-    };
-  }
-
   function requestBulkMemoFormat(targetFormat) {
     bulkMemoTargetFormat = targetFormat;
     bulkMemoItems = collectProjectMemosForFormat($tree_data?.data, targetFormat, defaultMemoFormat);
@@ -450,115 +343,43 @@
   }
 
   async function applyBulkMemoFormat() {
-    if (application) {
-      bulkMemoPhase = "running";
-      try {
-        const commands = bulkMemoItems.map((item) => {
-          const node = getNode(item.id, $tree_data.data);
-          return {
-            type: "update-node",
-            nodeId: item.id,
-            changes: {
-              body: convertMemoContent(
-                node.data.body,
-                node.data.format || defaultMemoFormat,
-                bulkMemoTargetFormat
-              ),
-              format: bulkMemoTargetFormat,
-            },
-          };
-        });
-        const result = await application.dispatch(commands);
-        bulkMemoItems = bulkMemoItems.map((item) => ({
-          ...item,
-          status: result ? "ok" : "error",
-        }));
-      } catch (error) {
-        bulkMemoItems = bulkMemoItems.map((item) => ({
-          ...item,
-          status: "error",
-          error: error instanceof Error ? error.message : String(error),
-        }));
-      } finally {
-        bulkMemoPhase = "done";
-      }
-      return;
-    }
-    if (!$tree_data?.data) return;
     bulkMemoPhase = "running";
-    const results = bulkMemoItems.map((item) => ({ ...item, status: "pending", error: "" }));
-    const resultMap = new Map(results.map((item) => [item.id, item]));
-    $tree_data = {
-      ...$tree_data,
-      data: convertNodeMemosToFormatWithResults(
-        $tree_data.data,
-        bulkMemoTargetFormat,
-        defaultMemoFormat,
-        resultMap
-      ),
-    };
-    results.forEach((item) => {
-      if (item.status === "pending") {
-        item.status = "error";
-        item.error = "Target memo was not found.";
-      }
-    });
-    bulkMemoItems = results;
-    bulkMemoPhase = "done";
+    try {
+      const commands = bulkMemoItems.map((item) => {
+        const node = getNode(item.id, $tree_data.data);
+        return {
+          type: "update-node",
+          nodeId: item.id,
+          changes: {
+            body: convertMemoContent(
+              node.data.body,
+              node.data.format || defaultMemoFormat,
+              bulkMemoTargetFormat
+            ),
+            format: bulkMemoTargetFormat,
+          },
+        };
+      });
+      const result = await application.dispatch(commands);
+      bulkMemoItems = bulkMemoItems.map((item) => ({
+        ...item,
+        status: result ? "ok" : "error",
+      }));
+    } catch (error) {
+      bulkMemoItems = bulkMemoItems.map((item) => ({
+        ...item,
+        status: "error",
+        error: error instanceof Error ? error.message : String(error),
+      }));
+    } finally {
+      bulkMemoPhase = "done";
+    }
   }
 
   // Add
-  export async function handleAdd(e, action) {
-    if (application) {
-      e.stopPropagation();
-      return application.add($table_selected_id, action, $active_row_path);
-    }
+  export function handleAdd(e, action) {
     e.stopPropagation();
-
-    if (!$tree_data?.data) {
-      return;
-    }
-
-    const new_node = getDefaultNode();
-    const rootId = $tree_data.data.id;
-    // The project root cannot have siblings. Treat the primary add action as
-    // "add a top-level task" here so the most prominent add button always works.
-    const selectedId = $table_selected_id ?? rootId;
-    const addAction = selectedId === rootId ? "append" : action;
-
-    if (selectedId) {
-      // 親ノードのIDを特定
-      let parentId;
-      if (addAction === "append") {
-        // appendの場合は選択されているノードが親
-        parentId = selectedId;
-      } else {
-        // insert_afterの場合は選択されているノードの親
-        const parentNode = parentForRow(selectedId);
-        if (parentNode) {
-          parentId = parentNode.id;
-        }
-      }
-
-      // ノードを追加。多親ノードは行ごとに親が違うので、いま見ている行の経路で足す。
-      const rowPath =
-        pathLeafId($active_row_path ?? "") === selectedId ? $active_row_path : undefined;
-      $tree_data.data = addNode(new_node, selectedId, $tree_data.data, addAction, rowPath);
-
-      // 親ノードが折りたたまれている場合は展開する
-      if (parentId) closed_row_paths.expandNodeEverywhere(parentId);
-
-      // 新しいノードを選択状態にしてDOMの更新を待つ
-      selectOnly(new_node.id);
-      // 作った行をそのまま名前入力にする（graph 経路の add と同じ挙動）。
-      pending_rename_id.set(new_node.id);
-      await tick();
-
-      const newRow = document.getElementById(new_node.id);
-      if (newRow) {
-        newRow.scrollIntoView({ behavior: "smooth", block: "nearest" });
-      }
-    }
+    return application.add($table_selected_id, action, $active_row_path);
   }
 
   // Remove — toolbar の削除ボタン。
@@ -602,7 +423,7 @@
       if (node) {
         // 多親ノードをアーカイブするときは、その行（辺）だけか、ノードごとかを
         // 先に聞く。ツリーの行メニューと同じ選択肢を出す。
-        if (application && mode === "archive") {
+        if (mode === "archive") {
           const state = application.archiveStateOf($table_selected_id, $active_row_path);
           if (state.shared && !state.node && !state.edge) {
             archive_scope_target = {
@@ -627,30 +448,8 @@
 
   // Restore — archived 行を元に戻す。確認ダイアログは挟まない（取り消し可能なため）。
   export function handleRestore(e) {
-    if (application) {
-      e.stopPropagation();
-      return application.archive(undefined, false);
-    }
     e.stopPropagation();
-    if (!$tree_data?.data) return;
-    if (isMultiSelect) {
-      const rootId = $tree_data.data.id;
-      const targets = new Set(Array.from($selected_ids).filter((id) => id !== rootId));
-      if (targets.size === 0) return;
-      const data = bulkRestoreNodes($tree_data.data, targets);
-      $tree_data = { ...$tree_data, data };
-      return;
-    }
-    if ($table_selected_id) {
-      const node = getNode($table_selected_id, $tree_data.data);
-      if (!node || node.id === $tree_data.data.id) return;
-      $tree_data.data = restoreNode(
-        $table_selected_id,
-        $tree_data.data,
-        pathLeafId($active_row_path ?? "") === $table_selected_id ? $active_row_path : undefined
-      );
-      $tree_data = { ...$tree_data, data: $tree_data.data };
-    }
+    return application.archive(undefined, false);
   }
 
   // 選択中の anchor が archived かどうか（toolbar のアイコン切替に使う）
@@ -660,7 +459,7 @@
   })();
   $: anchorIsRoot = Boolean(
     !isMultiSelect &&
-    (application?.isProtected($table_selected_id) ||
+    (application.isProtected($table_selected_id) ||
       ($tree_data?.data && $table_selected_id === $tree_data.data.id))
   );
   /**
@@ -678,10 +477,10 @@
    * graph 経路の履歴は main プロセスの `graph-v1.json` にあり、これまで
    * レンダラーには渡っていなかったため、履歴が空でもボタンが有効なままで、
    * 押しても何も起きなかった。read / execute / history の戻り値に段数を
-   * 添えるようにしたので、それを見る。legacy 経路は自前のスタックを見る。
+   * 添えるようにしたので、それを見る。
    */
-  $: undoAvailable = application ? $canUndoGraph : $canUndoLegacy;
-  $: redoAvailable = application ? $canRedoGraph : $canRedoLegacy;
+  $: undoAvailable = $canUndoGraph;
+  $: redoAvailable = $canRedoGraph;
 
   $: hasRemoveTarget = isMultiSelect || Boolean($table_selected_id);
   $: removeDisabled = anchorIsRoot || !hasRemoveTarget;
@@ -694,88 +493,16 @@
     return anchorIsArchived;
   })();
 
-  // Move / indent helpers — tree_control functions mutate the tree in-place
-  // and return the SAME reference, so we must force Svelte reactivity by
-  // reassigning the store with a shallow-cloned wrapper.
-  function withSelectedNode(updater) {
-    if (!$table_selected_id || !$tree_data?.data) return;
-    const target = $table_selected_id;
-    // 多親ノードは同じ id の行が複数ある。ツールバーとショートカットも、
-    // ツリーでいま操作している行（辺）に対して動かす。
-    const rowPath = pathLeafId($active_row_path ?? "") === target ? $active_row_path : undefined;
-    updater(target, $tree_data.data, rowPath);
-    $tree_data = { ...$tree_data, data: $tree_data.data };
-  }
-  // Bulk dispatcher for the move/indent/outdent toolbar buttons.
-  // When multiple rows are selected, route to the bulk helper; otherwise
-  // fall back to the single-row helper acting on $table_selected_id.
-  function runBulkOrSingle({ bulk, single, gate }) {
-    if (!$tree_data?.data) return;
-    if (isMultiSelect) {
-      if (gate && !gate()) return;
-      bulk($selected_ids, $tree_data.data, bulkParentPath);
-      $tree_data = { ...$tree_data, data: $tree_data.data };
-      return;
-    }
-    withSelectedNode(single);
-  }
-  const handleMoveUp = (e) => {
-    if (application) {
-      e?.stopPropagation();
-      return application.move("up");
-    }
+  // ツールバーとメニューの移動。複数選択なら選択全体を、いま操作している行の
+  // 経路を基準に動かす（application が決める）。
+  const moveSelection = (direction) => (e) => {
     e?.stopPropagation?.();
-    if (!selectionTreeCapabilities.moveUp) return;
-    runBulkOrSingle({
-      bulk: bulkMoveUp,
-      single: moveNodeUp,
-      gate: () => canMultiSiblingMove,
-    });
+    return application.move(direction);
   };
-  const handleMoveDown = (e) => {
-    if (application) {
-      e?.stopPropagation();
-      return application.move("down");
-    }
-    e?.stopPropagation?.();
-    if (!selectionTreeCapabilities.moveDown) return;
-    runBulkOrSingle({
-      bulk: bulkMoveDown,
-      single: moveNodeDown,
-      gate: () => canMultiSiblingMove,
-    });
-  };
-  const handleIndent = (e) => {
-    if (application) {
-      e?.stopPropagation();
-      return application.move("indent");
-    }
-    e?.stopPropagation?.();
-    if (!selectionTreeCapabilities.indent) return;
-    if (isMultiSelect) {
-      if (!canMultiTreeOp || !$tree_data?.data) return;
-      const { new_parent_ids } = bulkIndent($selected_ids, $tree_data.data, bulkParentPath);
-      $tree_data = { ...$tree_data, data: $tree_data.data };
-      for (const pid of new_parent_ids) {
-        closed_row_paths.expandNodeEverywhere(pid);
-      }
-      return;
-    }
-    withSelectedNode(indentNode);
-  };
-  const handleOutdent = (e) => {
-    if (application) {
-      e?.stopPropagation();
-      return application.move("outdent");
-    }
-    e?.stopPropagation?.();
-    if (!selectionTreeCapabilities.outdent) return;
-    runBulkOrSingle({
-      bulk: bulkOutdent,
-      single: outdentNode,
-      gate: () => canMultiTreeOp && canMultiOutdent,
-    });
-  };
+  const handleMoveUp = moveSelection("up");
+  const handleMoveDown = moveSelection("down");
+  const handleIndent = moveSelection("indent");
+  const handleOutdent = moveSelection("outdent");
   const handleExpandAll = () => closed_row_paths.expandAll();
   const handleCollapseAll = () => closed_row_paths.collapseAll();
 
@@ -910,12 +637,10 @@
         handleOutdent();
         break;
       case "undo":
-        if (application) void application.history("undo");
-        else undoHistory();
+        void application.history("undo");
         break;
       case "redo":
-        if (application) void application.history("redo");
-        else redoHistory();
+        void application.history("redo");
         break;
       case "expandAll":
         handleExpandAll();
@@ -960,7 +685,7 @@
       <Pane style={"min-width: 7.5rem;"}>
         <section class="tree-workspace" aria-label="ノード一覧">
           <header class="tree-heading">
-            <strong>{projectName}</strong><span class="storage-badge">{projectStorageLabel}</span>
+            <strong>{projectName}</strong>
           </header>
           <div class="TaskListToolbar">
             <!-- Keep filter search on a separate row at narrow widths. -->
@@ -1242,7 +967,7 @@
                   normalColor={"var(--theme-color-Sub-main)"}
                   activeColor={"var(--theme-color-Primary-main)"}
                   disabled={!undoAvailable}
-                  on:click={() => (application ? application.history("undo") : undoHistory())}
+                  on:click={() => application.history("undo")}
                 >
                   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path
@@ -1263,7 +988,7 @@
                   normalColor={"var(--theme-color-Sub-main)"}
                   activeColor={"var(--theme-color-Primary-main)"}
                   disabled={!redoAvailable}
-                  on:click={() => (application ? application.history("redo") : redoHistory())}
+                  on:click={() => application.history("redo")}
                 >
                   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path
@@ -1696,16 +1421,6 @@
   .TbSearchRow :global(> *) {
     flex: 1 1 auto;
     min-width: 0;
-  }
-  .storage-badge {
-    color: var(--fg-muted);
-    flex: 0 0 auto;
-    padding: 0.1125rem var(--sp2);
-    border-radius: var(--shape-xs);
-    background-color: color-mix(in srgb, var(--fg-muted) 12%, transparent);
-    font-size: var(--font-label-md);
-    font-weight: 600;
-    white-space: nowrap;
   }
   .TbSep {
     display: inline-block;

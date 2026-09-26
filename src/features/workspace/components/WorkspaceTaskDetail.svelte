@@ -1,5 +1,6 @@
 <script>
-  import { setContext, onMount, onDestroy } from "svelte";
+  import { setContext, onMount, onDestroy, tick } from "svelte";
+  import * as platform from "@lib/ipc/platform";
   import { createTreeGridApplication, TREEGRID_APPLICATION } from "../application/treegrid";
   import { workspaceApplication } from "../application/workspace";
   import { selected_id, selected_type, selectOnly, active_row_path } from "@stores/ui";
@@ -9,6 +10,8 @@
   export let taskName;
   export let projectId;
   export let occurrencePath;
+  /** 起動時間の計測用（`TASK_MANAGE_PERF`）。main プロセスが URL に載せてくる。 */
+  export let performanceRunId = undefined;
   const application = createTreeGridApplication(workspacePath);
   setContext(TREEGRID_APPLICATION, application);
   const error = application.error;
@@ -25,8 +28,25 @@
       ready = true;
     } catch (e) {
       error.set(e.message);
+    } finally {
+      reportMilestone("detail.taskDataLoaded");
     }
+    await tick();
+    try {
+      performance.mark("detail-ready");
+      performance.measure("renderer-to-detail-ready", "renderer-start", "detail-ready");
+    } catch {
+      // renderer-start is absent in component tests
+    }
+    requestAnimationFrame(() => reportMilestone("detail.interactive"));
   });
+  function reportMilestone(name) {
+    platform.reportPerformanceMilestone({
+      name,
+      durationMs: performance.now(),
+      runId: performanceRunId,
+    });
+  }
   function history(event) {
     if (
       !(event.ctrlKey || event.metaKey) ||

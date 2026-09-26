@@ -17,7 +17,7 @@ Dependabot のアラート一覧そのものは API 経由で取得していな�
 | カスタムプロトコル・カスタム session / partition を一切登録していない | `electron/*.js` に `protocol.*` / `fromPartition` なし |
 | `contextIsolation: true` / `nodeIntegration: false` / `sandbox: true` (Electron 41 の既定値)。子ウィンドウは明示指定 | `electron/index.js` |
 | アプリコードから外部への HTTP 通信を行わない | `fetch` / `net.request` の呼び出しなし |
-| 扱うデータはすべてローカル (ユーザー自身のワークスペース) | `electron/workspace.js` |
+| 扱うデータはすべてローカル (ユーザー自身のワークスペース) | `electron/workspace-graph.js` |
 
 **ただし 1 点だけ例外がある。** Markdown プレビューは `marked` の出力をサニタイズせずに
 `{@html renderedHtml}` で描画している (`src/features/memos/components/MarkdownMemo.svelte:1919,1990`)。

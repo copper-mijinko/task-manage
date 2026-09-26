@@ -123,7 +123,6 @@ async function renderMarkdownMemo(props = {}) {
     props: {
       saveMemo: vi.fn(),
       content: "",
-      isWorkspaceProject: true,
       ...props,
     },
   });
@@ -204,29 +203,14 @@ describe("Memo mode routing", () => {
 
   beforeEach(() => {
     quillInstances.length = 0;
-    window.electronAPI = { wsResolveMemoAsset: vi.fn(), openExternalLink: vi.fn() };
+    window.electronAPI = { openExternalLink: vi.fn() };
   });
 
   afterEach(() => {
     delete window.electronAPI;
   });
 
-  test("uses Quill for db.json Projects even when a workspace path exists", async () => {
-    const saveMemo = vi.fn();
-    await renderMemo({
-      saveMemo,
-      content: { ops: [{ insert: "legacy\n" }] },
-      workspaceProjectDir: "C:\\workspace\\project",
-      taskId: "task-1",
-      isWorkspaceProject: false,
-    });
-
-    expect(quillInstances).toHaveLength(1);
-    expect(document.querySelector(".cm-editor")).not.toBeInTheDocument();
-    expect(quillInstances[0].setContents).toHaveBeenCalledWith({ ops: [{ insert: "legacy\n" }] });
-  });
-
-  test("uses Markdown editor for workspace projects", async () => {
+  test("uses the Markdown editor by default", async () => {
     await renderMarkdownMemo({ content: "# Workspace" });
 
     expect(quillInstances).toHaveLength(0);
@@ -234,16 +218,15 @@ describe("Memo mode routing", () => {
     expect(document.querySelector(".preview h1")).toHaveTextContent("Workspace");
   }, 30000);
 
-  test("uses Markdown editor for db.json memo when its format is markdown", async () => {
+  test("uses the Markdown editor when the format is markdown", async () => {
     await renderMemo({
       saveMemo: vi.fn(),
-      content: "# Markdown in db",
-      isWorkspaceProject: false,
+      content: "# Markdown body",
       format: "markdown",
     });
 
     expect(quillInstances).toHaveLength(0);
-    expect(document.querySelector(".preview h1")).toHaveTextContent("Markdown in db");
+    expect(document.querySelector(".preview h1")).toHaveTextContent("Markdown body");
   });
 
   test("uses a monospace-friendly font stack in the Markdown editor", async () => {
@@ -295,11 +278,10 @@ describe("Memo mode routing", () => {
     expect(view.state.doc.toString()).toBe("Title");
   });
 
-  test("uses Quill editor for workspace memo when its format is quill", async () => {
+  test("uses the Quill editor when the format is quill", async () => {
     await renderMemo({
       saveMemo: vi.fn(),
       content: { ops: [{ insert: "workspace quill\n" }] },
-      isWorkspaceProject: true,
       format: "quill",
     });
 
@@ -317,7 +299,7 @@ describe("Memo mode routing", () => {
   });
 
   test("limits the Quill toolbar to shared Markdown-compatible controls", async () => {
-    await renderMemo({ saveMemo: vi.fn(), content: "", isWorkspaceProject: false });
+    await renderMemo({ saveMemo: vi.fn(), content: "", format: "quill" });
     const toolbar = JSON.stringify(quillInstances[0].options.modules.toolbar.container);
 
     for (const unsupported of [
@@ -350,7 +332,7 @@ describe("Memo mode routing", () => {
   });
 
   test("uses a Quill table dropdown with all table actions", async () => {
-    await renderMemo({ saveMemo: vi.fn(), content: "", isWorkspaceProject: false });
+    await renderMemo({ saveMemo: vi.fn(), content: "", format: "quill" });
     const select = quillInstances[0].toolbarContainer.querySelector('select[aria-label="表"]');
 
     expect(select).toBeInTheDocument();
@@ -383,7 +365,7 @@ describe("Memo mode routing", () => {
     await renderMemo({
       saveMemo: vi.fn(),
       content: " leading　full",
-      isWorkspaceProject: false,
+      format: "quill",
     });
 
     expect(document.querySelector(".quill-visible-space-layer")).toBeInTheDocument();
@@ -394,7 +376,7 @@ describe("Memo mode routing", () => {
     await renderMemo({
       saveMemo: vi.fn(),
       content: "a 　b",
-      isWorkspaceProject: false,
+      format: "quill",
     });
     const quill = quillInstances[0];
     const layer = document.querySelector(".quill-visible-space-layer");
@@ -420,7 +402,7 @@ describe("Memo mode routing", () => {
       const result = await renderMemo({
         saveMemo: vi.fn(),
         content: " leading　full",
-        isWorkspaceProject: false,
+        format: "quill",
       });
       const quill = quillInstances[0];
 
@@ -439,7 +421,7 @@ describe("Memo mode routing", () => {
   });
 
   test("adds distinct Quill inline and block code toolbar buttons", async () => {
-    await renderMemo({ saveMemo: vi.fn(), content: "", isWorkspaceProject: false });
+    await renderMemo({ saveMemo: vi.fn(), content: "", format: "quill" });
     const inlineCode = quillInstances[0].toolbarContainer.querySelector("button.ql-code");
     const codeBlock = quillInstances[0].toolbarContainer.querySelector("button.ql-code-block");
 
@@ -448,9 +430,9 @@ describe("Memo mode routing", () => {
     expect(inlineCode.innerHTML).not.toBe(codeBlock.innerHTML);
   });
 
-  test("db.json Projects save Quill Delta content", async () => {
+  test("saves Quill Delta content", async () => {
     const saveMemo = vi.fn();
-    await renderMemo({ saveMemo, content: "", isWorkspaceProject: false });
+    await renderMemo({ saveMemo, content: "", format: "quill" });
     const quill = quillInstances.at(-1);
 
     quill.handlers["text-change"]({}, {}, "user");
@@ -479,7 +461,7 @@ describe("Memo mode routing", () => {
     const result = await renderMemo({
       saveMemo,
       content: { ops: [{ insert: "before\n" }] },
-      isWorkspaceProject: false,
+      format: "quill",
     });
     const quill = quillInstances.at(-1);
 
@@ -506,7 +488,7 @@ describe("Memo mode routing", () => {
       await result.rerender({
         saveMemo,
         content: { ops: [{ insert: "changed\n" }] },
-        isWorkspaceProject: false,
+        format: "quill",
       });
       await tick();
       vi.advanceTimersByTime(150);
@@ -527,7 +509,6 @@ describe("Markdown Memo - view mode", () => {
     quillInstances.length = 0;
     saveMemo = vi.fn();
     window.electronAPI = {
-      wsResolveMemoAsset: vi.fn(),
       openExternalLink: vi.fn(),
       openImageExternal: vi.fn().mockResolvedValue({ success: true }),
       openImageWindow: vi.fn(),
@@ -622,16 +603,14 @@ describe("Markdown Memo - view mode", () => {
   });
 
   test("resolves workspace image paths to previewable file URLs", async () => {
-    window.electronAPI.wsResolveMemoAsset.mockResolvedValue({
-      success: true,
-      url: "file:///C:/workspace/project/task-1/assets/diagram.png",
-    });
+    const resolveAsset = vi
+      .fn()
+      .mockResolvedValue("file:///C:/workspace/project/task-1/assets/diagram.png");
 
     await renderMarkdownMemo({
       saveMemo,
+      resolveAsset,
       content: "![Diagram](./assets/diagram.png)",
-      workspaceProjectDir: "C:\\workspace\\project",
-      taskId: "task-1",
     });
 
     await waitFor(() => {
@@ -644,16 +623,14 @@ describe("Markdown Memo - view mode", () => {
   });
 
   test("opens a rendered workspace image with the operating system default app", async () => {
-    window.electronAPI.wsResolveMemoAsset.mockResolvedValue({
-      success: true,
-      url: "file:///C:/workspace/project/task-1/assets/diagram.png",
-    });
+    const resolveAsset = vi
+      .fn()
+      .mockResolvedValue("file:///C:/workspace/project/task-1/assets/diagram.png");
 
     await renderMarkdownMemo({
       saveMemo,
+      resolveAsset,
       content: "![Diagram](./assets/diagram.png)",
-      workspaceProjectDir: "C:\\workspace\\project",
-      taskId: "task-1",
     });
 
     let image;
@@ -711,7 +688,7 @@ describe("Markdown Memo - edit mode", () => {
   beforeEach(() => {
     quillInstances.length = 0;
     saveMemo = vi.fn();
-    window.electronAPI = { wsSaveMemoImage: vi.fn() };
+    window.electronAPI = {};
   });
 
   afterEach(() => {
@@ -1056,19 +1033,15 @@ describe("Markdown Memo - edit mode", () => {
     expect(saveMemo).not.toHaveBeenCalled();
   });
 
-  test("pasting an image in workspace mode saves it and inserts markdown", async () => {
-    window.electronAPI.wsSaveMemoImage.mockResolvedValue({
-      success: true,
-      path: "./assets/pasted-image.png",
-    });
+  test("pasting an image saves it through saveImage and inserts markdown", async () => {
+    const saveImage = vi.fn().mockResolvedValue("./assets/pasted-image.png");
     const originalGetClientRects = Range.prototype.getClientRects;
     Range.prototype.getClientRects = () => [];
 
     await renderMarkdownMemo({
       saveMemo,
+      saveImage,
       content: "",
-      workspaceProjectDir: "C:\\project",
-      taskId: "task-1",
     });
 
     await chooseMarkdownMode("edit");
@@ -1092,12 +1065,7 @@ describe("Markdown Memo - edit mode", () => {
     document.querySelector(".cm-content").dispatchEvent(pasteEvent);
 
     await waitFor(() => {
-      expect(window.electronAPI.wsSaveMemoImage).toHaveBeenCalledWith(
-        "C:\\project",
-        "task-1",
-        expect.any(Uint8Array),
-        "image/png"
-      );
+      expect(saveImage).toHaveBeenCalledWith(file);
     });
 
     await waitFor(() => {
@@ -1116,7 +1084,7 @@ describe("Markdown Memo - link handling in preview", () => {
   beforeEach(() => {
     quillInstances.length = 0;
     saveMemo = vi.fn();
-    window.electronAPI = { openExternalLink: vi.fn(), wsResolveMemoAsset: vi.fn() };
+    window.electronAPI = { openExternalLink: vi.fn() };
   });
 
   afterEach(() => {

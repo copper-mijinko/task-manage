@@ -3,8 +3,6 @@ import os from "os";
 import path from "path";
 import { test, expect, _electron as electron } from "@playwright/test";
 
-const FIXTURE_DIR = path.join(__dirname, "fixtures");
-
 const WS_PROJECT_ID = "ws-proj-tagged";
 const WS_TASK_ID = "ws-task-tagged";
 const WS_MEMO_ID = "ws-memo-tagged";
@@ -19,7 +17,6 @@ const graphNode = (window, name) =>
 /** Build workspace fixture files directly without importing the CommonJS workspace.js */
 function buildWorkspaceTempDir() {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "tm-tags-"));
-  fs.copyFileSync(path.join(FIXTURE_DIR, "db.json"), path.join(tempDir, "db.json"));
 
   const wsDir = path.join(tempDir, "ws");
   const projectDir = path.join(wsDir, "tagged-project");

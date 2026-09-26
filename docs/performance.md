@@ -22,118 +22,49 @@
 
 ### 2.2 main process の起動処理
 
-main process は、起動時に不要な同期 I/O と watcher 初期化を前倒ししない。
+main process は、起動時に不要な同期 I/O を前倒ししない。
 
-- `electron/index.js` は `lowdb` の初期データ書き込みを、データが存在しない場合だけ行う
-- ワークスペース watcher の開始は `INITIAL_WORKSPACE_WATCHER_DELAY_MS` だけ遅らせる
-- renderer 表示に直接必要な処理を優先し、外部ファイル監視は初期描画後に回す
+- `meta.json` は起動時に 1 回だけ読み、書込は遅延（debounce）させてまとめる（`electron/settings-store.js`）
+- ワークスペースのグラフは renderer が要求したときに初めて読む（`ws:read-graph`）。ファイル監視は持たない
 
-## 3. ワークスペースプロジェクト選択
+## 3. ワークスペースの読み込み
 
-### 3.1 summary read
+ワークスペースの正本は `graph-v1.json` 1 ファイルなので、読み込みは 1 回の非同期読み取りと JSON の parse で済む。
+ノードの本文もグラフに含まれるため、ノードを選ぶたびの追加 IPC はない。
 
-`ws:read-project` はプロジェクト選択時の主経路であり、メモ本文を読まない。
-`electron/index.js` の `readProjectSummary(projectDir)` は `workspace.readProject(projectDir, { includeMemoContent: false })` を呼ぶ。
+- main process はワークスペースごとに読んだグラフをメモリに保持し、ファイルの更新時刻と大きさが変わらない限り読み直さない
+- 旧 Markdown 形式からの取り込みは、初回の自動取り込みか、ユーザーが選んだときだけ行う
 
-summary read では次を読み込む。
+## 4. 保存
 
-- `_project.md` と各タスクの `_index.md`
-- タスク名、ステータス、日付、親子関係、順序などのツリー表示に必要なメタデータ
-- メモファイルの frontmatter と先頭部分から取れるタイトル、タグ、フォーマット、順序
-
-summary read では次を読み込まない。
-
-- 各メモ本文全体
-- Markdown / Quill 本文の parse 結果
-- メモ内画像や assets の内容
-
-本文未読のメモは `bodyLoaded: false` と `content: ""` を持つ。
-
-### 3.2 選択タスクのメモ本文 hydration
-
-タスク詳細を表示するとき、`src/features/tasks/components/TaskDetail.svelte` は選択タスクのメモに `bodyLoaded: false` が含まれる場合だけ `wsReadTaskMemos(projectDir, taskId)` を呼ぶ。
-
-main process 側では `ws:read-task-memos` が `workspace.readTaskMemos(projectDir, taskId, taskDirs)` を使い、そのタスクのメモ本文だけを読む。
-読み込んだメモは `tree_data` と `workspace_tasks_cache` に反映され、以後同じタスクでは本文読み込み済みの状態を再利用する。
-
-この経路は「選択された 1 タスクにつき 1 IPC」であり、プロジェクト選択時に全タスク分のメモ本文を読む N+1 読み込みを発生させない。
-
-### 3.3 メモ本文検索
-
-メモ本文を対象にした full-text 検索では、本文が未読のままだと正しい検索結果を作れない。
-そのため `src/features/search/stores/search.ts` は、次の条件を満たすときだけプロジェクト単位でメモ本文を hydrate する。
-
-- 選択中の対象が WorkspaceProject
-- `search_memo` が有効
-- `full_text` 検索語がある
-- 現在のツリーに `bodyLoaded: false` のメモがある
-
-このとき `wsReadProjectMemos(projectDir)` を 1 回だけ呼び、main process の `ws:read-project-memos` がプロジェクト内タスクのメモ本文をまとめて返す。
-renderer は返却された `memosByTaskId` を `tree_data` と `workspace_tasks_cache` にマージする。
-
-通常のプロジェクト選択やタスク名・ステータス検索では、このプロジェクト全体 hydration は行わない。
-
-## 4. 未読本文を含む保存
-
-summary read 後のツリーには、本文未読のメモが混ざる。
-その状態で保存してもメモ本文を空文字で上書きしないよう、保存前に既存本文を復元する。
-
-- renderer 側の `src/features/workspace/utils/workspace_tree.ts` は、`bodyLoaded: false` のメモについて既存ツリーの本文を優先して保持する
-- main process 側の `withLoadedMemoBodies(projectDir, tasks, taskDirs)` は、未読本文が残るタスクを保存する前に disk/cache から本文を補完する
-- `ws:write-task` / `ws:write-project-patch` / `ws:write-project` は、未読本文を含む payload をそのままファイルへ書かない
-
-この方針により、プロジェクト選択は軽い summary read のままにしつつ、保存時のデータ欠落を防ぐ。
-
-## 5. Workspace の差分保存
-
-通常編集では、保存のたびに WorkspaceProject 全体を main process へ送り直さない。
-renderer は前回保存時の `tree_data` と現在の `tree_data` を比較し、変更されたタスクと削除された task id だけを `ws:write-project-patch` で送る。
-
-main process 側では `WorkspaceWriteQueue` が同一 projectDir の pending patch をマージし、`writeProjectPatchAsync` が対象タスクだけを書き込む。
-さらに各 `_index.md` / memo file は `writeFileIfChanged` を通るため、patch 対象に入ったタスクでも内容が同じファイルは実書込しない。
-
-初回保存や前回データがない場合は、互換性と安全性のため `ws:write-project` の全体保存にフォールバックする。
-
-### 5.1 保存完了イベントと revision
-
-Workspace 保存では、renderer の `tree_data` を編集中の正本として扱う。
-保存が遅い環境では、古い snapshot の書込が後から完了することがあるため、保存完了時の `local-write` をそのまま画面へ戻すと Quill やメモ表示が古い内容へ巻き戻る。
-
-これを防ぐため、renderer は WorkspaceProject のローカル編集ごとに projectDir 単位の `revision` を増やす。
-`revision` は `wsBroadcastProjectSnapshot` と `wsWriteProject` / `wsWriteProjectPatch` の options に載せ、main process の `WorkspaceWriteQueue` が保存完了時の `local-write` payload に返す。
-renderer は現在保持している revision 以下の `local-write` を保存完了通知として扱い、`tree_data` へ再反映しない。
-
-この設計により、OneDrive などでファイル書込が遅れても、古い保存完了が現在のメモリ状態を上書きしない。
-一方で、ディスク上の正規化結果を画面へ即時反映したい場合は `local-write` ではなく、明示的な reload または `external-update` / `conflict-reload` 経路で扱う。
+- 編集はコマンド（差分）として送る。ツリー全体を送り直さない
+- main process はコマンドをワークスペースごとに直列に適用し、`graph-v1.json` を一時ファイル経由で置き換える
+- 画像・添付は別ファイルとして保存し、グラフには参照だけを書く
+- renderer は保存の完了を待たずに次の操作を受け付け、保存状態は `saveStatus` で示す
 
 ## 6. 編集・スクロール・フィルタ時の再計算
 
 読み込みだけでなく、編集・スクロール・フィルタのたびに走る再計算も、ツリー規模に対して無駄に重くしない。
 
 - スクロール時の sticky パンくず（`buildStickyTrail`）は、可視行の id→row マップを毎フレーム作り直さない。`TreeTable.svelte` は `rows` でメモ化したマップを引数で渡し、行高もスクロール毎に `getComputedStyle` で取り直さない（テーマ変更時のみ更新する）。スクロール毎のコストは、先頭可視行から祖先を辿る木の深さぶんに限定する。
-- WorkspaceProject の編集ごとに同期実行する他ウィンドウ同期（`broadcastWorkspaceSnapshot` → `ws:broadcast-project-snapshot`）は、スナップショット生成（`projectDataToWorkspaceTasks` 1 回）だけを行う。前回状態との差分（2 回目の変換 + タスク単位の deep-equal）は持ち込まない。その重い diff は throttle 済みの disk 保存経路（`persistTreeData` / `buildWorkspacePatch`）にのみ置く。
-- `filtered_data` の再導出は、filter ストア自身の `tree_data` 購読に一本化する。tree 保存経路から `filter.set(get(filter))` で再フィルタを二重発火させない。フィルタ条件・ソート・アーカイブ表示・ツリー変更の各購読で過不足なく更新される。
-- セッション内で増え続ける一時マップを残さない。`workspaceProjectRevisions` はアクティブな projectDir のぶんだけ保持し、プロジェクト切替時に非アクティブのエントリを破棄する（非アクティブな projectDir の revision は `onWorkspaceProjectUpdated` で早期 return され参照されない）。
+- 他ウィンドウへの同期は main process が保存後のグラフを broadcast するだけで、renderer 側で差分を計算しない。
+- 表示用ツリー（`filtered`）はツリーグリッドのアプリケーションがグラフ・フィルタ条件・ソート・アーカイブ表示から派生させる。保存経路から再フィルタを発火させない。
 
 ## 7. 守るべき境界
 
 性能を保つため、次の境界を維持する。
 
 - 起動経路から `MarkdownMemo.svelte` / `QuillMemo.svelte` / `highlight.js` を直接 import しない
-- プロジェクト選択時の `ws:read-project` は `includeMemoContent: false` を維持する
-- タスク詳細では選択タスク単位、メモ本文検索ではプロジェクト単位の IPC にまとめる
-- プロジェクト選択時にタスク数ぶん `ws:read-task-memos` を呼ぶ実装にしない
-- `bodyLoaded` を renderer のツリー変換、検索、保存経路で落とさない
+- 編集のたびにグラフ全体を IPC で送らない（コマンドだけを送る）
+- 画像・添付の中身をグラフに入れない
 
 ## 8. 検証
 
 性能関連の変更では、少なくとも次を確認する。
 
-- `node --check electron/index.js`
-- `node --check electron/workspace.js`
-- `svelte-check --tsconfig ./tsconfig.json`
-- `vite build`
-- `vitest run tests/unit/search.test.js tests/unit/workspace.test.js tests/unit/workspace_tree.test.ts tests/unit/tree_control.test.js tests/unit/saveStatus.test.js tests/unit/filter_store.test.ts tests/component/TaskDetail.test.js tests/component/Memo.test.js --pool=threads`
+- `npm run check`
+- `npm run build`
+- `npm test`
 
 加えて、production build 後の `renderer/index.html` で起動時に preload される module 数を確認する。
 メモエディタ関連 chunk が初期 modulepreload に戻っている場合は、起動経路への eager import が再発している可能性が高い。
@@ -151,7 +82,7 @@ npm run build
 npm run measure:performance
 ```
 
-`measure:performance` は E2E fixture を一時ディレクトリへ複製し、次の時間を計測する。出力には後方互換用の中央値、各サンプルに加えて、p50 / p95 / max の集計が含まれる。既存のユーザーデータは使用しない。
+`measure:performance` は一時ディレクトリに計測用のワークスペースを作り、次の時間を計測する。出力には後方互換用の中央値、各サンプルに加えて、p50 / p95 / max の集計が含まれる。既存のユーザーデータは使用しない。
 
 - `startupInteractiveMs`: Electron の起動開始から、保存済みプロジェクトが操作可能になるまで
 - `detailInteractiveMs`: 別ウィンドウを要求してから、タスク詳細が表示されるまで
@@ -196,12 +127,10 @@ npm start
 npm run perf:workspace -- --root "C:\path\inside\OneDrive" --iterations 20 --projects 8 --tasks 30
 ```
 
-所要時間とevent-loop delayを別々に集計する。対象は `readProject` / `readTaskMemos` / `writeProjectAsync` / `writeProjectPatchAsync` / `listProjects` / `setProjectOrderAsync` と、それぞれのasync read経路である。event-loop delayは各処理中にheartbeatを継続し、その最大driftを1サンプルとして記録する。処理終了直前のblockingも最後のheartbeatで検出する。所要時間が長くてもevent-loop delayが低ければUIは応答を維持できるため、両方を比較する。
-
-interactive IPCのWorkspace cache missは非同期で補完する。同じprojectのcache missが重なった場合はin-flight Promiseを共有し、同じprojectを並行して複数回走査しない。disk readの待機中にrenderer snapshotやreconcilerがcacheを更新した場合は、遅れて完了したdisk readで新しいcacheを上書きしない。
+所要時間とevent-loop delayを別々に集計する。対象はグラフの読み込み・コマンド実行・Undo・Redo である（`--projects` / `--tasks` はグラフのノード数を決める）。event-loop delayは各処理中にheartbeatを継続し、その最大driftを1サンプルとして記録する。処理終了直前のblockingも最後のheartbeatで検出する。所要時間が長くてもevent-loop delayが低ければUIは応答を維持できるため、両方を比較する。
 
 ### 9.4 比較方法
 
 変更前後で同じ保存場所、fixtureサイズ、サンプル数を使用する。平均値は一時的なOneDrive待ちを隠すため、判断にはp50 / p95 / maxと個別サンプルを用いる。OSキャッシュ、ウイルス対策、GPU process初期化の影響を避けるため、測定中は条件を揃える。
 
-起動経路では、プロジェクト画面、Inbox、クイックキャプチャ、タスク詳細画面を動的 import の境界として維持する。CodeMirror と Quill は日時ショートカットの登録だけでは読み込まず、対象エディタでショートカットが実行されたときに初めて読み込む。Lodash はパッケージ全体ではなく、使用する関数のサブパスから import する。
+起動経路では、プロジェクト画面、クイックキャプチャ、タスク詳細画面を動的 import の境界として維持する。CodeMirror と Quill は日時ショートカットの登録だけでは読み込まず、対象エディタでショートカットが実行されたときに初めて読み込む。Lodash はパッケージ全体ではなく、使用する関数のサブパスから import する。

@@ -8,12 +8,6 @@ export type WorkspaceTaskStatus =
   | "Completed"
   | "Canceled";
 
-/** ノード本文の遅延読み込みで返るもの。 */
-export interface NodeBody {
-  body: unknown;
-  format: MemoFormat;
-}
-
 export interface WorkspaceAttachment {
   id: string;
   name: string;
@@ -84,21 +78,4 @@ export interface WorkspaceTask {
 export interface WorkspaceInfo {
   path: string;
   label: string;
-}
-
-export interface WorkspaceProjectListItem {
-  name: string;
-  rootId: string;
-  dirName: string;
-  projectDir: string;
-  order?: number;
-}
-
-export interface WorkspaceProject {
-  tasks: Record<string, WorkspaceTask>;
-}
-
-export interface WorkspaceProjectPatch {
-  tasks: WorkspaceTask[];
-  deletedTaskIds: string[];
 }

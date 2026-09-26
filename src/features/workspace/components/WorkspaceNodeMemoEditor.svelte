@@ -24,7 +24,6 @@
 <Memo
   content={node.body || ""}
   format={node.format || "markdown"}
-  isWorkspaceProject={true}
   saveImage={saveAsset}
   resolveAsset={async (path) =>
     (await platform.wsResolveGraphAsset(workspacePath, nodeId, path)).url}

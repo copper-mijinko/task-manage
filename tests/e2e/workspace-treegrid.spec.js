@@ -479,7 +479,6 @@ function fixture() {
     path.join(workspacePath, ".task-manage", "graph-v1.json"),
     JSON.stringify({ schemaVersion: 1, graph, undo: [], redo: [] })
   );
-  fs.writeFileSync(path.join(tempDir, "db.json"), "[]");
   fs.writeFileSync(
     path.join(tempDir, "meta.json"),
     JSON.stringify({

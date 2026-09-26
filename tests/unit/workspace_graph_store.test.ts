@@ -1,6 +1,7 @@
 import { get } from "svelte/store";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { workspace_graph_store } from "@features/workspace/stores/graph";
+import { saveStatus } from "@stores/save_status";
 
 const mocks = vi.hoisted(() => ({
   readGraph: vi.fn(),
@@ -191,5 +192,41 @@ describe("workspace graph store races", () => {
     expect(mocks.executeGraphCommand).toHaveBeenCalledTimes(1);
     expect(get(workspace_graph_store).graph?.revision).toBe(3);
     expect(get(workspace_graph_store).error).toContain("changed");
+  });
+});
+
+describe("workspace graph store save status", () => {
+  beforeEach(() => {
+    mocks.readGraph.mockReset();
+    mocks.executeGraphCommand.mockReset();
+    saveStatus.set("idle");
+  });
+
+  it("reports writing, then saved after a successful command", async () => {
+    mocks.readGraph.mockResolvedValue(graph("ws", 1));
+    await workspace_graph_store.load("ws");
+    let resolve!: (value: unknown) => void;
+    mocks.executeGraphCommand.mockReturnValue(new Promise((r) => (resolve = r)));
+    const running = workspace_graph_store.execute(
+      { type: "create-node", parentId: "root", node: { name: "A" } },
+      "tree"
+    );
+    await vi.waitFor(() => expect(get(saveStatus)).toBe("writing"));
+    resolve({ graph: graph("ws", 2), selectedNodeIds: [] });
+    await running;
+    expect(get(saveStatus)).toBe("saved");
+  });
+
+  it("reports an error when the command fails", async () => {
+    mocks.readGraph.mockResolvedValue(graph("ws", 1));
+    await workspace_graph_store.load("ws");
+    mocks.executeGraphCommand.mockRejectedValue(new Error("disk full"));
+    await expect(
+      workspace_graph_store.execute(
+        { type: "create-node", parentId: "root", node: { name: "A" } },
+        "tree"
+      )
+    ).rejects.toThrow("disk full");
+    expect(get(saveStatus)).toBe("error");
   });
 });

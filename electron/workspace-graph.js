@@ -200,7 +200,11 @@ function enqueue(workspacePath, operation) {
   return next;
 }
 
-async function importLegacyGraph(workspacePath) {
+/**
+ * ワークスペース直下の旧 Markdown プロジェクト（`<dir>/_project.md`）を並び順で返す。
+ * グラフの初回作成と、既存グラフへの追加取り込みの両方がこれを使う。
+ */
+async function listLegacyMarkdownProjects(workspacePath) {
   const entries = await fs.promises.readdir(workspacePath, { withFileTypes: true });
   const projects = [];
   for (const entry of entries) {
@@ -219,6 +223,8 @@ async function importLegacyGraph(workspacePath) {
       throw new Error(`Invalid legacy project: ${entry.name}`);
     projects.push({
       projectDir,
+      dirName: entry.name,
+      name: typeof metadata.name === "string" && metadata.name ? metadata.name : entry.name,
       rootId: metadata.id,
       order: Number(metadata.order),
       inbox: metadata.kind === "inbox" || entry.name === "_inbox",
@@ -230,6 +236,92 @@ async function importLegacyGraph(workspacePath) {
         (Number.isFinite(b.order) ? b.order : Number.MAX_SAFE_INTEGER) ||
       a.projectDir.localeCompare(b.projectDir)
   );
+  return projects;
+}
+
+/**
+ * 旧 Markdown プロジェクト 1 つを `nodes` へ足し、取り込んだルートの id を返す。
+ *
+ * ルートの親は呼び出し側が決める（ここでは空にしておく）。画像と添付は
+ * 正本の置き場所 `.task-manage/assets/<nodeId>/` へ写す。
+ */
+async function importLegacyProjectNodes(workspacePath, project, nodes, today) {
+  const { ids: expectedIds, duplicateMemos } = await strictProjectPreflight(
+    project.projectDir,
+    project.rootId
+  );
+  const loaded = await workspace.readProjectAsync(project.projectDir, {
+    includeMemoContent: false,
+  });
+  const loadedIds = new Set(loaded.tasks.keys());
+  for (const id of expectedIds)
+    if (!loadedIds.has(id)) throw new Error(`Legacy task was not imported: ${id}`);
+  const tasks = [
+    ...(await workspace.loadNodeBodiesAsync(
+      project.projectDir,
+      [...loaded.tasks.values()],
+      loaded.taskDirs
+    )),
+    ...(await importDuplicateLegacyMemos(project.projectDir, loaded, duplicateMemos)),
+  ];
+  // 旧形式はプロジェクトごとに独立して読んでいたので、id が一意なのは
+  // プロジェクトの中だけだった。v0.40 までのエクスポートはルート以外の id を
+  // db.json から引き継いだため、同じプロジェクトを 2 回エクスポートすると
+  // 別プロジェクトに同じ id が並ぶ。1 つのグラフに入れるときは、後から来た
+  // 側に新しい id を振り、同じプロジェクト内の親参照もそれに合わせる。
+  const renamed = new Map();
+  for (const task of tasks) if (nodes[task.id]) renamed.set(task.id, crypto.randomUUID());
+  const importedId = (id) => renamed.get(id) ?? id;
+  for (const legacyTask of tasks) {
+    const legacyId = legacyTask.id;
+    const task = {
+      ...legacyTask,
+      id: importedId(legacyId),
+      parents: (legacyTask.parents || []).map((parent) => ({
+        ...parent,
+        id: importedId(parent.id),
+      })),
+    };
+    if (nodes[task.id]) throw new Error(`Duplicate node id in legacy workspace: ${task.id}`);
+    const canonicalNodeDir = assetDir(workspacePath, task.id);
+    const legacyTaskDir =
+      loaded.taskDirs.get(legacyId) === "_project"
+        ? project.projectDir
+        : path.join(project.projectDir, loaded.taskDirs.get(legacyId));
+    await copyDirectoryStrict(
+      path.join(legacyTaskDir, "assets"),
+      path.join(canonicalNodeDir, "assets"),
+      project.projectDir
+    );
+    await copyDirectoryStrict(
+      path.join(legacyTaskDir, "attachments"),
+      path.join(canonicalNodeDir, "attachments"),
+      project.projectDir
+    );
+    const legacyAssetPrefix = "assets/";
+    const canonicalAssetPrefix = `assets/${task.id}/assets/`;
+    const attachments = (task.attachments || []).map((attachment) => ({
+      ...attachment,
+      relativePath: `assets/${task.id}/${String(attachment.relativePath).replace(/^\.\//, "")}`,
+    }));
+    nodes[task.id] = {
+      ...task,
+      body: rewriteAssetReferences(
+        rewriteAssetReferences(task.body, legacyAssetPrefix, canonicalAssetPrefix),
+        "attachments/",
+        `assets/${task.id}/attachments/`
+      ),
+      attachments,
+      createdAt: /^\d{4}-\d{2}-\d{2}$/.test(task.createdAt || "") ? task.createdAt : today,
+      assetOwnerId: task.id,
+      parents: legacyId === project.rootId ? [] : task.parents,
+    };
+  }
+  return importedId(project.rootId);
+}
+
+async function importLegacyGraph(workspacePath) {
+  const projects = await listLegacyMarkdownProjects(workspacePath);
   const workspaceId = crypto.randomUUID();
   const rootId = `workspace-${workspaceId}`;
   const today = new Date().toISOString().slice(0, 10);
@@ -242,81 +334,10 @@ async function importLegacyGraph(workspacePath) {
     },
   };
   for (const [projectIndex, project] of projects.entries()) {
-    const { ids: expectedIds, duplicateMemos } = await strictProjectPreflight(
-      project.projectDir,
-      project.rootId
-    );
-    const loaded = await workspace.readProjectAsync(project.projectDir, {
-      includeMemoContent: false,
-    });
-    const loadedIds = new Set(loaded.tasks.keys());
-    for (const id of expectedIds)
-      if (!loadedIds.has(id)) throw new Error(`Legacy task was not imported: ${id}`);
-    const tasks = [
-      ...(await workspace.loadNodeBodiesAsync(
-        project.projectDir,
-        [...loaded.tasks.values()],
-        loaded.taskDirs
-      )),
-      ...(await importDuplicateLegacyMemos(project.projectDir, loaded, duplicateMemos)),
+    project.importedRootId = await importLegacyProjectNodes(workspacePath, project, nodes, today);
+    nodes[project.importedRootId].parents = [
+      { id: rootId, order: Number.isFinite(project.order) ? project.order : projectIndex },
     ];
-    // 旧形式はプロジェクトごとに独立して読んでいたので、id が一意なのは
-    // プロジェクトの中だけだった。v0.40 までのエクスポートはルート以外の id を
-    // db.json から引き継いだため、同じプロジェクトを 2 回エクスポートすると
-    // 別プロジェクトに同じ id が並ぶ。1 つのグラフに入れるときは、後から来た
-    // 側に新しい id を振り、同じプロジェクト内の親参照もそれに合わせる。
-    const renamed = new Map();
-    for (const task of tasks) if (nodes[task.id]) renamed.set(task.id, crypto.randomUUID());
-    const importedId = (id) => renamed.get(id) ?? id;
-    project.importedRootId = importedId(project.rootId);
-    for (const legacyTask of tasks) {
-      const legacyId = legacyTask.id;
-      const task = {
-        ...legacyTask,
-        id: importedId(legacyId),
-        parents: (legacyTask.parents || []).map((parent) => ({
-          ...parent,
-          id: importedId(parent.id),
-        })),
-      };
-      if (nodes[task.id]) throw new Error(`Duplicate node id in legacy workspace: ${task.id}`);
-      const canonicalNodeDir = assetDir(workspacePath, task.id);
-      const legacyTaskDir =
-        loaded.taskDirs.get(legacyId) === "_project"
-          ? project.projectDir
-          : path.join(project.projectDir, loaded.taskDirs.get(legacyId));
-      await copyDirectoryStrict(
-        path.join(legacyTaskDir, "assets"),
-        path.join(canonicalNodeDir, "assets"),
-        project.projectDir
-      );
-      await copyDirectoryStrict(
-        path.join(legacyTaskDir, "attachments"),
-        path.join(canonicalNodeDir, "attachments"),
-        project.projectDir
-      );
-      const legacyAssetPrefix = "assets/";
-      const canonicalAssetPrefix = `assets/${task.id}/assets/`;
-      const attachments = (task.attachments || []).map((attachment) => ({
-        ...attachment,
-        relativePath: `assets/${task.id}/${String(attachment.relativePath).replace(/^\.\//, "")}`,
-      }));
-      nodes[task.id] = {
-        ...task,
-        body: rewriteAssetReferences(
-          rewriteAssetReferences(task.body, legacyAssetPrefix, canonicalAssetPrefix),
-          "attachments/",
-          `assets/${task.id}/attachments/`
-        ),
-        attachments,
-        createdAt: /^\d{4}-\d{2}-\d{2}$/.test(task.createdAt || "") ? task.createdAt : today,
-        assetOwnerId: task.id,
-        parents:
-          legacyId === project.rootId
-            ? [{ id: rootId, order: Number.isFinite(project.order) ? project.order : projectIndex }]
-            : task.parents,
-      };
-    }
   }
   const graph = { schemaVersion: 1, workspaceId, rootId, revision: 0, nodes };
   const inboxProject = projects.find((project) => project.inbox);
@@ -603,6 +624,7 @@ async function saveNodeAsset(workspacePath, nodeId, fileName, bytes) {
   if (!graph.nodes[nodeId]) throw new Error("Unknown node");
   const safeName = path
     .basename(String(fileName || "attachment"))
+    // eslint-disable-next-line no-control-regex -- Windows では制御文字をファイル名に使えない
     .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "");
   if (!safeName || safeName === "." || safeName === "..") throw new Error("Invalid file name");
   const dir = assetDir(workspacePath, nodeId);
@@ -657,6 +679,74 @@ async function resolveNodeAsset(workspacePath, nodeId, relativePath) {
   return real;
 }
 
+function nextRootOrder(graph) {
+  let max = -1;
+  for (const node of Object.values(graph.nodes)) {
+    const link = (node.parents || []).find((parent) => parent.id === graph.rootId);
+    if (Number.isFinite(link?.order)) max = Math.max(max, link.order);
+  }
+  return max + 1;
+}
+
+/**
+ * グラフへ取り込めるワークスペース直下の旧 Markdown プロジェクト。
+ *
+ * グラフの初回作成で取り込まれたものも並ぶので、`imported` で区別する。
+ * 後から置かれた（別の PC や別ワークスペースから写した）プロジェクトを
+ * 既存のグラフへ足すために使う。
+ */
+async function listMarkdownImportSources(workspacePath) {
+  const graph = await readWorkspaceGraph(workspacePath);
+  const nodes = Object.values(graph.nodes);
+  const sources = new Set(nodes.map((node) => node.importSource).filter(Boolean));
+  return (await listLegacyMarkdownProjects(workspacePath)).map((project) => ({
+    dirName: project.dirName,
+    name: project.name,
+    imported: Boolean(graph.nodes[project.rootId]) || sources.has(`markdown:${project.rootId}`),
+  }));
+}
+
+/**
+ * 旧 Markdown プロジェクトを既存のグラフへ、ワークスペースのルート直下の
+ * ノードとして足す。
+ *
+ * 1 回の取り込みは 1 つの操作として保存され、「元に戻す」で取り消せる。
+ * 取り込み元の Markdown ファイルは書き換えない。
+ */
+async function importMarkdownProjects(workspacePath, markdownDirs = [], expectedRevision) {
+  return mutate(workspacePath, expectedRevision, async (document) => {
+    const graph = structuredClone(document.graph);
+    const today = new Date().toISOString().slice(0, 10);
+    const selectedNodeIds = [];
+    const attach = (rootId, importSource) => {
+      graph.nodes[rootId].parents = [{ id: graph.rootId, order: nextRootOrder(graph) }];
+      graph.nodes[rootId].importSource = importSource;
+      selectedNodeIds.push(rootId);
+    };
+    const projects = await listLegacyMarkdownProjects(workspacePath);
+    for (const dirName of markdownDirs) {
+      const project = projects.find((item) => item.dirName === dirName);
+      if (!project) throw new Error(`Markdown project not found: ${dirName}`);
+      const rootId = await importLegacyProjectNodes(workspacePath, project, graph.nodes, today);
+      attach(rootId, `markdown:${project.rootId}`);
+    }
+    if (!selectedNodeIds.length) throw new Error("取り込むプロジェクトが選ばれていません。");
+    graph.revision = (graph.revision || 0) + 1;
+    document.graph = graph;
+    return { selectedNodeIds };
+  });
+}
+
+/** 書き込み待ちのグラフ操作があるか。 */
+function hasPendingWrites() {
+  return queues.size > 0;
+}
+
+/** いま待ち行列にあるグラフ操作がすべて終わるまで待つ。 */
+async function whenIdle() {
+  while (queues.size) await Promise.all([...queues.values()]);
+}
+
 function isGraphActive(workspacePath) {
   return fs.existsSync(graphPath(workspacePath));
 }
@@ -666,8 +756,12 @@ module.exports = {
   executeWorkspaceGraphCommand,
   undoWorkspaceGraph: (workspacePath, revision) => changeHistory(workspacePath, "undo", revision),
   redoWorkspaceGraph: (workspacePath, revision) => changeHistory(workspacePath, "redo", revision),
+  listMarkdownImportSources,
+  importMarkdownProjects,
   saveNodeAsset,
   resolveNodeAsset,
   isGraphActive,
+  hasPendingWrites,
+  whenIdle,
   graphPath,
 };

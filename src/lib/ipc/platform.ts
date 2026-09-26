@@ -1,36 +1,19 @@
 ﻿import type {
   ElectronAPI,
   FindInPageResult,
+  MarkdownImportSource,
   PerformanceMilestone,
-  ProjectListItem,
   TaskDetailWindowData,
   ThemeName,
   WindowState,
-  WorkspaceConflictEvent,
-  WorkspaceFlushCompleteEvent,
-  WorkspaceFlushStartEvent,
-  WorkspaceNoticeEvent,
-  WorkspaceProjectUpdatedEvent,
-  WorkspaceSaveStatusEvent,
 } from "@app-types/app";
-import type {
-  WorkspaceInfo,
-  WorkspaceAttachment,
-  WorkspaceProject,
-  WorkspaceProjectListItem,
-  NodeBody,
-  WorkspaceProjectPatch,
-  WorkspaceTask,
-} from "@app-types/workspace";
+import type { WorkspaceInfo } from "@app-types/workspace";
 import type {
   GraphCommandOrigin,
   WorkspaceGraph,
   WorkspaceGraphCommand,
   WorkspaceGraphCommandResult,
 } from "@app-types/workspace_graph";
-import type { ProjectData } from "@features/tasks/utils/tree_control";
-import { promoteLegacyMemosToNodes } from "@features/tasks/utils/tree_control";
-import type { MemoFormat } from "@features/memos/utils/memo_utils";
 
 // Single point where the Electron runtime is accessed.
 // Returns Partial<ElectronAPI> so method-level guards work correctly
@@ -38,51 +21,6 @@ import type { MemoFormat } from "@features/memos/utils/memo_utils";
 // All exported functions are safe no-ops / return safe defaults when unavailable.
 function api(): Partial<ElectronAPI> | undefined {
   return typeof window !== "undefined" ? window.electronAPI : undefined;
-}
-
-export function isPlatformAvailable(): boolean {
-  return api() !== undefined;
-}
-
-// ---------------------------------------------------------------------------
-// Legacy project operations
-// ---------------------------------------------------------------------------
-
-/**
- * `db.json` プロジェクトの読み出し。
- *
- * 旧メモ配列はここで子ノードに直す（[data.md](../../../docs/data.md) § 6）。
- * `db.json` は生の JSON が renderer に届くので、入口で 1 回直さないと既存の
- * メモが画面から消える。ワークスペース側は main プロセスが同じことをする。
- */
-export function getTreeData(projectId?: string): Promise<ProjectData | undefined> {
-  const result = api()?.getTreeData?.(projectId);
-  return result ? result.then(promoteLegacyMemosToNodes) : Promise.resolve(undefined);
-}
-
-export function setTreeData(treeData: ProjectData): Promise<void> {
-  return Promise.resolve(api()?.setTreeData?.(treeData));
-}
-
-export function getInitialTreeData(): Promise<ProjectData | undefined> {
-  const result = api()?.getInitialTreeData?.();
-  return result ? result.then(promoteLegacyMemosToNodes) : Promise.resolve(undefined);
-}
-
-export function getProjectIDs(): Promise<ProjectListItem[]> {
-  return api()?.getProjectIDs?.() ?? Promise.resolve([]);
-}
-
-export function setProjectOrder(projects: ProjectListItem[]): void {
-  api()?.setProjectOrder?.(projects);
-}
-
-export function addProject(project: ProjectData): Promise<void> {
-  return Promise.resolve(api()?.addProject?.(project)).then(() => undefined);
-}
-
-export function deleteProject(projectId: string): void {
-  api()?.deleteProject?.(projectId);
 }
 
 export function message(msg: string): void {
@@ -201,48 +139,8 @@ export function onThemeChanged(callback: (theme: ThemeName) => void): void {
   api()?.onThemeChanged?.(callback);
 }
 
-export function onTreeDataUpdated(callback: (treeData: ProjectData) => void): void {
-  api()?.onTreeDataUpdated?.(callback);
-}
-
-export function onProjectDeleted(callback: (projectId: string) => void): void {
-  api()?.onProjectDeleted?.(callback);
-}
-
 export function onSaveError(callback: (message: string) => void): void {
   api()?.onSaveError?.(callback);
-}
-
-export function onWorkspaceSaveStatus(callback: (event: WorkspaceSaveStatusEvent) => void): void {
-  api()?.onWorkspaceSaveStatus?.(callback);
-}
-
-export function onWorkspaceProjectUpdated(
-  callback: (event: WorkspaceProjectUpdatedEvent) => void
-): void {
-  api()?.onWorkspaceProjectUpdated?.(callback);
-}
-
-export function onWorkspaceProjectDeleted(callback: (event: { projectDir: string }) => void): void {
-  api()?.onWorkspaceProjectDeleted?.(callback);
-}
-
-export function onWorkspaceConflict(callback: (event: WorkspaceConflictEvent) => void): void {
-  api()?.onWorkspaceConflict?.(callback);
-}
-
-export function onWorkspaceNotice(callback: (event: WorkspaceNoticeEvent) => void): void {
-  api()?.onWorkspaceNotice?.(callback);
-}
-
-export function onWorkspaceFlushStart(callback: (event: WorkspaceFlushStartEvent) => void): void {
-  api()?.onWorkspaceFlushStart?.(callback);
-}
-
-export function onWorkspaceFlushComplete(
-  callback: (event: WorkspaceFlushCompleteEvent) => void
-): void {
-  api()?.onWorkspaceFlushComplete?.(callback);
 }
 
 export function onSearchResultUpdated(callback: (result: FindInPageResult) => void): void {
@@ -267,207 +165,11 @@ export function wsSetWorkspaces(config: {
   api()?.wsSetWorkspaces?.(config);
 }
 
-export function wsListProjects(workspacePath: string): Promise<WorkspaceProjectListItem[]> {
-  return api()?.wsListProjects?.(workspacePath) ?? Promise.resolve([]);
-}
-
-export function wsSetProjectOrder(
-  workspacePath: string,
-  projects: WorkspaceProjectListItem[]
-): Promise<{ success: boolean; projects?: WorkspaceProjectListItem[]; error?: string }> {
-  return (
-    api()?.wsSetProjectOrder?.(workspacePath, projects) ??
-    Promise.resolve({ success: false, error: "API unavailable" })
-  );
-}
-
-export function wsReadProject(
-  projectDir: string,
-  options?: { preferCache?: boolean }
-): Promise<WorkspaceProject | undefined> {
-  const readProject = api()?.wsReadProject;
-  if (!readProject) return Promise.resolve(undefined);
-  return options ? readProject(projectDir, options) : readProject(projectDir);
-}
-
-export function wsReadTaskBody(
-  projectDir: string,
-  taskId: string
-): Promise<{ body: unknown; format: MemoFormat; error?: string }> {
-  return (
-    api()?.wsReadTaskBody?.(projectDir, taskId) ??
-    Promise.resolve({ body: "", format: "markdown" as MemoFormat })
-  );
-}
-
-export function wsReadProjectBodies(
-  projectDir: string
-): Promise<{ bodiesByTaskId: Record<string, NodeBody>; error?: string }> {
-  return api()?.wsReadProjectBodies?.(projectDir) ?? Promise.resolve({ bodiesByTaskId: {} });
-}
-
-export function wsWriteTask(
-  projectDir: string,
-  task: WorkspaceTask
-): Promise<{ success: boolean; error?: string }> {
-  return (
-    api()?.wsWriteTask?.(projectDir, task) ??
-    Promise.resolve({ success: false, error: "API unavailable" })
-  );
-}
-
-export function wsSaveMemoImage(
-  projectDir: string,
-  taskId: string,
-  bytes: Uint8Array,
-  mimeType?: string
-): Promise<{ success: boolean; path?: string; error?: string }> {
-  return (
-    api()?.wsSaveMemoImage?.(projectDir, taskId, bytes, mimeType) ??
-    Promise.resolve({ success: false, error: "API unavailable" })
-  );
-}
-
-export function wsResolveMemoAsset(
-  projectDir: string,
-  taskId: string,
-  assetPath: string
-): Promise<{ success: boolean; url?: string; error?: string }> {
-  return (
-    api()?.wsResolveMemoAsset?.(projectDir, taskId, assetPath) ??
-    Promise.resolve({ success: false, error: "API unavailable" })
-  );
-}
-
-export function wsSaveTaskAttachment(
-  projectDir: string,
-  taskId: string,
-  fileName: string,
-  bytes: Uint8Array
-): Promise<{ success: boolean; attachment?: WorkspaceAttachment; error?: string }> {
-  return (
-    api()?.wsSaveTaskAttachment?.(projectDir, taskId, fileName, bytes) ??
-    Promise.resolve({ success: false, error: "API unavailable" })
-  );
-}
-
-export function wsDeleteTaskAttachment(
-  projectDir: string,
-  taskId: string,
-  attachmentPath: string
-): Promise<{ success: boolean; attachments?: WorkspaceAttachment[]; error?: string }> {
-  return (
-    api()?.wsDeleteTaskAttachment?.(projectDir, taskId, attachmentPath) ??
-    Promise.resolve({ success: false, error: "API unavailable" })
-  );
-}
-
-export function wsOpenTaskAttachment(
-  projectDir: string,
-  taskId: string,
-  attachmentPath: string
-): Promise<{ success: boolean; error?: string }> {
-  return (
-    api()?.wsOpenTaskAttachment?.(projectDir, taskId, attachmentPath) ??
-    Promise.resolve({ success: false, error: "API unavailable" })
-  );
-}
-
-export function wsOpenTaskAttachmentWith(
-  projectDir: string,
-  taskId: string,
-  attachmentPath: string
-): Promise<{ success: boolean; error?: string }> {
-  return (
-    api()?.wsOpenTaskAttachmentWith?.(projectDir, taskId, attachmentPath) ??
-    Promise.resolve({ success: false, error: "API unavailable" })
-  );
-}
-
-export function wsWriteProject(
-  projectDir: string,
-  tasks: WorkspaceTask[],
-  options?: { forceLocal?: boolean; revision?: number }
-): Promise<{ success: boolean; queued?: boolean; error?: string }> {
-  return (
-    api()?.wsWriteProject?.(projectDir, tasks, options) ??
-    Promise.resolve({ success: false, error: "API unavailable" })
-  );
-}
-
-export function wsWriteProjectPatch(
-  projectDir: string,
-  patch: WorkspaceProjectPatch,
-  options?: { forceLocal?: boolean; revision?: number }
-): Promise<{ success: boolean; queued?: boolean; noop?: boolean; error?: string }> {
-  return (
-    api()?.wsWriteProjectPatch?.(projectDir, patch, options) ??
-    Promise.resolve({ success: false, error: "API unavailable" })
-  );
-}
-
-export function wsBroadcastProjectSnapshot(
-  projectDir: string,
-  tasks: Record<string, WorkspaceTask>,
-  options?: { revision?: number }
-): void {
-  api()?.wsBroadcastProjectSnapshot?.(projectDir, tasks, options);
-}
-
-export function wsDeleteTask(
-  projectDir: string,
-  taskId: string
-): Promise<{ success: boolean; error?: string }> {
-  return (
-    api()?.wsDeleteTask?.(projectDir, taskId) ??
-    Promise.resolve({ success: false, error: "API unavailable" })
-  );
-}
-
-export function wsCreateProject(
-  workspacePath: string,
-  name: string,
-  id: string,
-  order?: number
-): Promise<{ success: boolean; projectDir?: string; dirName?: string; error?: string }> {
-  return (
-    api()?.wsCreateProject?.(workspacePath, name, id, order) ??
-    Promise.resolve({ success: false, error: "API unavailable" })
-  );
-}
-
-export function wsDeleteProject(projectDir: string): Promise<{ success: boolean; error?: string }> {
-  return (
-    api()?.wsDeleteProject?.(projectDir) ??
-    Promise.resolve({ success: false, error: "API unavailable" })
-  );
-}
-
-export function wsResolveConflict(
-  projectDir: string,
-  action: "reload" | "keep-local"
-): Promise<{ success: boolean; error?: string }> {
-  return (
-    api()?.wsResolveConflict?.(projectDir, action) ??
-    Promise.resolve({ success: false, error: "API unavailable" })
-  );
-}
-
 export function wsOpenWorkspace(
   workspacePath: string
 ): Promise<{ success: boolean; error?: string }> {
   return (
     api()?.wsOpenWorkspace?.(workspacePath) ??
-    Promise.resolve({ success: false, error: "API unavailable" })
-  );
-}
-
-export function wsOpenTaskFolder(
-  projectDir: string,
-  taskId: string
-): Promise<{ success: boolean; error?: string }> {
-  return (
-    api()?.wsOpenTaskFolder?.(projectDir, taskId) ??
     Promise.resolve({ success: false, error: "API unavailable" })
   );
 }
@@ -479,38 +181,6 @@ export interface WsSelectDirectoryResult {
 
 export function wsSelectDirectory(): Promise<WsSelectDirectoryResult> {
   return api()?.wsSelectDirectory?.() ?? Promise.resolve({ path: null });
-}
-
-export function wsGetLegacyProjects(): Promise<{ id: string; name: string; taskCount: number }[]> {
-  return api()?.wsGetLegacyProjects?.() ?? Promise.resolve([]);
-}
-
-export function wsExportLegacyProjects(
-  workspacePath: string,
-  options?: { memoFormat?: "preserve" | "markdown" }
-): Promise<{
-  success: boolean;
-  migrated: { name: string; count: number }[];
-  errors: { name: string; error: string }[];
-}> {
-  return (
-    api()?.wsExportLegacyProjects?.(workspacePath, options) ??
-    Promise.resolve({ success: false, migrated: [], errors: [] })
-  );
-}
-
-export function wsMigrateProjects(
-  workspacePath: string,
-  options?: { memoFormat?: "preserve" | "markdown" }
-): Promise<{
-  success: boolean;
-  migrated: { name: string; count: number }[];
-  errors: { name: string; error: string }[];
-}> {
-  return (
-    api()?.wsMigrateProjects?.(workspacePath, options) ??
-    Promise.resolve({ success: false, migrated: [], errors: [] })
-  );
 }
 
 export function wsReadGraph(workspacePath: string): Promise<WorkspaceGraph> {
@@ -554,6 +224,22 @@ export function onWorkspaceGraphUpdated(
   api()?.onWorkspaceGraphUpdated?.(callback);
 }
 
+export function wsListMarkdownImports(workspacePath: string): Promise<MarkdownImportSource[]> {
+  const fn = api()?.wsListMarkdownImports;
+  if (!fn) return Promise.reject(new Error("Workspace graph API unavailable"));
+  return fn(workspacePath);
+}
+
+export function wsImportMarkdownProjects(
+  workspacePath: string,
+  dirNames: string[],
+  expectedRevision?: number
+): Promise<WorkspaceGraphCommandResult> {
+  const fn = api()?.wsImportMarkdownProjects;
+  if (!fn) return Promise.reject(new Error("Workspace graph API unavailable"));
+  return fn(workspacePath, dirNames, expectedRevision);
+}
+
 export function wsSaveGraphAsset(
   workspacePath: string,
   nodeId: string,
@@ -584,67 +270,4 @@ export function wsOpenGraphAsset(
   const fn = api()?.wsOpenGraphAsset;
   if (!fn) return Promise.reject(new Error("Workspace graph asset API unavailable"));
   return fn(workspacePath, nodeId, relativePath, chooseProgram);
-}
-
-// ---------------------------------------------------------------------------
-// Inbox operations
-// ---------------------------------------------------------------------------
-
-export function wsEnsureInbox(workspacePath: string): Promise<{
-  success: boolean;
-  projectDir?: string;
-  rootId?: string;
-  error?: string;
-}> {
-  return (
-    api()?.wsEnsureInbox?.(workspacePath) ??
-    Promise.resolve({ success: false, error: "API unavailable" })
-  );
-}
-
-export function wsReadInbox(workspacePath: string): Promise<{
-  success: boolean;
-  projectDir?: string;
-  rootId?: string;
-  tasks?: Record<string, WorkspaceTask>;
-  error?: string;
-}> {
-  return (
-    api()?.wsReadInbox?.(workspacePath) ??
-    Promise.resolve({ success: false, error: "API unavailable" })
-  );
-}
-
-export function wsAddInboxItem(
-  workspacePath: string,
-  item: Partial<WorkspaceTask> & { name: string }
-): Promise<{
-  success: boolean;
-  task?: WorkspaceTask;
-  projectDir?: string;
-  rootId?: string;
-  error?: string;
-}> {
-  return (
-    api()?.wsAddInboxItem?.(workspacePath, item) ??
-    Promise.resolve({ success: false, error: "API unavailable" })
-  );
-}
-
-export function wsSendInboxItems(args: {
-  workspacePath: string;
-  targetProjectDir: string;
-  targetRootId: string;
-  /** Parent task id under which the items will be appended. Omit to use the project root. */
-  targetParentId?: string;
-  taskIds: string[];
-}): Promise<{
-  success: boolean;
-  moved?: string[];
-  errors?: { taskId: string; error: string }[];
-  error?: string;
-}> {
-  return (
-    api()?.wsSendInboxItems?.(args) ?? Promise.resolve({ success: false, error: "API unavailable" })
-  );
 }
