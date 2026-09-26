@@ -1,4 +1,4 @@
-﻿<script>
+<script>
   import { dueDateUrgency, dueDateUrgencyLabel } from "@lib/utils/date_urgency";
   import { tick } from "svelte";
 
@@ -199,10 +199,7 @@
   .Date::-webkit-calendar-picker-indicator {
     background: transparent;
     position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    inset: 0;
     width: 100%;
     height: 100%;
     margin: 0;

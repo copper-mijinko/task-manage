@@ -920,8 +920,7 @@
        生まれ、メニューが中央に、チップが右端に飛ぶ。 */
     grid-template-columns: auto 1fr auto;
     align-items: center;
-    column-gap: var(--sp2);
-    row-gap: 2px;
+    gap: 2px var(--sp2);
     padding: var(--sp2) 0;
     border-bottom: 1px solid color-mix(in srgb, var(--fg-muted) 18%, transparent);
   }
@@ -1028,9 +1027,6 @@
     background: var(--canvas-default);
     color: color-mix(in srgb, var(--theme-color-Sub-main) 70%, transparent);
     text-align: center;
-  }
-  .empty-state-hint {
-    max-width: 24rem;
   }
   .empty-state-icon {
     width: 1.6875rem;

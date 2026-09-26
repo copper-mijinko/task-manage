@@ -535,8 +535,7 @@
     width: 100%;
     height: 100%;
     box-sizing: border-box;
-    overflow-y: auto;
-    overflow-x: hidden;
+    overflow: hidden auto;
   }
   .Section {
     display: flex;
@@ -557,8 +556,7 @@
     flex-direction: column;
     width: 100%;
     max-height: 13.5rem;
-    overflow-y: auto;
-    overflow-x: hidden;
+    overflow: hidden auto;
   }
   .ProjectSubsection {
     display: flex;
@@ -642,7 +640,7 @@
   .Logo {
     width: 0.9375rem;
     height: 0.9375rem;
-    fill: currentColor;
+    fill: currentcolor;
     margin-right: var(--sp3);
   }
   .AddButtonContainer {
@@ -758,7 +756,7 @@
     opacity: 0.6;
   }
 
-  .MenuRow:global(.DragOverTop):before {
+  .MenuRow:global(.DragOverTop)::before {
     border-top: 0.15rem solid var(--accent-fg);
     position: absolute;
     content: "";
@@ -770,7 +768,7 @@
     pointer-events: none;
   }
 
-  .MenuRow:global(.DragOverBottom):before {
+  .MenuRow:global(.DragOverBottom)::before {
     border-bottom: 0.15rem solid var(--accent-fg);
     position: absolute;
     content: "";

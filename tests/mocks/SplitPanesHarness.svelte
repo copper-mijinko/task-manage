@@ -1,4 +1,4 @@
-﻿<script>
+<script>
   import Pane from "@lib/layouts/Pane.svelte";
   import SplitPanes from "@lib/layouts/SplitPanes.svelte";
 

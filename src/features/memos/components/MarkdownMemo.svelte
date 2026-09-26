@@ -2487,7 +2487,7 @@
 <style>
   .wrapper {
     --memo-editor-font:
-      "BIZ UDゴシック", "BIZ UDGothic", "Cascadia Mono", "Cascadia Code", Consolas, "Courier New",
+      "BIZ UDゴシック", "BIZ UDGothic", "Cascadia Mono", "Cascadia Code", consolas, "Courier New",
       monospace;
     --memo-quill-button-color: var(--theme-color-Sub-light);
     --memo-quill-button-active-color: #06c;
@@ -2605,7 +2605,7 @@
 
   .tool-icon :global(.ql-stroke) {
     fill: none;
-    stroke: currentColor;
+    stroke: currentcolor;
     stroke-linecap: round;
     stroke-linejoin: round;
     stroke-width: 2;
@@ -2613,14 +2613,14 @@
 
   .tool-icon :global(.ql-stroke-miter) {
     fill: none;
-    stroke: currentColor;
+    stroke: currentcolor;
     stroke-miterlimit: 10;
     stroke-width: 2;
   }
 
   .tool-icon :global(.ql-fill),
   .tool-icon :global(.ql-stroke.ql-fill) {
-    fill: currentColor;
+    fill: currentcolor;
   }
 
   .tool-icon :global(.ql-even) {
@@ -2702,7 +2702,7 @@
     width: 100%;
     height: 100%;
     fill: none;
-    stroke: currentColor;
+    stroke: currentcolor;
     stroke-width: 2;
     stroke-linecap: round;
     stroke-linejoin: round;
@@ -2840,7 +2840,7 @@
   .memo-mode-chevron :global(svg) {
     display: block;
     fill: none;
-    stroke: currentColor;
+    stroke: currentcolor;
     stroke-width: 2;
     stroke-linecap: round;
     stroke-linejoin: round;

@@ -332,28 +332,6 @@ export function ripple(
   };
 }
 
-// clickOutside
-export function clickOutside(node: HTMLElement) {
-  const handleClick = (event: MouseEvent) => {
-    const rect = node.getBoundingClientRect();
-    if (!(event.target instanceof Node)) {
-      return;
-    }
-
-    if (!node.contains(event.target) && rect.width && rect.height) {
-      node.dispatchEvent(new CustomEvent("outclick"));
-    }
-  };
-
-  document.addEventListener("click", handleClick, true);
-
-  return {
-    destroy() {
-      document.removeEventListener("click", handleClick, true);
-    },
-  };
-}
-
 /**
  * Pop-up dismiss helper.
  *

@@ -350,7 +350,7 @@
     width: 0.525rem;
     height: 0.525rem;
     fill: none;
-    stroke: currentColor;
+    stroke: currentcolor;
     stroke-width: 2.5;
     stroke-linecap: round;
     stroke-linejoin: round;

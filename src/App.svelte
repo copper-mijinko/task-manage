@@ -419,7 +419,7 @@
     height: 2.25rem;
     margin-bottom: var(--sp3);
     fill: none;
-    stroke: currentColor;
+    stroke: currentcolor;
     stroke-width: 1.5;
     stroke-linecap: round;
     stroke-linejoin: round;

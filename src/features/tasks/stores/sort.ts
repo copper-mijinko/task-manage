@@ -1,4 +1,4 @@
-﻿import { writable, type Writable } from "svelte/store";
+import { writable, type Writable } from "svelte/store";
 import type { SortState } from "@app-types/app";
 
 export const SORTABLE_COLUMNS = new Set([

@@ -1,4 +1,4 @@
-﻿import { fireEvent, render, waitFor } from "@testing-library/svelte";
+import { fireEvent, render, waitFor } from "@testing-library/svelte";
 import { tick } from "svelte";
 import { vi } from "vitest";
 import { startCompletion } from "@codemirror/autocomplete";

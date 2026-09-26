@@ -1,4 +1,4 @@
-﻿import {
+import {
   areAllSiblings,
   buildStickyTrail,
   filterTree,
