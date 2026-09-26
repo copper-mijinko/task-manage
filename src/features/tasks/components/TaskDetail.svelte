@@ -922,7 +922,11 @@
   }
   /* 名前は 1 行目の左、チップはその隣、メニューは 1 行目の右端、
      経路は 2 行目に回す。 */
-  .parent-location :global(.parent-link),
+  /* 名前とチップを同じ列に置くと、2 つが同じ場所に重なって描かれる。 */
+  .parent-location :global(.parent-link) {
+    grid-column: 1;
+    grid-row: 1;
+  }
   .parent-location .parent-chip {
     grid-column: 2;
     grid-row: 1;

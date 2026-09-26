@@ -365,3 +365,29 @@ test("a node shown under two parents, the Inbox badge and the detail window stay
       .toBe("完了");
   });
 });
+
+test("the parent list in the detail pane lays out name, current-path chip and menu without overlap", async () => {
+  await run(createWorkspace(), async (app) => {
+    const page = app.window;
+    await select(page, "root/work/spec");
+    const location = page
+      .getByRole("region", { name: "所属する場所" })
+      .locator(".parent-location")
+      .first();
+    await expect(location.getByRole("button", { name: "Work", exact: true })).toBeVisible();
+    await expect(location.getByText("現在の表示経路")).toBeVisible();
+    const boxes = await location.evaluate((element) =>
+      [".parent-link", ".parent-chip", ".IconButton"].map((selector) => {
+        const rect = element.querySelector(selector).getBoundingClientRect();
+        return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+      })
+    );
+    const overlaps = (a, b) =>
+      a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+    // 名前 → チップ → メニューの順に左から並び、どれも重ならない。
+    expect(overlaps(boxes[0], boxes[1])).toBe(false);
+    expect(overlaps(boxes[1], boxes[2])).toBe(false);
+    expect(boxes[0].right).toBeLessThanOrEqual(boxes[1].left);
+    expect(boxes[1].right).toBeLessThanOrEqual(boxes[2].left);
+  });
+});
