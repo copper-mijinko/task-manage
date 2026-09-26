@@ -671,3 +671,16 @@ test("attachment sorting treats absent lists as zero and keeps equal counts stab
   ).toEqual(["two", "one", "missing", "empty"]);
   expect(tree.children.map((n) => n.id)).toEqual(["two", "missing", "one", "empty"]);
 });
+
+test("date sorting keeps rows without a date last in both directions", () => {
+  const child = (id, due) => ({ id, data: { name: id, "due date": due }, children: [] });
+  const tree = {
+    id: "root",
+    data: { name: "root" },
+    children: [child("none"), child("late", "2026-10-20"), child("early", "2026-10-01")],
+  };
+  const order = (direction) =>
+    sortTree(tree, { column: "due date", direction }).children.map((n) => n.id);
+  expect(order("asc")).toEqual(["early", "late", "none"]);
+  expect(order("desc")).toEqual(["late", "early", "none"]);
+});

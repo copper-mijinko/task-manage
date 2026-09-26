@@ -1,5 +1,6 @@
 <script>
   import { tick } from "svelte";
+  import { STATUS_VALUES, statusOptionLabel } from "@lib/utils/status_labels";
   import { fly } from "svelte/transition";
   import IconButton from "@lib/primitives/IconButton.svelte";
 
@@ -23,7 +24,7 @@
     onclearselection,
   } = $props();
 
-  const STATUSES = ["", "Undefined", "Open", "Pending", "In Progress", "Completed", "Canceled"];
+  const STATUSES = STATUS_VALUES;
   const STATUS_COLOR = {
     Open: "var(--theme-color-Primary-main)",
     "In Progress": "var(--theme-color-Info-main)",
@@ -272,9 +273,7 @@
           onclick={() => pickStatus(opt)}
         >
           <span class="StatusDot" style="background: {STATUS_COLOR[opt]}"></span>
-          <span class="StatusLabel"
-            >{opt === "" ? "ステータスなし" : opt === "Undefined" ? "未定義" : opt}</span
-          >
+          <span class="StatusLabel">{statusOptionLabel(opt)}</span>
         </button>
       </li>
     {/each}

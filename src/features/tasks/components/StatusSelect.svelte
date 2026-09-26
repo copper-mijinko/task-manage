@@ -1,6 +1,12 @@
 <script>
   import { viewportPopover } from "@lib/actions/viewport_popover";
   import { onDestroy, tick } from "svelte";
+  import {
+    NO_STATUS,
+    STATUS_VALUES,
+    statusLabel,
+    statusOptionLabel,
+  } from "@lib/utils/status_labels";
 
   /**
    * @typedef {Object} Props
@@ -25,32 +31,11 @@
   // 「無し」は既定値ではなく状態のひとつ。メモから育ったノードは進み具合を
   // 持たないので、そこに「未着手」を出すと未完了ノードの山に埋もれる。
   // 選ぶだけで追跡が始まるよう、専用の操作は作らずここに並べる。
-  const NO_STATUS = "";
-  const UNDEFINED_STATUS = "Undefined";
-  const STATUSES = [
-    NO_STATUS,
-    UNDEFINED_STATUS,
-    "Open",
-    "Pending",
-    "In Progress",
-    "Completed",
-    "Canceled",
-  ];
-  const STATUS_LABELS = $state({
-    [NO_STATUS]: "なし",
-    Open: "未着手",
-    Pending: "保留",
-    "In Progress": "進行中",
-    Completed: "完了",
-    Canceled: "キャンセル",
-  });
-
-  STATUS_LABELS[NO_STATUS] = "ステータスなし";
-  STATUS_LABELS[UNDEFINED_STATUS] = "未定義";
+  const STATUSES = STATUS_VALUES;
 
   const color_map = {
     [NO_STATUS]: "transparent",
-    [UNDEFINED_STATUS]: "var(--fg-muted)",
+    Undefined: "var(--fg-muted)",
     Open: "var(--theme-color-Primary-main)",
     "In Progress": "var(--theme-color-Info-main)",
     Pending: "var(--theme-color-Warning-main)",
@@ -127,14 +112,14 @@
     aria-expanded={open}
     {disabled}
     data-current-status={status}
-    title={STATUS_LABELS[status] ?? status}
+    title={statusOptionLabel(status)}
     onclick={toggle}
   >
     <span class="s-dot" style="--dot-color: {color_map[status]};"></span>
     <!-- 未設定は「ステータスなし」の 7 文字を全行に並べると、列の中でいちばん
          目立つ文字列になってしまう。日付や件数と同じくダッシュにして、
          正式な呼び名は title と選択肢の側に残す。 -->
-    <span class="s-label">{status ? (STATUS_LABELS[status] ?? status) : "—"}</span>
+    <span class="s-label">{status ? statusLabel(status) : "—"}</span>
     <svg class="s-caret" viewBox="0 0 12 12" aria-hidden="true">
       <path
         d="M3 4.5L6 7.5L9 4.5"
@@ -170,7 +155,7 @@
         >
           <span class="s-dot s-dot-static" style="--dot-color: {color_map[opt]};" data-status={opt}
           ></span>
-          <span class="s-option-label">{STATUS_LABELS[opt] ?? opt}</span>
+          <span class="s-option-label">{statusOptionLabel(opt)}</span>
           {#if opt === status}
             <svg class="s-check" viewBox="0 0 16 16" aria-hidden="true">
               <path
