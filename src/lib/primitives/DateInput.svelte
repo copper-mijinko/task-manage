@@ -28,6 +28,7 @@
 開始日のような「期限ではない日付」は false にする。過ぎた開始日は
 進行中ノードのごく普通の状態で、警告色にすると本当の期限切れが埋もれる。
    * @property {any} [status] - 期限の色付けを抑えるためのノードステータス（完了 / 中止なら急かさない）。
+   * @property {(detail?: any) => void} [onchange]
    */
 
   /** @type {Props} */
@@ -95,7 +96,7 @@
       aria-label={ariaLabel}
       onclick={(event) => {
         event.stopPropagation();
-        beginEdit(event);
+        beginEdit();
       }}
     >
       {displayDate || "—"}{#if isInherited}<span aria-label="親から継承"> ↳</span>{/if}

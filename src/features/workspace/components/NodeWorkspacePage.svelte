@@ -234,11 +234,12 @@
             rootId={graph.rootId}
             {selectedId}
             onSelect={(id) => select({ nodeId: id, occurrenceId: id, parentId: "" })}
-            onUpdate={(id, changes) =>
-              execute(
+            onUpdate={async (id, changes) => {
+              await execute(
                 { command: { type: "update-node", nodeId: id, changes }, origin: "graph" },
                 true
-              )}
+              );
+            }}
           />{/if}
       </section>
       <WorkspaceNodeInspector

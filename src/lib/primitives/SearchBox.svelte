@@ -151,7 +151,7 @@
     class="SearchChips"
     class:is-empty={terms.length === 0}
     onclick={(e) => {
-      if (e.target?.closest?.("button")) return;
+      if (e.target instanceof Element && e.target.closest("button")) return;
       search_box?.focus();
     }}
   >

@@ -56,7 +56,7 @@
     mutation_observer = new MutationObserver((mutations) => {
       const paneChanged = mutations.some((mutation) =>
         [...mutation.addedNodes, ...mutation.removedNodes].some(
-          (node) => node.nodeType === Node.ELEMENT_NODE && node.classList?.contains("Pane")
+          (node) => node instanceof Element && node.classList.contains("Pane")
         )
       );
       if (paneChanged) {
@@ -68,15 +68,22 @@
     });
   });
 
-  const isValidPersistedLayout = (value) =>
-    value &&
-    typeof value === "object" &&
-    Array.isArray(value.ratio) &&
-    value.ratio.length === 2 &&
-    value.ratio.every((item) => Number.isFinite(item) && item >= 0) &&
-    (value.collapsedPane === null ||
-      value.collapsedPane === "start" ||
-      value.collapsedPane === "end");
+  /**
+   * @param {unknown} value
+   * @returns {value is { ratio: number[], collapsedPane?: "start" | "end" | null }}
+   */
+  const isValidPersistedLayout = (value) => {
+    if (!value || typeof value !== "object") return false;
+    const layout = /** @type {{ ratio?: unknown, collapsedPane?: unknown }} */ (value);
+    return (
+      Array.isArray(layout.ratio) &&
+      layout.ratio.length === 2 &&
+      layout.ratio.every((item) => Number.isFinite(item) && item >= 0) &&
+      (layout.collapsedPane === null ||
+        layout.collapsedPane === "start" ||
+        layout.collapsedPane === "end")
+    );
+  };
 
   const restorePersistedLayout = async () => {
     if (!persistenceKey) return;

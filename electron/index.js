@@ -91,11 +91,12 @@ app.on("ready", () => {
     },
   });
 
-  const knownWorkspacePaths = () =>
-    [
-      ...(settings.get("workspaces") || []).map((item) => item.path),
-      settings.get("activeWorkspace"),
-    ].filter(Boolean);
+  /** @returns {string[]} */
+  const knownWorkspacePaths = () => {
+    const workspaces = /** @type {{ path: string }[]} */ (settings.get("workspaces") || []);
+    const active = /** @type {string | undefined} */ (settings.get("activeWorkspace"));
+    return [...workspaces.map((item) => item.path), active].filter(Boolean);
+  };
   const workspaceAuthorizer = createWorkspaceAuthorizer({ getWorkspacePaths: knownWorkspacePaths });
   const ipc = createIpcRegistrar(
     createIpcSenderValidator({

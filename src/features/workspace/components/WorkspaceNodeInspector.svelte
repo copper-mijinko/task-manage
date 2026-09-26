@@ -92,7 +92,7 @@
   }
   async function openAttachment(item) {
     const result = await platform.wsResolveGraphAsset(workspacePath, nodeId, item.relativePath);
-    await platform.openImageExternal(result.url, item.name);
+    await platform.openImageExternal(result.url);
   }
 </script>
 

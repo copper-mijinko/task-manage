@@ -333,15 +333,17 @@ async function importLegacyGraph(workspacePath) {
       createdAt: today,
     },
   };
+  const importedRootIds = new Map();
   for (const [projectIndex, project] of projects.entries()) {
-    project.importedRootId = await importLegacyProjectNodes(workspacePath, project, nodes, today);
-    nodes[project.importedRootId].parents = [
+    const importedRootId = await importLegacyProjectNodes(workspacePath, project, nodes, today);
+    importedRootIds.set(project, importedRootId);
+    nodes[importedRootId].parents = [
       { id: rootId, order: Number.isFinite(project.order) ? project.order : projectIndex },
     ];
   }
   const graph = { schemaVersion: 1, workspaceId, rootId, revision: 0, nodes };
   const inboxProject = projects.find((project) => project.inbox);
-  if (inboxProject) graph.inboxId = inboxProject.importedRootId;
+  if (inboxProject) graph.inboxId = importedRootIds.get(inboxProject);
   identifyInbox(graph);
   repairRootReachability(graph);
   validateGraph(graph);

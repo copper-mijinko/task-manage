@@ -9,7 +9,7 @@
    * @property {any} header
    * @property {any} content
    * @property {any} [callback]
-   * @property {string} [ok] - 確定ボタンのラベル。既定は英語の "ok" だったが、UI 全体が日本語なので
+   * @property {string | false} [ok] - false なら確定ボタンを出さない。 確定ボタンのラベル。既定は英語の "ok" だったが、UI 全体が日本語なので
 言語が混ざるうえ、"ok" は「何が起きるか」を述べない。呼び出し側は
 「アーカイブする」「完全に削除」のように動作を名指しするのが望ましい。
    * @property {string} [cancel]

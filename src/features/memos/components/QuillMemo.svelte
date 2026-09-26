@@ -11,7 +11,7 @@
   /**
    * @typedef {Object} Props
    * @property {any} saveMemo
-   * @property {string} [content]
+   * @property {unknown} [content] - Quill の Delta、または旧形式の文字列
    * @property {boolean} [readOnly]
    */
 

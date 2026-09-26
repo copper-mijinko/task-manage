@@ -29,6 +29,9 @@
    * @property {number} [selectionCount] - When >1, the menu acts on the whole multi-selection (label gets count prefix).
    * @property {boolean} [archived] - 行が archived 状態かどうか。true のときメニューは
 delete (= archive) ではなく restore / permanently delete を出す。
+   * @property {(detail?: any) => void} [oncommit]
+   * @property {(detail?: any) => void} [onmenuvisibilitychange]
+   * @property {(detail?: any) => void} [onaction]
    */
 
   /** @type {Props} */

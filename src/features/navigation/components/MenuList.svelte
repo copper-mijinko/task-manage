@@ -27,9 +27,9 @@
   }
   function moveProjectFromMenu(delta) {
     const { project, section } = projectMenu;
-    const projects = [...getProjectsForSection(section)];
+    const projects = [...getProjectsForSection()];
     const index = projects.findIndex(
-      (p) => getProjectId(p, section) === getProjectId(project, section)
+      (p) => getProjectId(p) === getProjectId(project)
     );
     if (index < 0 || index + delta < 0 || index + delta >= projects.length) return;
     projects.splice(index, 1);
@@ -200,9 +200,9 @@
     const section = el.dataset.section;
     if (!canReorderSection(section) || section !== dragged_section || !dragOverType) return;
 
-    const projects = getProjectsForSection(section);
-    const draggedIndex = projects.findIndex((p) => getProjectId(p, section) === dragged_id);
-    const targetIndex = projects.findIndex((p) => getProjectId(p, section) === el.dataset.id);
+    const projects = getProjectsForSection();
+    const draggedIndex = projects.findIndex((p) => getProjectId(p) === dragged_id);
+    const targetIndex = projects.findIndex((p) => getProjectId(p) === el.dataset.id);
 
     if (draggedIndex !== -1 && targetIndex !== -1) {
       // Clone the project array
@@ -266,16 +266,16 @@
             title: "上に移動",
             action: "up",
             disabled:
-              getProjectsForSection(projectMenu.section).findIndex(
+              getProjectsForSection().findIndex(
                 (p) =>
-                  getProjectId(p, projectMenu.section) ===
-                  getProjectId(projectMenu.project, projectMenu.section)
+                  getProjectId(p) ===
+                  getProjectId(projectMenu.project)
               ) <= 0,
           },
           {
             title: "下に移動",
             action: "down",
-            disabled: getProjectsForSection(projectMenu.section).at(-1) === projectMenu.project,
+            disabled: getProjectsForSection().at(-1) === projectMenu.project,
           },
           { type: "separator" },
           {
@@ -386,7 +386,7 @@
   {/if}
   <br />
   <div class:Section={true}>
-    <svg class="Logo" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" mirror-in-rtl="true"
+    <svg class="Logo" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"
       ><path
         d="M8 6H5c-.553 0-1-.448-1-1s.447-1 1-1h3c.553 0 1 .448 1 1s-.447 1-1 1zM13 10H5c-.553 0-1-.448-1-1s.447-1 1-1h8c.553 0 1 .448 1 1s-.447 1-1 1zM13 14H5c-.553 0-1-.448-1-1s.447-1 1-1h8c.553 0 1 .448 1 1s-.447 1-1 1z"
       ></path><path
