@@ -1,8 +1,8 @@
 const { app, BrowserWindow, screen } = require("electron");
 const { usePortableDataDirectory, resolveAppDataPath } = require("./app-paths");
-// ポータブル版（実行ファイルの隣に data フォルダがある）なら、利用者データ
-// 領域をそこへ移す。ログや localStorage の置き場所も決まるので、ほかの
-// モジュールを読み込む前に行う。
+// ポータブル版（実行ファイルの隣に data フォルダがある）か TASK_MANAGE_DATA_DIR
+// の指定があれば、利用者データ領域をそこへ移す。ログや localStorage の置き場所
+// も決まるので、ほかのモジュールを読み込む前に行う。
 const portableDataDirectory = usePortableDataDirectory(app);
 const path = require("path");
 const { performance } = require("perf_hooks");
@@ -28,7 +28,7 @@ const { registerTaskDetailWindows } = require("./task-detail-window");
 
 const agentDebugging = configureAgentDebugging(app);
 if (portableDataDirectory) {
-  log.info(`Portable mode: storing data in ${portableDataDirectory}`);
+  log.info(`Storing user data in ${portableDataDirectory}`);
 }
 if (agentDebugging) {
   log.info(`Agent UI debugging enabled at http://${agentDebugging.host}:${agentDebugging.port}`);

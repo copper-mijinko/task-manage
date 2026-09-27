@@ -91,13 +91,16 @@
      すべて Name が吸う（TreeTable の fitNameColumn）。 */
   --col-min-name: 11.25rem;
   /* ステータスは「ステータス」5 文字 + 並べ替えボタンが並ぶので、日付列
-     （3 文字）より少し広く要る。5.25rem では見出しが「ステー...」に切れていた。 */
-  --col-min-status: 6rem;
+     （3 文字）より少し広く要る。5.25rem では見出しが「ステー...」に切れていた。
+     行側はドット・ラベル・▼が並び、6rem ではいちばん長い「キャンセル」が
+     「キャン…」に切れていた（layout.spec.js）。 */
+  --col-min-status: 6.75rem;
   --col-min-date: 6rem;
   --col-min-count: 3.75rem;
-  /* タグ列は中身が短いチップ 1〜2 個。ヘッダーの「タグ」表示が
-     読める幅だけ確保する。 */
-  --col-min-tags: 3rem;
+  /* タグ列は中身が短いチップ 1〜2 個。3rem では「タグ」の見出ししか
+     読めず、6〜7 文字のタグ（design / release）が「+N」と並ぶと「de…」
+     に切れていた。チップ 1 個と件数が並んで読める幅を取る。 */
+  --col-min-tags: 4.5rem;
   --col-min-default: 6rem;
 
   /* Card body padding — overridable by density mode so we don't squash

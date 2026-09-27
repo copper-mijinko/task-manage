@@ -81,6 +81,19 @@ describe("portable data directory", () => {
     );
   });
 
+  it("moves userData under TASK_MANAGE_DATA_DIR so test runs do not share browser state", () => {
+    const { dir, execPath } = extractedApp({ withData: true });
+    const app = packaged();
+    const run = path.join(dir, "e2e-run");
+    const env = { TASK_MANAGE_DATA_DIR: run };
+
+    expect(usePortableDataDirectory(app, { env, execPath })).toBe(path.join(run, "user-data"));
+    expect(app.getPath("userData")).toBe(path.join(run, "user-data"));
+    expect(resolveAppDataPath("meta.json", { env, electronApp: app })).toBe(
+      path.join(run, "meta.json")
+    );
+  });
+
   it("keeps the OS user-data directory when there is no data folder (installer)", () => {
     const { execPath } = extractedApp({ withData: false });
     const app = packaged();
