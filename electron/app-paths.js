@@ -34,9 +34,20 @@ function portableDataDirectory(options = {}) {
  *
  * @param {{ isPackaged: boolean, setPath: (name: "userData", value: string) => void }} electronApp
  * @param {{ env?: NodeJS.ProcessEnv, execPath?: string }} [options]
- * @returns {string | null} 使うことにしたフォルダ。ポータブル版でなければ null
+ * @returns {string | null} 使うことにしたフォルダ。ポータブル版でも `TASK_MANAGE_DATA_DIR`
+ *   の指定でもなければ null
  */
 function usePortableDataDirectory(electronApp, options = {}) {
+  // `TASK_MANAGE_DATA_DIR`（E2E・エージェント検証）では、設定ファイルだけで
+  // なく利用者データ領域もその中へ移す。移さないと localStorage（表示密度・
+  // 列幅）や Chromium がページごとに覚える表示倍率が、起動のたびに共有の
+  // ~/.config/task-manage に残り、前のテストの状態を次のテストが引き継ぐ。
+  const customDataDir = (options.env ?? process.env).TASK_MANAGE_DATA_DIR;
+  if (customDataDir) {
+    const userData = path.join(customDataDir, "user-data");
+    electronApp.setPath("userData", userData);
+    return userData;
+  }
   const directory = portableDataDirectory({ ...options, electronApp });
   if (directory) electronApp.setPath("userData", directory);
   return directory;
