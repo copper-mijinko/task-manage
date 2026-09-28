@@ -314,7 +314,7 @@
         $selected_type = "WorkspaceProject";
         $selected_id = $workspaceNavigation.rootId;
         $sidebarCollapsed = true;
-      }}>Workspace Root</button
+      }}>ワークスペース全体</button
     >
   {/if}
   <div class="WorkspaceInfo">

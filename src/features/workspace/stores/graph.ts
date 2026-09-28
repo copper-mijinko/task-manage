@@ -1,6 +1,7 @@
 import { derived, get, readable, writable, type Readable } from "svelte/store";
 import * as platform from "@lib/ipc/platform";
 import { saveStatus } from "@stores/save_status";
+import { toUserError } from "@lib/utils/error_messages";
 import type {
   GraphCommandOrigin,
   WorkspaceGraph,
@@ -69,14 +70,18 @@ async function run<T>(fn: () => Promise<T>): Promise<T> {
   const next = operation
     .catch(() => undefined)
     .then(async () => {
+      const before = get(saveStatus);
       saveStatus.set("writing");
       try {
         const result = await fn();
         saveStatus.set("saved");
         return result;
       } catch (error) {
-        saveStatus.set("error");
-        throw error;
+        // 入力が受け付けられなかっただけならファイルは変わっていないので、
+        // 保存状態は操作の前に戻す。本当に書けなかったときだけ保存失敗。
+        const userError = toUserError(error);
+        saveStatus.set(userError.rejected ? (before === "writing" ? "saved" : before) : "error");
+        throw userError;
       }
     });
   operation = next;

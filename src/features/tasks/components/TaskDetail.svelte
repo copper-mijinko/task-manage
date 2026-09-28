@@ -305,7 +305,7 @@
   let node = $derived(
     $table_selected_id && $tree_data ? getNode($table_selected_id, $tree_data.data) : undefined
   );
-  let name = $derived(node ? node.data["name"] : "Select Task");
+  let name = $derived(node ? node.data["name"] : "");
   let cardTitle = $derived(titleOverride || name);
   let nodeBody = $derived(node ? (node.data["body"] ?? "") : "");
   let bodyFormat = $derived(normalizeMemoFormat(node?.data?.["format"], defaultMemoFormat));

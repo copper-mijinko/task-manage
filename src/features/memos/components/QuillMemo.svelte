@@ -781,7 +781,11 @@
   {#if errorMessage}
     <div class="error-banner" role="alert">
       <span>{errorMessage}</span>
-      <button type="button" aria-label="Dismiss link error" onclick={() => (errorMessage = null)}>
+      <button
+        type="button"
+        aria-label="リンクのエラーを閉じる"
+        onclick={() => (errorMessage = null)}
+      >
         x
       </button>
     </div>

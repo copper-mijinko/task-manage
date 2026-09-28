@@ -135,7 +135,7 @@ describe("GanttPanel", () => {
 
     const title = container.querySelector(".GanttTitle");
 
-    expect(title).toHaveTextContent("Gantt");
+    expect(title).toHaveTextContent("ガント");
     expect(title).toHaveClass("GanttTitle");
     expect(container.querySelector(".GanttTitleRow .ScaleButtons")).toBeInTheDocument();
     expect(container.querySelector(".TimelineHeaderViewport .HeaderCell")).toBeInTheDocument();

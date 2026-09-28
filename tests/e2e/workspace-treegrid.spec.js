@@ -21,7 +21,7 @@ test("revision conflict preserves body input and retry keeps external changes", 
     await page.locator(".cm-content").fill("Keep input after conflict");
     // 手動保存ボタンは廃止。自動保存 (500ms debounce) がそのまま衝突する。
     await expect(
-      page.getByRole("alert").filter({ hasText: "Workspace graph changed" })
+      page.getByRole("alert").filter({ hasText: "別の変更が先に保存されました" })
     ).toBeVisible();
     await expect(page.locator(".cm-content")).toHaveText("Keep input after conflict");
     await page.getByRole("button", { name: "再試行", exact: true }).first().click();

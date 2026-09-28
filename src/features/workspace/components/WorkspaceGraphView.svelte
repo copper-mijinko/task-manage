@@ -102,7 +102,7 @@
   viewBox="0 0 1000 650"
   preserveAspectRatio="xMidYMid meet"
   role="img"
-  aria-label="Workspace graph"
+  aria-label="ワークスペースのグラフ"
   ><defs
     ><marker id="workspace-arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"
       ><path d="M0 0L0 6L9 3z" /></marker

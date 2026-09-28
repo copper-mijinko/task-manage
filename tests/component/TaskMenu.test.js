@@ -6,7 +6,7 @@ import TaskMenuHarness from "../mocks/TaskMenuHarness.svelte";
 async function openMenu() {
   await fireEvent.click(screen.getByRole("button", { name: "ノードメニューを開く" }));
   await tick();
-  expect(screen.getByRole("menu", { name: "Task actions" })).toBeInTheDocument();
+  expect(screen.getByRole("menu", { name: "ノードの操作" })).toBeInTheDocument();
 }
 
 describe("TaskMenu", () => {
@@ -17,7 +17,7 @@ describe("TaskMenu", () => {
     await fireEvent.keyDown(window, { key: "Escape" });
     await tick();
 
-    expect(screen.queryByRole("menu", { name: "Task actions" })).toBeNull();
+    expect(screen.queryByRole("menu", { name: "ノードの操作" })).toBeNull();
   });
 
   test("window blur does not throw and closes the menu", async () => {
@@ -27,7 +27,7 @@ describe("TaskMenu", () => {
     expect(() => window.dispatchEvent(new Event("blur"))).not.toThrow();
     await tick();
 
-    expect(screen.queryByRole("menu", { name: "Task actions" })).toBeNull();
+    expect(screen.queryByRole("menu", { name: "ノードの操作" })).toBeNull();
   });
 
   test("opening a modal closes the menu", async () => {
@@ -37,6 +37,6 @@ describe("TaskMenu", () => {
     window.dispatchEvent(new CustomEvent("task-manage:modal-open"));
     await tick();
 
-    expect(screen.queryByRole("menu", { name: "Task actions" })).toBeNull();
+    expect(screen.queryByRole("menu", { name: "ノードの操作" })).toBeNull();
   });
 });
