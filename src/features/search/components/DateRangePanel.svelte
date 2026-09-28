@@ -2,6 +2,9 @@
   import { viewportPopover } from "@lib/actions/viewport_popover";
   import { onMount, onDestroy } from "svelte";
   import { activePanelId, newPanelId } from "@stores/panel_coordinator";
+
+  /** 列の内部名（"due date" など）ではなく、見出しと同じ名前で出す。 */
+  const COLUMN_LABELS: Record<string, string> = { "start date": "開始日", "due date": "期限日" };
   import { globalDismiss } from "@lib/actions";
 
   interface Props {
@@ -78,9 +81,9 @@
   use:viewportPopover={anchorRect}
   use:globalDismiss={() => onclose?.()}
 >
-  <div class="PanelTitle">{column} フィルター</div>
+  <div class="PanelTitle">{COLUMN_LABELS[column] ?? column}フィルター</div>
   <div class="DateRow">
-    <label for="dr-from-{column.replace(' ', '-')}">From</label>
+    <label for="dr-from-{column.replace(' ', '-')}">から</label>
     <input
       id="dr-from-{column.replace(' ', '-')}"
       type="date"
@@ -89,7 +92,7 @@
     />
   </div>
   <div class="DateRow">
-    <label for="dr-to-{column.replace(' ', '-')}">To</label>
+    <label for="dr-to-{column.replace(' ', '-')}">まで</label>
     <input
       id="dr-to-{column.replace(' ', '-')}"
       type="date"

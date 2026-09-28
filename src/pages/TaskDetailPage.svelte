@@ -17,7 +17,7 @@
 
   /** @type {Props} */
   let {
-    initialTaskName = "Task Detail",
+    initialTaskName = "ノード詳細",
     initialTaskId = "",
     initialProjectId = "",
     ready = false,
@@ -74,7 +74,7 @@
   let taskName = $derived(taskPathName || node?.data?.name || initialTaskName);
   $effect.pre(() => {
     if (ready && taskName && typeof document !== "undefined") {
-      document.title = `${taskName} | Task Detail`;
+      document.title = `${taskName} | ノード詳細`;
     }
   });
   let isProjectDeleted = $derived(ready && initialProjectId && $selected_id !== initialProjectId);
@@ -97,12 +97,12 @@
     {:else if isProjectDeleted}
       <div class="empty-state">
         <h2>プロジェクトが見つかりません。</h2>
-        <p>The project for this detail window was deleted.</p>
+        <p>この詳細ウィンドウのプロジェクトは削除されました。</p>
       </div>
     {:else if isTaskDeleted}
       <div class="empty-state">
         <h2>ノードが見つかりません。</h2>
-        <p>The target task was deleted. Rename is still tracked by task ID.</p>
+        <p>対象のノードは削除されました。</p>
       </div>
     {:else}
       <TaskDetail titleOverride={taskName} showOpenWindowAction={false} />

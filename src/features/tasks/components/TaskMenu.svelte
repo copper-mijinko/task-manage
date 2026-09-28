@@ -2,6 +2,11 @@
   import { viewportPopover } from "@lib/actions/viewport_popover";
   import { onDestroy } from "svelte";
 
+  /** 表示用のキー表記（"Alt+↑"）を aria-keyshortcuts の書式（"Alt+ArrowUp"）にする。 */
+  function toAriaShortcut(shortcut) {
+    return shortcut.replace("↑", "ArrowUp").replace("↓", "ArrowDown").replace("Ctrl", "Control");
+  }
+
   /**
    * @typedef {Object} Props
    * @property {any} [menuItems]
@@ -158,7 +163,7 @@
     style:left={position.position === "right" ? `${position.x}px` : undefined}
     style:right={position.position === "left" ? `calc(100vw - ${position.x}px)` : undefined}
   >
-    <ul class="task-menu" role="menu" aria-label="Task actions">
+    <ul class="task-menu" role="menu" aria-label="ノードの操作">
       {#each menuItems as item}
         {#if item.type === "separator"}
           <li class="menu-separator" role="separator" aria-hidden="true"></li>
@@ -176,6 +181,7 @@
               role={item.checked === undefined ? "menuitem" : "menuitemcheckbox"}
               aria-checked={item.checked === undefined ? undefined : item.checked}
               aria-disabled={item.disabled ? "true" : undefined}
+              aria-keyshortcuts={item.shortcut ? toAriaShortcut(item.shortcut) : undefined}
               onclick={(event) => triggerAction(item, event)}
             >
               <span class="menu-item-content">
@@ -195,6 +201,11 @@
                 {/if}
                 <span class="menu-label">{item.title}</span>
               </span>
+              {#if item.shortcut}
+                <!-- 名前（読み上げ・テストの照合）に混ぜないよう隠し、キーは
+                     aria-keyshortcuts で伝える。 -->
+                <kbd class="menu-shortcut" aria-hidden="true">{item.shortcut}</kbd>
+              {/if}
               {#if item.children?.length}
                 <span class="submenu-arrow">›</span>
               {/if}
@@ -299,6 +310,14 @@
     gap: var(--sp2);
   }
 
+  .menu-shortcut {
+    margin-left: auto;
+    padding-left: var(--sp3);
+    font-family: inherit;
+    font-size: var(--font-label-sm);
+    color: color-mix(in srgb, var(--theme-color-Sub-main) 60%, transparent);
+    white-space: nowrap;
+  }
   .menu-label {
     overflow: hidden;
     text-overflow: ellipsis;

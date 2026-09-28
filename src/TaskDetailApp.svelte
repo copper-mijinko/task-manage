@@ -10,7 +10,7 @@
   const workspacePath = search.get("workspacePath") || "";
   const projectId = search.get("projectId") || "";
   const taskId = search.get("taskId") || "";
-  const taskName = search.get("taskName") || "Task Detail";
+  const taskName = search.get("taskName") || "ノード詳細";
   const occurrencePath = search.get("occurrencePath") || "";
   const performanceRunId = search.get("performanceRunId") || undefined;
 
@@ -18,7 +18,7 @@
   let unregisterDateTimeShortcuts = null;
 
   init_detail_store();
-  document.title = `${taskName} | Task Detail`;
+  document.title = `${taskName} | ノード詳細`;
 
   onMount(async () => {
     const currentTheme = await platform.getCurrentTheme().catch(() => undefined);

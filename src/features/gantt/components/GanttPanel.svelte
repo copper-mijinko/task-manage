@@ -897,7 +897,7 @@
   <!-- Scale toggle + header -->
   <div class="GanttHeader">
     <div class="GanttTitleRow">
-      <span class="GanttTitle">Gantt</span>
+      <span class="GanttTitle">ガント</span>
       <div class="ScaleButtons" role="group" aria-label="表示スケール">
         <button
           type="button"

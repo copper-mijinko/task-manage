@@ -158,7 +158,7 @@
           autocomplete="off"
           spellcheck="false"
         />
-        <button class="search-button" onclick={handleSearchButtonClick}> Search </button>
+        <button class="search-button" onclick={handleSearchButtonClick}> 検索 </button>
       </div>
 
       <div class="count-display">
@@ -174,8 +174,8 @@
       <div class="controls">
         <IconButton
           onclick={findPrevious}
-          tooltipContent="Prev"
-          ariaLabel="Previous match"
+          tooltipContent="前へ"
+          ariaLabel="前の一致へ"
           style="width: 24px; height: 24px; padding: 0;"
           normalColor="var(--theme-color-Primary-main)"
           activeColor="var(--theme-color-Primary-dark)"
@@ -193,8 +193,8 @@
 
         <IconButton
           onclick={findNext}
-          tooltipContent="Next"
-          ariaLabel="Next match"
+          tooltipContent="次へ"
+          ariaLabel="次の一致へ"
           style="width: 24px; height: 24px; padding: 0;"
           normalColor="var(--theme-color-Primary-main)"
           activeColor="var(--theme-color-Primary-dark)"
@@ -212,8 +212,8 @@
 
         <IconButton
           onclick={clearSearch}
-          tooltipContent="Clear"
-          ariaLabel="Clear search"
+          tooltipContent="クリア"
+          ariaLabel="検索をクリア"
           style="width: 24px; height: 24px; padding: 0;"
           normalColor="var(--theme-color-Success-main)"
           activeColor="var(--theme-color-Success-dark)"
@@ -238,8 +238,8 @@
 
         <IconButton
           onclick={closeSearch}
-          tooltipContent="Close(Esc)"
-          ariaLabel="Close search"
+          tooltipContent="閉じる (Esc)"
+          ariaLabel="検索を閉じる"
           style="width: 24px; height: 24px; padding: 0;"
           normalColor="var(--theme-color-Error-main)"
           activeColor="var(--theme-color-Error-dark)"

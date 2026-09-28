@@ -71,9 +71,9 @@
   use:viewportPopover={anchorRect}
   use:globalDismiss={() => onclose?.()}
 >
-  <div class="PanelTitle">Name フィルター</div>
+  <div class="PanelTitle">ノード名フィルター</div>
   <label class="TextRow" for="name-filter-input">
-    <span>Name</span>
+    <span>ノード名</span>
     <input
       bind:this={inputElement}
       id="name-filter-input"

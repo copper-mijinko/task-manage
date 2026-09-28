@@ -211,7 +211,7 @@ describe("workspace graph store races", () => {
     mocks.executeGraphCommand.mockRejectedValue(new Error("Workspace graph changed"));
     await expect(
       workspace_graph_store.execute({ type: "set-position", nodeId: "root", x: 1, y: 1 })
-    ).rejects.toThrow("changed");
+    ).rejects.toThrow("別の変更が先に保存されました");
     expect(mocks.executeGraphCommand).toHaveBeenCalledTimes(1);
     expect(get(workspace_graph_store).graph?.revision).toBe(3);
     expect(get(workspace_graph_store).error).toContain("changed");

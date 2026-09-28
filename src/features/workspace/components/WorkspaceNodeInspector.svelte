@@ -100,7 +100,7 @@
   {#if node}
     <div class="title">
       <h2>{node.name}</h2>
-      {#if nodeId === graph.rootId}<span>Workspace root</span>{/if}
+      {#if nodeId === graph.rootId}<span>ワークスペースのルート</span>{/if}
     </div>
     <button
       onclick={() => run({ type: "create-node", parentId: nodeId, node: { name: "新しいノード" } })}

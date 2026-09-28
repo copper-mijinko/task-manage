@@ -32,7 +32,7 @@ describe("PageSearchBox", () => {
 
     const input = screen.getByPlaceholderText("search...");
     await fireEvent.input(input, { target: { value: "  release  " } });
-    await fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    await fireEvent.click(screen.getByRole("button", { name: "検索" }));
 
     expect(api.findInPage).toHaveBeenCalledWith("release", {});
   });
@@ -42,7 +42,7 @@ describe("PageSearchBox", () => {
 
     render(PageSearchBox, { props: { show: true } });
 
-    await fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    await fireEvent.click(screen.getByRole("button", { name: "検索" }));
 
     expect(api.findInPage).not.toHaveBeenCalled();
   });

@@ -264,13 +264,13 @@ test("less common states stay clean: inherited dates, archived rows, relation ed
     await page.keyboard.press("Escape");
     await page.keyboard.press("Escape");
 
-    // 保存に失敗したときの表示。
+    // 入力を受け付けなかったときの表示。
     await select(page, "root/work/build");
     const detail = page.getByRole("region", { name: "ノード詳細" });
     await detail.getByRole("button", { name: "編集", exact: true }).click();
     await detail.getByLabel("期限日", { exact: true }).fill("2026-09-01");
-    await expect(page.getByRole("status").filter({ hasText: "保存失敗" })).toBeVisible();
-    await check("保存失敗");
+    await expect(page.getByRole("alert")).toContainText("開始日が期限日より後");
+    await check("入力エラー");
     await detail.getByLabel("期限日", { exact: true }).fill("2026-10-20");
     await detail.getByRole("button", { name: "編集終了", exact: true }).click();
 

@@ -14,6 +14,7 @@
     移すほうが自然。
 -->
 <script>
+  import { userErrorMessage } from "@lib/utils/error_messages";
   import { selected_id } from "@stores";
   import { INBOX_SELECTED_ID } from "@features/inbox/stores/inbox";
   import { AGENDA_SELECTED_ID } from "@features/agenda/stores/agenda";
@@ -58,18 +59,7 @@
     selectedOccurrenceId = detail.occurrenceId || detail.nodeId;
     sourceParentId = detail.parentId || "";
   }
-  function friendlyError(error) {
-    const raw = error instanceof Error ? error.message : String(error);
-    if (/cannot create a cycle|cycle/i.test(raw))
-      return "このビューでは循環する関係を作れません。グラフで操作してください。";
-    if (/duplicate/i.test(raw)) return "同じ親子関係はすでにあります。";
-    if (/root/i.test(raw)) return "Workspace root にはこの操作を実行できません。";
-    if (/date|YYYY-MM-DD/i.test(raw))
-      return "日付を確認してください。開始日は期限以前に設定します。";
-    if (/changed|conflict|revision/i.test(raw))
-      return "別の変更が先に保存されました。最新の内容を読み込みました。";
-    return "保存できませんでした。入力と接続先を確認してください。";
-  }
+  const friendlyError = userErrorMessage;
   async function execute(detail, propagate = false) {
     const target = detail.workspacePath || workspacePath;
     localError = "";
@@ -180,7 +170,7 @@
   let displayGraph = $derived(graph ? filterGraph(graph, $active_tag) : graph);
 </script>
 
-<main class="page" aria-label="Workspace nodes" style="width:100%;flex:1;align-self:stretch">
+<main class="page" aria-label="ワークスペースのノード" style="width:100%;flex:1;align-self:stretch">
   <header>
     <div>
       <h1>Workspace</h1>
