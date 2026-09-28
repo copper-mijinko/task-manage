@@ -180,6 +180,21 @@ delete (= archive) ではなく restore / permanently delete を出す。
             path: "M12 19L18 13H14V5H10V13H6L12 19Z",
           },
         },
+        // 別の親の下へ。Inbox から振り分けるときの近道（以前は詳細ペインの
+        // 奥のメニューにしかなかった）。1 行ずつ行う操作。
+        ...(!isRoot
+          ? [
+              {
+                title: "移動…",
+                action: "moveTo",
+                disabled: isMulti || archived,
+                icon: {
+                  viewBox: "0 0 24 24",
+                  path: "M4 6H11V8H4V6ZM4 11H9V13H4V11ZM4 16H11V18H4V16ZM15 8L20 12L15 16V13H12V11H15V8Z",
+                },
+              },
+            ]
+          : []),
         {
           title: `${countPrefix}インデント`,
           action: "indentTask",

@@ -68,6 +68,14 @@ async function walkMainScreens(page, check, suffix) {
   await check(`行メニュー${suffix}`);
   await page.keyboard.press("Escape");
 
+  await row(page, "root/work/shared").getByRole("button", { name: "ノード操作を開く" }).click();
+  await page.getByRole("menuitem", { name: "移動…", exact: true }).click();
+  await check(`移動先を選ぶ${suffix}`);
+  await page
+    .getByRole("dialog", { name: "移動先を選ぶ" })
+    .getByRole("button", { name: "キャンセル" })
+    .click();
+
   await page.getByRole("button", { name: "表示と操作", exact: true }).click();
   await check(`表示と操作メニュー${suffix}`);
   await page.keyboard.press("Escape");

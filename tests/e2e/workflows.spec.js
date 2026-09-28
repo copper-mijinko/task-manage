@@ -8,6 +8,7 @@ import {
   largeNodes,
   overflow,
   row,
+  rowMenu,
   run,
   select,
 } from "./support.js";
@@ -103,5 +104,31 @@ test("a large workspace renders a window of rows, and search, keyboard jumps and
     await expect(row(page, "root/p7/p7-t42")).toBeVisible();
     await expect(row(page, "root/p7/p7-t42")).toHaveAttribute("aria-selected", "true");
     await expect(row(page, "root/p0/p0-t0")).toHaveCount(0);
+  });
+});
+
+test("an Inbox item moves into a project from the row menu, choosing the destination by search", async () => {
+  await run(createWorkspace(), async (app) => {
+    const page = app.window;
+    await rowMenu(page, "root/inbox/idea", "移動…");
+    const dialog = page.getByRole("dialog", { name: "移動先を選ぶ" });
+    // 自分自身・いまの親（Inbox）は候補に出ない。打つと候補が縮む。
+    const options = dialog.getByRole("listbox", { name: "移動先の親の候補" }).getByRole("option");
+    await expect(options.filter({ hasText: "Inbox" })).toHaveCount(0);
+    await dialog.getByRole("textbox", { name: "移動先の親" }).fill("wor");
+    await expect(options.first().locator(".Name")).toHaveText("Work");
+    await dialog.getByRole("textbox", { name: "移動先の親" }).press("Enter");
+    await dialog.getByRole("button", { name: "移動", exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect.poll(() => childrenOf(app, "work")).toContain("Idea");
+    expect(childrenOf(app, "inbox")).toEqual([]);
+    await expect(row(page, "root/work/idea")).toBeVisible();
+
+    // 子孫は移動先に出ない（循環になるため）。
+    await rowMenu(page, "root/work", "移動…");
+    await dialog.getByRole("textbox", { name: "移動先の親" }).fill("spec");
+    await expect(dialog.getByText("一致するノードがありません")).toBeVisible();
+    await dialog.getByRole("button", { name: "キャンセル", exact: true }).click();
+    await expect(dialog).toHaveCount(0);
   });
 });
