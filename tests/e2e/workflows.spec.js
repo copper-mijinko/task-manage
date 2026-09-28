@@ -162,3 +162,36 @@ test("adding a project starts naming it, and Esc cancels the new project", async
       .toBe("row");
   });
 });
+
+test("a project can be renamed from the sidebar menu", async () => {
+  await run(createWorkspace(), async (app) => {
+    const page = app.window;
+    const sidebar = page.getByRole("complementary", { name: "ナビゲーション" });
+    const openMenu = async () => {
+      const trigger = sidebar.getByRole("button", { name: "Workの操作" });
+      if (!(await trigger.isVisible()))
+        await page.getByRole("button", { name: "サイドバーを表示", exact: true }).click();
+      await trigger.click();
+      await page.getByRole("menuitem", { name: "名前を変更", exact: true }).click();
+    };
+    const input = sidebar.getByRole("textbox", { name: "プロジェクト名" });
+
+    // Esc は取り消し。
+    await openMenu();
+    await expect(input).toHaveValue("Work");
+    await input.fill("Nope");
+    await input.press("Escape");
+    await expect(input).toHaveCount(0);
+    expect(graphOf(app).nodes.work.name).toBe("Work");
+
+    // Enter で確定すると、サイドバーとツリーの両方の名前が変わる。
+    await openMenu();
+    await input.fill("Office");
+    await input.press("Enter");
+    await expect.poll(() => graphOf(app).nodes.work.name).toBe("Office");
+    await expect(sidebar.getByRole("button", { name: "Office", exact: true })).toBeVisible();
+    await expect(
+      row(page, "root/work").getByRole("textbox", { name: "Officeのノード名" })
+    ).toBeVisible();
+  });
+});

@@ -77,6 +77,14 @@ export const workspaceApplication = {
       path
     );
   },
+  async renameScope(path, nodeId, name) {
+    await this.load(path);
+    return workspace_graph_store.execute(
+      { type: "update-node", nodeId, changes: { name } },
+      "tree",
+      path
+    );
+  },
   async removeScope(path, nodeId) {
     await this.load(path);
     return workspace_graph_store.execute({ type: "delete-node", nodeId }, "tree", path);
