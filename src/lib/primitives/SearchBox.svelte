@@ -155,6 +155,7 @@
   <select
     class="SearchMode"
     aria-label="絞り込みの対象"
+    title="全文: 名前・状態・日付などすべての項目 / タグ: タグ名"
     bind:value={searchMode}
     onchange={changeMode}
   >
@@ -201,8 +202,8 @@
       list={searchMode === "tags" ? "task-search-tags" : undefined}
       placeholder={terms.length === 0
         ? searchMode === "tags"
-          ? "タグ名で絞り込み"
-          : "ノードを絞り込み"
+          ? "タグ名で一覧を絞り込み"
+          : "一覧を絞り込み（一致しない行を隠す）"
         : ""}
       aria-label="ノード一覧を絞り込み"
       oninput={scheduleFilter}

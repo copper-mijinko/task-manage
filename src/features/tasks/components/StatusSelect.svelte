@@ -3,7 +3,7 @@
   import { onDestroy, tick } from "svelte";
   import {
     NO_STATUS,
-    STATUS_VALUES,
+    statusChoices,
     statusLabel,
     statusOptionLabel,
   } from "@lib/utils/status_labels";
@@ -31,7 +31,7 @@
   // 「無し」は既定値ではなく状態のひとつ。メモから育ったノードは進み具合を
   // 持たないので、そこに「未着手」を出すと未完了ノードの山に埋もれる。
   // 選ぶだけで追跡が始まるよう、専用の操作は作らずここに並べる。
-  const STATUSES = STATUS_VALUES;
+  let STATUSES = $derived(statusChoices(status));
 
   const color_map = {
     [NO_STATUS]: "transparent",

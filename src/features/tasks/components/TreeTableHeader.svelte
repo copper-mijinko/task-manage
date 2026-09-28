@@ -1,6 +1,11 @@
 <script>
   import { getContext, tick } from "svelte";
-  import { STATUS_VALUES, statusLabel } from "@lib/utils/status_labels";
+  import {
+    LEGACY_STATUS,
+    SELECTABLE_STATUS_VALUES,
+    STATUS_VALUES,
+    statusLabel,
+  } from "@lib/utils/status_labels";
   import { TREEGRID_APPLICATION } from "@features/workspace/application/treegrid";
   const application = getContext(TREEGRID_APPLICATION);
   import { filter } from "@stores";
@@ -70,7 +75,13 @@
 
   // 「なし」（空文字）は他の状態と同格の選択肢。ステータスを持たないノードは
   // 統一後ふつうに存在するので、絞り込めないと数の多いほうが探せなくなる。
-  const STATUS_OPTIONS = [...STATUS_VALUES];
+  // 「未定義」は、その状態のノードがあるときだけ絞り込みの選択肢に出す。
+  const statusRecords = application.records;
+  let STATUS_OPTIONS = $derived(
+    Object.values($statusRecords ?? {}).some((record) => record.status === LEGACY_STATUS)
+      ? [...STATUS_VALUES]
+      : [...SELECTABLE_STATUS_VALUES]
+  );
 
   /**
    * 選択済みステータスの取り出し。

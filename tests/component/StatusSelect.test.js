@@ -5,6 +5,13 @@ import StatusSelect from "@features/tasks/components/StatusSelect.svelte";
 import StatusSelectHarness from "../mocks/StatusSelectHarness.svelte";
 
 describe("StatusSelect", () => {
+  test("keeps the legacy 未定義 option only for a node that already has it", async () => {
+    const { getByLabelText } = render(StatusSelect, { props: { status: "Undefined" } });
+    await fireEvent.click(getByLabelText("ステータス"));
+    await tick();
+    expect(screen.getByRole("option", { name: "未定義" })).toHaveAttribute("aria-selected", "true");
+  });
+
   test("shows the current status text on the trigger button", () => {
     const { getByLabelText } = render(StatusSelect, { props: { status: "In Progress" } });
 
@@ -21,7 +28,8 @@ describe("StatusSelect", () => {
     await tick();
 
     expect(screen.getByRole("listbox")).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "未定義" })).toBeInTheDocument();
+    // 旧形式の「未定義」は、すでにその状態のノードでだけ選択肢に出る。
+    expect(screen.queryByRole("option", { name: "未定義" })).toBeNull();
     expect(screen.getByRole("option", { name: "ステータスなし" })).toBeInTheDocument();
     // All status options are visible.
     expect(screen.getByRole("option", { name: /未着手/ })).toBeInTheDocument();

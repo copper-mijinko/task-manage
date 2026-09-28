@@ -255,7 +255,14 @@
   <h1 class="Title">{title}</h1>
 
   <!-- Page-search: highlight matches on screen only; does NOT filter rows. -->
-  <label class="SearchField" aria-label="画面内検索（ハイライト）" data-page-search-skip>
+  <!-- 一覧の絞り込み（行を減らす）と並ぶので、こちらは色を付けるだけだと
+       文言とツールチップではっきりさせる。 -->
+  <label
+    class="SearchField"
+    aria-label="画面内検索（ハイライト）"
+    title="画面に出ている文字に色を付けて探します（一覧の行は減りません）"
+    data-page-search-skip
+  >
     <svg class="SearchIcon" viewBox="0 0 24 24" aria-hidden="true">
       <circle cx="11" cy="11" r="7" />
       <path d="M21 21L16.5 16.5" />
@@ -264,7 +271,7 @@
       bind:this={searchInputEl}
       type="search"
       class="SearchInput"
-      placeholder="画面内をハイライト検索…"
+      placeholder="画面内の文字を探す…"
       value={queryText}
       oninput={handleSearchInput}
       onkeydown={handleSearchKeydown}
