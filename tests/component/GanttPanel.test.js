@@ -127,6 +127,8 @@ describe("GanttPanel", () => {
 
     expect(headerCell.children[0]).toHaveClass("HeaderCellDate");
     expect(headerCell.children[1]).toHaveClass("HeaderCellWeekday");
+    // OS の言語にかかわらず、曜日は日本語で出す。
+    expect(headerCell.children[1].textContent).toMatch(/^[日月火水木金土]$/);
   });
 
   test("renders a left aligned gantt title row with scale buttons", async () => {
