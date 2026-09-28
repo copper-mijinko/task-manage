@@ -341,10 +341,10 @@
     if (editContextKey !== previousEditContextKey) {
       changeDataDebounce.cancel();
       previousEditContextKey = editContextKey;
-      // 項目の編集モードは、別のノードに移っても保つ。以前はここで毎回
-      // 読み取り表示に戻していて、続けて何件も直すと、そのたびに「編集」を
-      // 押し直す必要があった。本文の編集はノードごとに始める。
-      editingBody = false;
+      // 項目の編集モードも、本文（Quill）の編集中かどうかも、別のノードに
+      // 移っても保つ。以前はここで毎回読み取り表示に戻していて、続けて何件も
+      // 直すと、そのたびに「編集」を押し直す必要があった（Markdown の本文は
+      // 表示モードを設定に保存していて、もとから保たれていた）。
       parentEditing = false;
       parentNotice = "";
       blockedParent = "";
