@@ -338,3 +338,45 @@ test("detail edit mode stays on across rows; archive needs no confirmation and i
     await page.keyboard.press("Escape");
   });
 });
+
+test("focus stays usable after archive, undo and a status change, and F6 moves between the tree and the detail pane", async () => {
+  await run(createWorkspace(), async (app) => {
+    const page = app.window;
+    const focused = () =>
+      page.evaluate(() => {
+        const active = document.activeElement;
+        if (!active || active === document.body) return "body";
+        return active.getAttribute("role") === "row"
+          ? `row:${active.dataset.rowPath}`
+          : active.getAttribute("aria-label") || active.tagName;
+      });
+
+    // アーカイブした行の次の行にフォーカスが移り、そのまま矢印キーが効く。
+    await select(page, "root/work/build");
+    await page.keyboard.press("Delete");
+    await expect.poll(focused).toBe("row:root/work/release");
+    await page.keyboard.press("ArrowUp");
+    await expect.poll(focused).toBe("row:root/work/spec");
+    await page.keyboard.press("Control+z");
+    await expect(row(page, "root/work/build")).toBeVisible();
+    await expect.poll(focused).toMatch(/^row:/);
+
+    // ステータスを選ぶと、開いたボタンへ戻る。
+    await row(page, "root/work/spec").getByRole("button", { name: "Specのステータス" }).click();
+    await page.getByRole("option", { name: "完了", exact: true }).click();
+    await expect.poll(focused).toBe("Specのステータス");
+
+    // F6 で詳細ペインへ、もう一度で行へ戻る。
+    await select(page, "root/work/spec");
+    await page.keyboard.press("F6");
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          document.querySelector("section.node-detail")?.contains(document.activeElement)
+        )
+      )
+      .toBe(true);
+    await page.keyboard.press("F6");
+    await expect.poll(focused).toBe("row:root/work/spec");
+  });
+});

@@ -6,7 +6,7 @@
   const tree_data = application.tree;
   const filtered_data = application.filtered;
 
-  import { onDestroy, onMount, tick } from "svelte";
+  import { onDestroy, onMount, tick, untrack } from "svelte";
   import TreeTableHeader from "@features/tasks/components/TreeTableHeader.svelte";
   import TreeTableRow from "@features/tasks/components/TreeTableRow.svelte";
   import BulkActionBar from "@features/tasks/components/BulkActionBar.svelte";
@@ -224,6 +224,62 @@
   }
 
   onDestroy(() => pageSearchCountIsPartial.set(false));
+
+  /**
+   * フォーカスが「ツリーのもの」か。行を消す・元に戻す・ステータスを選ぶなど、
+   * フォーカスしていた要素が描き直しで消えると、フォーカスはどこにも無くなり、
+   * クリックし直すまで矢印キーも Delete も効かなかった。ツリーで操作していた
+   * 最中にそうなったら、いま操作している行へ戻す。
+   * ツリーから開いたポップアップ（ステータスの選択肢・行メニュー）とダイアログ
+   * の中にいる間は、まだツリーの操作の続きとして扱う。
+   */
+  let treeOwnsFocus = false;
+  const TREE_POPUPS = '.s-popup, #task-menu, [role="dialog"], [role="alertdialog"]';
+  function trackFocusOwner(event) {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (table_root?.contains(target)) treeOwnsFocus = true;
+    else if (!target.closest(TREE_POPUPS)) treeOwnsFocus = false;
+  }
+  onMount(() => {
+    document.addEventListener("focusin", trackFocusOwner);
+    document.addEventListener("pointerdown", trackFocusOwner, true);
+    return () => {
+      document.removeEventListener("focusin", trackFocusOwner);
+      document.removeEventListener("pointerdown", trackFocusOwner, true);
+    };
+  });
+  function restoreLostFocus() {
+    void tick().then(() => {
+      const focused = document.activeElement;
+      if (treeOwnsFocus && (!focused || focused === document.body))
+        void focusRowByPath($active_row_path);
+    });
+  }
+
+  /**
+   * F6 でツリーと詳細ペインを行き来する。行では Tab をインデントに使うので、
+   * 行のステータスや日付へは Tab で入れない。詳細ペインは編集モードのまま
+   * 保たれるので、キーボードだけでもそちらで全項目を直せる。
+   */
+  function handleF6(event) {
+    if (event.key !== "F6" || event.ctrlKey || event.metaKey || event.altKey) return;
+    const detail = document.querySelector("section.node-detail");
+    const focused = document.activeElement;
+    if (detail?.contains(focused) || !table_root?.contains(focused)) {
+      if (!$active_row_path) return;
+      event.preventDefault();
+      void focusRowByPath($active_row_path);
+      return;
+    }
+    const target =
+      detail?.querySelector(
+        ".detail-fields input, .detail-fields button, .detail-fields [tabindex='0']"
+      ) ?? detail?.querySelector("button, input, [tabindex='0']");
+    if (!(target instanceof HTMLElement)) return;
+    event.preventDefault();
+    target.focus();
+  }
 
   /**
    * 出現アニメーションは本当に増えた行だけに流す。スクロールで描き始めた
@@ -922,6 +978,23 @@
     );
   }
 
+  /**
+   * 行を片付けたあとに操作を続ける行。消える行（とその子孫）の次の行、無ければ
+   * 前の行。先頭の行（ルート）へ飛ばず、いま見ていた場所のまま続けられる。
+   */
+  function neighborRowPath(path, removedIds = new Set()) {
+    const index = rows.findIndex((row) => row.path === path);
+    if (index < 0) return undefined;
+    const gone = (row) =>
+      removedIds.has(row.id) || row.path === path || row.path.startsWith(`${path}/`);
+    const after = rows.slice(index + 1).find((row) => !gone(row));
+    const before = rows
+      .slice(0, index)
+      .reverse()
+      .find((row) => !gone(row));
+    return (after ?? before)?.path;
+  }
+
   function isInMultiSelection(id) {
     return selectionSize > 1 && $selected_ids.has(id);
   }
@@ -1018,8 +1091,10 @@
     }
     // 完全削除が混ざらなければ確認せずにアーカイブする（通知から元に戻せる）。
     if (permanentIds.length === 0) {
+      const next = neighborRowPath($active_row_path, new Set(archiveIds));
       void application.archiveWithNotice(archiveIds);
       clearSelection();
+      if (next) $active_row_path = next;
       return;
     }
     bulkArchiveTargetIds = archiveIds;
@@ -1105,8 +1180,10 @@
     const node = getNode(id, $tree_data.data);
     if (!node || node.id === $tree_data.data.id || application.isProtected(id)) return;
     if (mode === "archive") {
+      const next = neighborRowPath(rowFor(id)?.path);
       void application.archiveWithNotice([id]);
       clearSelection();
+      if (next) $active_row_path = next;
       return;
     }
 
@@ -1179,6 +1256,11 @@
       $active_row_path =
         rows.find((row) => $selected_ids.has(row.id))?.path ?? rows[0]?.path ?? undefined;
     }
+  });
+  $effect(() => {
+    // 行の並びが変わったら（消えた・戻った・描き直した）、失ったフォーカスを戻す。
+    void rows;
+    untrack(restoreLostFocus);
   });
   let tabStopRowPath = $derived($active_row_path);
   let activeRowId = $derived(rows.find((row) => row.path === $active_row_path)?.id ?? null);
@@ -1346,7 +1428,12 @@
   );
 </script>
 
-<svelte:window onkeydown={handleGlobalKeydown} />
+<svelte:window
+  onkeydown={(event) => {
+    handleF6(event);
+    if (!event.defaultPrevented) handleGlobalKeydown(event);
+  }}
+/>
 
 <div
   bind:this={table_root}
