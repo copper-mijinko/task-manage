@@ -452,3 +452,24 @@ test("Esc right after adding cancels the new node, and Ctrl+X then Ctrl+V moves 
     expect(graphOf(app).nodes.idea.parents.map((parent) => parent.id)).toEqual(["work"]);
   });
 });
+
+test("the separate detail window shows the archive notice and its undo", async () => {
+  await run(createWorkspace(), async (app) => {
+    const page = app.window;
+    await select(page, "root/work/release");
+    const opened = app.electronApp.waitForEvent("window");
+    await page.getByRole("button", { name: "ノード詳細の操作" }).click();
+    await page.getByRole("menuitem", { name: "別Windowで開く", exact: true }).click();
+    const detail = await opened;
+    await detail.getByRole("button", { name: "ノード詳細の操作" }).click();
+    await detail.getByRole("menuitem", { name: "アーカイブ", exact: true }).click();
+    // 確認を挟まない操作なので、別ウィンドウでも通知と「元に戻す」を出す。
+    const archived = detail
+      .getByRole("status")
+      .filter({ hasText: "「Release」をアーカイブしました" });
+    await expect(archived).toBeVisible();
+    await expect.poll(() => graphOf(app).nodes.release.archived).toBe(true);
+    await archived.getByRole("button", { name: "元に戻す" }).click();
+    await expect.poll(() => graphOf(app).nodes.release.archived).toBeFalsy();
+  });
+});
