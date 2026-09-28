@@ -34,6 +34,19 @@ describe("error_messages", () => {
     expect(isRejectedOperation(ipc("Verification: save failed"))).toBe(false);
   });
 
+  test("translates file and workspace failures without calling them rejections", () => {
+    const denied = ipc("EACCES: permission denied, open 'graph-v1.json'");
+    expect(userErrorMessage(denied)).toBe(
+      "ファイルにアクセスできません（使用中か、権限がありません）。"
+    );
+    expect(isRejectedOperation(denied)).toBe(false);
+    expect(userErrorMessage(ipc("Invalid workspace graph"))).toContain("読み込めませんでした");
+    expect(isRejectedOperation(ipc("Invalid workspace graph"))).toBe(false);
+    expect(userErrorMessage(ipc("Active workspace is not registered"))).toContain(
+      "登録されていません"
+    );
+  });
+
   test("toUserError keeps the original error as the cause", () => {
     const original = ipc("Duplicate edges are not allowed");
     const wrapped = toUserError(original);

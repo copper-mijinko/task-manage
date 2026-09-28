@@ -1,4 +1,4 @@
-import { fireEvent, screen } from "@testing-library/svelte";
+import { fireEvent, screen, waitFor } from "@testing-library/svelte";
 import { vi } from "vitest";
 
 import TaskAttachments from "@features/tasks/components/TaskAttachments.svelte";
@@ -77,11 +77,12 @@ describe("TaskAttachments", () => {
     expect(screen.queryByText("多数の添付")).not.toBeInTheDocument();
   });
 
-  test("opens an attachment when clicked and deletes it after confirmation", async () => {
+  test("opens an attachment when clicked and removes it without a confirmation", async () => {
     const attachment = makeAttachment(1);
     const application = applicationStub({
       openAsset: vi.fn().mockResolvedValue(undefined),
       update: vi.fn().mockResolvedValue({}),
+      notifyUndoable: vi.fn(),
     });
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
 
@@ -98,6 +99,14 @@ describe("TaskAttachments", () => {
 
     // 一覧から外すだけで、ファイルは「元に戻す」のために残す。
     expect(application.update).toHaveBeenCalledWith("task-1", { attachments: [] });
+    // 元に戻せるので確認は出さず、「元に戻す」付きの通知で知らせる。
+    expect(confirmSpy).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(application.notifyUndoable).toHaveBeenCalledWith(
+        {},
+        "「file-1.txt」を添付から外しました"
+      )
+    );
     confirmSpy.mockRestore();
   });
 

@@ -1,3 +1,4 @@
+import { userErrorMessage } from "@lib/utils/error_messages";
 import { derived, get } from "svelte/store";
 import { workspace_graph_store } from "../stores/graph";
 import { workspace_store } from "../stores/workspace";
@@ -52,7 +53,7 @@ export const workspaceApplication = {
       );
       return { success: true };
     } catch (error) {
-      return { success: false, error: error.message || String(error) };
+      return { success: false, error: userErrorMessage(error) };
     }
   },
   async load(path) {

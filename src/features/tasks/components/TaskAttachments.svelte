@@ -1,4 +1,5 @@
 <script>
+  import { userErrorMessage } from "@lib/utils/error_messages";
   import { getContext } from "svelte";
   import { TREEGRID_APPLICATION } from "@features/workspace/application/treegrid";
   import IconButton from "@lib/primitives/IconButton.svelte";
@@ -81,7 +82,7 @@
       }
       await application.update(id, { attachments: [...existing, ...added] });
     } catch (e) {
-      errorMessage = e.message;
+      errorMessage = userErrorMessage(e);
     } finally {
       isBusy = false;
     }
@@ -131,7 +132,7 @@
     try {
       await application.openAsset(taskId, attachmentPath(attachment), chooseProgram);
     } catch (e) {
-      errorMessage = e.message;
+      errorMessage = userErrorMessage(e);
     }
   }
 
@@ -175,14 +176,16 @@
   async function deleteAttachment(attachment) {
     if (readOnly || !canUseAttachments || isBusy) return;
     closeAttachmentMenu();
-    if (!window.confirm(`「${attachment.name}」を添付一覧から削除しますか？`)) return;
+    // 元に戻せる操作なので確認は挟まず、通知の「元に戻す」で戻せるようにする。
+    // 以前はブラウザ標準の確認（ボタンが OK / Cancel）で止めていた。
     errorMessage = "";
     try {
-      await application.update(taskId, {
+      const result = await application.update(taskId, {
         attachments: attachmentList.filter((item) => item.id !== attachment.id),
       });
+      application.notifyUndoable(result, `「${attachment.name}」を添付から外しました`);
     } catch (e) {
-      errorMessage = e.message;
+      errorMessage = userErrorMessage(e);
     }
   }
 </script>

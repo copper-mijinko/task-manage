@@ -1,4 +1,5 @@
 <script>
+  import { userErrorMessage } from "@lib/utils/error_messages";
   import { setContext, onDestroy } from "svelte";
   import { get } from "svelte/store";
   import MainPage from "@pages/MainPage.svelte";
@@ -17,7 +18,7 @@
   const error = application.error;
   const projection = application.tree;
   let previousScope = "";
-  void workspaceApplication.load(workspacePath).catch((e) => error.set(e.message));
+  void workspaceApplication.load(workspacePath).catch((e) => error.set(userErrorMessage(e)));
   let navigation = $derived($workspaceNavigation);
   $effect.pre(() => {
     if (navigation && !$selected_id) $selected_id = navigation.rootId;

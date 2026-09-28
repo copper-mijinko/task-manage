@@ -107,7 +107,11 @@ test("keyboard: arrows move and expand, Ctrl+C / Ctrl+V copy a subtree, Ctrl+A a
     await expect.poll(() => activeRow(page)).toBe("root/work/spec");
 
     // コピーして別のプロジェクトへ貼る。複製は元と独立して編集できる。
+    // 画面が変わらないコピーは、通知で何を写したかを知らせる。
     await page.keyboard.press("Control+c");
+    await expect(
+      page.getByRole("status").filter({ hasText: "「Spec」をコピーしました" })
+    ).toBeVisible();
     await select(page, "root/home");
     await page.keyboard.press("Control+v");
     await expect.poll(() => childrenOf(app, "home")).toEqual(["Groceries", "Spec のコピー"]);

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { userErrorMessage } from "@lib/utils/error_messages";
   import Modal from "@lib/primitives/Modal.svelte";
   import IconButton from "@lib/primitives/IconButton.svelte";
   import * as platform from "@lib/ipc/platform";
@@ -40,7 +41,7 @@
         importSources.filter((source) => !source.imported).map((source) => source.dirName)
       );
     } catch (error) {
-      importMessage = error instanceof Error ? error.message : String(error);
+      importMessage = userErrorMessage(error);
     }
   }
 
@@ -64,7 +65,7 @@
       await loadImportSources();
       importMessage = `${result.selectedNodeIds.length} 件のプロジェクトを取り込みました。「元に戻す」で取り消せます。`;
     } catch (error) {
-      importMessage = error instanceof Error ? error.message : String(error);
+      importMessage = userErrorMessage(error);
     } finally {
       importBusy = false;
     }

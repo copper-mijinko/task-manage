@@ -1,4 +1,5 @@
 <script>
+  import { userErrorMessage } from "@lib/utils/error_messages";
   import { setContext, onMount, onDestroy, tick, untrack } from "svelte";
   import * as platform from "@lib/ipc/platform";
   import { createTreeGridApplication, TREEGRID_APPLICATION } from "../application/treegrid";
@@ -41,7 +42,7 @@
       $active_row_path = occurrencePath;
       ready = true;
     } catch (e) {
-      error.set(e.message);
+      error.set(userErrorMessage(e));
     } finally {
       reportMilestone("detail.taskDataLoaded");
     }

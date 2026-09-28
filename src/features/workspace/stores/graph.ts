@@ -1,7 +1,7 @@
 import { derived, get, readable, writable, type Readable } from "svelte/store";
 import * as platform from "@lib/ipc/platform";
 import { saveStatus } from "@stores/save_status";
-import { toUserError } from "@lib/utils/error_messages";
+import { toUserError, userErrorMessage } from "@lib/utils/error_messages";
 import { showNotice } from "@stores/notice";
 import { describeHistoryStep } from "@features/workspace/utils/graph_change";
 import type {
@@ -122,7 +122,7 @@ export const workspace_graph_store = {
       }
       return graph;
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = userErrorMessage(error);
       if (loadGeneration === generation) {
         state.update((current) => ({ ...current, graph: null, loading: false, error: message }));
       }

@@ -1,4 +1,5 @@
 <script>
+  import { userErrorMessage } from "@lib/utils/error_messages";
   import { onMount } from "svelte";
   import Quill from "quill";
   import quillIcons from "quill/ui/icons.js";
@@ -30,7 +31,7 @@
         return true;
       })
       .catch((error) => {
-        errorMessage = error.message;
+        errorMessage = userErrorMessage(error);
         return false;
       });
     return pendingSave;
