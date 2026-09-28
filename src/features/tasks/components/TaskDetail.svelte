@@ -99,8 +99,15 @@
       requestBodyFormat(bodyFormat === "markdown" ? "quill" : "markdown");
   }
 
-  const requestDanger = () => {
-    dangerTarget = { id: node.id, name, permanent: isArchived };
+  const requestDanger = async () => {
+    if (isArchived) {
+      dangerTarget = { id: node.id, name, permanent: true };
+      return;
+    }
+    // アーカイブは元に戻せるので確認せず、通知から取り消せるようにする。
+    const id = node.id;
+    if ((await memoEditor?.flush()) === false) return;
+    await application.archiveWithNotice([id]);
   };
   async function confirmDanger() {
     const target = dangerTarget;
@@ -316,7 +323,7 @@
               ]
             : []),
           {
-            title: isArchived ? "完全削除…" : "アーカイブ…",
+            title: isArchived ? "完全削除…" : "アーカイブ",
             action: "danger",
             disabled: application.isProtected(node.id),
           },
@@ -334,7 +341,9 @@
     if (editContextKey !== previousEditContextKey) {
       changeDataDebounce.cancel();
       previousEditContextKey = editContextKey;
-      editingProperties = false;
+      // 項目の編集モードは、別のノードに移っても保つ。以前はここで毎回
+      // 読み取り表示に戻していて、続けて何件も直すと、そのたびに「編集」を
+      // 押し直す必要があった。本文の編集はノードごとに始める。
       editingBody = false;
       parentEditing = false;
       parentNotice = "";

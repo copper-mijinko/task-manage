@@ -109,8 +109,11 @@ async function walkMainScreens(page, check, suffix) {
 
   await select(page, "root/work/release");
   await page.keyboard.press("Delete");
-  await check(`アーカイブの確認${suffix}`);
-  await page.keyboard.press("Escape");
+  const archived = page.getByRole("status").filter({ hasText: "アーカイブしました" });
+  await expect(archived).toBeVisible();
+  await check(`アーカイブの通知${suffix}`);
+  await archived.getByRole("button", { name: "元に戻す" }).click();
+  await expect(row(page, "root/work/release")).toBeVisible();
 
   await overflow(page, "列の設定");
   const columns = page.getByRole("dialog", { name: "列の設定" });

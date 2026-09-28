@@ -1016,6 +1016,12 @@
       if (isNodeEffectivelyArchived(id, $tree_data.data)) permanentIds.push(id);
       else archiveIds.push(id);
     }
+    // 完全削除が混ざらなければ確認せずにアーカイブする（通知から元に戻せる）。
+    if (permanentIds.length === 0) {
+      void application.archiveWithNotice(archiveIds);
+      clearSelection();
+      return;
+    }
     bulkArchiveTargetIds = archiveIds;
     bulkPermanentTargetIds = permanentIds;
     bulkDeleteCount = targetIds.length;
@@ -1098,6 +1104,11 @@
     }
     const node = getNode(id, $tree_data.data);
     if (!node || node.id === $tree_data.data.id || application.isProtected(id)) return;
+    if (mode === "archive") {
+      void application.archiveWithNotice([id]);
+      clearSelection();
+      return;
+    }
 
     deleteMode = mode;
     deleteTargetId = id;

@@ -2,6 +2,8 @@ import { derived, get, readable, writable, type Readable } from "svelte/store";
 import * as platform from "@lib/ipc/platform";
 import { saveStatus } from "@stores/save_status";
 import { toUserError } from "@lib/utils/error_messages";
+import { showNotice } from "@stores/notice";
+import { describeHistoryStep } from "@features/workspace/utils/graph_change";
 import type {
   GraphCommandOrigin,
   WorkspaceGraph,
@@ -182,6 +184,9 @@ function history(direction: "undo" | "redo") {
           ? await platform.wsUndoGraph(workspacePath, graph.revision)
           : await platform.wsRedoGraph(workspacePath, graph.revision);
       applyResult(workspacePath, callGeneration, result.graph);
+      // 何が戻ったのかは画面のどこにも出ないので、変わったノードの名前で知らせる。
+      // 起動し直しても履歴は残るので、思わぬ段を戻したことに気づけるように。
+      showNotice(describeHistoryStep(direction, graph, result.graph));
       return result;
     } catch (error) {
       await handleGraphError(workspacePath, callGeneration, error);

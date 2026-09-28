@@ -413,7 +413,6 @@ test("archiving a branch hides everything under it and restoring a deep row brin
       .getByRole("button", { name: "ノード操作を開く" })
       .click();
     await page.getByRole("menuitem", { name: "アーカイブ", exact: true }).click();
-    await page.getByRole("button", { name: "アーカイブする", exact: true }).click();
     await expect.poll(() => graphOf(app).nodes.cycle.archived).toBe(true);
 
     // 次に中間（alpha の下の shared）をこの場所だけアーカイブすると、その下の行も消える。

@@ -44,7 +44,6 @@ test("quick capture adds to the Inbox from anywhere, the badge counts it, and th
     // 片付けると（アーカイブ）バッジが減る。
     await select(page, `inbox/${bob.id}`);
     await page.keyboard.press("Delete");
-    await page.getByRole("button", { name: "アーカイブする", exact: true }).click();
     await expect(inboxBadge(page)).toHaveText("2");
   });
 });
