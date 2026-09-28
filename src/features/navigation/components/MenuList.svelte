@@ -9,7 +9,7 @@
     workspaceApplication,
     workspaceNavigation,
   } from "@features/workspace/application/workspace";
-  import { onDestroy } from "svelte";
+  import { onDestroy, tick } from "svelte";
   import { slide } from "svelte/transition";
   import TaskMenu from "@features/tasks/components/TaskMenu.svelte";
   let projectMenu = $state(null);
@@ -35,6 +35,42 @@
     projects.splice(index + delta, 0, project);
     saveProjectOrder(section, projects);
   }
+  /**
+   * サイドバーでプロジェクトの名前を変える。以前はプロジェクトを開いて先頭行の
+   * 名前を直すしかなかった。Enter か欄を離れると確定、Esc で取り消し。
+   */
+  let renamingProjectId = $state(null);
+  let renameDraft = $state("");
+  async function startProjectRename(project) {
+    renamingProjectId = project.rootId;
+    renameDraft = project.name ?? "";
+    await tick();
+    const input = document.querySelector(".ProjectRenameInput");
+    if (input instanceof HTMLInputElement) {
+      input.focus();
+      input.select();
+    }
+  }
+  async function finishProjectRename(commit) {
+    const id = renamingProjectId;
+    if (!id) return;
+    renamingProjectId = null;
+    const name = renameDraft.trim();
+    const current = workspaceProjects.find((project) => project.rootId === id)?.name ?? "";
+    if (commit && name && name !== current) {
+      try {
+        await workspaceApplication.renameScope($workspace_store.activeWorkspacePath, id, name);
+      } catch (error) {
+        project_add_error = userErrorMessage(error);
+      }
+    }
+    await tick();
+    const button = document.querySelector(
+      `.MenuRow[data-id="${CSS.escape(id)}"] .ProjectSelectButton`
+    );
+    if (button instanceof HTMLElement) button.focus();
+  }
+
   function deleteProjectFromMenu() {
     workspace_delete_target = projectMenu.project;
     show_workspace_delete = true;
@@ -276,6 +312,7 @@
   let projectMenuItems = $derived(
     projectMenu
       ? [
+          { title: "名前を変更", action: "rename" },
           {
             title: "上に移動",
             action: "up",
@@ -483,23 +520,45 @@
               data-section="WorkspaceProject"
               use:projectDragAndDrop
             >
-              <button
-                type="button"
-                class="ProjectSelectButton"
-                use:ripple
-                aria-label={proj.name}
-                onclick={() => selectWorkspaceProject(proj)}
-              >
+              {#if renamingProjectId === proj.rootId}
                 <div class="TreeLine" style="flex-shrink: 0"></div>
-                <span
-                  class="TextOverFlow"
-                  use:tooltip={{
-                    color: "var(--on-theme-tooltip-fg)",
-                    backgroundColor: "var(--on-theme-tooltip-bg)",
-                    content: proj.name,
-                  }}>{proj.name}</span
+                <input
+                  class="ProjectRenameInput"
+                  type="text"
+                  aria-label="プロジェクト名"
+                  bind:value={renameDraft}
+                  onkeydown={(event) => {
+                    if (event.isComposing || event.keyCode === 229) return;
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      void finishProjectRename(true);
+                    } else if (event.key === "Escape") {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      void finishProjectRename(false);
+                    }
+                  }}
+                  onblur={() => void finishProjectRename(true)}
+                />
+              {:else}
+                <button
+                  type="button"
+                  class="ProjectSelectButton"
+                  use:ripple
+                  aria-label={proj.name}
+                  onclick={() => selectWorkspaceProject(proj)}
                 >
-              </button>
+                  <div class="TreeLine" style="flex-shrink: 0"></div>
+                  <span
+                    class="TextOverFlow"
+                    use:tooltip={{
+                      color: "var(--on-theme-tooltip-fg)",
+                      backgroundColor: "var(--on-theme-tooltip-bg)",
+                      content: proj.name,
+                    }}>{proj.name}</span
+                  >
+                </button>
+              {/if}
               <button
                 class="ui-action ProjectMenuTrigger"
                 aria-label={proj.name + "の操作"}
@@ -538,7 +597,8 @@
   menuItems={projectMenuItems}
   onclose={closeProjectMenu}
   onaction={(item) => {
-    if (item.action === "up") moveProjectFromMenu(-1);
+    if (item.action === "rename") startProjectRename(projectMenu.project);
+    else if (item.action === "up") moveProjectFromMenu(-1);
     else if (item.action === "down") moveProjectFromMenu(1);
     else if (item.action === "remove") deleteProjectFromMenu();
   }}
@@ -710,6 +770,17 @@
     color: inherit;
     cursor: pointer;
     text-align: left;
+  }
+  .ProjectRenameInput {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: var(--tap-min);
+    padding: 0 var(--sp1);
+    border: 1px solid var(--accent-fg);
+    border-radius: var(--shape-xs);
+    background: transparent;
+    color: inherit;
+    font: inherit;
   }
   .ProjectSelectButton:focus-visible {
     outline: 2px solid var(--accent-fg);
