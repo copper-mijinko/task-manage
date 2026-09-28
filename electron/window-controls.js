@@ -116,6 +116,7 @@ function attachTextContextMenu(win, menu = Menu) {
     const selected = Boolean(params.selectionText?.trim());
     if (!editable && !selected) return;
     const flags = params.editFlags ?? {};
+    /** @type {import("electron").MenuItemConstructorOptions[]} */
     const template = editable
       ? [
           { role: "cut", label: "切り取り", enabled: flags.canCut !== false },
