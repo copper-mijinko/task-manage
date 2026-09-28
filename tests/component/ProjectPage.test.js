@@ -188,19 +188,16 @@ describe("ProjectPage", () => {
     expect(screen.getByRole("button", { name: "下に移動" })).toBeDisabled();
   });
 
-  test("archives the selected node after confirmation (delete button = archive)", async () => {
+  test("archives the selected node without a confirmation (delete button = archive)", async () => {
     const { container } = await renderPage();
     selectRow("task-1", "project-1/task-1");
     await tick();
     const buttons = container.querySelectorAll(".TbGroup button");
 
+    // アーカイブは元に戻せるので確認を挟まない（通知から取り消せる）。
     await fireEvent.click(buttons[2]);
-    expect(
-      screen.getByText((content) => content.includes("アーカイブしますか"))
-    ).toBeInTheDocument();
-
-    await fireEvent.click(screen.getByRole("button", { name: "アーカイブする" }));
     await settle();
+    expect(screen.queryByText((content) => content.includes("アーカイブしますか"))).toBeNull();
 
     // ノードは物理削除されず archived フラグだけが立つ（論理削除）。
     expect(backend.node("task-1").archived).toBe(true);

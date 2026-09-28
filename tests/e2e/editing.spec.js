@@ -5,6 +5,7 @@ import {
   createWorkspace,
   graphOf,
   nodesNamed,
+  overflow,
   row,
   rowMenu,
   run,
@@ -124,11 +125,13 @@ test("keyboard: arrows move and expand, Ctrl+C / Ctrl+V copy a subtree, Ctrl+A a
     await page.keyboard.press("Escape");
     await expect(page.getByRole("toolbar", { name: "一括操作" })).toHaveCount(0);
 
-    // 2 行を選んで Delete → 確認 → どちらもアーカイブされ、表示から消える。
+    // 2 行を選んで Delete → 確認なしでどちらもアーカイブされ、表示から消える。
     await select(page, "root/work/build");
     await select(page, "root/work/release", ["Control"]);
     await page.keyboard.press("Delete");
-    await page.getByRole("button", { name: "アーカイブする", exact: true }).click();
+    await expect(
+      page.getByRole("status").filter({ hasText: "2 件をアーカイブしました" })
+    ).toBeVisible();
     await expect
       .poll(() => [graphOf(app).nodes.build.archived, graphOf(app).nodes.release.archived])
       .toEqual([true, true]);
@@ -279,6 +282,59 @@ test("keyboard editing: Enter adds and keeps going, Ctrl+Enter adds a child, F2 
       "aria-keyshortcuts",
       "Tab"
     );
+    await page.keyboard.press("Escape");
+  });
+});
+
+test("detail edit mode stays on across rows; archive needs no confirmation and its notice undoes it; undo says what it reverted", async () => {
+  await run(createWorkspace(), async (app) => {
+    const page = app.window;
+    const detail = page.getByRole("region", { name: "ノード詳細" });
+    await select(page, "root/work/spec");
+    await detail.getByRole("button", { name: "編集", exact: true }).click();
+    await expect(detail.getByRole("textbox", { name: "ノード名", exact: true })).toHaveValue(
+      "Spec"
+    );
+    // 別の行へ移っても編集モードのまま。
+    await select(page, "root/work/build");
+    await expect(detail.getByRole("textbox", { name: "ノード名", exact: true })).toHaveValue(
+      "Build"
+    );
+
+    // アーカイブは確認なし。通知の「元に戻す」で戻る。
+    await select(page, "root/work/release");
+    await page.keyboard.press("Delete");
+    const archived = page
+      .getByRole("status")
+      .filter({ hasText: "「Release」をアーカイブしました" });
+    await expect(archived).toBeVisible();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect.poll(() => graphOf(app).nodes.release.archived).toBe(true);
+    await archived.getByRole("button", { name: "元に戻す" }).click();
+    await expect.poll(() => graphOf(app).nodes.release.archived).toBeFalsy();
+    await expect(row(page, "root/work/release")).toBeVisible();
+
+    // 元に戻す / やり直すは、変わったノードの名前を知らせる。
+    await rowMenu(page, "root/work/spec", "名前を変更");
+    await typeName(page, "Spec 2");
+    await expect.poll(() => graphOf(app).nodes.spec.name).toBe("Spec 2");
+    await select(page, "root/home");
+    await page.keyboard.press("Control+z");
+    await expect(
+      page.getByRole("status").filter({ hasText: "元に戻しました：「Spec」" })
+    ).toBeVisible();
+    await page.keyboard.press("Control+y");
+    await expect(
+      page.getByRole("status").filter({ hasText: "やり直しました：「Spec 2」" })
+    ).toBeVisible();
+
+    // 完全削除は、これまでどおり確認する。
+    await overflow(page, "アーカイブ済みを表示", "menuitemcheckbox");
+    await select(page, "root/work/release");
+    await page.keyboard.press("Delete");
+    await select(page, "root/work/release");
+    await page.keyboard.press("Delete");
+    await expect(page.getByText("完全削除の確認")).toBeVisible();
     await page.keyboard.press("Escape");
   });
 });

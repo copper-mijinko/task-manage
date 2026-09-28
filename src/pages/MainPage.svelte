@@ -268,6 +268,12 @@
         if (isNodeEffectivelyArchived(id, $tree_data.data)) permanentIds.push(id);
         else archiveIds.push(id);
       }
+      // 完全削除が混ざらなければ確認せずにアーカイブする（通知から元に戻せる）。
+      if (permanentIds.length === 0) {
+        void application.archiveWithNotice(archiveIds);
+        clearSelection();
+        return;
+      }
       archive_target_ids = archiveIds;
       permanent_target_ids = permanentIds;
       is_bulk_confirm = true;
@@ -297,6 +303,11 @@
             };
             return;
           }
+        }
+        if (mode === "archive") {
+          void application.archiveWithNotice([$table_selected_id]);
+          clearSelection();
+          return;
         }
         confirm_mode = mode;
         is_bulk_confirm = false;

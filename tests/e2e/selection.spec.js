@@ -72,8 +72,11 @@ test("deleting a mixed selection archives active rows and permanently deletes ar
   await run(createWorkspace(), async (app) => {
     const page = app.window;
     await select(page, "root/work/release");
+    // アーカイブは確認なしで実行し、取り消せる通知を出す。
     await page.getByRole("button", { name: "アーカイブ", exact: true }).click();
-    await page.getByRole("button", { name: "アーカイブする", exact: true }).click();
+    await expect(
+      page.getByRole("status").filter({ hasText: "「Release」をアーカイブしました" })
+    ).toBeVisible();
     await expect.poll(() => graphOf(app).nodes.release.archived).toBe(true);
     await expect(row(page, "root/work/release")).toHaveCount(0);
 

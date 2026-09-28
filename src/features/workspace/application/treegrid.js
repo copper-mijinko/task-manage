@@ -23,6 +23,7 @@ import * as platform from "@lib/ipc/platform";
 import { tick } from "svelte";
 import { selected_id } from "@stores/ui";
 import { navigation_history } from "@stores/navigation_history";
+import { showNotice } from "@stores/notice";
 
 export const TREEGRID_APPLICATION = "task-manage:treegrid-application";
 
@@ -350,6 +351,37 @@ export function createTreeGridApplication(workspacePath) {
       }),
     /** ノードごとアーカイブ（そのノードの行がすべて片付く）。 */
     archive: (targets = ids(), archived = true) => updateMany({ archived }, targets),
+    /**
+     * アーカイブして、取り消せる通知を出す。アーカイブは元に戻せるので確認
+     * ダイアログで止めず、代わりに直後の「元に戻す」を用意する（以前は Delete の
+     * たびに確認が出ていた）。通知の「元に戻す」は、その後に別の変更が
+     * 入っていたら、無関係な段を戻さないよう何もしない。
+     */
+    archiveWithNotice: async (targets = ids()) => {
+      const names = targets.map((id) => graphNow()?.nodes?.[id]?.name || "（名前なし）");
+      const result = await updateMany({ archived: true }, targets);
+      if (!result) return result;
+      const revision = result.graph?.revision;
+      showNotice(
+        targets.length === 1
+          ? `「${names[0]}」をアーカイブしました`
+          : `${targets.length} 件をアーカイブしました`,
+        {
+          actionLabel: "元に戻す",
+          timeout: 8000,
+          action: () => {
+            if (graphNow()?.revision !== revision) {
+              showNotice(
+                "このあとに別の変更があるため、ここからは戻せません。「元に戻す」ボタンを使ってください。"
+              );
+              return;
+            }
+            workspace_graph_store.undo().catch((e) => error.set(e.message));
+          },
+        }
+      );
+      return result;
+    },
     /**
      * その行（＝辺）だけをアーカイブ。ノードは残るので、他の親の下では
      * 今までどおり見える。`path` は行の経路で、親はその末尾ひとつ手前。
