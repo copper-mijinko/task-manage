@@ -1,6 +1,6 @@
 <script>
   import { tick } from "svelte";
-  import { STATUS_VALUES, statusOptionLabel } from "@lib/utils/status_labels";
+  import { SELECTABLE_STATUS_VALUES, statusOptionLabel } from "@lib/utils/status_labels";
   import { fly } from "svelte/transition";
   import IconButton from "@lib/primitives/IconButton.svelte";
 
@@ -24,7 +24,7 @@
     onclearselection,
   } = $props();
 
-  const STATUSES = STATUS_VALUES;
+  const STATUSES = SELECTABLE_STATUS_VALUES;
   const STATUS_COLOR = {
     Open: "var(--theme-color-Primary-main)",
     "In Progress": "var(--theme-color-Info-main)",

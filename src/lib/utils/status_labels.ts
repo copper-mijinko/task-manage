@@ -31,6 +31,21 @@ export const STATUS_LABELS: Record<string, string> = {
 };
 
 /**
+ * 旧形式から持ち込まれた「未定義」。「ステータスなし」と見分けがつかず、
+ * 選択肢に並んでいても選ぶ理由が無いので、新しく選ぶ一覧には出さない。
+ * すでにこの状態のノードでは、いまの値として表示できるよう選択肢に残す。
+ */
+export const LEGACY_STATUS = "Undefined";
+
+/** 新しく選べる状態（「未定義」を除く）。 */
+export const SELECTABLE_STATUS_VALUES = STATUS_VALUES.filter((value) => value !== LEGACY_STATUS);
+
+/** `current` の状態のノードに出す選択肢。 */
+export function statusChoices(current: string | null | undefined): readonly string[] {
+  return current === LEGACY_STATUS ? STATUS_VALUES : SELECTABLE_STATUS_VALUES;
+}
+
+/**
  * 状態を選ぶ一覧（行のステータス・一括変更）での「なし」の名前。単独の
  * 「なし」だと何が無いのか分からないので、選択肢の中ではこう呼ぶ。
  */

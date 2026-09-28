@@ -722,13 +722,14 @@ export function canIndentNode(target: string, tree_data: TreeData, rowPath?: str
 
 // ステータス無しのノードは最後に置く。並べ替えは「進み具合を見る」ための
 // 操作なので、進み具合を持たないものを間に挟むと列が読みにくくなる。
-const STATUS_ORDER: Record<NodeStatus, number> = {
+const STATUS_ORDER: Record<NodeStatus | "Undefined", number> = {
   Open: 0,
   "In Progress": 1,
   Pending: 2,
   Completed: 3,
   Canceled: 4,
-  [NO_STATUS]: 5,
+  Undefined: 5,
+  [NO_STATUS]: 6,
 };
 
 export function sortTree(
