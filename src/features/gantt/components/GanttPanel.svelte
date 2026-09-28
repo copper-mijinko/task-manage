@@ -13,8 +13,9 @@
   let headerScrollLeft = $state(0);
   let dragState = $state();
   let rootFontSizePx = $state(16);
-  let locale =
-    typeof navigator !== "undefined" && navigator.language ? navigator.language : undefined;
+  // 画面は日本語だけなので、曜日や月の表記も日本語に揃える。OS の言語に
+  // 従うと、英語の OS では見出しだけ「Sat」「Oct 2026」になっていた。
+  const locale = "ja-JP";
   let prevTimelineStartTs = null;
 
   // ── 見えている行だけ描く ─────────────────────────────────────────

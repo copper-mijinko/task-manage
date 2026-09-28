@@ -729,7 +729,7 @@
                 <IconButton
                   tooltipContent={anchorIsArchived
                     ? "アーカイブ済みノードには追加できません"
-                    : "ノード追加"}
+                    : "ノード追加 (Enter)"}
                   ariaLabel="ノード追加"
                   disabled={anchorIsArchived}
                   variant="text"
@@ -750,7 +750,7 @@
                 <IconButton
                   tooltipContent={anchorIsArchived
                     ? "アーカイブ済みノードには追加できません"
-                    : "子ノード追加"}
+                    : "子ノード追加 (Ctrl+Enter)"}
                   ariaLabel="子ノード追加"
                   disabled={anchorIsArchived}
                   variant="text"
@@ -792,10 +792,10 @@
                     : anchorIsRoot
                       ? "プロジェクトルートはアーカイブできません"
                       : isMultiSelect
-                        ? `${selectionSize}件を削除（アーカイブ／完全削除を自動振り分け）`
+                        ? `${selectionSize}件を削除（アーカイブ／完全削除を自動振り分け） (Delete)`
                         : anchorIsArchived
-                          ? "完全に削除"
-                          : "アーカイブ"}
+                          ? "完全に削除 (Delete)"
+                          : "アーカイブ (Delete)"}
                   ariaLabel={isMultiSelect
                     ? `${selectionSize}件を削除`
                     : anchorIsArchived
