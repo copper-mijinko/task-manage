@@ -43,6 +43,21 @@ function filterProject(project, filters, archived, tag) {
   return node ? filterTree(node, filters) : null;
 }
 
+/**
+ * 作った直後で、まだ何も変わっていないノード。名前の入力を Esc で取り消したら
+ * 作成ごと取り消す（以前は「新しいノード」「新しいプロジェクト」という空の
+ * ノードが残った）。行の追加とサイドバーのプロジェクト追加が書き、名前欄が読む。
+ * どのツリー画面からでも取り消せるよう、画面ごとではなくここに 1 つだけ置く。
+ *
+ * @type {{ id: string, revision?: number, fromId?: string, fromPath?: string, onCancel?: () => void } | null}
+ */
+let justCreated = null;
+
+/** 作ったノードを「作った直後」として覚える。 */
+export function markJustCreated(record) {
+  justCreated = record;
+}
+
 export function createTreeGridApplication(workspacePath) {
   const scope = writable("");
   const error = writable("");
@@ -158,11 +173,6 @@ export function createTreeGridApplication(workspacePath) {
     dispatch(
       targets.map((id) => ({ type: "update-node", nodeId: id, changes: nodeChanges(patch) }))
     );
-  /**
-   * 作った直後で、まだ何も変わっていないノード。名前の入力を Esc で取り消したら
-   * 作成ごと取り消す（以前は「新しいノード」という空の行が残った）。
-   */
-  let justCreated = null;
   const isFreshNode = (nodeId) =>
     justCreated?.id === nodeId && graphNow()?.revision === justCreated.revision;
   async function cancelCreation(nodeId) {
@@ -176,7 +186,11 @@ export function createTreeGridApplication(workspacePath) {
       error.set(e.message);
       return false;
     }
-    // 追加を始めた行へ戻る。
+    // 追加を始めた場所へ戻る（行の追加なら元の行、プロジェクトなら元の画面）。
+    if (created.onCancel) {
+      created.onCancel();
+      return true;
+    }
     if (created.fromId) selectOnly(created.fromId);
     if (created.fromPath && hasOccurrence(created.fromPath)) revealOccurrence(created.fromPath);
     return true;

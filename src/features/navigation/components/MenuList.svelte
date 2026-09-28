@@ -45,7 +45,8 @@
   import { ripple, tooltip } from "@lib/actions";
   import { selected_type, selected_id, sidebarCollapsed } from "@stores";
   import { workspace_store } from "@features/workspace/stores/workspace";
-  import { showWorkspaceSetup } from "@stores/ui";
+  import { pending_rename_id, showWorkspaceSetup } from "@stores/ui";
+  import { markJustCreated } from "@features/workspace/application/treegrid";
 
   function selectWorkspaceProject(proj) {
     $selected_type = "WorkspaceProject";
@@ -57,13 +58,27 @@
     e.stopPropagation();
     workspaceProjectsExpanded = true;
     try {
+      const previous = { type: $selected_type, id: $selected_id };
       const result = await workspaceApplication.createScope(
         $workspace_store.activeWorkspacePath,
         "新しいプロジェクト"
       );
+      const projectId = result.selectedNodeIds[0];
       $selected_type = "WorkspaceProject";
-      $selected_id = result.selectedNodeIds[0];
+      $selected_id = projectId;
       $sidebarCollapsed = true;
+      // 開いたプロジェクトの先頭行（プロジェクト自身）をそのまま名前入力にする。
+      // 以前は「新しいプロジェクト」のまま開くだけで、フォーカスも失っていた。
+      // Esc で取り消したら、作成ごと取り消して元の画面へ戻る。
+      markJustCreated({
+        id: projectId,
+        revision: result.graph?.revision,
+        onCancel: () => {
+          $selected_type = previous.type;
+          $selected_id = previous.id;
+        },
+      });
+      pending_rename_id.set(projectId);
     } catch (e) {
       project_add_error = userErrorMessage(e);
     }
