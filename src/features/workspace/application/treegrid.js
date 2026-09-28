@@ -130,6 +130,28 @@ export function createTreeGridApplication(workspacePath) {
       return undefined;
     }
   }
+  /**
+   * 操作の結果を知らせ、「元に戻す」を添える（アーカイブ・添付を外すなど、
+   * 確認ダイアログで止めない操作）。通知の「元に戻す」は、その後に別の変更が
+   * 入っていたら、無関係な段を戻さないよう何もしない。
+   */
+  function notifyUndoable(result, message) {
+    if (!result) return;
+    const revision = result.graph?.revision;
+    showNotice(message, {
+      actionLabel: "元に戻す",
+      timeout: 8000,
+      action: () => {
+        if (graphNow()?.revision !== revision) {
+          showNotice(
+            "このあとに別の変更があるため、ここからは戻せません。「元に戻す」ボタンを使ってください。"
+          );
+          return;
+        }
+        workspace_graph_store.undo().catch((e) => error.set(e.message));
+      },
+    });
+  }
   const update = (id, patch) =>
     dispatch({ type: "update-node", nodeId: id, changes: nodeChanges(patch) });
   const updateMany = (patch, targets = ids()) =>
@@ -360,28 +382,15 @@ export function createTreeGridApplication(workspacePath) {
     archiveWithNotice: async (targets = ids()) => {
       const names = targets.map((id) => graphNow()?.nodes?.[id]?.name || "（名前なし）");
       const result = await updateMany({ archived: true }, targets);
-      if (!result) return result;
-      const revision = result.graph?.revision;
-      showNotice(
+      notifyUndoable(
+        result,
         targets.length === 1
           ? `「${names[0]}」をアーカイブしました`
-          : `${targets.length} 件をアーカイブしました`,
-        {
-          actionLabel: "元に戻す",
-          timeout: 8000,
-          action: () => {
-            if (graphNow()?.revision !== revision) {
-              showNotice(
-                "このあとに別の変更があるため、ここからは戻せません。「元に戻す」ボタンを使ってください。"
-              );
-              return;
-            }
-            workspace_graph_store.undo().catch((e) => error.set(e.message));
-          },
-        }
+          : `${targets.length} 件をアーカイブしました`
       );
       return result;
     },
+    notifyUndoable,
     /**
      * その行（＝辺）だけをアーカイブ。ノードは残るので、他の親の下では
      * 今までどおり見える。`path` は行の経路で、親はその末尾ひとつ手前。
@@ -400,6 +409,12 @@ export function createTreeGridApplication(workspacePath) {
     copy: (targets = ids()) => {
       clipboard = [...targets];
       copied.set(clipboard);
+      // コピーは画面が何も変わらないので、何を写したかを知らせる。
+      if (!clipboard.length) return;
+      const first = graphNow()?.nodes?.[clipboard[0]]?.name || "（名前なし）";
+      showNotice(
+        `${clipboard.length === 1 ? `「${first}」` : `${clipboard.length} 件`}をコピーしました（Ctrl+V で選んだ行の子に貼り付け）`
+      );
     },
     paste: (targetParentId = get(table_selected_id), mode = "subgraph") =>
       dispatch(clipboard.map((nodeId) => ({ type: "copy", nodeId, targetParentId, mode }))),

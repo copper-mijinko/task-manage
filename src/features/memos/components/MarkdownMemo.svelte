@@ -1,5 +1,6 @@
 <script module lang="ts">
   // marked.use() の設定はモジュール読込時に一度だけ行う (下の instance <script> 参照)。
+  import { userErrorMessage } from "@lib/utils/error_messages";
   import { Marked } from "marked";
   const marked = new Marked();
   let markedConfigured = false;
@@ -337,7 +338,7 @@
         if (version === saveVersion) {
           hasChanges = true;
           saveState = "error";
-          saveError = error.message;
+          saveError = userErrorMessage(error);
         }
         return false;
       });
@@ -371,7 +372,7 @@
         target.focus();
       }
     } catch (error) {
-      saveError = error instanceof Error ? error.message : String(error);
+      saveError = userErrorMessage(error);
     }
   }
 

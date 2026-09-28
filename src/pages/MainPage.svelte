@@ -1,4 +1,5 @@
 <script>
+  import { userErrorMessage } from "@lib/utils/error_messages";
   import { getContext } from "svelte";
   import { dismissAllTooltips } from "@lib/actions";
   import { TREEGRID_APPLICATION } from "@features/workspace/application/treegrid";
@@ -232,7 +233,7 @@
       bulkMemoItems = bulkMemoItems.map((item) => ({
         ...item,
         status: "error",
-        error: error instanceof Error ? error.message : String(error),
+        error: userErrorMessage(error),
       }));
     } finally {
       bulkMemoPhase = "done";

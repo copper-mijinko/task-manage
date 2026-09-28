@@ -26,13 +26,42 @@ const KNOWN: [RegExp, string][] = [
   [/No workspace graph is loaded/i, "ワークスペースが開かれていません。"],
 ];
 
+/**
+ * 入力の拒否ではなく、本当に失敗したときの理由（ファイルの読み書きなど）。
+ * 言い換えるだけで、保存失敗の扱いは変えない。
+ */
+const FAILURES: [RegExp, string][] = [
+  [/ENOSPC/, "ディスクの空き容量が足りません。"],
+  [/EACCES|EPERM|EBUSY/, "ファイルにアクセスできません（使用中か、権限がありません）。"],
+  [/ENOENT/, "ファイルまたはフォルダーが見つかりません。"],
+  [
+    /Active workspace is not registered/i,
+    "このワークスペースは登録されていません。設定から開き直してください。",
+  ],
+  [
+    /not approved by the directory picker/i,
+    "フォルダーの選択を確認できませんでした。もう一度選んでください。",
+  ],
+  [
+    /Invalid workspace graph|Invalid node record|Every node must be reachable/i,
+    "ワークスペースのデータを読み込めませんでした（形式が正しくありません）。",
+  ],
+  [
+    /Cannot read legacy|Invalid legacy|legacy .* was not imported/i,
+    "旧形式のファイルを読み込めませんでした。",
+  ],
+  [/Only image assets|Unsupported image URL/i, "この画像は表示できません。"],
+  [/Task does not exist in workspace/i, "ノードが見つかりません。"],
+  [/API unavailable/i, "アプリの内部機能に接続できませんでした。再起動してください。"],
+];
+
 /** 画面に出すメッセージ。 */
 export function userErrorMessage(error: unknown): string {
   const raw = (error instanceof Error ? error.message : String(error ?? "")).replace(
     IPC_PREFIX,
     ""
   );
-  for (const [pattern, message] of KNOWN) if (pattern.test(raw)) return message;
+  for (const [pattern, message] of [...KNOWN, ...FAILURES]) if (pattern.test(raw)) return message;
   return raw || "操作できませんでした。";
 }
 
@@ -46,6 +75,7 @@ export function isRejectedOperation(error: unknown): boolean {
     IPC_PREFIX,
     ""
   );
+  if (FAILURES.some(([pattern]) => pattern.test(raw))) return false;
   return (
     KNOWN.some(([pattern]) => pattern.test(raw)) ||
     /Inbox|できません|Invalid|Unknown|not allowed|protected|require/i.test(raw)

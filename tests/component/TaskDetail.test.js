@@ -203,7 +203,7 @@ describe("TaskDetail", () => {
     );
   });
 
-  test("removes an attachment from the node after confirmation", async () => {
+  test("removes an attachment from the node without a confirmation", async () => {
     project.data.children[0].data.attachments = [specAttachment];
     table_selected_id.set("task-1");
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
@@ -215,6 +215,7 @@ describe("TaskDetail", () => {
     await waitFor(() => {
       expect(backend.node("task-1").attachments).toEqual([]);
     });
+    expect(confirmSpy).not.toHaveBeenCalled();
     confirmSpy.mockRestore();
   });
 

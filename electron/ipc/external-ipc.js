@@ -78,7 +78,7 @@ function registerExternalIpc(ipc, workspaceAuthorizer) {
       const win = new BrowserWindow({
         width: 960,
         height: 720,
-        title: "Image",
+        title: "画像",
         autoHideMenuBar: true,
         backgroundColor: "#1f1f1f",
         webPreferences: {

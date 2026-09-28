@@ -4,6 +4,7 @@
 </script>
 
 <script>
+  import { userErrorMessage } from "@lib/utils/error_messages";
   import {
     workspaceApplication,
     workspaceNavigation,
@@ -64,7 +65,7 @@
       $selected_id = result.selectedNodeIds[0];
       $sidebarCollapsed = true;
     } catch (e) {
-      project_add_error = e.message;
+      project_add_error = userErrorMessage(e);
     }
   }
 
@@ -122,7 +123,7 @@
   function saveProjectOrder(_section, projects) {
     void workspaceApplication
       .reorderScopes($workspace_store.activeWorkspacePath, projects)
-      .catch((e) => (project_add_error = e.message));
+      .catch((e) => (project_add_error = userErrorMessage(e)));
   }
 
   // Drag start
@@ -510,7 +511,7 @@
   show={show_workspace_delete}
   toggle={toggle_workspace_delete}
   header="Workspaceプロジェクトの削除"
-  content={`「${workspace_delete_target?.name ?? ""}」のノードと接続を削除します。子ノードは残り、必要ならWorkspace Rootに接続されます。元に戻す操作で復元できます。`}
+  content={`「${workspace_delete_target?.name ?? ""}」のノードと接続を削除します。子ノードは残り、必要ならワークスペースのルートに接続されます。元に戻す操作で復元できます。`}
   ok="削除する"
   danger={true}
   callback={callback_workspace_delete}

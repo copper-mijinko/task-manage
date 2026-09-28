@@ -82,7 +82,7 @@ function registerWorkspaceIpc(ipc, { settings, workspaceAuthorizer, knownWorkspa
   ipc.handle("ws:select-directory", async () => {
     const result = await dialog.showOpenDialog({
       properties: ["openDirectory"],
-      title: "Select workspace folder",
+      title: "ワークスペースのフォルダーを選択",
     });
     if (result.canceled || !result.filePaths[0]) return { path: null };
 
