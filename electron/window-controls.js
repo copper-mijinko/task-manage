@@ -1,4 +1,4 @@
-const { BrowserWindow } = require("electron");
+const { BrowserWindow, Menu } = require("electron");
 
 const ZOOM_STEP = 0.5;
 const MIN_ZOOM_LEVEL = -5;
@@ -104,7 +104,33 @@ function registerWindowControlIpc(ipc) {
   });
 }
 
+/**
+ * 入力欄と選択した文字の右クリックメニュー（切り取り・コピー・貼り付け・
+ * すべて選択）。Electron は既定では何も出さないので、右クリックでコピーや
+ * 貼り付けができなかった。役割（role）だけのメニューなので、ページ側へ
+ * 新しい権限は渡さない。
+ */
+function attachTextContextMenu(win, menu = Menu) {
+  win.webContents.on("context-menu", (_event, params) => {
+    const editable = params.isEditable;
+    const selected = Boolean(params.selectionText?.trim());
+    if (!editable && !selected) return;
+    const flags = params.editFlags ?? {};
+    const template = editable
+      ? [
+          { role: "cut", label: "切り取り", enabled: flags.canCut !== false },
+          { role: "copy", label: "コピー", enabled: flags.canCopy !== false },
+          { role: "paste", label: "貼り付け", enabled: flags.canPaste !== false },
+          { type: "separator" },
+          { role: "selectAll", label: "すべて選択" },
+        ]
+      : [{ role: "copy", label: "コピー" }];
+    menu.buildFromTemplate(template).popup({ window: win });
+  });
+}
+
 module.exports = {
+  attachTextContextMenu,
   attachZoomControls,
   changeWindowZoom,
   denyRendererNavigation,

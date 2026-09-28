@@ -1045,6 +1045,10 @@
     handleAddRelative(event.id, "append", event.path);
   }
 
+  function handleCutTask(event) {
+    return application.cut(isInMultiSelection(event.id) ? [...selectionSet] : [event.id]);
+  }
+
   function handleCopyTask(event) {
     return application.copy(isInMultiSelection(event.id) ? [...selectionSet] : [event.id]);
   }
@@ -1139,7 +1143,10 @@
       return;
     }
     if (!$table_selected_id) return;
-    if ((e.ctrlKey || e.metaKey) && (e.key === "c" || e.key === "C")) {
+    if ((e.ctrlKey || e.metaKey) && (e.key === "x" || e.key === "X")) {
+      e.preventDefault();
+      application.cut();
+    } else if ((e.ctrlKey || e.metaKey) && (e.key === "c" || e.key === "C")) {
       e.preventDefault();
       application.copy();
     } else if ((e.ctrlKey || e.metaKey) && (e.key === "v" || e.key === "V")) {
@@ -1538,6 +1545,7 @@
           onrestoretask={requestRestore}
           onpermanentdeletetask={requestPermanentDelete}
           oncopytask={handleCopyTask}
+          oncuttask={handleCutTask}
           onpastetask={handlePasteTask}
         />
       {/if}

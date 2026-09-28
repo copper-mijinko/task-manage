@@ -416,3 +416,39 @@ test("a Quill body stays in edit mode when another node is selected", async () =
     );
   });
 });
+
+test("Esc right after adding cancels the new node, and Ctrl+X then Ctrl+V moves a node", async () => {
+  await run(createWorkspace(), async (app) => {
+    const page = app.window;
+    const before = Object.keys(graphOf(app).nodes).length;
+
+    // 追加直後の名前入力を Esc で取り消すと、ノードも残らない。
+    await select(page, "root/work/spec");
+    await page.keyboard.press("Enter");
+    await expect(page.locator('.TableRow input[type="text"]:focus')).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect.poll(() => Object.keys(graphOf(app).nodes).length).toBe(before);
+    expect(nodesNamed(app, "新しいノード")).toEqual([]);
+    await expect
+      .poll(() => page.evaluate(() => document.activeElement?.getAttribute("data-row-path")))
+      .toBe("root/work/spec");
+
+    // 名前を付けてからの Esc（F2 の取り消し）はノードを消さない。
+    await page.keyboard.press("F2");
+    await page.keyboard.press("Escape");
+    expect(graphOf(app).nodes.spec.name).toBe("Spec");
+
+    // 切り取って別の親に貼ると、複製ではなく移動になる。
+    await select(page, "root/inbox/idea");
+    await page.keyboard.press("Control+x");
+    await expect(
+      page.getByRole("status").filter({ hasText: "「Idea」を切り取りました" })
+    ).toBeVisible();
+    await select(page, "root/work");
+    await page.keyboard.press("Control+v");
+    await expect.poll(() => childrenOf(app, "work")).toContain("Idea");
+    expect(childrenOf(app, "inbox")).toEqual([]);
+    expect(Object.keys(graphOf(app).nodes).length).toBe(before);
+    expect(graphOf(app).nodes.idea.parents.map((parent) => parent.id)).toEqual(["work"]);
+  });
+});
