@@ -1,13 +1,13 @@
 <script>
   import { getContext, tick, untrack } from "svelte";
-  import { writable } from "svelte/store";
+  import { get, writable } from "svelte/store";
   import { TREEGRID_APPLICATION } from "@features/workspace/application/treegrid";
   const application = getContext(TREEGRID_APPLICATION);
   const applicationClipboard = application.copied;
   import { ripple, tooltip, dismissAllTooltips } from "@lib/actions";
   import TaskMenu from "@features/tasks/components/TaskMenu.svelte";
   import { pageSearchQuery } from "@features/search/stores/search";
-  import { pending_rename_id } from "@stores/ui";
+  import { active_row_path, pending_rename_id } from "@stores/ui";
   import { activePanelId } from "@stores/panel_coordinator";
 
   /**
@@ -122,6 +122,16 @@ delete (= archive) ではなく restore / permanently delete を出す。
       // 3. Clipboard — copy is bulk-aware; paste disallowed onto archived
       // (archived は読み取り専用なので子追加が禁止扱い)。
       [
+        {
+          title: `${countPrefix}切り取り`,
+          action: "cutTask",
+          shortcut: "Ctrl+X",
+          disabled: isRoot || archived,
+          icon: {
+            viewBox: "0 0 24 24",
+            path: "M6 3a3 3 0 1 0 2.4 4.8L11 10.4 4 17.4 5.4 18.8 12.4 11.8 14.3 13.7A3 3 0 1 0 15.7 12.3L8.8 5.4A3 3 0 0 0 6 3Zm0 2a1 1 0 1 1 0 2 1 1 0 0 1 0-2Zm12 8a1 1 0 1 1 0 2 1 1 0 0 1 0-2ZM14 7l5-5 1.4 1.4-5 5Z",
+          },
+        },
         {
           title: `${countPrefix}コピー`,
           action: "copyTask",
@@ -410,6 +420,18 @@ delete (= archive) ではなく restore / permanently delete を出す。
     });
   }
 
+  /** 作った直後のノードを取り消し、追加を始めた行にフォーカスを戻す。 */
+  async function cancelFreshNode() {
+    const table = input?.closest('[role="treegrid"]');
+    if (!(await application.cancelCreation(nodeId))) return;
+    await tick();
+    const path = get(active_row_path);
+    const target = path
+      ? table?.querySelector(`[role="row"][data-row-path="${CSS.escape(path)}"]`)
+      : null;
+    if (target instanceof HTMLElement) target.focus({ preventScroll: true });
+  }
+
   /** 名前の編集を始める（行で F2 を押したとき）。 */
   export function startRename() {
     if (!isEditing) void toggle();
@@ -506,7 +528,9 @@ delete (= archive) ではなく restore / permanently delete を出す。
       } else if (e.key === "Escape") {
         resetDraft();
         isEditing = false;
-        returnFocusToRow();
+        // 作った直後の名前入力を取り消したら、ノードも作らなかったことにする。
+        if (nodeId && application?.isFreshNode?.(nodeId)) void cancelFreshNode();
+        else returnFocusToRow();
       }
     }}
     ondragstart={(e) => {

@@ -75,6 +75,7 @@
    * @property {(detail?: any) => void} [onrestoretask]
    * @property {(detail?: any) => void} [onpermanentdeletetask]
    * @property {(detail?: any) => void} [oncopytask]
+   * @property {(detail?: any) => void} [oncuttask]
    * @property {(detail?: any) => void} [onpastetask]
    */
 
@@ -121,6 +122,7 @@
     onrestoretask,
     onpermanentdeletetask,
     oncopytask,
+    oncuttask,
     onpastetask,
   } = $props();
 
@@ -416,6 +418,7 @@
       restoreTask: () => onrestoretask?.({ id, path }),
       permanentDeleteTask: () => onpermanentdeletetask?.({ id }),
       copyTask: () => oncopytask?.({ id }),
+      cutTask: () => oncuttask?.({ id }),
       pasteTask: () => onpastetask?.({ id, path }),
     };
     handlers[action]?.();

@@ -158,6 +158,29 @@ export function createTreeGridApplication(workspacePath) {
     dispatch(
       targets.map((id) => ({ type: "update-node", nodeId: id, changes: nodeChanges(patch) }))
     );
+  /**
+   * 作った直後で、まだ何も変わっていないノード。名前の入力を Esc で取り消したら
+   * 作成ごと取り消す（以前は「新しいノード」という空の行が残った）。
+   */
+  let justCreated = null;
+  const isFreshNode = (nodeId) =>
+    justCreated?.id === nodeId && graphNow()?.revision === justCreated.revision;
+  async function cancelCreation(nodeId) {
+    const created = justCreated;
+    justCreated = null;
+    if (!created || created.id !== nodeId || graphNow()?.revision !== created.revision)
+      return false;
+    try {
+      await workspace_graph_store.undo({ quiet: true });
+    } catch (e) {
+      error.set(e.message);
+      return false;
+    }
+    // 追加を始めた行へ戻る。
+    if (created.fromId) selectOnly(created.fromId);
+    if (created.fromPath && hasOccurrence(created.fromPath)) revealOccurrence(created.fromPath);
+    return true;
+  }
   async function add(id = get(table_selected_id), action = "append", path = get(active_row_path)) {
     id ||= get(scope) || graphNow().rootId;
     const parentId =
@@ -178,6 +201,12 @@ export function createTreeGridApplication(workspacePath) {
       order,
     });
     if (result?.selectedNodeIds[0]) {
+      justCreated = {
+        id: result.selectedNodeIds[0],
+        revision: result.graph?.revision,
+        fromId: id,
+        fromPath: path,
+      };
       closed_row_paths.expandNodeEverywhere(parentId);
       selectOnly(result.selectedNodeIds[0]);
       // 作った行をそのまま名前入力にする。既定名「新しいノード」のまま
@@ -255,6 +284,8 @@ export function createTreeGridApplication(workspacePath) {
     closed_row_paths.expandNodeEverywhere(parentId);
   }
   let clipboard = [];
+  /** 切り取りなら、貼り付けで複製せずに移す。移す元の親もここに持つ。 */
+  let cutSources = null;
   const copied = writable([]);
   async function navigateToNode(id, { clearFilters = false } = {}) {
     const graph = graphNow();
@@ -391,6 +422,8 @@ export function createTreeGridApplication(workspacePath) {
       return result;
     },
     notifyUndoable,
+    isFreshNode,
+    cancelCreation,
     /**
      * その行（＝辺）だけをアーカイブ。ノードは残るので、他の親の下では
      * 今までどおり見える。`path` は行の経路で、親はその末尾ひとつ手前。
@@ -407,6 +440,7 @@ export function createTreeGridApplication(workspacePath) {
     remove: (targets) => dispatch(targets.map((nodeId) => ({ type: "delete-node", nodeId }))),
     copied,
     copy: (targets = ids()) => {
+      cutSources = null;
       clipboard = [...targets];
       copied.set(clipboard);
       // コピーは画面が何も変わらないので、何を写したかを知らせる。
@@ -416,8 +450,55 @@ export function createTreeGridApplication(workspacePath) {
         `${clipboard.length === 1 ? `「${first}」` : `${clipboard.length} 件`}をコピーしました（Ctrl+V で選んだ行の子に貼り付け）`
       );
     },
-    paste: (targetParentId = get(table_selected_id), mode = "subgraph") =>
-      dispatch(clipboard.map((nodeId) => ({ type: "copy", nodeId, targetParentId, mode }))),
+    /**
+     * 切り取り（Ctrl+X）。貼り付けで選んだ行の子へ移す。多親ノードは、
+     * いま操作している行の親（それ以外は最初に見つかった行の親）から外す。
+     */
+    cut: (targets = ids()) => {
+      const activePath = get(active_row_path) || "";
+      const activeId = activePath.split("/").at(-1);
+      const sources = targets
+        .map((id) => ({
+          id,
+          parentId:
+            id === activeId ? activePath.split("/").at(-2) : occurrenceOf(id)?.split("/").at(-2),
+        }))
+        .filter((source) => source.parentId);
+      if (!sources.length) return;
+      clipboard = sources.map((source) => source.id);
+      cutSources = sources;
+      copied.set(clipboard);
+      const first = graphNow()?.nodes?.[clipboard[0]]?.name || "（名前なし）";
+      showNotice(
+        `${clipboard.length === 1 ? `「${first}」` : `${clipboard.length} 件`}を切り取りました（Ctrl+V で選んだ行の子に移動）`
+      );
+    },
+    paste: async (targetParentId = get(table_selected_id), mode = "subgraph") => {
+      if (!cutSources) {
+        return dispatch(
+          clipboard.map((nodeId) => ({ type: "copy", nodeId, targetParentId, mode }))
+        );
+      }
+      // 切り取りは 1 回だけ貼れる（移したあとに同じ元の親から外すことはできない）。
+      const sources = cutSources;
+      const result = await dispatch(
+        sources
+          .filter((source) => source.id !== targetParentId && source.parentId !== targetParentId)
+          .map((source) => ({
+            type: "move",
+            childId: source.id,
+            fromParentId: source.parentId,
+            toParentId: targetParentId,
+          }))
+      );
+      if (result) {
+        cutSources = null;
+        clipboard = [];
+        copied.set([]);
+        closed_row_paths.expandNodeEverywhere(targetParentId);
+      }
+      return result;
+    },
     copyTo: (nodeId, targetParentId, mode) =>
       dispatch({ type: "copy", nodeId, targetParentId, mode }),
     moveTo: (nodeId, path, toParentId) =>

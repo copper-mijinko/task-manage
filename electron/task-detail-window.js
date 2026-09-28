@@ -5,6 +5,7 @@ const log = require("electron-log/main");
 const { performanceMetrics } = require("./performance-metrics");
 const {
   attachZoomControls,
+  attachTextContextMenu,
   denyRendererNavigation,
   forwardWindowState,
 } = require("./window-controls");
@@ -70,6 +71,7 @@ function registerTaskDetailWindows(ipc, { getMainWindow, readGraph }) {
     });
 
     attachZoomControls(win);
+    attachTextContextMenu(win);
     denyRendererNavigation(win);
     forwardWindowState(win);
     forwardFindInPageResults(win.webContents);

@@ -59,6 +59,7 @@
         { keys: ["Ctrl", "A"], description: "表示中のノードをすべて選択" },
         { keys: ["Esc"], description: "選択を解除" },
         { keys: ["Delete"], description: "選択したノードをアーカイブ / 削除" },
+        { keys: ["Ctrl", "X"], description: "選択したノードを切り取り（貼り付けで移動）" },
         { keys: ["Ctrl", "C"], description: "選択したノードをコピー" },
         { keys: ["Ctrl", "V"], description: "コピーしたノードを子として貼り付け" },
         { keys: ["Ctrl", "Z"], description: "元に戻す" },

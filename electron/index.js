@@ -16,6 +16,7 @@ const { performanceMetrics } = require("./performance-metrics");
 const { createIpcSenderValidator, createWorkspaceAuthorizer } = require("./ipc-security");
 const {
   attachZoomControls,
+  attachTextContextMenu,
   denyRendererNavigation,
   forwardWindowState,
   registerWindowControlIpc,
@@ -76,6 +77,7 @@ function createMainWindow() {
     performanceMetrics.record("startup.processToLoadFinished", performance.now());
   });
   attachZoomControls(win);
+  attachTextContextMenu(win);
   denyRendererNavigation(win);
   forwardWindowState(win);
   forwardFindInPageResults(win.webContents);

@@ -159,15 +159,16 @@ export const workspace_graph_store = {
       }
     });
   },
-  undo() {
-    return history("undo");
+  /** `quiet` は通知を出さない（作成の取り消しなど、利用者が戻したと思っていない段）。 */
+  undo({ quiet = false }: { quiet?: boolean } = {}) {
+    return history("undo", quiet);
   },
   redo() {
     return history("redo");
   },
 };
 
-function history(direction: "undo" | "redo") {
+function history(direction: "undo" | "redo", quiet = false) {
   const callSnapshot = get(state);
   const callGeneration = generation;
   return run(async () => {
@@ -186,7 +187,7 @@ function history(direction: "undo" | "redo") {
       applyResult(workspacePath, callGeneration, result.graph);
       // 何が戻ったのかは画面のどこにも出ないので、変わったノードの名前で知らせる。
       // 起動し直しても履歴は残るので、思わぬ段を戻したことに気づけるように。
-      showNotice(describeHistoryStep(direction, graph, result.graph));
+      if (!quiet) showNotice(describeHistoryStep(direction, graph, result.graph));
       return result;
     } catch (error) {
       await handleGraphError(workspacePath, callGeneration, error);
