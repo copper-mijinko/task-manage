@@ -138,7 +138,7 @@ test("adding a project starts naming it, and Esc cancels the new project", async
     const projects = () =>
       childrenOf(app, "root").filter((name) => !["Work", "Home", "Inbox"].includes(name));
     const addProject = async () => {
-      const button = page.getByRole("button", { name: "Workspaceプロジェクトを追加" });
+      const button = page.getByRole("button", { name: "ワークスペースプロジェクトを追加" });
       if (!(await button.isVisible()))
         await page.getByRole("button", { name: "サイドバーを表示", exact: true }).click();
       await button.click();

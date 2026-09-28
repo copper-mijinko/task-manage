@@ -582,7 +582,7 @@
                     >{nodeNameById[parentId] || parentId}</button
                   >
                   <small class="parent-path" title={parentId}
-                    >{nodePathById[parentId] || "Workspace内の所属先"}</small
+                    >{nodePathById[parentId] || "ワークスペース内の所属先"}</small
                   >
                   {#if ($active_row_path || "").split("/").at(-2) === parentId}<span
                       class="parent-chip">現在の表示経路</span
@@ -715,7 +715,7 @@
     show={Boolean(dangerTarget)}
     toggle={() => (dangerTarget = null)}
     header={dangerTarget?.permanent ? "完全削除の確認" : "アーカイブの確認"}
-    content={`「${dangerTarget?.name || ""}」を${dangerTarget?.permanent ? "完全削除" : "アーカイブ"}しますか？\n${dangerTarget?.permanent ? "Workspaceの履歴に残っている間は「元に戻す」で復元できます。" : "後でアーカイブ表示から復元できます。"}`}
+    content={`「${dangerTarget?.name || ""}」を${dangerTarget?.permanent ? "完全削除" : "アーカイブ"}しますか？\n${dangerTarget?.permanent ? "ワークスペースの履歴に残っている間は「元に戻す」で復元できます。" : "後でアーカイブ表示から復元できます。"}`}
     ok={dangerTarget?.permanent ? "完全に削除" : "アーカイブする"}
     danger={Boolean(dangerTarget?.permanent)}
     callback={confirmDanger}

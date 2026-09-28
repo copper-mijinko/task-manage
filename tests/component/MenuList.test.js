@@ -57,18 +57,17 @@ describe("MenuList project list", () => {
     expect(screen.getByText("Workspace Alpha")).toBeInTheDocument();
 
     const workspaceToggle = screen.getByRole("button", {
-      name: "Workspaceプロジェクトを折りたたむ",
+      name: "ワークスペースプロジェクトを折りたたむ",
     });
     expect(workspaceToggle).toHaveAttribute("aria-expanded", "true");
 
     await fireEvent.click(workspaceToggle);
     expect(screen.queryByText("Workspace Alpha")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Workspaceプロジェクトを展開" })).toHaveAttribute(
-      "aria-expanded",
-      "false"
-    );
+    expect(
+      screen.getByRole("button", { name: "ワークスペースプロジェクトを展開" })
+    ).toHaveAttribute("aria-expanded", "false");
 
-    await fireEvent.click(screen.getByRole("button", { name: "Workspaceプロジェクトを展開" }));
+    await fireEvent.click(screen.getByRole("button", { name: "ワークスペースプロジェクトを展開" }));
     expect(screen.getByText("Workspace Alpha")).toBeInTheDocument();
   });
 
@@ -78,7 +77,7 @@ describe("MenuList project list", () => {
     render(MenuList);
 
     await fireEvent.click(
-      screen.getByRole("button", { name: "Workspaceをファイルエクスプローラーで開く" })
+      screen.getByRole("button", { name: "ワークスペースをファイルエクスプローラーで開く" })
     );
 
     expect(backend.api.wsOpenWorkspace).toHaveBeenCalledWith(TEST_WORKSPACE);
@@ -109,7 +108,7 @@ describe("MenuList project list", () => {
     await seedProjects();
     render(MenuList);
 
-    await fireEvent.click(screen.getByRole("button", { name: "Workspaceプロジェクトを追加" }));
+    await fireEvent.click(screen.getByRole("button", { name: "ワークスペースプロジェクトを追加" }));
 
     await waitFor(() => expect(backend.childrenOf("workspace-root")).toHaveLength(3));
     const created = backend.childrenOf("workspace-root")[2];
@@ -123,7 +122,7 @@ describe("MenuList project list", () => {
     backend.api.wsExecuteGraphCommand.mockRejectedValueOnce(new Error("保存に失敗しました"));
     render(MenuList);
 
-    await fireEvent.click(screen.getByRole("button", { name: "Workspaceプロジェクトを追加" }));
+    await fireEvent.click(screen.getByRole("button", { name: "ワークスペースプロジェクトを追加" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("保存に失敗しました");
     expect(get(selected_id)).toBeUndefined();

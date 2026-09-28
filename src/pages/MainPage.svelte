@@ -448,12 +448,12 @@
           lines.push(`${permanent_target_ids.length} 件を完全削除`);
         const body = lines.join(" / ");
         if (permanent_target_ids.length > 0) {
-          return `${body} します。\nWorkspaceの履歴に残っている間は「元に戻す」で復元できます。`;
+          return `${body} します。\nワークスペースの履歴に残っている間は「元に戻す」で復元できます。`;
         }
         return `${body} します。\n後でアーカイブ表示から復元できます。`;
       }
       if (confirm_mode === "permanent") {
-        return `"${name_confirm}" を完全に削除しますか？\nWorkspaceの履歴に残っている間は「元に戻す」で復元できます。`;
+        return `"${name_confirm}" を完全に削除しますか？\nワークスペースの履歴に残っている間は「元に戻す」で復元できます。`;
       }
       return `"${name_confirm}" をアーカイブしますか？\n後でアーカイブ表示から復元できます。`;
     })()

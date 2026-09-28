@@ -1421,12 +1421,12 @@
           lines.push(`${bulkPermanentTargetIds.length} 件を完全削除`);
         const body = lines.join(" / ");
         if (bulkPermanentTargetIds.length > 0) {
-          return `${body} します。\nWorkspaceの履歴に残っている間は「元に戻す」で復元できます。`;
+          return `${body} します。\nワークスペースの履歴に残っている間は「元に戻す」で復元できます。`;
         }
         return `${body} します。\n後でアーカイブ表示から復元できます。`;
       }
       if (deleteMode === "permanent") {
-        return `"${deleteTargetName}" を完全に削除しますか？\nWorkspaceの履歴に残っている間は「元に戻す」で復元できます。`;
+        return `"${deleteTargetName}" を完全に削除しますか？\nワークスペースの履歴に残っている間は「元に戻す」で復元できます。`;
       }
       return `"${deleteTargetName}" をアーカイブしますか？\n後でアーカイブ表示から復元できます。`;
     })()
