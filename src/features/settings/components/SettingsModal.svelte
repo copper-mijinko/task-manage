@@ -55,6 +55,7 @@
         { keys: ["F2"], description: "名前を変更" },
         { keys: ["Tab"], description: "インデント（Shift+Tab でアウトデント）" },
         { keys: ["Alt", "↑"], description: "上に移動（Alt+↓ で下に移動）" },
+        { keys: ["F6"], description: "ツリーと詳細ペインを行き来する" },
         { keys: ["Ctrl", "A"], description: "表示中のノードをすべて選択" },
         { keys: ["Esc"], description: "選択を解除" },
         { keys: ["Delete"], description: "選択したノードをアーカイブ / 削除" },

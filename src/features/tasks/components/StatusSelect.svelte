@@ -64,6 +64,9 @@
 
   function select(value) {
     open = false;
+    // 選択肢は body 直下に出しているので、閉じるとフォーカスの行き場が無くなる。
+    // メニューボタンの作法どおり、開いたボタンへ戻す。
+    containerEl?.querySelector("button")?.focus({ preventScroll: true });
     if (value === status) return;
     // Dispatch a change event whose target.value matches the legacy <select> API.
     onchange?.({ target: { value }, value });
