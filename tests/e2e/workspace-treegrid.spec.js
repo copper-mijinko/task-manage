@@ -690,8 +690,13 @@ test("move and detach use the displayed parent; cyclic copy stays in TreeGrid", 
   try {
     await select(page, "root/beta/shared");
     await page.getByRole("button", { name: "ノード詳細の操作" }).click();
-    await page.getByRole("menuitem", { name: "配置を変更", exact: true }).click();
-    await page.getByRole("combobox", { name: "配置先の親" }).selectOption("review");
+    await page.getByRole("menuitem", { name: "移動…", exact: true }).click();
+    await page.getByRole("textbox", { name: "移動先の親" }).fill("Review");
+    await page
+      .getByRole("listbox", { name: "移動先の親の候補" })
+      .getByRole("option")
+      .first()
+      .click();
     await page.getByRole("button", { name: "移動", exact: true }).click();
     await expect
       .poll(() =>
@@ -704,9 +709,8 @@ test("move and detach use the displayed parent; cyclic copy stays in TreeGrid", 
     // The next edge command must address the occurrence that was just moved,
     // without asking the user to find and select it again.
     await page.getByRole("button", { name: "ノード詳細の操作" }).click();
-    await page.getByRole("menuitem", { name: "配置を変更", exact: true }).click();
-    await page.getByRole("dialog").getByRole("combobox").first().selectOption("detach");
-    await page.getByRole("button", { name: "配置を外す", exact: true }).click();
+    await page.getByRole("menuitem", { name: "移動…", exact: true }).click();
+    await page.getByRole("button", { name: "この配置を外す", exact: true }).click();
     await expect
       .poll(() =>
         graphOf(app)
@@ -719,9 +723,8 @@ test("move and detach use the displayed parent; cyclic copy stays in TreeGrid", 
     await expect(row(page, "root/beta/shared")).toBeVisible();
     await select(page, "root/beta/shared");
     await page.getByRole("button", { name: "ノード詳細の操作" }).click();
-    await page.getByRole("menuitem", { name: "配置を変更", exact: true }).click();
-    await page.getByRole("dialog").getByRole("combobox").first().selectOption("detach");
-    await page.getByRole("button", { name: "配置を外す", exact: true }).click();
+    await page.getByRole("menuitem", { name: "移動…", exact: true }).click();
+    await page.getByRole("button", { name: "この配置を外す", exact: true }).click();
     await expect
       .poll(() =>
         graphOf(app)
@@ -732,7 +735,12 @@ test("move and detach use the displayed parent; cyclic copy stays in TreeGrid", 
     await select(page, "root/alpha/shared");
     await page.getByRole("button", { name: "ノード詳細の操作" }).click();
     await page.getByRole("menuitem", { name: "コピー先を指定", exact: true }).click();
-    await page.getByRole("combobox", { name: "配置先の親" }).selectOption("beta");
+    await page.getByRole("textbox", { name: "コピー先の親" }).fill("Beta");
+    await page
+      .getByRole("listbox", { name: "コピー先の親の候補" })
+      .getByRole("option")
+      .first()
+      .click();
     await page.getByRole("combobox", { name: "コピー範囲" }).selectOption("subgraph");
     await page.getByRole("dialog").getByRole("button", { name: "コピー", exact: true }).click();
     await expect.poll(() => Object.keys(graphOf(app).nodes).length).toBe(9);

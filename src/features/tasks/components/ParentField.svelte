@@ -1,6 +1,7 @@
 <script>
   import { viewportPopover } from "@lib/actions/viewport_popover";
   import { globalDismiss } from "@lib/actions";
+  import { rankCandidates } from "@features/tasks/utils/node_search";
 
   /**
    * 親ノードを付け外しするフィールド。タグ欄と同じ操作にしてある
@@ -38,36 +39,7 @@
   let inputElement = $state();
   let activeIndex = $state(0);
 
-  function subsequenceScore(text, needle) {
-    if (!needle) return 0;
-    const haystack = text.toLowerCase();
-    const direct = haystack.indexOf(needle);
-    if (direct >= 0) return 1000 - direct;
-    let cursor = 0;
-    let score = 0;
-    let streak = 0;
-    for (const ch of needle) {
-      const at = haystack.indexOf(ch, cursor);
-      if (at < 0) return -1;
-      streak = at === cursor ? streak + 1 : 0;
-      score += streak;
-      cursor = at + 1;
-    }
-    return score;
-  }
-
-  function rank(list, needle) {
-    const available = list.filter((item) => !current.includes(item.id));
-    if (!needle) return available;
-    return available
-      .map((item) => ({
-        item,
-        score: Math.max(subsequenceScore(item.name, needle), subsequenceScore(item.path, needle)),
-      }))
-      .filter((entry) => entry.score >= 0)
-      .sort((a, b) => b.score - a.score)
-      .map((entry) => entry.item);
-  }
+  const rank = (list, needle) => rankCandidates(list, needle, current);
 
   function addParent(id) {
     if (disabled || !id || current.includes(id)) return;

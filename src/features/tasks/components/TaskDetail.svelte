@@ -25,6 +25,9 @@
   import DateInput from "@lib/primitives/DateInput.svelte";
   import TagField from "@lib/primitives/TagField.svelte";
   import ParentField from "@features/tasks/components/ParentField.svelte";
+  import NodePicker from "@features/tasks/components/NodePicker.svelte";
+  import MoveNodeDialog from "@features/tasks/components/MoveNodeDialog.svelte";
+  import { nodePathLabels } from "@features/tasks/utils/node_search";
   import { normalizeTagList } from "@lib/utils/tags";
   import { parentIdsOf } from "@lib/utils/parent_links";
   import {
@@ -55,6 +58,7 @@
   let relationAction = $state("");
   let relationBusy = $state(false);
   let relationNodeId;
+  let moveDialogOpen = $state(false);
   function openRelation(action) {
     application.error.set("");
     relationTarget = "";
@@ -64,12 +68,7 @@
   async function submitRelation() {
     relationBusy = true;
     try {
-      const result =
-        relationAction === "copy"
-          ? await application.copyTo(node.id, relationTarget, copyMode)
-          : relationAction === "detach"
-            ? await application.detach(node.id, $active_row_path)
-            : await application.moveTo(node.id, $active_row_path, relationTarget);
+      const result = await application.copyTo(node.id, relationTarget, copyMode);
       if (result) relationAction = "";
     } finally {
       relationBusy = false;
@@ -93,7 +92,7 @@
   function handleDetailMenuAction(item) {
     if (item.action === "danger") requestDanger();
     else if (item.action === "restore") application.archive([node.id], false);
-    else if (item.action === "move") openRelation("move");
+    else if (item.action === "move") moveDialogOpen = true;
     else if (item.action === "copy") openRelation("copy");
     else if (item.action === "window") openTaskDetailInWindow();
     else if (item.action === "format")
@@ -248,26 +247,6 @@
     return true;
   };
 
-  function buildNodePathLabels(root) {
-    const labels = {};
-    if (!root) return labels;
-    // 多親ノードは経路が複数ある。1 本目だけ出すと、経路で見分けるという
-    // この欄の目的が、いちばん見分けたい相手で果たせない。残りは件数で示す。
-    const pathsById = {};
-    const walk = (treeNode, trail) => {
-      const label = trail.join(" / ");
-      const seen = (pathsById[treeNode.id] ??= []);
-      if (!seen.includes(label)) seen.push(label);
-      const nextTrail = [...trail, treeNode.data?.name ?? ""];
-      for (const child of treeNode.children ?? []) walk(child, nextTrail);
-    };
-    walk(root, []);
-    for (const [id, paths] of Object.entries(pathsById)) {
-      labels[id] = paths.length > 1 ? `${paths[0]} 他 ${paths.length - 1} 件` : (paths[0] ?? "");
-    }
-    return labels;
-  }
-
   function saveParents(nextParentIds) {
     return application.parents(node.id, nextParentIds);
   }
@@ -322,7 +301,7 @@
     ...(node
       ? [
           {
-            title: "配置を変更",
+            title: "移動…",
             action: "move",
             disabled: isArchived || application.isProtected(node.id),
           },
@@ -371,7 +350,7 @@
     Object.fromEntries(Object.values($records ?? {}).map((record) => [record.id, record.name]))
   );
   /** 候補に出す補助情報（ルートからの経路）。同名ノードの見分けに要る。 */
-  let nodePathById = $derived(buildNodePathLabels($tree_data?.data));
+  let nodePathById = $derived(nodePathLabels($tree_data?.data));
   /**
    * 親の候補。自分自身だけを除外し、子孫へのリンクも許可する（循環は
    * グラフが保存できる）。既に親になっているものは ParentField 側で外れる。
@@ -756,63 +735,45 @@
   </div>
 {/if}
 
-{#if relationAction && node}
+{#if relationAction === "copy" && node}
   <Modal
-    label={relationAction === "copy" ? "ノードをコピー" : "配置を変更"}
-    width="22.5rem"
+    label="ノードをコピー"
+    width="26rem"
     height="auto"
     toggle={() => {
       if (!relationBusy) relationAction = "";
     }}
   >
     <div class="graph-actions">
-      <h2>{relationAction === "copy" ? "ノードをコピー" : "配置を変更"}</h2>
+      <h2>「{name}」をコピー</h2>
       {#if $relationError}<p role="alert">{$relationError}</p>{/if}
-      <p>{name}</p>
-      {#if relationAction !== "copy"}
-        <p>現在の親: {nodeNameById[($active_row_path || "").split("/").at(-2)] || "なし"}</p>
-        <label
-          >操作
-          <select bind:value={relationAction} disabled={relationBusy}>
-            <option value="move">この配置を移動</option>
-            <option value="detach">この配置を外す</option>
-          </select>
-        </label>
-      {/if}
-      {#if relationAction !== "detach"}
-        <label
-          >対象の親
-          <select aria-label="配置先の親" bind:value={relationTarget} disabled={relationBusy}>
-            <option value="">親を選択</option>
-            {#each parentCandidates as candidate}<option value={candidate.id}
-                >{candidate.name}{candidate.path ? ` — ${candidate.path}` : ""}</option
-              >{/each}
-          </select>
-        </label>
-      {:else}
-        <p>この親との接続を外します。ノード自体は削除されません。</p>
-      {/if}
-      {#if relationAction === "copy"}
-        <label
-          >コピー範囲
-          <select aria-label="コピー範囲" bind:value={copyMode} disabled={relationBusy}>
-            <option value="node">このノードのみ</option>
-            <option value="share-children">直接の子を共有</option>
-            <option value="subgraph">子孫もコピー</option>
-          </select>
-        </label>
-      {/if}
+      <NodePicker
+        candidates={parentCandidates}
+        value={relationTarget}
+        label="コピー先の親"
+        disabled={relationBusy}
+        onchange={({ id }) => (relationTarget = id)}
+      />
+      <label
+        >コピー範囲
+        <select aria-label="コピー範囲" bind:value={copyMode} disabled={relationBusy}>
+          <option value="node">このノードのみ</option>
+          <option value="share-children">直接の子を共有</option>
+          <option value="subgraph">子孫もコピー</option>
+        </select>
+      </label>
       <button disabled={relationBusy} onclick={() => (relationAction = "")}>キャンセル</button>
-      <button
-        disabled={relationBusy ||
-          (relationAction !== "detach" && !relationTarget) ||
-          (relationAction !== "copy" && !($active_row_path || "").includes("/"))}
-        onclick={submitRelation}
-      >
-        {relationAction === "copy" ? "コピー" : relationAction === "detach" ? "配置を外す" : "移動"}
-      </button>
+      <button disabled={relationBusy || !relationTarget} onclick={submitRelation}>コピー</button>
     </div>
   </Modal>
+{/if}
+
+{#if moveDialogOpen && node}
+  <MoveNodeDialog
+    nodeId={node.id}
+    path={$active_row_path}
+    onclose={() => (moveDialogOpen = false)}
+  />
 {/if}
 
 <style>

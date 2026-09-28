@@ -10,6 +10,7 @@
   import TreeTableHeader from "@features/tasks/components/TreeTableHeader.svelte";
   import TreeTableRow from "@features/tasks/components/TreeTableRow.svelte";
   import BulkActionBar from "@features/tasks/components/BulkActionBar.svelte";
+  import MoveNodeDialog from "@features/tasks/components/MoveNodeDialog.svelte";
   import ArchiveScopeDialog from "@features/tasks/components/ArchiveScopeDialog.svelte";
   import Modal from "@lib/primitives/Modal.svelte";
   import Button from "@lib/primitives/Button.svelte";
@@ -949,6 +950,16 @@
   const handleIndentTask = (event) => moveFromRow("indent", event);
   const handleOutdentTask = (event) => moveFromRow("outdent", event);
 
+  /** 行メニューの「移動…」。移動先を選ぶダイアログを開く。 */
+  let moveDialog = $state(null);
+  function handleMoveTo(event) {
+    moveDialog = { id: event.id, path: rowFor(event.id, event.path)?.path ?? event.path };
+  }
+  function closeMoveDialog() {
+    moveDialog = null;
+    void focusRowByPath($active_row_path);
+  }
+
   function handleAddRelative(targetId, action, targetPath) {
     return application.add(targetId, action, rowFor(targetId, targetPath)?.path);
   }
@@ -1420,6 +1431,7 @@
           onreorder={handleReorder}
           onmoveup={handleMoveUp}
           onmovedown={handleMoveDown}
+          onmoveto={handleMoveTo}
           onindenttask={handleIndentTask}
           onoutdenttask={handleOutdentTask}
           onaddbelow={handleAddBelow}
@@ -1508,6 +1520,10 @@
     </div>
   </div>
 </Modal>
+{#if moveDialog}
+  <MoveNodeDialog nodeId={moveDialog.id} path={moveDialog.path} onclose={closeMoveDialog} />
+{/if}
+
 <ArchiveScopeDialog
   target={archiveScopeTarget}
   oncancel={() => (archiveScopeTarget = null)}

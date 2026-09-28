@@ -68,6 +68,7 @@
    * @property {(detail?: any) => void} [onaddchild]
    * @property {(detail?: any) => void} [onmoveup]
    * @property {(detail?: any) => void} [onmovedown]
+   * @property {(detail?: any) => void} [onmoveto]
    * @property {(detail?: any) => void} [onindenttask]
    * @property {(detail?: any) => void} [onoutdenttask]
    * @property {(detail?: any) => void} [ondeletetask]
@@ -113,6 +114,7 @@
     onaddchild,
     onmoveup,
     onmovedown,
+    onmoveto,
     onindenttask,
     onoutdenttask,
     ondeletetask,
@@ -407,6 +409,7 @@
       toggleExpand: () => ontoggle?.({ id, path }),
       moveUp: () => onmoveup?.({ id, path }),
       moveDown: () => onmovedown?.({ id, path }),
+      moveTo: () => onmoveto?.({ id, path }),
       indentTask: () => onindenttask?.({ id, path }),
       outdentTask: () => onoutdenttask?.({ id, path }),
       deleteTask: () => ondeletetask?.({ id, path }),
