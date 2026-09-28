@@ -156,9 +156,12 @@ test("detail pane: name, status, dates, tags and body edits save, reject an inve
     await detail.getByLabel("開始日", { exact: true }).fill("2026-10-05");
     await expect.poll(() => graphOf(app).nodes.spec.startDate).toBe("2026-10-05");
 
-    // 期限が開始より前になる変更は保存されず、失敗が見える。
+    // 期限が開始より前になる変更は受け付けず、理由を日本語で出す。ファイルは
+    // 変わっていないので、ヘッダーは「保存失敗」にならない。
     await detail.getByLabel("期限日", { exact: true }).fill("2026-10-01");
-    await expect(page.getByRole("status").filter({ hasText: "保存失敗" })).toBeVisible();
+    await expect(page.getByRole("alert")).toContainText("開始日が期限日より後になっています");
+    await expect(page.getByRole("alert")).not.toContainText("Error invoking");
+    await expect(page.getByRole("status").filter({ hasText: "保存済み" })).toBeVisible();
     expect(graphOf(app).nodes.spec.dueDate).toBe("2026-10-10");
     await detail.getByLabel("期限日", { exact: true }).fill("2026-10-12");
     await expect.poll(() => graphOf(app).nodes.spec.dueDate).toBe("2026-10-12");
@@ -203,5 +206,79 @@ test("detail pane: name, status, dates, tags and body edits save, reject an inve
     await expect(
       row(page, "root/work/spec").getByRole("textbox", { name: "Specのノード名" })
     ).toBeVisible();
+  });
+});
+
+/** いまフォーカスのある行の名前（名前の入力中なら "editing"）。 */
+const focusedRowName = (page) =>
+  page.evaluate(() => {
+    if (document.querySelector('.TableRow input[type="text"]:focus')) return "editing";
+    const active = document.activeElement;
+    return active?.getAttribute("role") === "row"
+      ? active.querySelector('input[type="text"]').value
+      : null;
+  });
+
+test("keyboard editing: Enter adds and keeps going, Ctrl+Enter adds a child, F2 renames, Tab and Alt+arrows move", async () => {
+  await run(createWorkspace(), async (app) => {
+    const page = app.window;
+    await select(page, "root/work/spec");
+
+    // Enter で下に追加 → 名前を入れて Enter → フォーカスは新しい行に戻り、
+    // もう一度 Enter で続けて追加できる。
+    await page.keyboard.press("Enter");
+    await typeName(page, "One");
+    await expect.poll(() => focusedRowName(page)).toBe("One");
+    await page.keyboard.press("Enter");
+    await typeName(page, "Two");
+    await expect
+      .poll(() => childrenOf(app, "work"))
+      .toEqual(["Spec", "One", "Two", "Build", "Release"]);
+    await expect.poll(() => focusedRowName(page)).toBe("Two");
+
+    // Tab でインデント（One の子に）、Shift+Tab で戻す。フォーカスは動いた行に付いていく。
+    await page.keyboard.press("Tab");
+    await expect.poll(() => childrenOf(app, nodesNamed(app, "One")[0].id)).toEqual(["Two"]);
+    await expect.poll(() => focusedRowName(page)).toBe("Two");
+    await page.keyboard.press("Shift+Tab");
+    await expect
+      .poll(() => childrenOf(app, "work"))
+      .toEqual(["Spec", "One", "Two", "Build", "Release"]);
+
+    // Alt+↑ / Alt+↓ で兄弟の中を動く。
+    await page.keyboard.press("Alt+ArrowUp");
+    await expect
+      .poll(() => childrenOf(app, "work"))
+      .toEqual(["Spec", "Two", "One", "Build", "Release"]);
+    await page.keyboard.press("Alt+ArrowDown");
+    await expect
+      .poll(() => childrenOf(app, "work"))
+      .toEqual(["Spec", "One", "Two", "Build", "Release"]);
+
+    // F2 で名前を変え、Esc で取り消すと元の名前のまま行にフォーカスが戻る。
+    await page.keyboard.press("F2");
+    await expect.poll(() => focusedRowName(page)).toBe("editing");
+    await page.keyboard.press("Escape");
+    await expect.poll(() => focusedRowName(page)).toBe("Two");
+    await page.keyboard.press("F2");
+    await typeName(page, "Two renamed");
+    await expect.poll(() => nodesNamed(app, "Two renamed").length).toBe(1);
+
+    // Ctrl+Enter で子に追加。
+    await page.keyboard.press("Control+Enter");
+    await typeName(page, "Child");
+    await expect
+      .poll(() => childrenOf(app, nodesNamed(app, "Two renamed")[0].id))
+      .toEqual(["Child"]);
+
+    // メニューにもキーが出る（名前には混ざらない）。
+    await rowMenu(page, "root/work/spec", "名前を変更");
+    await page.keyboard.press("Escape");
+    await row(page, "root/work/spec").getByRole("button", { name: "ノード操作を開く" }).click();
+    await expect(page.getByRole("menuitem", { name: "インデント", exact: true })).toHaveAttribute(
+      "aria-keyshortcuts",
+      "Tab"
+    );
+    await page.keyboard.press("Escape");
   });
 });

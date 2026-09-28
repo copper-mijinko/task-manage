@@ -182,8 +182,51 @@
     "End",
   ]);
 
+  /**
+   * 行そのものにフォーカスがあるときの編集キー。アウトライナーと同じ割り当てで、
+   * メニューを開かずにノードを足し・動かし・名前を変えられるようにする
+   * （以前はどれも「…」メニューかツールバーからしかできなかった）。
+   * 行の中のボタンや入力欄にフォーカスがあるときは、それぞれの操作に任せる。
+   * 実行したら true。
+   */
+  function handleEditKey(e) {
+    if (e.target !== e.currentTarget || e.isComposing) return false;
+    const plain = !e.ctrlKey && !e.metaKey && !e.altKey;
+    const isRootRow = depth === 0 || application.isProtected(id);
+    if (e.key === "F2" && plain && !e.shiftKey) {
+      if (!isArchived && !inMulti) taskName?.startRename();
+      return true;
+    }
+    if (e.key === "Enter" && !e.altKey && !e.shiftKey) {
+      if (isArchived || inMulti) return true;
+      // Ctrl+Enter は子に追加。ルート行には兄弟が作れないので Enter も子に追加。
+      if (e.ctrlKey || e.metaKey || isRootRow) onaddchild?.({ id, path });
+      else onaddbelow?.({ id, path });
+      return true;
+    }
+    if (e.key === "Tab" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      // できないとき（先頭の行のインデントなど）は通常の Tab に任せ、グリッドの
+      // 外へ出られるようにする。
+      if (e.shiftKey ? !effectiveCanOutdent : !effectiveCanIndent) return false;
+      if (e.shiftKey) onoutdenttask?.({ id, path });
+      else onindenttask?.({ id, path });
+      return true;
+    }
+    if ((e.key === "ArrowUp" || e.key === "ArrowDown") && e.altKey && !e.ctrlKey && !e.metaKey) {
+      if (e.key === "ArrowUp" && effectiveCanMoveUp) onmoveup?.({ id, path });
+      if (e.key === "ArrowDown" && effectiveCanMoveDown) onmovedown?.({ id, path });
+      return true;
+    }
+    return false;
+  }
+
   function handleKeydown(e) {
-    if (e.key === "Enter" || e.key === " ") {
+    if (handleEditKey(e)) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    if (e.key === " ") {
       e.preventDefault();
       select(e);
       return;

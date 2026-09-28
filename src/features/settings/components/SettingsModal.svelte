@@ -47,6 +47,14 @@
     {
       title: "ノードツリー",
       items: [
+        {
+          keys: ["Enter"],
+          description: "下にノードを追加（名前の入力後にもう一度 Enter で続けて追加）",
+        },
+        { keys: ["Ctrl", "Enter"], description: "子ノードを追加" },
+        { keys: ["F2"], description: "名前を変更" },
+        { keys: ["Tab"], description: "インデント（Shift+Tab でアウトデント）" },
+        { keys: ["Alt", "↑"], description: "上に移動（Alt+↓ で下に移動）" },
         { keys: ["Ctrl", "A"], description: "表示中のノードをすべて選択" },
         { keys: ["Esc"], description: "選択を解除" },
         { keys: ["Delete"], description: "選択したノードをアーカイブ / 削除" },

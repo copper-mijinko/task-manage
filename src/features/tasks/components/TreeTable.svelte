@@ -925,14 +925,24 @@
     return selectionSize > 1 && $selected_ids.has(id);
   }
 
-  /** 行メニューの移動。複数選択に含まれる行なら選択全体を動かす。 */
-  function moveFromRow(direction, event) {
+  /**
+   * 行メニューとキー（Tab / Shift+Tab / Alt+↑↓）の移動。複数選択に含まれる
+   * 行なら選択全体を動かす。動いた行は経路が変わって描き直されるので、
+   * フォーカスが行から外れていたら移動先の行へ戻す（戻さないと続けて
+   * Tab や Alt+↑ を押しても効かなかった）。
+   */
+  async function moveFromRow(direction, event) {
     const { id, path } = event;
-    return application.move(
+    const result = await application.move(
       direction,
       isInMultiSelection(id) ? [...selectionSet] : [id],
       rowFor(id, path)?.path
     );
+    await tick();
+    const focused = document.activeElement;
+    if (!focused || focused === document.body || !focused.isConnected)
+      await focusRowByPath($active_row_path);
+    return result;
   }
   const handleMoveUp = (event) => moveFromRow("up", event);
   const handleMoveDown = (event) => moveFromRow("down", event);
