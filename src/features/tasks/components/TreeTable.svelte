@@ -1117,9 +1117,7 @@
   function shouldPrioritizeSelectedText(e) {
     if (!hasSelectedDocumentText()) return false;
     if (hasSelectedMemoText()) return true;
-    return (
-      (e.ctrlKey || e.metaKey) && (e.key === "c" || e.key === "C" || e.key === "a" || e.key === "A")
-    );
+    return (e.ctrlKey || e.metaKey) && ["c", "C", "x", "X", "a", "A"].includes(e.key);
   }
 
   function handleGlobalKeydown(e) {

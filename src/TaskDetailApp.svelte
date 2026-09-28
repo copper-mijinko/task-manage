@@ -4,6 +4,7 @@
   import * as platform from "@lib/ipc/platform";
   import { registerDateTimeShortcuts } from "@lib/utils/datetime_shortcuts";
   import WorkspaceTaskDetail from "@features/workspace/components/WorkspaceTaskDetail.svelte";
+  import NoticeBanner from "@lib/primitives/NoticeBanner.svelte";
 
   // ノード詳細ウィンドウ。開く対象は main プロセスが URL に載せてくる。
   const search = new URLSearchParams(window.location.search);
@@ -37,6 +38,7 @@
 </script>
 
 <div class="detail-app">
+  <div class="notice-stack"><NoticeBanner /></div>
   {#if saveErrorMessage}
     <div class="banner error" role="alert">
       <span>{saveErrorMessage}</span>
@@ -72,6 +74,14 @@
     height: 100vh;
     overflow: hidden;
     background: var(--theme-color-Main-dark);
+  }
+  .notice-stack {
+    position: fixed;
+    top: 0.75rem;
+    right: 0.75rem;
+    width: min(24rem, calc(100vw - 1.5rem));
+    z-index: 10000;
+    pointer-events: none;
   }
   main {
     flex: 1;

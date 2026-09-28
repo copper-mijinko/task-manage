@@ -16,7 +16,7 @@
   import Header from "@features/navigation/components/Header.svelte";
   import MenuList from "@features/navigation/components/MenuList.svelte";
   import { showQuickCapture, showWorkspaceSetup } from "@stores/ui";
-  import { notice, dismissNotice } from "@stores/notice";
+  import NoticeBanner from "@lib/primitives/NoticeBanner.svelte";
   import Loading from "@lib/primitives/Loading.svelte";
   import PageSearchBox from "@features/search/components/PageSearchBox.svelte";
   import { sidebarCollapsed } from "@stores";
@@ -219,22 +219,7 @@
 
 <div class:Container={true}>
   <div class="notification-stack">
-    {#if $notice}
-      <div class="notice-banner" role="status">
-        <span>{$notice.message}</span>
-        {#if $notice.action}
-          <button
-            class="notice-action"
-            onclick={() => {
-              const current = $notice;
-              dismissNotice(current?.id);
-              current?.action?.();
-            }}>{$notice.actionLabel ?? "元に戻す"}</button
-          >
-        {/if}
-        <button aria-label="通知を閉じる" onclick={() => dismissNotice()}>×</button>
-      </div>
-    {/if}
+    <NoticeBanner />
     {#if saveErrorMessage}
       <div class="save-error-banner" role="alert">
         <span>{saveErrorMessage}</span>
@@ -328,34 +313,6 @@
     display: grid;
     gap: var(--sp2);
     pointer-events: none;
-  }
-  .notice-banner {
-    display: flex;
-    align-items: center;
-    gap: var(--sp2);
-    padding: var(--sp2) var(--sp3);
-    background: var(--theme-color-Sub-main);
-    color: var(--theme-color-Main-main);
-    font-size: var(--font-body-sm);
-  }
-  .notice-banner > span {
-    flex: 1;
-    min-width: 0;
-  }
-  .notice-banner button {
-    min-height: var(--tap-min);
-    padding: 0 var(--sp2);
-    border: 0;
-    border-radius: var(--shape-xs);
-    background: transparent;
-    color: inherit;
-    font: inherit;
-    cursor: pointer;
-  }
-  .notice-banner .notice-action {
-    font-weight: 600;
-    text-decoration: underline;
-    text-underline-offset: 2px;
   }
   .notification-stack > :global(div) {
     pointer-events: auto;
