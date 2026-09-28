@@ -84,6 +84,7 @@ delete (= archive) ではなく restore / permanently delete を出す。
         {
           title: "名前を変更",
           action: "rename",
+          shortcut: "F2",
           disabled: isMulti || archived,
           icon: {
             viewBox: "-4 -4 32 32",
@@ -98,6 +99,7 @@ delete (= archive) ではなく restore / permanently delete を出す。
               {
                 title: "下にノードを追加",
                 action: "addBelow",
+                shortcut: "Enter",
                 disabled: isMulti || archived,
                 icon: {
                   viewBox: "0 0 24 24",
@@ -109,6 +111,7 @@ delete (= archive) ではなく restore / permanently delete を出す。
         {
           title: "子ノードを追加",
           action: "addChild",
+          shortcut: "Ctrl+Enter",
           disabled: isMulti || archived,
           icon: {
             viewBox: "0 0 24 24",
@@ -122,6 +125,7 @@ delete (= archive) ではなく restore / permanently delete を出す。
         {
           title: `${countPrefix}コピー`,
           action: "copyTask",
+          shortcut: "Ctrl+C",
           icon: {
             viewBox: "0 0 24 24",
             path: "M8 4v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7.242a2 2 0 0 0-.602-1.43L16.083 2.57A2 2 0 0 0 14.685 2H10a2 2 0 0 0-2 2ZM4 8H2v12a2 2 0 0 0 2 2h8v-2H4Z",
@@ -131,6 +135,7 @@ delete (= archive) ではなく restore / permanently delete を出す。
         {
           title: "子ノードとして貼り付け",
           action: "pasteTask",
+          shortcut: "Ctrl+V",
           disabled: archived || $applicationClipboard.length === 0,
           icon: {
             viewBox: "0 0 24 24",
@@ -158,6 +163,7 @@ delete (= archive) ではなく restore / permanently delete を出す。
         {
           title: `${countPrefix}上に移動`,
           action: "moveUp",
+          shortcut: "Alt+↑",
           disabled: !canMoveUp || archived,
           icon: {
             viewBox: "0 0 24 24",
@@ -167,6 +173,7 @@ delete (= archive) ではなく restore / permanently delete を出す。
         {
           title: `${countPrefix}下に移動`,
           action: "moveDown",
+          shortcut: "Alt+↓",
           disabled: !canMoveDown || archived,
           icon: {
             viewBox: "0 0 24 24",
@@ -176,6 +183,7 @@ delete (= archive) ではなく restore / permanently delete を出す。
         {
           title: `${countPrefix}インデント`,
           action: "indentTask",
+          shortcut: "Tab",
           disabled: !canIndent || archived,
           icon: {
             viewBox: "0 0 24 24",
@@ -185,6 +193,7 @@ delete (= archive) ではなく restore / permanently delete を出す。
         {
           title: `${countPrefix}アウトデント`,
           action: "outdentTask",
+          shortcut: "Shift+Tab",
           disabled: !canOutdent || archived,
           icon: {
             viewBox: "0 0 24 24",
@@ -209,6 +218,7 @@ delete (= archive) ではなく restore / permanently delete を出す。
               {
                 title: `${countPrefix}完全に削除`,
                 action: "permanentDeleteTask",
+                shortcut: "Delete",
                 icon: {
                   viewBox: "0 0 48 48",
                   path: "M13.05 42q-1.25 0-2.125-.875T10.05 39V10.5H8v-3h9.4V6h13.2v1.5H40v3h-2.05V39q0 1.2-.9 2.1-.9.9-2.1.9Zm21.9-31.5h-21.9V39h21.9Zm-16.6 24.2h3V14.75h-3Zm8.3 0h3V14.75h-3Zm-13.6-24.2V39Z",
@@ -219,6 +229,7 @@ delete (= archive) ではなく restore / permanently delete を出す。
               {
                 title: `${countPrefix}アーカイブ`,
                 action: "deleteTask",
+                shortcut: "Delete",
                 icon: {
                   viewBox: "0 0 48 48",
                   path: "M13.05 42q-1.25 0-2.125-.875T10.05 39V10.5H8v-3h9.4V6h13.2v1.5H40v3h-2.05V39q0 1.2-.9 2.1-.9.9-2.1.9Zm21.9-31.5h-21.9V39h21.9Zm-16.6 24.2h3V14.75h-3Zm8.3 0h3V14.75h-3Zm-13.6-24.2V39Z",
@@ -372,6 +383,23 @@ delete (= archive) ではなく restore / permanently delete を出す。
     }
   });
 
+  /**
+   * キーで名前の編集を終えたら、フォーカスをその行に戻す。戻さないと
+   * フォーカスがどこにも無くなり、矢印キーも Enter（次のノードを追加）も
+   * クリックし直すまで効かなかった。
+   */
+  function returnFocusToRow() {
+    const row = input?.closest('[role="row"]');
+    void tick().then(() => {
+      if (row?.isConnected) row.focus({ preventScroll: true });
+    });
+  }
+
+  /** 名前の編集を始める（行で F2 を押したとき）。 */
+  export function startRename() {
+    if (!isEditing) void toggle();
+  }
+
   export async function openMenuAt(position) {
     // ホバーしたままクリックすると、トリガーのツールチップが残ってメニューの
     // 1 項目目に重なる。開く前に閉じておく。
@@ -459,9 +487,11 @@ delete (= archive) ではなく restore / permanently delete を出す。
       if (e.key === "Enter") {
         flushCommit();
         isEditing = false;
+        returnFocusToRow();
       } else if (e.key === "Escape") {
         resetDraft();
         isEditing = false;
+        returnFocusToRow();
       }
     }}
     ondragstart={(e) => {
