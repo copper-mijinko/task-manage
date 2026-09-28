@@ -362,7 +362,7 @@
       aria-label="予定を開く"
       title={$workspace_store.activeWorkspacePath
         ? "予定を開く（全プロジェクトの期限）"
-        : "Workspaceを設定すると予定が使えます"}
+        : "ワークスペースを設定すると予定が使えます"}
     >
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path
@@ -396,7 +396,7 @@
     aria-pressed={inboxActive}
     title={$workspace_store.activeWorkspacePath
       ? "Inboxを開く"
-      : "Workspaceを設定するとInboxが使えます"}
+      : "ワークスペースを設定するとInboxが使えます"}
   >
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path

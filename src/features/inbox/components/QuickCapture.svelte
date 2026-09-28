@@ -40,7 +40,7 @@ primitive (no Card chrome, no padding-aware layout).
     const name = value.trim();
     if (!name || busy) return;
     if (!workspaceReady) {
-      errorMessage = "Workspaceを設定してください";
+      errorMessage = "ワークスペースを設定してください";
       return;
     }
     busy = true;
@@ -155,7 +155,8 @@ primitive (no Card chrome, no padding-aware layout).
       </div>
       <div class="QuickCaptureMeta">
         {#if !workspaceReady}
-          <span class="MetaWarn">Workspaceが未設定です。先にワークスペースを追加してください。</span
+          <span class="MetaWarn"
+            >ワークスペースが未設定です。先にワークスペースを追加してください。</span
           >
         {:else if errorMessage}
           <span class="MetaError">{errorMessage}</span>

@@ -240,7 +240,7 @@
     />
   </div>
 
-  {#if !canUseAttachments}<p>添付はWorkspaceで利用できます。</p>{:else if readOnly}<p>
+  {#if !canUseAttachments}<p>添付はワークスペースで利用できます。</p>{:else if readOnly}<p>
       アーカイブ済みのため、添付の変更はできません。
     </p>{/if}
   {#if attachmentList.length > 0}

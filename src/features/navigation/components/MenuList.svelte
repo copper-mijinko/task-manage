@@ -145,7 +145,7 @@
     workspace_open_error = "";
     const result = await workspace_store.openActiveWorkspace();
     if (!result?.success) {
-      workspace_open_error = result?.error ?? "Workspaceを開けませんでした";
+      workspace_open_error = result?.error ?? "ワークスペースを開けませんでした";
       if (workspace_open_error_timer) clearTimeout(workspace_open_error_timer);
       workspace_open_error_timer = setTimeout(() => {
         workspace_open_error = "";
@@ -357,7 +357,7 @@
         stroke-linejoin="round"
       />
     </svg>
-    <span class="TextOverFlow">Workspace</span>
+    <span class="TextOverFlow">ワークスペース</span>
   </div>
   {#if $workspace_store.activeWorkspacePath}
     <button
@@ -386,11 +386,11 @@
         class="WorkspaceIconBtn"
         type="button"
         onclick={handleOpenActiveWorkspace}
-        aria-label="Workspaceをファイルエクスプローラーで開く"
+        aria-label="ワークスペースをファイルエクスプローラーで開く"
         use:tooltip={{
           color: "var(--on-theme-tooltip-fg)",
           backgroundColor: "var(--on-theme-tooltip-bg)",
-          content: "Workspaceをファイルエクスプローラーで開く",
+          content: "ワークスペースをファイルエクスプローラーで開く",
           force: true,
         }}
       >
@@ -454,13 +454,13 @@
         aria-expanded={workspaceProjectsExpanded}
         aria-controls="workspace-project-list"
         aria-label={workspaceProjectsExpanded
-          ? "Workspaceプロジェクトを折りたたむ"
-          : "Workspaceプロジェクトを展開"}
+          ? "ワークスペースプロジェクトを折りたたむ"
+          : "ワークスペースプロジェクトを展開"}
         use:tooltip={{
           color: "var(--on-theme-tooltip-fg)",
           backgroundColor: "var(--on-theme-tooltip-bg)",
           content:
-            "Workspaceフォルダに保存されるプロジェクトです。メモはWorkspaceファイルとして管理されます。",
+            "ワークスペースのフォルダーに保存されるプロジェクトです。本文や添付も同じフォルダーにまとめて保存されます。",
           force: true,
         }}
         onclick={() => (workspaceProjectsExpanded = !workspaceProjectsExpanded)}
@@ -481,14 +481,14 @@
             stroke-linejoin="round"
           />
         </svg>
-        <span class="SubsectionLabel TextOverFlow">Workspace</span>
+        <span class="SubsectionLabel TextOverFlow">ワークスペース</span>
         <span class="SubsectionCount">{workspaceProjects.length}</span>
       </button>
       <div class="AddButtonContainer">
         {#if $workspace_store.activeWorkspacePath}
           <IconButton
-            tooltipContent="Workspaceプロジェクトを追加"
-            ariaLabel="Workspaceプロジェクトを追加"
+            tooltipContent="ワークスペースプロジェクトを追加"
+            ariaLabel="ワークスペースプロジェクトを追加"
             normalColor="var(--canvas-subtle)"
             activeColor="var(--hover-bg)"
             onclick={addWorkspaceProject}
@@ -572,8 +572,8 @@
             <div class="TreeLine" style="flex-shrink: 0"></div>
             <span class="TextOverFlow">
               {$workspace_store.activeWorkspacePath
-                ? "Workspaceプロジェクトなし"
-                : "Workspace未設定"}
+                ? "ワークスペースプロジェクトなし"
+                : "ワークスペース未設定"}
             </span>
           </div>
         {/if}
@@ -584,7 +584,7 @@
 <Dialog
   show={show_workspace_delete}
   toggle={toggle_workspace_delete}
-  header="Workspaceプロジェクトの削除"
+  header="ワークスペースプロジェクトの削除"
   content={`「${workspace_delete_target?.name ?? ""}」のノードと接続を削除します。子ノードは残り、必要ならワークスペースのルートに接続されます。元に戻す操作で復元できます。`}
   ok="削除する"
   danger={true}
@@ -688,7 +688,7 @@
   }
   /* 見出しは「Workspace」「アプリ内」だけにしてある。親セクションが既に
      「プロジェクト」なので、子でも繰り返すと 216px のサイドバー幅に収まらず
-     「Workspaceプロジ…」と切れていた。正式名称はツールチップと aria-label
+     「ワークスペースプロジ…」と切れていた。正式名称はツールチップと aria-label
      が持っている。 */
   .SubsectionLabel {
     flex: 0 1 auto;

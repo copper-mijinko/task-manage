@@ -173,7 +173,7 @@
 <main class="page" aria-label="ワークスペースのノード" style="width:100%;flex:1;align-self:stretch">
   <header>
     <div>
-      <h1>Workspace</h1>
+      <h1>ワークスペース</h1>
       <p>一つのノードを複数の見方で整理します。</p>
     </div>
     <nav aria-label="表示形式">
@@ -242,7 +242,9 @@
       />
     </div>
   {:else}<div class="empty">
-      {workspacePath ? "Workspace graph を読み込めませんでした" : "Workspaceを選択してください"}
+      {workspacePath
+        ? "ワークスペースのグラフを読み込めませんでした"
+        : "ワークスペースを選択してください"}
     </div>{/if}
 </main>
 

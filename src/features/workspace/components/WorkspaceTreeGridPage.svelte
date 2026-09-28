@@ -84,7 +84,7 @@
   {#if $projection?.truncated}<div role="status">
       表示上限に達しました。Projectを選択して範囲を絞ってください。
     </div>{/if}
-  {#if navigation}<MainPage />{:else}<p>Workspaceを読み込み中…</p>{/if}
+  {#if navigation}<MainPage />{:else}<p>ワークスペースを読み込み中…</p>{/if}
 </main>
 
 <style>
