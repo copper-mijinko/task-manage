@@ -4,6 +4,7 @@ import {
   childrenOf,
   createWorkspace,
   graphOf,
+  node,
   nodesNamed,
   overflow,
   row,
@@ -382,5 +383,36 @@ test("focus stays usable after archive, undo and a status change, and F6 moves b
       .toBe(true);
     await page.keyboard.press("F6");
     await expect.poll(focused).toBe("row:root/work/spec");
+  });
+});
+
+test("a Quill body stays in edit mode when another node is selected", async () => {
+  const nodes = [
+    node("root", [], { name: "Workspace" }),
+    node("a", [["root", 0]], { name: "A", body: "<p>alpha</p>", format: "quill" }),
+    node("b", [["root", 1]], { name: "B", body: "<p>beta</p>", format: "quill" }),
+  ];
+  await run(createWorkspace(nodes), async (app) => {
+    const page = app.window;
+    const bodyToolbar = page.locator("section.node-detail .body-toolbar");
+    await select(page, "root/a");
+    await page.getByRole("tab", { name: "本文", exact: true }).click();
+    await bodyToolbar.getByRole("button", { name: "編集", exact: true }).click();
+    await expect(
+      bodyToolbar.getByRole("button", { name: "プレビュー", exact: true })
+    ).toBeVisible();
+    // 別のノードへ移っても、本文は編集できるまま。
+    await select(page, "root/b");
+    await expect(page.getByRole("tab", { name: "本文", exact: true })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    await expect(
+      bodyToolbar.getByRole("button", { name: "プレビュー", exact: true })
+    ).toBeVisible();
+    await expect(page.locator("section.node-detail .ql-editor")).toHaveAttribute(
+      "contenteditable",
+      "true"
+    );
   });
 });
