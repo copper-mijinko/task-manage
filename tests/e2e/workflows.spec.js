@@ -131,3 +131,34 @@ test("an Inbox item moves into a project from the row menu, choosing the destina
     await expect(dialog).toHaveCount(0);
   });
 });
+
+test("adding a project starts naming it, and Esc cancels the new project", async () => {
+  await run(createWorkspace(), async (app) => {
+    const page = app.window;
+    const projects = () =>
+      childrenOf(app, "root").filter((name) => !["Work", "Home", "Inbox"].includes(name));
+    const addProject = async () => {
+      const button = page.getByRole("button", { name: "Workspaceプロジェクトを追加" });
+      if (!(await button.isVisible()))
+        await page.getByRole("button", { name: "サイドバーを表示", exact: true }).click();
+      await button.click();
+    };
+
+    // 作った直後の名前入力を Esc で取り消すと、プロジェクトも残らない。
+    await addProject();
+    const input = page.locator('.TableRow input[type="text"]:focus');
+    await expect(input).toHaveValue("新しいプロジェクト");
+    await page.keyboard.press("Escape");
+    await expect.poll(projects).toEqual([]);
+
+    // 名前を入れて Enter で確定すると、その名前で残り、フォーカスは行に戻る。
+    await addProject();
+    await expect(input).toBeVisible();
+    await page.keyboard.type("Plan");
+    await page.keyboard.press("Enter");
+    await expect.poll(projects).toEqual(["Plan"]);
+    await expect
+      .poll(() => page.evaluate(() => document.activeElement?.getAttribute("role")))
+      .toBe("row");
+  });
+});
