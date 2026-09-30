@@ -19,7 +19,7 @@ electron/                        # main プロセス
 ├── ipc-security.js              # 外部 URL・ワークスペースパスの検証
 ├── ipc/
 │   ├── settings-ipc.js          # get/set/delete-meta-data・テーマ
-│   ├── workspace-ipc.js         # ws:* チャネル（グラフの読み書き・Undo/Redo・画像/添付・取り込み）
+│   ├── workspace-ipc.js         # ws:* チャネル（グラフの読み書き・Undo/Redo・読み直し・画像/添付）
 │   ├── external-ipc.js          # 外部リンク・画像の表示
 │   └── find-in-page-ipc.js      # 画面内検索
 ├── task-detail-window.js        # ノード詳細の別ウィンドウ
@@ -27,9 +27,18 @@ electron/                        # main プロセス
 ├── window-state.js              # ウィンドウ位置・大きさの保存と復元
 ├── os-open.js                   # OS のファイラ・プログラム選択で開く
 ├── workspace-application.js     # ワークスペース単位のアプリケーション層（読込・コマンド実行・通知）
-├── workspace-graph.js           # graph-v1.json の保存・履歴・資産・Markdown 取り込み
+├── workspace-graph.js           # ワークスペースの保存の入口（読み込み・コマンド実行・Undo/Redo・資産）
+├── store/                       # Markdown ファイルの読み書き（1 ノード 1 ファイル）
+│   ├── frontmatter.js           # frontmatter の読み書き（未知のキーは元の行のまま残す）
+│   ├── node-file.js             # ノード ⇄ ファイル内容
+│   ├── loader.js                # フォルダー → グラフ（読み込み時の修復を含む）
+│   ├── writer.js                # グラフの変化 → 変わったファイルだけの書き込み（競合検出・巻き戻し）
+│   ├── history.js / trash.js    # 元に戻す履歴（1 段 1 ファイル）・削除したノードのごみ箱
+│   ├── layout.js                # グラフビューの座標（.task-manage/layout.json）
+│   ├── files.js                 # 画像・添付のファイル名と安全なパス
+│   └── migrate-graph-json.js    # 旧 graph-v1.json から Markdown への一度きりの変換
 ├── workspace-graph-engine.js    # グラフのコマンド適用（純粋関数）
-├── workspace.js                 # 旧 Markdown 形式の読み取り専用リーダ（取り込み元）
+├── workspace.js                 # Markdown の共通部品（旧メモの解釈・ファイル名・原子的書込）
 ├── performance-metrics.js       # 起動・詳細ウィンドウの計測
 └── agent-debug.js               # 開発用 CDP（loopback のみ）
 
@@ -262,9 +271,9 @@ CI（`.github/workflows/`）と同じ `npm run lint` / `npm run check` / `npm te
 | ページ内ハイライト検索                                             | `Header.svelte` の検索ボックス + `@features/search/utils/page_search_highlighter.ts`                                                             |
 | 列ヘッダのフィルタ / 列設定ポップオーバー                          | `TreeTableHeader.svelte` + `@features/search/components/*FilterPanel.svelte`                                                                     |
 | ツリーの三点リーダメニュー                                         | `TaskMenu.svelte` + `TaskName.svelte`                                                                                                            |
-| ワークスペース管理ダイアログ | `WorkspaceSetup.svelte`（登録・切替・削除、旧 Markdown 形式からの取り込み） |
+| ワークスペース管理ダイアログ | `WorkspaceSetup.svelte`（登録・切替・削除、ディスクから読み込み直す） |
 | ウィンドウ状態の保存 / 復元（main プロセス） | `electron/window-state.js`（`loadWindowState` / `trackWindowState`）+ `electron/index.js` の BrowserWindow 生成 |
-| グラフの保存（main プロセス） | `electron/workspace-graph.js` + `electron/workspace-graph-engine.js` + `electron/workspace-application.js` + `electron/ipc/workspace-ipc.js`（§ 8.9） |
+| グラフの保存（main プロセス） | `electron/workspace-graph.js` + `electron/store/*.js` + `electron/workspace-graph-engine.js` + `electron/workspace-application.js` + `electron/ipc/workspace-ipc.js`（§ 8.9） |
 | 保存エラーのバナー | `src/App.svelte` の `save-error-banner`（`saveStatus` が `error` のとき） |
 | 予定ビューの選択状態 | `src/features/agenda/stores/agenda.ts`（`AGENDA_SELECTED_ID`） |
 | ノードのタグ | `src/lib/primitives/TagField.svelte` + `src/lib/utils/tags.ts` + `TaskDetail.svelte` のタグ欄 + `TreeTableRow.svelte` の `tags` 列 + `@features/memos/stores/tags` の統合索引。保存先はグラフのノードの `tags` |
@@ -359,14 +368,14 @@ CI（`.github/workflows/`）と同じ `npm run lint` / `npm run check` / `npm te
 ### 8.8 ノードの削除
 
 - ツリーグリッドの `remove(id)` がグラフコマンド `delete-node` を送る。表示中のスコープ（ルート）と保護ノード（ワークスペースのルート・Inbox）は対象外
-- 削除は Undo で戻せる。ディスク上の画像・添付ファイルは消さない
+- 削除は Undo で戻せる。ノードのフォルダー（画像・添付を含む）は `.task-manage/trash/` へ移り、Undo で元の場所へ戻る（[data.md](data.md) § 3.5）
 - プロジェクトはワークスペースのルート直下のノードであり、専用の削除経路は持たない
 
 ### 8.9 グラフの保存
 
-ワークスペースの正本は `<workspace>/.task-manage/graph-v1.json` 1 ファイル（形式は
+ワークスペースの正本は、フォルダーの中の Markdown ファイル（1 ノード 1 ファイル。形式は
 [data.md](data.md) § 3）。main プロセスだけが読み書きし、renderer はコマンドを送って
-結果のグラフを受け取る。
+結果の差分を受け取る。
 
 ```
 [ renderer ]  treegrid.js / WorkspaceSetup / QuickCapture
@@ -375,23 +384,30 @@ CI（`.github/workflows/`）と同じ `npm run lint` / `npm run check` / `npm te
 [ main ]  workspace-ipc.js → workspace-application.js
         │  workspace-graph.js: mutate（ワークスペースごとに直列化）
         │    ├─ revision の照合（古い revision からのコマンドは拒否）
-        │    ├─ workspace-graph-engine.js でコマンドを適用し、逆パッチを Undo 履歴へ（最大 50）
-        │    └─ atomicWriteFile（tmp → rename）で graph-v1.json を置き換え
+        │    ├─ workspace-graph-engine.js でコマンドを適用し、メモリ上のグラフを新しい版にする
+        │    ├─ store/writer.js: 前後のグラフを比べ、変わったノードのファイルだけを書く
+        │    │    （書く直前にファイルの中身を確かめ、アプリの外の変更は上書きしない）
+        │    └─ store/history.js: 元に戻す 1 段を .task-manage/history/ に書く
         ▼
-  戻り値の新しいグラフ + broadcast("workspace-graph-updated", { workspacePath, graph })
+  戻り値の差分 + broadcast("workspace-graph-updated", { workspacePath, delta })   ※要求元には戻り値だけ
         ▼
-[ renderer windows ]  workspace_graph_store が新しい revision のグラフで置き換え
+[ renderer windows ]  workspace_graph_store が差分を持っているグラフへ当てる（取りこぼしたら全体を読み直す）
 ```
+
+起動時（と「読み込み直す」）は、`store/loader.js` がフォルダーを読んでグラフを組み立てる。
+ファイルの読み込み（非同期 I/O）と、組み立て・修復（純粋関数）を分けてあり、組み立ての部分は
+ファイルなしでテストできる。読み込んだグラフはメモリに持ち続け、ファイルの監視はしない。
 
 #### 構成要素
 
 | 要素 | 配置 | 役割 |
 | --- | --- | --- |
 | コマンド適用 | `electron/workspace-graph-engine.js` | `create-node` / `update-node` / `link` / `detach` / `move` / `archive-edge` / `delete-node` / `copy` / `set-position` / `batch` を純粋関数として適用し、逆パッチを返す |
-| 保存と履歴 | `electron/workspace-graph.js` | `readGraph` / `executeCommand` / `undo` / `redo`、画像・添付の保存、旧 Markdown 形式からの取り込み（`importMarkdownProjects`）、`hasPendingWrites` / `whenIdle` |
+| 保存と履歴 | `electron/workspace-graph.js` | `readWorkspaceGraph` / `executeWorkspaceGraphCommand` / `undoWorkspaceGraph` / `redoWorkspaceGraph` / `reloadWorkspaceGraph`、画像・添付の保存（`saveNodeAsset`）、`hasPendingWrites` / `whenIdle` |
+| ファイルの読み書き | `electron/store/*.js` | 読み込みと修復（`loader.js`）、差分書き込み・競合検出・巻き戻し（`writer.js`）、履歴（`history.js`）、ごみ箱（`trash.js`）、座標（`layout.js`）、旧 JSON からの変換（`migrate-graph-json.js`） |
 | アプリケーション層 | `electron/workspace-application.js` | ワークスペースの認可済みパスでの読込とコマンド実行、更新の通知 |
 | IPC | `electron/ipc/workspace-ipc.js` | `ws:*` チャネルの登録。登録済みでないワークスペースへのアクセスは拒否する |
-| renderer ストア | `src/features/workspace/stores/graph.ts` | グラフの写し、`execute` / `undo` / `redo`、`saveStatus` の更新 |
+| renderer ストア | `src/features/workspace/stores/graph.ts` | グラフの写し、差分の適用（`applyGraphDelta`）、`execute` / `undo` / `redo` / `reload`、`saveStatus` の更新 |
 
 #### 保存状態
 
@@ -402,9 +418,12 @@ CI（`.github/workflows/`）と同じ `npm run lint` / `npm run check` / `npm te
 
 #### 別ウィンドウとの同期
 
-ノード詳細ウィンドウを含むすべてのウィンドウは `workspace-graph-updated` を受け取り、
-手元より新しい revision のグラフだけを採用する。どのウィンドウから編集しても正本は 1 つなので、
-競合の解決は revision の照合だけで済む。
+ノード詳細ウィンドウを含むすべてのウィンドウは `workspace-graph-updated` を受け取る。
+中身は変わったノードだけの差分（`{ baseRevision, revision, nodes, fields, history }`）で、
+手元の revision が `baseRevision` と一致するときだけ当てる。間の更新を取りこぼしていたら
+`ws:read-graph` でグラフ全体を読み直す。どのウィンドウから編集しても正本は 1 つなので、
+競合の解決は revision の照合だけで済む。「読み込み直す」だけは、ディスクから読み直した
+グラフ全体を全ウィンドウへ送る。
 
 #### 終了時
 
@@ -433,7 +452,7 @@ capture phase を選ぶ理由は、CodeMirror / Quill が自前のキーマッ�
 
 - **レンダラ分岐**: `src/features/memos/components/Memo.svelte` が `MemoEntry.format` を参照し、`MarkdownMemo.svelte` / `QuillMemo.svelte` のいずれかをマウントする
 - **正規化と変換**: `src/features/memos/utils/memo_utils.ts` が省略時デフォルトの解決と Markdown ⇄ Quill 変換を行う。個別変換・一括変換のいずれも本ユーティリティを経由する
-- **保存形式**: 本文はグラフのノードの `body`（`{ format, content }`）として `graph-v1.json` に入る（[data.md](data.md) § 6）
+- **保存形式**: 本文はノードのファイル（`_index.md` など）の frontmatter の後ろに入る。Quill のときは `format: quill` と、フェンス付きの JSON（[data.md](data.md) § 6）
 - **Undo 記録**: フォーマットの変更も `update-node` コマンドなので、グラフの Undo 履歴に 1 操作として残る
 - **UI セグメント**: 本文のフォーマット切替と、Markdown の Read / Edit モード切替は共通プリミティブ `src/lib/primitives/SegmentedControl.svelte` を使用し、アクティブ状態・セパレータ・キーボードフォーカス表現を統一する
 

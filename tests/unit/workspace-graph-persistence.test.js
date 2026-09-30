@@ -510,6 +510,63 @@ describe("workspace graph persistence", () => {
     });
   });
 
+  describe("legacy memo files", () => {
+    it("keep their images and do not come back twice when the node they were written in is deleted", async () => {
+      projectFixture(tempDir);
+      fs.writeFileSync(
+        path.join(tempDir, "alpha", "task-a", "memo-x.md"),
+        "---\nid: memo-x\ntitle: A memo\n---\nmemo ![i](./assets/legacy.png)\n"
+      );
+      const initial = await graphStore.readWorkspaceGraph(tempDir);
+      const deleted = await exec(
+        tempDir,
+        { type: "delete-node", nodeId: "task-a" },
+        initial.revision
+      );
+      // メモは親を失うのでワークスペース直下に付け直され、自分のフォルダーへ移る。
+      expect(deleted.graph.nodes["memo-x"].parents.map((link) => link.id)).toEqual([
+        deleted.graph.rootId,
+      ]);
+      const moved = path.join(tempDir, "alpha", "memo-x");
+      expect(read(path.join(moved, "assets", "legacy.png"))).toBe("legacy-image");
+      expect(fs.existsSync(path.join(tempDir, "alpha", "task-a"))).toBe(false);
+
+      graphStore.forgetWorkspace(tempDir);
+      const reopened = await graphStore.readWorkspaceGraph(tempDir);
+      expect(reopened.nodes["memo-x"].body).toContain("./assets/legacy.png");
+      const undone = await graphStore.undoWorkspaceGraph(tempDir, reopened.revision);
+      expect(undone.graph.nodes["task-a"].name).toBe("Task A");
+      expect(undone.graph.nodes["memo-x"].parents.map((link) => link.id)).toEqual(["task-a"]);
+      // 戻したフォルダーに古いメモのファイルは無いので、もう一度開いても 1 つだけ。
+      expect(fs.existsSync(path.join(tempDir, "alpha", "task-a", "memo-x.md"))).toBe(false);
+      graphStore.forgetWorkspace(tempDir);
+      const again = await graphStore.readWorkspaceGraph(tempDir);
+      expect(Object.values(again.nodes).filter((node) => node.name === "A memo")).toHaveLength(1);
+    });
+  });
+
+  describe("a corrupt history step", () => {
+    it("is dropped with a message instead of failing every time", async () => {
+      projectFixture(tempDir);
+      const initial = await graphStore.readWorkspaceGraph(tempDir);
+      const changed = await exec(
+        tempDir,
+        { type: "update-node", nodeId: "task-a", changes: { name: "Changed" } },
+        initial.revision
+      );
+      fs.writeFileSync(
+        path.join(tempDir, ".task-manage", "history", "undo", "000000001.json"),
+        "{ not json"
+      );
+      await expect(graphStore.undoWorkspaceGraph(tempDir, changed.graph.revision)).rejects.toThrow(
+        /履歴の 1 段を読めなかった/
+      );
+      const after = await graphStore.readWorkspaceGraph(tempDir);
+      expect(after.history).toEqual({ undo: 0, redo: 0 });
+      expect((await graphStore.undoWorkspaceGraph(tempDir, after.revision)).changed).toBe(false);
+    });
+  });
+
   describe("copying", () => {
     it("copies the node's images and attachments, and they stay after the source is deleted", async () => {
       projectFixture(tempDir);

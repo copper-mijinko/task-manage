@@ -2,8 +2,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 import { performance } from "node:perf_hooks";
 import { _electron as electron } from "@playwright/test";
+
+const { writeWorkspaceFiles } = createRequire(import.meta.url)("../tools/workspace-fixture.js");
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.resolve(scriptDir, "..");
@@ -54,7 +57,6 @@ function summarize(values) {
 /** project-1 と task-1 を持つワークスペースを作り、設定に登録する。 */
 function seedWorkspace(tempDir) {
   const workspacePath = path.join(tempDir, "workspace");
-  fs.mkdirSync(path.join(workspacePath, ".task-manage"), { recursive: true });
   const node = (id, name, parentId, order = 0) => ({
     id,
     name,
@@ -78,17 +80,7 @@ function seedWorkspace(tempDir) {
         status: "Open",
       });
   }
-  const graph = {
-    schemaVersion: 1,
-    workspaceId: "performance",
-    rootId: "root",
-    revision: 0,
-    nodes: Object.fromEntries(nodes.map((n) => [n.id, n])),
-  };
-  fs.writeFileSync(
-    path.join(workspacePath, ".task-manage", "graph-v1.json"),
-    JSON.stringify({ schemaVersion: 1, graph, undo: [], redo: [] })
-  );
+  writeWorkspaceFiles(workspacePath, nodes);
   fs.writeFileSync(
     path.join(tempDir, "meta.json"),
     JSON.stringify({

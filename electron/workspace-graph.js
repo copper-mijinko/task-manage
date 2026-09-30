@@ -109,6 +109,25 @@ function makeDelta(state, before, changedIds, fieldKeys) {
   };
 }
 
+const STORE_GITIGNORE = `# アプリの作業用（元に戻す履歴・削除したノードのごみ箱・変換前の退避）。
+# ワークスペースを git で管理するときは、これらを入れない。
+history/
+trash/
+backup/
+migration.json
+`;
+
+/** ワークスペースを git で管理しても作業用のファイルが入らないようにする（なくても困らない）。 */
+async function ensureStoreGitignore(workspacePath) {
+  const file = path.join(workspacePath, STORE_DIR, ".gitignore");
+  try {
+    await fs.promises.mkdir(path.dirname(file), { recursive: true });
+    await fs.promises.writeFile(file, STORE_GITIGNORE, { flag: "wx" });
+  } catch {
+    // すでにある、または書けない。どちらでもそのまま進める。
+  }
+}
+
 /** ワークスペースを開く（旧形式からの変換・読み込み・修復・履歴の読み込み）。 */
 async function openWorkspace(workspacePath, revision = 0) {
   await migrateGraphJson(workspacePath, { onWarn: warnHandler });
@@ -133,6 +152,7 @@ async function openWorkspace(workspacePath, revision = 0) {
   state.history.redo = index.redo;
   state.history.nextSeq = Math.max(0, ...index.undo, ...index.redo) + 1;
   await collectTrash(workspacePath, new Set([...index.undo, ...index.redo]));
+  await ensureStoreGitignore(workspacePath);
   return state;
 }
 
@@ -251,7 +271,17 @@ async function changeHistory(workspacePath, direction, expectedRevision) {
     const source = state.history[direction];
     if (source.length === 0) return { graph: withHistoryDepth(state), changed: false, delta: null };
     const seq = source[source.length - 1];
-    const step = await readStep(workspacePath, direction, seq);
+    let step;
+    try {
+      step = await readStep(workspacePath, direction, seq);
+    } catch (error) {
+      // 読めない段は、いつまでも残すと毎回失敗するので捨てる。
+      await removeStep(workspacePath, direction, seq).catch(() => {});
+      state.history[direction] = source.slice(0, -1);
+      throw new Error(
+        `履歴の 1 段を読めなかったため、破棄しました。もう一度操作してください。（${error.message}）`
+      );
+    }
     const before = state.graph;
     // パッチはノードの表と最上位の欄を置き換えるだけなので、浅い写しで足りる。
     const restored = { ...before, nodes: { ...before.nodes } };

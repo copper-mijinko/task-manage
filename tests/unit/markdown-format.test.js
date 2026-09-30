@@ -52,6 +52,12 @@ describe("parseFrontmatter", () => {
     expect(data.parents).toEqual(["p1", "p2"]);
   });
 
+  it("keeps a name that looks like a list as text", () => {
+    const { data } = parseFrontmatter("---\nname: [WIP]\ntags: [a, b]\n---\n");
+    expect(data.name).toBe("[WIP]");
+    expect(data.tags).toEqual(["a", "b"]);
+  });
+
   it("accepts a list that is not indented and a byte order mark", () => {
     const { data } = parseFrontmatter("﻿---\nid: a\ntags:\n- x\n- y\n---\n");
     expect(data.id).toBe("a");

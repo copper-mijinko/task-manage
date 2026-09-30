@@ -61,10 +61,13 @@ function splitFlowList(inner) {
   return parts.map((part) => part.trim()).filter((part) => part !== "");
 }
 
-/** `[a, b]` なら配列、そうでなければスカラー。 */
-function parseValue(raw) {
+/** `[a, b]` の形を配列として読むキー（`name: [WIP]` のような名前は文字列のまま）。 */
+const LIST_KEYS = new Set(["tags", "parents", "attachments"]);
+
+/** リストのキーなら `[a, b]` を配列に、そうでなければスカラー。 */
+function parseValue(key, raw) {
   const value = String(raw).trim();
-  if (value.startsWith("[") && value.endsWith("]")) {
+  if (LIST_KEYS.has(key) && value.startsWith("[") && value.endsWith("]")) {
     return splitFlowList(value.slice(1, -1)).map(parseScalar);
   }
   return parseScalar(value);
@@ -129,7 +132,7 @@ function parseFrontmatterDetailed(content) {
       currentItem = null;
       blocks.push({ key: currentKey, lines: [line] });
       const raw = top[2].trim();
-      data[currentKey] = raw === "" ? null : parseValue(raw);
+      data[currentKey] = raw === "" ? null : parseValue(currentKey, raw);
       continue;
     }
 

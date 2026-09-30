@@ -40,7 +40,7 @@ const LAYOUT_FILE = "layout.json";
 const FILE_DIRS = new Set(["assets", "attachments"]);
 
 /** 同時に開くファイル操作の上限（多すぎると EMFILE になる）。 */
-const IO_CONCURRENCY = 64;
+const IO_CONCURRENCY = 32;
 
 const compare = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 
@@ -107,13 +107,40 @@ function isMissing(error) {
   return error.code === "ENOENT" || error.code === "ENOTDIR";
 }
 
+/** 1 回で読み切る大きさ。ノードのファイルはほとんどこれに収まる。 */
+const SMALL_FILE_BYTES = 64 * 1024;
+
+/**
+ * ファイルを文字列で読む。小さいファイルは open・read・close の 3 回で済ませる
+ * （`fs.promises.readFile` は fstat も挟み、スレッドプールとの往復が 1 回多い。
+ * 数千ファイルを読む起動時に効く）。読み切れなかった大きいファイルは普通に読み直す。
+ */
+function readSmallText(filePath) {
+  return new Promise((resolve, reject) => {
+    fs.open(filePath, "r", (openError, fd) => {
+      if (openError) {
+        reject(openError);
+        return;
+      }
+      const buffer = Buffer.allocUnsafe(SMALL_FILE_BYTES);
+      fs.read(fd, buffer, 0, SMALL_FILE_BYTES, 0, (readError, bytesRead) => {
+        fs.close(fd, () => {
+          if (readError) reject(readError);
+          else if (bytesRead < SMALL_FILE_BYTES) resolve(buffer.toString("utf8", 0, bytesRead));
+          else fs.promises.readFile(filePath, "utf8").then(resolve, reject);
+        });
+      });
+    });
+  });
+}
+
 /** 非同期の読み（ファイル操作はまとめて同時実行数を制限する）。 */
 function createAsyncReader() {
   const limit = createLimiter(IO_CONCURRENCY);
   return {
     async readText(filePath) {
       try {
-        return await limit(() => fs.promises.readFile(filePath, "utf8"));
+        return await limit(() => readSmallText(filePath));
       } catch (error) {
         if (isMissing(error)) return null;
         throw new Error(`ファイルを読めませんでした: ${filePath}（${error.message}）`);

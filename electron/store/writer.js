@@ -176,8 +176,6 @@ async function applyToDisk(state, before, after, { seq, trashedIn = {}, copiedFr
   const locationUndo = [];
   /** @type {Map<string, { hash: string, attachmentKey: boolean }>} */
   const pendingInfo = new Map();
-  /** @type {(() => Promise<void>)[]} */
-  const afterCommit = [];
   /** @type {Record<string, any>} */
   const trashed = {};
 
@@ -208,16 +206,6 @@ async function applyToDisk(state, before, after, { seq, trashedIn = {}, copiedFr
   const added = changedIds.filter((id) => after.nodes[id] && !before.nodes[id]);
 
   try {
-    // 消えたノードのファイルはごみ箱へ（履歴が戻せる間は取っておく）。
-    for (const id of removed) {
-      const location = state.locations.get(id);
-      if (!location) continue;
-      await moveToTrash(workspacePath, location, id, seq);
-      undoThunks.push(async () => void (await restoreFromTrash(workspacePath, location, id, seq)));
-      trashed[id] = location;
-      setLocation(id, undefined);
-    }
-
     // 増えたノード。ごみ箱にあれば元の場所へ戻し、無ければ置き場所を決める。
     const needLocation = [];
     for (const id of added) {
@@ -251,12 +239,13 @@ async function applyToDisk(state, before, after, { seq, trashedIn = {}, copiedFr
       const info = state.fileInfo.get(id);
       /** @type {string | null} */
       let migrateFrom = null;
+      /** @type {string | null} */
+      let oldMemoFile = null;
       if (location.memo) {
         // 旧メモは、保存するときに自分のフォルダーへ移る（元のファイルは確定後に消す）。
         migrateFrom = location.dir;
         const moved = { dir: `${projectOf(location)}/${nodeDirName(id)}`, file: NODE_FILE };
-        const oldFile = fileOf(workspacePath, location);
-        afterCommit.push(() => fs.promises.rm(oldFile, { force: true }));
+        oldMemoFile = fileOf(workspacePath, location);
         setLocation(id, moved);
         location = moved;
       }
@@ -292,7 +281,27 @@ async function applyToDisk(state, before, after, { seq, trashedIn = {}, copiedFr
         });
       }
       pendingInfo.set(id, { hash: sha1(text), attachmentKey });
+      if (oldMemoFile !== null) {
+        // 移し終えたので、元のメモのファイルは消す（親のフォルダーに残すと、読み込みのたびに
+        // 同じメモが別のノードとして現れる）。戻すときのため、中身を控えておく。
+        const memoText = await readTextIfExists(oldMemoFile);
+        await fs.promises.rm(oldMemoFile, { force: true });
+        undoThunks.push(async () => {
+          if (memoText !== null) await atomicWriteFile(oldMemoFile, memoText, "utf8");
+        });
+      }
     });
+
+    // 消えたノードのファイルはごみ箱へ（履歴が戻せる間は取っておく）。書き込みのあとに行う
+    // （旧メモの移行が、消えるノードのフォルダーの画像を読むため）。
+    for (const id of removed) {
+      const location = state.locations.get(id);
+      if (!location) continue;
+      await moveToTrash(workspacePath, location, id, seq);
+      undoThunks.push(async () => void (await restoreFromTrash(workspacePath, location, id, seq)));
+      trashed[id] = location;
+      setLocation(id, undefined);
+    }
 
     // コピーしたノードへ、画像と添付を写す。
     for (const [copyId, sourceId] of Object.entries(copiedFrom)) {
@@ -346,7 +355,6 @@ async function applyToDisk(state, before, after, { seq, trashedIn = {}, copiedFr
     async finalize() {
       for (const id of removed) state.fileInfo.delete(id);
       for (const [id, info] of pendingInfo) state.fileInfo.set(id, info);
-      for (const task of afterCommit) await task().catch(() => {});
     },
   };
 }

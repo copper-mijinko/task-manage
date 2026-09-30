@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { expect, _electron as electron } from "@playwright/test";
 import { loadWorkspaceSync } from "../../electron/store/loader.js";
-import { renderNodeFile } from "../../electron/store/node-file.js";
+import { writeWorkspaceFiles } from "../../tools/workspace-fixture.js";
 
 const REPO_ROOT = path.resolve(__dirname, "../..");
 
@@ -83,39 +83,7 @@ export function largeNodes(count = 2000) {
   return nodes;
 }
 
-/**
- * ノードの配列から、ワークスペースのフォルダーに Markdown ファイルを書く（アプリが
- * 保存するのと同じ形）。`parents` が空のノードがワークスペース自身。
- *
- * ワークスペース直下の子がプロジェクト（フォルダー名は id）で、それ以外のノードは
- * 最初の親をたどった先のプロジェクトに置く。
- */
-export function writeWorkspaceFiles(workspacePath, nodes, { inboxId } = {}) {
-  const byId = new Map(nodes.map((n) => [n.id, n]));
-  const root = nodes.find((n) => n.parents.length === 0);
-  const isProject = (n) => n.parents.some((parent) => parent.id === root.id);
-  const projectOf = (n) => {
-    const seen = new Set();
-    let current = n;
-    while (current && !isProject(current) && !seen.has(current.id)) {
-      seen.add(current.id);
-      current = byId.get(current.parents[0]?.id);
-    }
-    return current ?? n;
-  };
-  fs.mkdirSync(workspacePath, { recursive: true });
-  for (const n of nodes) {
-    const text = renderNodeFile(n, { inbox: n.id === inboxId });
-    const target =
-      n === root
-        ? path.join(workspacePath, "_workspace.md")
-        : isProject(n)
-          ? path.join(workspacePath, n.id, "_project.md")
-          : path.join(workspacePath, projectOf(n).id, n.id, "_index.md");
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.writeFileSync(target, text);
-  }
-}
+export { writeWorkspaceFiles };
 
 /** ワークスペース（と任意で追加のファイル）を一時ディレクトリに作る。 */
 export function createWorkspace(nodes = projectNodes(), { meta = {}, files = {}, inboxId } = {}) {

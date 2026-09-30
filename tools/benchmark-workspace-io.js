@@ -6,6 +6,7 @@ process.env.TASK_MANAGE_PERF = "1";
 const { PerformanceMetrics, performanceMetrics } = require("../electron/performance-metrics");
 const workspaceGraph = require("../electron/workspace-graph");
 const { probeEventLoop } = require("./event-loop-probe");
+const { writeWorkspaceFiles } = require("./workspace-fixture");
 
 function readOption(name, fallback) {
   const index = process.argv.indexOf(`--${name}`);
@@ -26,26 +27,25 @@ function readPositiveInteger(name, fallback) {
 }
 
 /**
- * ワークスペースの正本（`.task-manage/graph-v1.json`）を直接作る。
+ * ワークスペースの正本（Markdown ファイル）を直接作る。
  * プロジェクト数 × ノード数のノードを持ち、各ノードに短い本文を付ける。
  */
 async function createFixture(fixtureDir, projectCount, taskCount) {
   const createdAt = "2026-01-01";
   const rootId = "workspace-root";
-  const nodes = { [rootId]: { id: rootId, name: "Benchmark", parents: [], createdAt } };
+  const nodes = [{ id: rootId, name: "Benchmark", parents: [], createdAt }];
   for (let projectIndex = 0; projectIndex < projectCount; projectIndex += 1) {
     const projectId = `project-${projectIndex}`;
-    nodes[projectId] = {
+    nodes.push({
       id: projectId,
       name: `Performance Project ${projectIndex}`,
       status: "Open",
       parents: [{ id: rootId, order: projectIndex }],
       createdAt,
-    };
+    });
     for (let taskIndex = 0; taskIndex < taskCount; taskIndex += 1) {
-      const id = `${projectId}-task-${taskIndex}`;
-      nodes[id] = {
-        id,
+      nodes.push({
+        id: `${projectId}-task-${taskIndex}`,
         name: `Task ${taskIndex}`,
         status: taskIndex % 3 === 0 ? "In Progress" : "Open",
         parents: [{ id: projectId, order: taskIndex }],
@@ -53,15 +53,10 @@ async function createFixture(fixtureDir, projectCount, taskCount) {
         format: "markdown",
         tags: ["performance"],
         createdAt,
-      };
+      });
     }
   }
-  const graph = { schemaVersion: 1, workspaceId: "benchmark", rootId, revision: 0, nodes };
-  await fs.promises.mkdir(path.join(fixtureDir, ".task-manage"), { recursive: true });
-  await fs.promises.writeFile(
-    workspaceGraph.graphPath(fixtureDir),
-    JSON.stringify({ schemaVersion: 1, graph, undo: [], redo: [] })
-  );
+  writeWorkspaceFiles(fixtureDir, nodes);
 }
 
 /** イベントループの遅れと所要時間の両方を記録する。 */

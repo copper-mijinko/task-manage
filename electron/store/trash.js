@@ -34,9 +34,14 @@ async function exists(target) {
   );
 }
 
+/** 移す。元がもう無ければ（外で消された）何もしない。 */
 async function move(from, to) {
   await fs.promises.mkdir(path.dirname(to), { recursive: true });
-  await retryFileOperation(() => fs.promises.rename(from, to));
+  try {
+    await retryFileOperation(() => fs.promises.rename(from, to));
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
 }
 
 /** ノードのファイルをごみ箱へ移す。 */

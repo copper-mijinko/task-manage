@@ -6,7 +6,7 @@
 
 ### 1.1 Unit テスト
 
-main プロセスのモジュール（グラフエンジン・保存・取り込み・IPC の検証）と、renderer の純粋関数・ストアを対象にする。
+main プロセスのモジュール（グラフエンジン・Markdown の読み書き・履歴・IPC の検証）と、renderer の純粋関数・ストアを対象にする。
 `Vitest` で実行する。
 
 ### 1.2 Component テスト
@@ -17,7 +17,9 @@ main プロセスのモジュール（グラフエンジン・保存・取り込
 ### 1.3 E2E テスト
 
 Electron アプリ全体を起動して確認する。
-`Playwright` を使い、一時ディレクトリに用意したワークスペース（`gr## 2. テストファイル一覧
+`Playwright` を使い、一時ディレクトリに用意したワークスペース（Markdown ファイル）を開いて、起動、初期表示、保存済みデータの読み込み、画面操作の流れを確認する。
+
+## 2. テストファイル一覧
 
 個々のテストケースはファイルを見れば分かるので、ここではファイルと対象の対応だけを示す。
 
@@ -26,15 +28,16 @@ Electron アプリ全体を起動して確認する。
 | ファイル | 対象 |
 | --- | --- |
 | `workspace-graph-engine.test.js` | `electron/workspace-graph-engine.js`：各コマンドの適用と逆パッチ、循環・保護ノードの拒否 |
-| `workspace-graph-persistence.test.js` | `electron/workspace-graph.js`：保存・revision 照合・Undo/Redo・資産の保存と解決・パスの脱出拒否 |
-| `workspace-graph-import.test.js` | `electron/workspace-graph.js`：旧 Markdown 形式の一覧と、既存グラフへの取り込み（Undo 可能） |
-| `legacy-markdown-reader.test.js` | `electron/workspace.js`：旧 Markdown 形式（frontmatter・旧メモ・本文）の読み取り |
-| `workspace-application.test.js` | `electron/workspace-application.js`：読込・コマンド実行・更新通知 |
+| `markdown-format.test.js` | `electron/store/frontmatter.js` / `node-file.js`：frontmatter とノードのファイルの往復（親の並び順・辺のアーカイブ・本文に水平線・未知のキーの保持・誤った値の扱い） |
+| `markdown-loader.test.js` | `electron/store/loader.js`：フォルダーからグラフの組み立てと読み込み時の修復（id の重複・親の欠落・到達不能・旧メモ・旧形式の各書き方） |
+| `workspace-graph-persistence.test.js` | `electron/workspace-graph.js` と `electron/store/`：差分書き込み（変えたファイルだけ）・revision 照合・Undo/Redo と再起動後の履歴・削除のごみ箱と復元・外部変更の検出・失敗時の巻き戻し・読み直し・資産の保存と解決・パスの脱出拒否 |
+| `workspace-graph-migration.test.js` | `electron/store/migrate-graph-json.js`：旧 `graph-v1.json` から Markdown への一度きりの変換（本文・画像・添付・旧フォルダーの退避・途中で止まった場合の再開） |
+| `workspace-application.test.js` | `electron/workspace-application.js`：読込・コマンド実行・更新（差分）の通知・読み直し |
 | `ipc-security.test.js` | `electron/ipc-security.js`：外部 URL とワークスペースパスの検証 |
 | `window-state.test.js` | `electron/window-state.js`：ウィンドウ状態の正規化・保存・復元 |
 | `performance-metrics.test.js` / `event-loop-probe.test.js` | 計測まわり |
 | `agent-debug.test.js` / `agent-ui-launch.test.js` / `agent-ui-runtime.test.js` | 開発用 CDP と Agent UI の起動・診断（本番では無効であること） |
-| `workspace_graph_store.test.ts` | `@features/workspace/stores/graph`：読込・コマンド・保存状態 |
+| `workspace_graph_store.test.ts` | `@features/workspace/stores/graph`：読込・コマンド・差分の適用と取りこぼし時の読み直し・保存状態 |
 | `workspace_store.test.ts` | `@features/workspace/stores/workspace` |
 | `graph_projection.test.ts` / `treegrid_projection.test.js` | グラフからツリー行への射影 |
 | `tree_control.test.js` / `orphans.test.ts` / `archive.test.ts` / `no_status.test.ts` / `task_tags.test.js` | `tree_control.ts`：フィルタ・表示行・パンくず・経路 API・アーカイブの表示・ステータス「なし」・タグ |
@@ -77,9 +80,8 @@ Electron アプリ全体を起動して確認する。
 | `editing.spec.js` | よく使う編集の組み合わせ: 行メニュー（追加・移動・インデント・アウトデント・名前変更）と元に戻す／やり直し、キーボード操作（矢印・Home/End・Ctrl+C/V・Ctrl+A・Delete）、詳細ペインの編集と再起動をまたぐ元に戻す |
 | `selection.spec.js` | 全選択・範囲選択と一括操作（状態・日付・移動・コピー）、1 回の元に戻すで 1 操作ぶん戻ること、アーカイブ済みを含む選択の削除と復元 |
 | `filters.spec.js` | 全文・状態・タグの絞り込みの重ね掛けと個別解除、入力直後の別操作、編集やスコープ切替との組み合わせ、本文検索、並べ替え（保存順は変えない） |
-| `workflows.spec.js` | クイック追加と Inbox のバッジ、表示密度と列の設定の再起動後の保持、大きいワークスペースでの検索・末尾移動・編集 |
+| `workflows.spec.js` | クイック追加と Inbox のバッジ、表示密度と列の設定の再起動後の保持、大きいワークスペースでの検索・末尾移動・編集、旧 Markdown フォルダーをそのまま開いて編集がファイルに戻ること、外から置いたフォルダーを「読み込み直す」で取り込むこと、外で書き換えたファイルを上書きしないこと |
 | `consistency.spec.js` | 表示の整合性: 行・詳細ペイン・ガント・サイドバー・ファイルが編集／元に戻す／再起動のあとも同じ値を出すこと、状態の名前がどこでも同じこと、ツリーとガントの行の並びと高さ、多親ノードの両方の行・Inbox のバッジ・別ウィンドウの詳細 |
-
 | `layout.spec.js` | 見た目の整合性: 主な画面と状態（メニュー・ダイアログ・詳細の各タブ・一括操作・絞り込み・ガント・設定・別ウィンドウ・アーカイブ・保存失敗・経路表示・Inbox）を、既定／コンパクト・ライト／幅 900・700／拡大で開き、崩れが無いこと。検出器そのものが崩れを拾えることも確かめる |
 
 `layout_audit.js` は画面の崩れを DOM の実寸から拾う検出器。文字どうしの重なり
@@ -88,7 +90,7 @@ Electron アプリ全体を起動して確認する。
 などの浮いた層は除く）、画面外へのはみ出しを報告する。スクロールできる領域は
 送りながら調べる。新しい画面や状態を足したら `layout.spec.js` の巡回に加える。
 
-`support.js` は共通部品（一時ワークスペース、起動と後片付け、行や保存状態の操作）。
+`support.js` は共通部品（一時ワークスペース、起動と後片付け、行や保存状態の操作）。ワークスペースは Markdown ファイルとして作り（`createWorkspace`）、`graphAt` / `graphOf` は、ディスクに書かれたファイルを読み直して確かめる。
 `run()` を通したテストは、画面で捕捉されない例外（`pageerror`）が 1 件でもあれば
 失敗する。操作が「何も起きない」だけで例外が出る不具合を見逃さないため。
 

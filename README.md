@@ -18,16 +18,22 @@ Node には本文、画像・添付ファイル、タグを保存できます。
 
 ## Storage and migration
 
-正規データは次の場所に保存されます。
+ワークスペースは、ノード 1 つにつき Markdown ファイル 1 つで保存されます（人も生成 AI もそのまま読み書きできます）。
 
 ```text
-<workspace>/.task-manage/graph-v1.json
-<workspace>/.task-manage/assets/<node-id>/...
+<workspace>/_workspace.md                 ワークスペースのルート
+<workspace>/<project>/_project.md         プロジェクトのルート
+<workspace>/<project>/<node-id>/_index.md ノード（本文 + frontmatter）
+<workspace>/<project>/<node-id>/assets/       本文に貼った画像
+<workspace>/<project>/<node-id>/attachments/  添付ファイル
+<workspace>/.task-manage/                 元に戻す履歴・ごみ箱・グラフビューの座標（アプリの作業用）
 ```
 
-初回読み込み時、既存のプロジェクト Markdown を一度だけ正規 graph に取り込みます。取り込みでは Node ID、親子関係、本文、タグ、画像・添付ファイルを保持します。以後はアプリを正規データの編集に使用してください。後から旧 Markdown を直接編集しても、正規 graph へ自動同期されません。
+親子関係（複数の親・親ごとの並び順・アーカイブ）は各ファイルの frontmatter の `parents:` に入っているので、グラフの機能（複数の親、循環、リンク、コピーの 3 モード、Undo/Redo）は従来どおり使えます。編集のたびに書き換わるのは、変えたノードのファイルだけです。
 
-すでに graph を持つワークスペースにも、ワークスペース管理ダイアログの「Markdown から取り込む」で旧 Markdown のプロジェクトを選んで追加できます（Undo で取り消せます）。元の Markdown ファイルは変更しません。
+旧 Markdown 形式のワークスペースは、そのまま開けます。以前の版の単一 JSON（`.task-manage/graph-v1.json`）は、開いたときに一度だけ Markdown へ変換します（元のファイルは消さず、`graph-v1.json.migrated` として残します）。
+
+アプリの外でファイルを編集したときは、ワークスペース管理ダイアログの「ディスクから読み込み直す」で反映します。アプリが最後に読み書きした内容と違うファイルは、上書きせずにエラーにします。
 
 詳細は [node graph design](docs/node-graph-design.md) と [node graph verification](docs/node-graph-verification.md) を参照してください。
 
