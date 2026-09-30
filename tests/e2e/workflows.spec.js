@@ -163,6 +163,40 @@ test("adding a project starts naming it, and Esc cancels the new project", async
   });
 });
 
+test("importing a Markdown project shows it right away and can be undone", async () => {
+  const files = {
+    "old/_project.md": "---\nid: old\nname: Old project\norder: 0\ncreatedAt: 2026-01-01\n---\n",
+    "old/task/_index.md":
+      "---\nid: old-task\nname: Old task\nparents:\n  - id: old\n    order: 0\ncreatedAt: 2026-01-02\n---\n",
+  };
+  await run(createWorkspace(undefined, { files }), async (app) => {
+    const page = app.window;
+    const manage = page.getByRole("button", { name: "ワークスペースを管理", exact: true });
+    if (!(await manage.isVisible()))
+      await page.getByRole("button", { name: "サイドバーを表示", exact: true }).click();
+    await manage.click();
+    await page.getByRole("button", { name: "取り込めるプロジェクトを探す..." }).click();
+    const option = page.getByRole("checkbox", { name: "Old project" });
+    await expect(option).toBeChecked();
+    await page.getByRole("button", { name: "選んだ 1 件を取り込む" }).click();
+    await expect(page.getByText("取り込み済み")).toBeVisible();
+
+    // もう一度選ぶと複製されることを知らせる。
+    await option.check();
+    await expect(page.getByText(/同じプロジェクトがもう 1 つ複製されます/)).toBeVisible();
+    await page.getByRole("button", { name: "閉じる", exact: true }).click();
+
+    // 画面を操作し直さなくても、取り込んだ行が出て「元に戻す」が効く。
+    await expect(row(page, "root/old")).toBeVisible();
+    await expect(row(page, "root/old/old-task")).toBeVisible();
+    const undo = page.getByRole("button", { name: "元に戻す", exact: true });
+    await expect(undo).toBeEnabled();
+    await undo.click();
+    await expect(row(page, "root/old")).toHaveCount(0);
+    await expect.poll(() => graphOf(app).nodes.old).toBeUndefined();
+  });
+});
+
 test("a project can be renamed from the sidebar menu", async () => {
   await run(createWorkspace(), async (app) => {
     const page = app.window;

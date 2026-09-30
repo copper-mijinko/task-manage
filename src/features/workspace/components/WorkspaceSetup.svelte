@@ -4,7 +4,7 @@
   import IconButton from "@lib/primitives/IconButton.svelte";
   import * as platform from "@lib/ipc/platform";
   import { workspace_store } from "@features/workspace/stores/workspace";
-  import { workspace_graph } from "@features/workspace/stores/graph";
+  import { workspace_graph_store } from "@features/workspace/stores/graph";
   import type { MarkdownImportSource } from "@app-types/app";
 
   interface Props {
@@ -20,7 +20,7 @@
 
   // ワークスペース直下の旧 Markdown プロジェクトの取り込み。グラフを作った
   // 後から置かれたプロジェクトを、既存のグラフへ足す。
-  let importSources: MarkdownImportSource[] | null = $state(null);
+  let importSources = $state<MarkdownImportSource[] | null>(null);
   let importSelection = $state(new Set<string>());
   let importBusy = $state(false);
   let importMessage = $state("");
@@ -45,6 +45,11 @@
     }
   }
 
+  // 取り込み済みのものをもう一度取り込むと、別のノードとして複製される。
+  let duplicateSelected = $derived(
+    Boolean(importSources?.some((source) => source.imported && importSelection.has(source.dirName)))
+  );
+
   function toggleImport(dirName: string, checked: boolean) {
     const next = new Set(importSelection);
     if (checked) next.add(dirName);
@@ -57,13 +62,12 @@
     importBusy = true;
     importMessage = "";
     try {
-      const result = await platform.wsImportMarkdownProjects(
-        activeWorkspacePath,
+      const result = await workspace_graph_store.importMarkdown(
         [...importSelection],
-        $workspace_graph?.revision
+        activeWorkspacePath
       );
       await loadImportSources();
-      importMessage = `${result.selectedNodeIds.length} 件のプロジェクトを取り込みました。「元に戻す」で取り消せます。`;
+      importMessage = `${result.selectedNodeIds?.length ?? 0} 件のプロジェクトを取り込みました。「元に戻す」で取り消せます。`;
     } catch (error) {
       importMessage = userErrorMessage(error);
     } finally {
@@ -90,9 +94,9 @@
     if (!pendingPath) return;
     const label = pendingLabel.trim() || (pendingPath.split(/[/\\]/).pop() ?? pendingPath);
     workspace_store.addWorkspace(pendingPath, label);
-    if (!$workspace_store.activeWorkspacePath) {
-      await workspace_store.setActive(pendingPath);
-    }
+    // 追加したフォルダーをそのまま開く。以前は開いているワークスペースが
+    // あると登録だけで、「切り替え」を押すまで画面に何も出なかった。
+    await workspace_store.setActive(pendingPath);
     pendingPath = null;
     pendingLabel = "";
   }
@@ -207,6 +211,11 @@
                 </li>
               {/each}
             </ul>
+            {#if duplicateSelected}
+              <p class="migrate-note warning">
+                「取り込み済み」を選ぶと、同じプロジェクトがもう 1 つ複製されます。
+              </p>
+            {/if}
             <button
               class="action-btn confirm-btn"
               disabled={importSelection.size === 0 || importBusy}
@@ -402,6 +411,9 @@
     font-size: var(--font-body-sm);
     color: var(--theme-color-Sub-dark);
     margin: 0;
+  }
+  .migrate-note.warning {
+    color: var(--theme-color-Error-main);
   }
   .migrate-link-btn {
     align-self: flex-start;

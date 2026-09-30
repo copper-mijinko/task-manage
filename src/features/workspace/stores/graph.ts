@@ -159,6 +159,38 @@ export const workspace_graph_store = {
       }
     });
   },
+  /**
+   * 旧 Markdown プロジェクトを取り込む。
+   *
+   * 他の書き込みと同じくこのストアを通す。main は要求元の画面へは結果を
+   * 通知しないので、直接 IPC を呼ぶと画面の一覧も「元に戻す」も取り込み前の
+   * ままになる。
+   */
+  importMarkdown(dirNames: string[], targetWorkspacePath?: string) {
+    const callSnapshot = get(state);
+    const callGeneration = generation;
+    return run(async () => {
+      const workspacePath = targetWorkspacePath ?? callSnapshot.workspacePath;
+      if (!workspacePath) throw new Error("No workspace graph is loaded");
+      const latest = get(state);
+      const graph =
+        latest.workspacePath === workspacePath && callGeneration === generation && latest.graph
+          ? latest.graph
+          : await platform.wsReadGraph(workspacePath);
+      try {
+        const result = await platform.wsImportMarkdownProjects(
+          workspacePath,
+          dirNames,
+          graph.revision
+        );
+        applyResult(workspacePath, callGeneration, result.graph);
+        return result;
+      } catch (error) {
+        await handleGraphError(workspacePath, callGeneration, error);
+        throw error;
+      }
+    });
+  },
   /** `quiet` は通知を出さない（作成の取り消しなど、利用者が戻したと思っていない段）。 */
   undo({ quiet = false }: { quiet?: boolean } = {}) {
     return history("undo", quiet);
