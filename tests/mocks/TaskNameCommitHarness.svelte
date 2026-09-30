@@ -7,10 +7,11 @@
   /**
    * @typedef {Object} Props
    * @property {string} [initialText]
+   * @property {boolean} [reject] 受け付けられなかった操作のように、名前を変えない
    */
 
   /** @type {Props} */
-  let { initialText = "Task 1" } = $props();
+  let { initialText = "Task 1", reject = false } = $props();
   // TaskName が読むのはクリップボードだけ。
   setContext(TREEGRID_APPLICATION, { copied: writable([]) });
   let currentText = $state(untrack(() => initialText));
@@ -18,7 +19,7 @@
   let lastCommitted = $state("");
 
   function handleCommit(event) {
-    currentText = event.value;
+    if (!reject) currentText = event.value;
     lastCommitted = event.value;
     committedCount += 1;
   }

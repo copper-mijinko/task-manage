@@ -136,6 +136,39 @@ describe("TaskName", () => {
     });
   });
 
+  describe("after a commit that was refused", () => {
+    // 回帰: 重複送信を防ぐために覚えている「直前に送った名前」が、拒否された（別の
+    // 変更が先に保存された・ファイルが外で変更されていた）あとも残り、同じ名前を
+    // 入れ直しても何も起きなかった。新しく編集を始めたら、また送れる。
+    test("typing the same name again in a new edit is sent again", async () => {
+      render(TaskNameCommitHarness, { initialText: "Original", reject: true });
+
+      await openRenameEditor();
+      let input = screen.getByDisplayValue("Original");
+      await fireEvent.input(input, { target: { value: "Retry" } });
+      await fireEvent.keyDown(input, { key: "Enter" });
+      expect(screen.getByTestId("committed-count")).toHaveTextContent("1");
+      expect(screen.getByTestId("current-text")).toHaveTextContent("Original");
+
+      await openRenameEditor();
+      input = screen.getByDisplayValue("Original");
+      await fireEvent.input(input, { target: { value: "Retry" } });
+      await fireEvent.keyDown(input, { key: "Enter" });
+      expect(screen.getByTestId("committed-count")).toHaveTextContent("2");
+    });
+
+    test("Enter followed by blur still sends the name once", async () => {
+      render(TaskNameCommitHarness, { initialText: "Original", reject: true });
+
+      await openRenameEditor();
+      const input = screen.getByDisplayValue("Original");
+      await fireEvent.input(input, { target: { value: "Once" } });
+      await fireEvent.keyDown(input, { key: "Enter" });
+      await fireEvent.blur(input);
+      expect(screen.getByTestId("committed-count")).toHaveTextContent("1");
+    });
+  });
+
   describe("three-dot menu toggle", () => {
     test("clicking the trigger button a second time closes the menu", async () => {
       // Regression: previously the menu's outside-click handler closed the

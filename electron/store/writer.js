@@ -151,7 +151,7 @@ async function readTextIfExists(filePath) {
 class ExternalChangeError extends Error {
   constructor(relativePath) {
     super(
-      `ファイルがアプリの外で変更されています: ${relativePath}。ワークスペースを再読み込みしてから操作してください。`
+      `ファイルがアプリの外で変更されています: ${relativePath}。ワークスペース管理の「ディスクから読み込み直す」で読み直してから操作してください。`
     );
     this.name = "ExternalChangeError";
   }

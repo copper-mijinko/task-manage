@@ -7,7 +7,8 @@
  * 理由は利用者の言葉に置き換える。
  */
 
-const IPC_PREFIX = /^Error invoking remote method '[^']*':\s*(?:Error:\s*)?/;
+// 「Error:」だけでなく、独自のエラー名（`ExternalChangeError:` など）の前置きも落とす。
+const IPC_PREFIX = /^Error invoking remote method '[^']*':\s*(?:[A-Za-z]*Error:\s*)?/;
 
 /**
  * 既知の理由と、その言い換え。上から順に照合する。言い換えが `null` のものは、
