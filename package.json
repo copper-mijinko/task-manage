@@ -1,6 +1,6 @@
 {
   "name": "task-manage",
-  "version": "0.1.45",
+  "version": "0.1.46",
   "description": "ワークスペース単位でノード（プロジェクト・タスク・メモ）をグラフとして管理するデスクトップアプリ",
   "author": "akai",
   "private": true,
