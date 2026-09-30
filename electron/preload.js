@@ -61,16 +61,10 @@ const electronAPI = {
   wsRedoGraph: (workspacePath, expectedRevision) =>
     ipcRenderer.invoke("ws:redo-graph", { workspacePath, expectedRevision }),
   onWorkspaceGraphUpdated: listen("workspace-graph-updated"),
-  wsListMarkdownImports: (workspacePath) =>
-    ipcRenderer.invoke("ws:list-markdown-imports", { workspacePath }),
-  wsImportMarkdownProjects: (workspacePath, dirNames, expectedRevision) =>
-    ipcRenderer.invoke("ws:import-markdown-projects", {
-      workspacePath,
-      dirNames,
-      expectedRevision,
-    }),
-  wsSaveGraphAsset: (workspacePath, nodeId, fileName, bytes) =>
-    ipcRenderer.invoke("ws:save-graph-asset", { workspacePath, nodeId, fileName, bytes }),
+  wsReloadWorkspace: (workspacePath) =>
+    ipcRenderer.invoke("ws:reload-workspace", { workspacePath }),
+  wsSaveGraphAsset: (workspacePath, nodeId, fileName, bytes, kind) =>
+    ipcRenderer.invoke("ws:save-graph-asset", { workspacePath, nodeId, fileName, bytes, kind }),
   wsResolveGraphAsset: (workspacePath, nodeId, relativePath) =>
     ipcRenderer.invoke("ws:resolve-graph-asset", { workspacePath, nodeId, relativePath }),
   wsOpenGraphAsset: (workspacePath, nodeId, relativePath, chooseProgram) =>

@@ -45,7 +45,7 @@ async function renderDetail(props = {}, tree = project) {
 const specAttachment = {
   id: "spec",
   name: "spec.pdf",
-  relativePath: "assets/task-1/spec.pdf",
+  relativePath: "./attachments/spec.pdf",
   size: 4,
 };
 
@@ -137,10 +137,11 @@ describe("TaskDetail", () => {
         TEST_WORKSPACE,
         "task-1",
         "spec.pdf",
-        expect.any(Uint8Array)
+        expect.any(Uint8Array),
+        "attachment"
       );
       expect(backend.node("task-1").attachments).toEqual([
-        expect.objectContaining({ name: "spec.pdf", relativePath: "assets/task-1/spec.pdf" }),
+        expect.objectContaining({ name: "spec.pdf", relativePath: "./attachments/spec.pdf" }),
       ]);
     });
   });
@@ -169,7 +170,7 @@ describe("TaskDetail", () => {
 
     await waitFor(() => {
       expect(backend.node("task-1").attachments).toEqual([
-        expect.objectContaining({ name: "drop.txt", relativePath: "assets/task-1/drop.txt" }),
+        expect.objectContaining({ name: "drop.txt", relativePath: "./attachments/drop.txt" }),
       ]);
     });
   });
@@ -187,7 +188,7 @@ describe("TaskDetail", () => {
     expect(backend.api.wsOpenGraphAsset).toHaveBeenCalledWith(
       TEST_WORKSPACE,
       "task-1",
-      "assets/task-1/spec.pdf",
+      "./attachments/spec.pdf",
       false
     );
 
@@ -198,7 +199,7 @@ describe("TaskDetail", () => {
     expect(backend.api.wsOpenGraphAsset).toHaveBeenLastCalledWith(
       TEST_WORKSPACE,
       "task-1",
-      "assets/task-1/spec.pdf",
+      "./attachments/spec.pdf",
       true
     );
   });

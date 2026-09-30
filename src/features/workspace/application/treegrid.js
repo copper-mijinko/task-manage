@@ -611,13 +611,21 @@ export function createTreeGridApplication(workspacePath) {
         error.set(e.message);
       }
     },
-    saveAsset: async (id, file) =>
+    /**
+     * `kind` は、本文に貼る画像（"image"）か、添付ファイル（"attachment"）か。
+     *
+     * @param {string} id
+     * @param {File} file
+     * @param {import("@app-types/app").GraphAssetKind} [kind]
+     */
+    saveAsset: async (id, file, kind = "attachment") =>
       (
         await platform.wsSaveGraphAsset(
           workspacePath,
           id,
           file.name || "pasted-image.png",
-          new Uint8Array(await file.arrayBuffer())
+          new Uint8Array(await file.arrayBuffer()),
+          kind
         )
       ).relativePath,
     resolveAsset: async (id, path) =>

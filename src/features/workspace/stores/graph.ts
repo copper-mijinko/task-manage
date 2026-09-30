@@ -8,6 +8,7 @@ import type {
   GraphCommandOrigin,
   WorkspaceGraph,
   WorkspaceGraphCommand,
+  WorkspaceGraphDelta,
 } from "@app-types/workspace_graph";
 
 interface GraphStoreState {
@@ -39,11 +40,86 @@ function replaceIf(next: (current: GraphStoreState) => GraphStoreState | null) {
   if (replacement && replacement !== current) state.set(replacement);
 }
 
+/** main の結果・通知にある、全体（`graph`）か差分（`delta`）。 */
+interface GraphPayload {
+  graph?: WorkspaceGraph;
+  delta?: WorkspaceGraphDelta | null;
+}
+
+/** 持っているグラフに差分を当てて、新しいグラフを作る（ノードの表だけを浅く写す）。 */
+export function applyGraphDelta(graph: WorkspaceGraph, delta: WorkspaceGraphDelta): WorkspaceGraph {
+  const nodes = { ...graph.nodes };
+  for (const [id, node] of Object.entries(delta.nodes)) {
+    if (node === null) delete nodes[id];
+    else nodes[id] = node;
+  }
+  const next: WorkspaceGraph = {
+    ...graph,
+    nodes,
+    revision: delta.revision,
+    history: delta.history,
+  };
+  const fields = delta.fields ?? {};
+  if ("inboxId" in fields) {
+    if (fields.inboxId) next.inboxId = fields.inboxId;
+    else delete next.inboxId;
+  }
+  if ("positions" in fields) {
+    if (fields.positions) next.positions = fields.positions;
+    else delete next.positions;
+  }
+  return next;
+}
+
+/**
+ * main の結果・通知から、新しいグラフを求める。
+ * `undefined` は「当てられない」（まだグラフが無い・間の更新を取りこぼした）こと。
+ */
+function graphFromPayload(
+  current: WorkspaceGraph | null,
+  payload: GraphPayload
+): WorkspaceGraph | undefined {
+  if (payload.graph) return payload.graph;
+  const delta = payload.delta;
+  if (!delta) return current ?? undefined;
+  if (!current) return undefined;
+  // もう持っている（自分の操作の結果が、通知より先に届いたときなど）。
+  if (delta.revision <= current.revision) return current;
+  if (delta.baseRevision !== current.revision) return undefined;
+  return applyGraphDelta(current, delta);
+}
+
+/** 全体を読み直して、新しければ置き換える。差分が当てられなかったときの立て直し。 */
+async function resync(workspacePath: string, operationGeneration: number) {
+  try {
+    const graph = await platform.wsReadGraph(workspacePath);
+    replaceIf((current) =>
+      current.workspacePath === workspacePath &&
+      operationGeneration === generation &&
+      (!current.graph || graph.revision > current.graph.revision)
+        ? { ...current, graph, error: null }
+        : null
+    );
+    return graph;
+  } catch {
+    // 次の操作（または読み込み）で改めて読み直される。
+    return undefined;
+  }
+}
+
 platform.onWorkspaceGraphUpdated((event) => {
-  replaceIf((current) =>
-    current.workspacePath === event.workspacePath &&
-    (!current.graph || event.graph.revision > current.graph.revision)
-      ? { ...current, graph: event.graph, error: null }
+  const current = get(state);
+  if (current.workspacePath !== event.workspacePath) return;
+  const next = graphFromPayload(current.graph, event);
+  if (!next) {
+    // 読み込み中なら、読み込みが最新を取ってくる。読み込み済みで抜けがあれば読み直す。
+    if (current.graph) void resync(event.workspacePath, generation);
+    return;
+  }
+  replaceIf((latest) =>
+    latest.workspacePath === event.workspacePath &&
+    (!latest.graph || next.revision > latest.graph.revision)
+      ? { ...latest, graph: next, error: null }
       : null
   );
 });
@@ -151,8 +227,8 @@ export const workspace_graph_store = {
           origin,
           graph.revision
         );
-        applyResult(workspacePath, callGeneration, result.graph);
-        return result;
+        const applied = await applyResult(workspacePath, callGeneration, result);
+        return { ...result, graph: applied ?? result.graph };
       } catch (error) {
         await handleGraphError(workspacePath, callGeneration, error);
         throw error;
@@ -160,36 +236,18 @@ export const workspace_graph_store = {
     });
   },
   /**
-   * 旧 Markdown プロジェクトを取り込む。
-   *
-   * 他の書き込みと同じくこのストアを通す。main は要求元の画面へは結果を
-   * 通知しないので、直接 IPC を呼ぶと画面の一覧も「元に戻す」も取り込み前の
-   * ままになる。
+   * ディスクから読み直す（ワークスペースのフォルダーを外で書き換えたとき）。
+   * main は画面が持つリビジョンより大きな値で返すので、そのまま置き換えられる。
    */
-  importMarkdown(dirNames: string[], targetWorkspacePath?: string) {
-    const callSnapshot = get(state);
-    const callGeneration = generation;
-    return run(async () => {
-      const workspacePath = targetWorkspacePath ?? callSnapshot.workspacePath;
-      if (!workspacePath) throw new Error("No workspace graph is loaded");
-      const latest = get(state);
-      const graph =
-        latest.workspacePath === workspacePath && callGeneration === generation && latest.graph
-          ? latest.graph
-          : await platform.wsReadGraph(workspacePath);
-      try {
-        const result = await platform.wsImportMarkdownProjects(
-          workspacePath,
-          dirNames,
-          graph.revision
-        );
-        applyResult(workspacePath, callGeneration, result.graph);
-        return result;
-      } catch (error) {
-        await handleGraphError(workspacePath, callGeneration, error);
-        throw error;
-      }
-    });
+  async reload(workspacePath: string) {
+    const graph = await platform.wsReloadWorkspace(workspacePath);
+    replaceIf((current) =>
+      current.workspacePath === workspacePath &&
+      (!current.graph || graph.revision >= current.graph.revision)
+        ? { ...current, graph, loading: false, error: null }
+        : null
+    );
+    return graph;
   },
   /** `quiet` は通知を出さない（作成の取り消しなど、利用者が戻したと思っていない段）。 */
   undo({ quiet = false }: { quiet?: boolean } = {}) {
@@ -216,11 +274,11 @@ function history(direction: "undo" | "redo", quiet = false) {
         direction === "undo"
           ? await platform.wsUndoGraph(workspacePath, graph.revision)
           : await platform.wsRedoGraph(workspacePath, graph.revision);
-      applyResult(workspacePath, callGeneration, result.graph);
+      const applied = await applyResult(workspacePath, callGeneration, result);
       // 何が戻ったのかは画面のどこにも出ないので、変わったノードの名前で知らせる。
       // 起動し直しても履歴は残るので、思わぬ段を戻したことに気づけるように。
-      if (!quiet) showNotice(describeHistoryStep(direction, graph, result.graph));
-      return result;
+      if (!quiet && applied) showNotice(describeHistoryStep(direction, graph, applied));
+      return { ...result, graph: applied ?? result.graph };
     } catch (error) {
       await handleGraphError(workspacePath, callGeneration, error);
       throw error;
@@ -228,14 +286,27 @@ function history(direction: "undo" | "redo", quiet = false) {
   });
 }
 
-function applyResult(workspacePath: string, operationGeneration: number, graph: WorkspaceGraph) {
+/**
+ * 操作の結果を、いま持っているグラフに当てる。差分が当てられないときは全体を
+ * 読み直す。返すのは、この結果を反映したグラフ。
+ */
+async function applyResult(
+  workspacePath: string,
+  operationGeneration: number,
+  payload: GraphPayload
+): Promise<WorkspaceGraph | undefined> {
+  const snapshot = get(state);
+  const inContext = snapshot.workspacePath === workspacePath && operationGeneration === generation;
+  const next = inContext ? graphFromPayload(snapshot.graph, payload) : payload.graph;
+  if (!next) return inContext ? resync(workspacePath, operationGeneration) : undefined;
   replaceIf((current) =>
     current.workspacePath === workspacePath &&
     operationGeneration === generation &&
-    (!current.graph || graph.revision > current.graph.revision)
-      ? { ...current, graph, error: null }
+    (!current.graph || next.revision > current.graph.revision)
+      ? { ...current, graph: next, error: null }
       : null
   );
+  return next;
 }
 
 async function handleGraphError(

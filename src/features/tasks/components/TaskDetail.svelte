@@ -191,7 +191,7 @@
    * ノードは本文を 1 つだけ持つ（「1 つのメモ ＝ 1 つのノード」）。複数の記録を
    * 残したいときはタブではなく子ノードを足す。
    */
-  const assetSaver = (id) => (file) => application.saveAsset(id, file);
+  const assetSaver = (id) => (file) => application.saveAsset(id, file, "image");
   const assetResolver = (id) => (path) => application.resolveAsset(id, path);
   // Capture the identity before an editor can finish an asynchronous save.
   const bodySaveCallback = (target) => (editedContent) => {

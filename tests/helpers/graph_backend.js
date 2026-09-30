@@ -98,8 +98,9 @@ export function installGraphBackend(initialGraph, extraApi = {}) {
       return { graph: publish(), changed: true };
     }),
     onWorkspaceGraphUpdated: vi.fn((callback) => listeners.add(callback)),
-    wsSaveGraphAsset: vi.fn(async (_path, nodeId, fileName) => ({
-      relativePath: `assets/${nodeId}/${fileName}`,
+    // 本物と同じく、ノードのフォルダーからの相対パスを返す（画像は assets、添付は attachments）。
+    wsSaveGraphAsset: vi.fn(async (_path, _nodeId, fileName, _bytes, kind = "attachment") => ({
+      relativePath: `./${kind === "image" ? "assets" : "attachments"}/${fileName}`,
     })),
     wsResolveGraphAsset: vi.fn(async () => ({ url: "data:image/png;base64," })),
     wsOpenGraphAsset: vi.fn(async () => undefined),

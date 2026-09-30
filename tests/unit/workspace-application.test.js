@@ -48,7 +48,7 @@ describe("Canonical workspace application", () => {
       repository: {
         executeWorkspaceGraphCommand: vi.fn(async (path, command, origin, revision) => {
           events.push([command.type, origin, revision]);
-          return { graph: fixture() };
+          return { selectedNodeIds: [], delta: { baseRevision: 3, revision: 4 }, graph: fixture() };
         }),
       },
       publish: () => events.push("publish"),
@@ -66,11 +66,66 @@ describe("Canonical workspace application", () => {
     const app = applicationModule.createWorkspaceApplication({
       authorize: async () => {},
       initialize: async () => {},
-      repository: { executeWorkspaceGraphCommand: vi.fn(async () => ({ graph: fixture() })) },
+      repository: {
+        executeWorkspaceGraphCommand: vi.fn(async () => ({
+          selectedNodeIds: [],
+          delta: { revision: 4 },
+          graph: fixture(),
+        })),
+      },
       publish,
     });
     await app.execute({ workspacePath: "w", command: { type: "update-node" }, requester });
     expect(publish).toHaveBeenCalledWith("w", expect.anything(), requester);
+  });
+  it("returns and publishes only the delta, never the whole graph", async () => {
+    const delta = { baseRevision: 3, revision: 4, nodes: { a: null } };
+    const publish = vi.fn();
+    const app = applicationModule.createWorkspaceApplication({
+      authorize: async () => {},
+      initialize: async () => {},
+      repository: {
+        executeWorkspaceGraphCommand: vi.fn(async () => ({
+          selectedNodeIds: ["a"],
+          delta,
+          graph: fixture(),
+        })),
+        undoWorkspaceGraph: vi.fn(async () => ({ changed: true, delta, graph: fixture() })),
+      },
+      publish,
+    });
+    const result = await app.execute({ workspacePath: "w", command: { type: "delete-node" } });
+    expect(result).toEqual({ selectedNodeIds: ["a"], delta });
+    expect(publish).toHaveBeenLastCalledWith("w", { delta }, undefined);
+    const undone = await app.history({ workspacePath: "w", direction: "undo" });
+    expect(undone).toEqual({ changed: true, delta });
+    expect(publish).toHaveBeenLastCalledWith("w", { delta }, undefined);
+  });
+  it("does not publish an undo that changed nothing", async () => {
+    const publish = vi.fn();
+    const app = applicationModule.createWorkspaceApplication({
+      authorize: async () => {},
+      initialize: async () => {},
+      repository: { undoWorkspaceGraph: vi.fn(async () => ({ changed: false, delta: null })) },
+      publish,
+    });
+    expect(await app.history({ workspacePath: "w", direction: "undo" })).toEqual({
+      changed: false,
+      delta: null,
+    });
+    expect(publish).not.toHaveBeenCalled();
+  });
+  it("reloads after authorization and sends the whole graph to the other windows", async () => {
+    const events = [];
+    const graph = fixture();
+    const app = applicationModule.createWorkspaceApplication({
+      authorize: async () => events.push("authorize"),
+      initialize: async () => events.push("initialize"),
+      repository: { reloadWorkspaceGraph: vi.fn(async () => graph) },
+      publish: (path, payload) => events.push(["publish", payload]),
+    });
+    expect(await app.reload({ workspacePath: "w" })).toBe(graph);
+    expect(events).toEqual(["authorize", ["publish", { graph }]]);
   });
   it("does not dispatch an unauthorized request", async () => {
     const initialize = vi.fn(),

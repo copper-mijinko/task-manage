@@ -12,7 +12,13 @@
   async function saveAsset(file) {
     const bytes = new Uint8Array(await file.arrayBuffer());
     return (
-      await platform.wsSaveGraphAsset(workspacePath, nodeId, file.name || "pasted-image.png", bytes)
+      await platform.wsSaveGraphAsset(
+        workspacePath,
+        nodeId,
+        file.name || "pasted-image.png",
+        bytes,
+        "image"
+      )
     ).relativePath;
   }
 </script>

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test, expect, _electron as electron } from "@playwright/test";
+import { graphAt, writeWorkspaceFiles } from "./support.js";
 
 const REPO_ROOT = path.resolve(__dirname, "../..");
 
@@ -13,11 +14,17 @@ test("revision conflict preserves body input and retry keeps external changes", 
     await page.getByRole("tab", { name: "本文", exact: true }).click();
     await page.getByRole("button", { name: /^メモ表示モード：/ }).click();
     await page.getByRole("option", { name: "編集", exact: true }).click();
-    const file = path.join(app.workspacePath, ".task-manage", "graph-v1.json");
-    const document = JSON.parse(fs.readFileSync(file, "utf8"));
-    document.graph.revision++;
-    document.graph.nodes.review.name = "External edit";
-    fs.writeFileSync(file, JSON.stringify(document));
+    // 別のウィンドウの変更（この画面へは通知が届かない）を、要求元を除く通知の
+    // 仕組みのまま再現する。
+    await page.evaluate(async (workspacePath) => {
+      const { revision } = await window.electronAPI.wsReadGraph(workspacePath);
+      await window.electronAPI.wsExecuteGraphCommand(
+        workspacePath,
+        { type: "update-node", nodeId: "review", changes: { name: "External edit" } },
+        "graph",
+        revision
+      );
+    }, app.workspacePath);
     await page.locator(".cm-content").fill("Keep input after conflict");
     // 手動保存ボタンは廃止。自動保存 (500ms debounce) がそのまま衝突する。
     await expect(
@@ -276,13 +283,9 @@ const node = (id, parents = [], extra = {}) => ({
 });
 
 test("drop before, after and onto the root persists the requested occurrence", async () => {
-  const context = fixture();
-  const file = path.join(context.workspacePath, ".task-manage", "graph-v1.json");
-  const document = JSON.parse(fs.readFileSync(file, "utf8"));
-  ["shared", "review", "implementation"].forEach((id, order) => {
-    document.graph.nodes[id].parents.find((p) => p.id === "alpha").order = order;
+  const context = fixture({
+    alphaOrder: { shared: 0, review: 1, implementation: 2 },
   });
-  fs.writeFileSync(file, JSON.stringify(document));
   const app = await launch(context);
   try {
     const page = app.window;
@@ -324,12 +327,10 @@ test("drop before, after and onto the root persists the requested occurrence", a
 });
 
 test("Inbox is protected and notifications do not shift the tree", async () => {
-  const context = fixture();
-  const file = path.join(context.workspacePath, ".task-manage", "graph-v1.json");
-  const document = JSON.parse(fs.readFileSync(file, "utf8"));
-  document.graph.inboxId = "inbox";
-  document.graph.nodes.inbox = node("inbox", ["root"], { name: "Inbox" });
-  fs.writeFileSync(file, JSON.stringify(document));
+  const context = fixture({
+    extraNodes: [node("inbox", ["root"], { name: "Inbox" })],
+    inboxId: "inbox",
+  });
   const app = await launch(context);
   try {
     const page = app.window;
@@ -449,10 +450,9 @@ test("archiving a branch hides everything under it and restoring a deep row brin
   }
 });
 
-function fixture() {
+function fixture({ alphaOrder = {}, extraNodes = [], inboxId } = {}) {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "tm-treegrid-"));
   const workspacePath = path.join(tempDir, "workspace");
-  fs.mkdirSync(path.join(workspacePath, ".task-manage"), { recursive: true });
   const nodes = [
     node("root"),
     node("alpha", ["root"]),
@@ -466,18 +466,12 @@ function fixture() {
     node("cycle", ["shared"]),
     node("review", ["alpha"], { status: "Open" }),
     node("implementation", ["alpha"], { status: "Open" }),
+    ...extraNodes,
   ];
-  const graph = {
-    schemaVersion: 1,
-    workspaceId: "treegrid-test",
-    rootId: "root",
-    revision: 0,
-    nodes: Object.fromEntries(nodes.map((n) => [n.id, n])),
-  };
-  fs.writeFileSync(
-    path.join(workspacePath, ".task-manage", "graph-v1.json"),
-    JSON.stringify({ schemaVersion: 1, graph, undo: [], redo: [] })
-  );
+  // 親ごとの並び順（兄弟どうしで比べる値）を指定どおりにする。
+  for (const [id, order] of Object.entries(alphaOrder))
+    nodes.find((n) => n.id === id).parents.find((p) => p.id === "alpha").order = order;
+  writeWorkspaceFiles(workspacePath, nodes, { inboxId });
   fs.writeFileSync(
     path.join(tempDir, "meta.json"),
     JSON.stringify({
@@ -514,9 +508,7 @@ async function launch(context) {
   }
   return { ...context, electronApp, window };
 }
-const graphOf = (app) =>
-  JSON.parse(fs.readFileSync(path.join(app.workspacePath, ".task-manage", "graph-v1.json"), "utf8"))
-    .graph;
+const graphOf = (app) => graphAt(app.workspacePath);
 const row = (page, occurrence) => page.locator(`[data-row-path="${occurrence}"]`);
 async function select(page, occurrence, modifiers = []) {
   await row(page, occurrence).getByRole("gridcell").nth(1).click({ modifiers });

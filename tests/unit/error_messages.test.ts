@@ -47,6 +47,16 @@ describe("error_messages", () => {
     );
   });
 
+  test("keeps the path in the message for a file changed outside the app, and treats it as a rejection", () => {
+    const changed = ipc(
+      "ファイルがアプリの外で変更されています: alpha/task-a/_index.md。ワークスペースを再読み込みしてから操作してください。"
+    );
+    expect(userErrorMessage(changed)).toContain("alpha/task-a/_index.md");
+    expect(userErrorMessage(changed)).not.toContain("Error invoking");
+    // 何も書いていないので、保存失敗にはしない。
+    expect(isRejectedOperation(changed)).toBe(true);
+  });
+
   test("toUserError keeps the original error as the cause", () => {
     const original = ipc("Duplicate edges are not allowed");
     const wrapped = toUserError(original);

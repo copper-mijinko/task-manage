@@ -5,6 +5,7 @@ import { test, expect } from "@playwright/test";
 import {
   createWorkspace,
   graphOf,
+  historyDepth,
   largeNodes,
   node,
   overflow,
@@ -170,9 +171,9 @@ test("tree row, detail pane, Gantt, sidebar and file agree through edits, undo a
 
     // 元に戻すと、すべての場所がいっしょに戻る。
     for (let step = 0; step < 4; step += 1) {
-      const revision = graphOf(app).revision;
+      const depth = historyDepth(app).undo;
       await page.keyboard.press("Control+z");
-      await expect.poll(() => graphOf(app).revision).not.toBe(revision);
+      await expect.poll(() => historyDepth(app).undo).toBeLessThan(depth);
     }
     await expectAgreement(app, "root/work/spec", original);
     await page.getByRole("button", { name: "サイドバーを表示", exact: true }).click();

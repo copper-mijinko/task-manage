@@ -1,11 +1,12 @@
 import type {
   ElectronAPI,
   FindInPageResult,
-  MarkdownImportSource,
+  GraphAssetKind,
   PerformanceMilestone,
   TaskDetailWindowData,
   ThemeName,
   WindowState,
+  WorkspaceGraphUpdate,
 } from "@app-types/app";
 import type { WorkspaceInfo } from "@app-types/workspace";
 import type {
@@ -13,6 +14,7 @@ import type {
   WorkspaceGraph,
   WorkspaceGraphCommand,
   WorkspaceGraphCommandResult,
+  WorkspaceGraphHistoryResult,
 } from "@app-types/workspace_graph";
 
 // Single point where the Electron runtime is accessed.
@@ -224,7 +226,7 @@ export function wsExecuteGraphCommand(
 export function wsUndoGraph(
   workspacePath: string,
   expectedRevision: number
-): Promise<{ graph: WorkspaceGraph; changed: boolean }> {
+): Promise<WorkspaceGraphHistoryResult> {
   const fn = api()?.wsUndoGraph;
   if (!fn) return Promise.reject(new Error("Workspace graph API unavailable"));
   return fn(workspacePath, expectedRevision);
@@ -233,43 +235,33 @@ export function wsUndoGraph(
 export function wsRedoGraph(
   workspacePath: string,
   expectedRevision: number
-): Promise<{ graph: WorkspaceGraph; changed: boolean }> {
+): Promise<WorkspaceGraphHistoryResult> {
   const fn = api()?.wsRedoGraph;
   if (!fn) return Promise.reject(new Error("Workspace graph API unavailable"));
   return fn(workspacePath, expectedRevision);
 }
 
-export function onWorkspaceGraphUpdated(
-  callback: (event: { workspacePath: string; graph: WorkspaceGraph }) => void
-): void {
+export function onWorkspaceGraphUpdated(callback: (event: WorkspaceGraphUpdate) => void): void {
   api()?.onWorkspaceGraphUpdated?.(callback);
 }
 
-export function wsListMarkdownImports(workspacePath: string): Promise<MarkdownImportSource[]> {
-  const fn = api()?.wsListMarkdownImports;
+/** ディスクから読み直す（外で書き換えたファイルを取り込む）。 */
+export function wsReloadWorkspace(workspacePath: string): Promise<WorkspaceGraph> {
+  const fn = api()?.wsReloadWorkspace;
   if (!fn) return Promise.reject(new Error("Workspace graph API unavailable"));
   return fn(workspacePath);
-}
-
-export function wsImportMarkdownProjects(
-  workspacePath: string,
-  dirNames: string[],
-  expectedRevision?: number
-): Promise<WorkspaceGraphCommandResult> {
-  const fn = api()?.wsImportMarkdownProjects;
-  if (!fn) return Promise.reject(new Error("Workspace graph API unavailable"));
-  return fn(workspacePath, plain(dirNames), expectedRevision);
 }
 
 export function wsSaveGraphAsset(
   workspacePath: string,
   nodeId: string,
   fileName: string,
-  bytes: Uint8Array
+  bytes: Uint8Array,
+  kind: GraphAssetKind = "attachment"
 ): Promise<{ relativePath: string }> {
   const fn = api()?.wsSaveGraphAsset;
   if (!fn) return Promise.reject(new Error("Workspace graph asset API unavailable"));
-  return fn(workspacePath, nodeId, fileName, bytes);
+  return fn(workspacePath, nodeId, fileName, bytes, kind);
 }
 
 export function wsResolveGraphAsset(

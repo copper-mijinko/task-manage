@@ -3,17 +3,22 @@ import os from "node:os";
 import path from "node:path";
 import graphStore from "../../electron/workspace-graph.js";
 
+/**
+ * ワークスペースのグラフの保存（Markdown ファイル + 履歴）のテスト。
+ *
+ * 編集のたびに書くのは、変わったノードのファイルと履歴の 1 段だけ。
+ */
 function projectFixture(root) {
   const projectDir = path.join(root, "alpha");
   const taskDir = path.join(projectDir, "task-a");
   fs.mkdirSync(taskDir, { recursive: true });
   fs.writeFileSync(
     path.join(projectDir, "_project.md"),
-    "---\nid: project-a\nname: Alpha\norder: 0\ncreatedAt: 2026-01-01\n---\nProject body\n"
+    "---\nid: project-a\nname: Alpha\norder: 0\ncreated: 2026-01-01\n---\nProject body\n"
   );
   fs.writeFileSync(
     path.join(taskDir, "_index.md"),
-    "---\nid: task-a\nname: Task A\nparents:\n  - id: project-a\n    order: 0\ncreatedAt: 2026-01-02\n---\nTask body\n![legacy](./assets/legacy.png)\n![dotless](assets/legacy.png)\n[attachment](./attachments/note.txt)\n"
+    "---\nid: task-a\nname: Task A\nparents:\n  - id: project-a\n    order: 0\ncreated: 2026-01-02\n---\nTask body\n![legacy](./assets/legacy.png)\n[attachment](./attachments/note.txt)\n"
   );
   fs.mkdirSync(path.join(taskDir, "assets"));
   fs.writeFileSync(path.join(taskDir, "assets", "legacy.png"), "legacy-image");
@@ -21,438 +26,690 @@ function projectFixture(root) {
   fs.writeFileSync(path.join(taskDir, "attachments", "note.txt"), "attachment");
 }
 
+const read = (file) => fs.readFileSync(file, "utf8");
+const exec = (root, command, revision, origin = "tree") =>
+  graphStore.executeWorkspaceGraphCommand(root, command, origin, revision);
+
 describe("workspace graph persistence", () => {
   let tempDir;
+  let taskFile;
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "task-manage-graph-"));
+    taskFile = path.join(tempDir, "alpha", "task-a", "_index.md");
   });
   afterEach(() => {
+    graphStore.forgetWorkspace(tempDir);
+    vi.restoreAllMocks();
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it("imports legacy Markdown once and preserves bodies", async () => {
-    projectFixture(tempDir);
-    const first = await graphStore.readWorkspaceGraph(tempDir);
-    expect(first.nodes["project-a"].parents[0].id).toBe(first.rootId);
-    expect(first.nodes["task-a"].body).toContain("Task body");
-    expect(first.nodes["task-a"].body).toContain("assets/task-a/assets/legacy.png");
-    expect(first.nodes["task-a"].body.match(/assets\/task-a\/assets\/legacy\.png/g)).toHaveLength(
-      2
-    );
-    expect(first.nodes["task-a"].body).toContain("assets/task-a/attachments/note.txt");
-    expect(first.nodes["task-a"].sourceProjectDir).toBeUndefined();
-    await expect(
-      graphStore.resolveNodeAsset(tempDir, "task-a", "assets/task-a/assets/legacy.png")
-    ).resolves.toMatch(/legacy\.png$/);
-    fs.writeFileSync(path.join(tempDir, "alpha", "task-a", "_index.md"), "broken after activation");
-    const second = await graphStore.readWorkspaceGraph(tempDir);
-    expect(second.workspaceId).toBe(first.workspaceId);
-    expect(second.nodes["task-a"].name).toBe("Task A");
-  });
+  describe("opening", () => {
+    it("opens a legacy folder and only adds the workspace file", async () => {
+      projectFixture(tempDir);
+      const before = read(taskFile);
+      const first = await graphStore.readWorkspaceGraph(tempDir);
+      expect(first.nodes["project-a"].parents[0].id).toBe(first.rootId);
+      expect(first.nodes["task-a"].body).toContain("Task body");
+      // 画像への参照は、ノードのフォルダーからの相対のまま（書き換えない）。
+      expect(first.nodes["task-a"].body).toContain("./assets/legacy.png");
+      expect(read(taskFile)).toBe(before);
+      expect(fs.existsSync(path.join(tempDir, "_workspace.md"))).toBe(true);
+      await expect(
+        graphStore.resolveNodeAsset(tempDir, "task-a", "./assets/legacy.png")
+      ).resolves.toMatch(/legacy\.png$/);
 
-  it("serializes first initialization and rejects stale revisions", async () => {
-    projectFixture(tempDir);
-    const [a, b] = await Promise.all([
-      graphStore.readWorkspaceGraph(tempDir),
-      graphStore.readWorkspaceGraph(tempDir),
-    ]);
-    expect(a.rootId).toBe(b.rootId);
-    const command = { type: "create-node", parentId: a.rootId, node: { name: "One" } };
-    const first = await graphStore.executeWorkspaceGraphCommand(tempDir, command, "graph", 0);
-    await expect(
-      graphStore.executeWorkspaceGraphCommand(tempDir, command, "graph", 0)
-    ).rejects.toThrow(/expected revision/);
-    const disk = await graphStore.readWorkspaceGraph(tempDir);
-    expect(disk.revision).toBe(first.graph.revision);
-    expect(Object.values(disk.nodes).filter((node) => node.name === "One")).toHaveLength(1);
-  });
-
-  it("uses one queue for relative and absolute aliases of the same workspace", async () => {
-    projectFixture(tempDir);
-    const relative = path.relative(process.cwd(), tempDir);
-    const initial = await graphStore.readWorkspaceGraph(tempDir);
-    const command = (name) => ({ type: "create-node", parentId: initial.rootId, node: { name } });
-    const outcomes = await Promise.allSettled([
-      graphStore.executeWorkspaceGraphCommand(
-        tempDir,
-        command("Absolute"),
-        "graph",
-        initial.revision
-      ),
-      graphStore.executeWorkspaceGraphCommand(
-        relative,
-        command("Relative"),
-        "graph",
-        initial.revision
-      ),
-    ]);
-    expect(outcomes.filter((result) => result.status === "fulfilled")).toHaveLength(1);
-    expect(outcomes.filter((result) => result.status === "rejected")).toHaveLength(1);
-    const after = await graphStore.readWorkspaceGraph(tempDir);
-    expect(after.revision).toBe(initial.revision + 1);
-    expect(
-      Object.values(after.nodes).filter(
-        (node) => node.name === "Absolute" || node.name === "Relative"
-      )
-    ).toHaveLength(1);
-  });
-
-  it("persists undo and redo across module reads", async () => {
-    projectFixture(tempDir);
-    const initial = await graphStore.readWorkspaceGraph(tempDir);
-    const changed = await graphStore.executeWorkspaceGraphCommand(
-      tempDir,
-      { type: "update-node", nodeId: "task-a", changes: { name: "Changed" } },
-      "graph",
-      initial.revision
-    );
-    const undone = await graphStore.undoWorkspaceGraph(tempDir, changed.graph.revision);
-    expect(undone.graph.nodes["task-a"].name).toBe("Task A");
-    const redone = await graphStore.redoWorkspaceGraph(tempDir, undone.graph.revision);
-    expect(redone.graph.nodes["task-a"].name).toBe("Changed");
-  });
-
-  it("keeps only the changed nodes in each history step", async () => {
-    projectFixture(tempDir);
-    const bigDir = path.join(tempDir, "alpha", "big-task");
-    fs.mkdirSync(bigDir);
-    fs.writeFileSync(
-      path.join(bigDir, "_index.md"),
-      `---\nid: big-task\nname: Big\nparents:\n  - id: project-a\n    order: 1\n---\n${"x".repeat(200_000)}\n`
-    );
-    let graph = await graphStore.readWorkspaceGraph(tempDir);
-    const sizeAfterImport = fs.statSync(graphStore.graphPath(tempDir)).size;
-    for (let index = 0; index < 20; index += 1) {
-      graph = (
-        await graphStore.executeWorkspaceGraphCommand(
-          tempDir,
-          { type: "update-node", nodeId: "task-a", changes: { name: `Rename ${index}` } },
-          "tree",
-          graph.revision
-        )
-      ).graph;
-    }
-    // 1 段ごとにグラフ全体を積むと 20 倍を超える。
-    expect(fs.statSync(graphStore.graphPath(tempDir)).size).toBeLessThan(sizeAfterImport * 1.5);
-    const stored = JSON.parse(fs.readFileSync(graphStore.graphPath(tempDir), "utf8"));
-    expect(stored.undo).toHaveLength(20);
-    expect(Object.keys(stored.undo[19].nodes)).toEqual(["task-a"]);
-
-    const undone = await graphStore.undoWorkspaceGraph(tempDir, graph.revision);
-    expect(undone.graph.nodes["task-a"].name).toBe("Rename 18");
-    expect(undone.graph.revision).toBe(graph.revision + 1);
-    expect(undone.graph.nodes["big-task"].body).toHaveLength(200_000);
-  });
-
-  it("converts full-graph history written by older versions", async () => {
-    projectFixture(tempDir);
-    const initial = await graphStore.readWorkspaceGraph(tempDir);
-    const named = (name, revision) => ({
-      ...structuredClone(initial),
-      revision,
-      nodes: {
-        ...structuredClone(initial.nodes),
-        "task-a": { ...structuredClone(initial.nodes["task-a"]), name },
-      },
+      graphStore.forgetWorkspace(tempDir);
+      const second = await graphStore.readWorkspaceGraph(tempDir);
+      expect(second.workspaceId).toBe(first.workspaceId);
+      expect(second.rootId).toBe(first.rootId);
     });
-    const { history: _history, ...current } = named("Two", 2);
-    fs.writeFileSync(
-      graphStore.graphPath(tempDir),
-      JSON.stringify({
-        schemaVersion: 1,
-        graph: current,
-        undo: [named("Zero", 0), named("One", 1)],
-        redo: [named("Three", 3)],
-      })
-    );
 
-    const loaded = await graphStore.readWorkspaceGraph(tempDir);
-    expect(loaded.nodes["task-a"].name).toBe("Two");
-    expect(loaded.history).toEqual({ undo: 2, redo: 1 });
-    // 読んだだけで新しい形式に書き戻されている。
-    const converted = JSON.parse(fs.readFileSync(graphStore.graphPath(tempDir), "utf8"));
-    expect(converted.undo.every((entry) => !("rootId" in entry))).toBe(true);
-    expect(Object.keys(converted.undo[1].nodes)).toEqual(["task-a"]);
-    const redone = await graphStore.redoWorkspaceGraph(tempDir, loaded.revision);
-    expect(redone.graph.nodes["task-a"].name).toBe("Three");
-    let state = redone.graph;
-    for (const expected of ["Two", "One", "Zero"]) {
-      state = (await graphStore.undoWorkspaceGraph(tempDir, state.revision)).graph;
-      expect(state.nodes["task-a"].name).toBe(expected);
-    }
-    expect((await graphStore.undoWorkspaceGraph(tempDir, state.revision)).changed).toBe(false);
-    const stored = JSON.parse(fs.readFileSync(graphStore.graphPath(tempDir), "utf8"));
-    expect(stored.redo.every((entry) => !("rootId" in entry))).toBe(true);
+    it("serializes first initialization and rejects stale revisions", async () => {
+      projectFixture(tempDir);
+      const [a, b] = await Promise.all([
+        graphStore.readWorkspaceGraph(tempDir),
+        graphStore.readWorkspaceGraph(tempDir),
+      ]);
+      expect(a.rootId).toBe(b.rootId);
+      const command = { type: "create-node", parentId: a.rootId, node: { name: "One" } };
+      const first = await exec(tempDir, command, 0, "graph");
+      await expect(exec(tempDir, command, 0, "graph")).rejects.toThrow(/expected revision/);
+      const disk = await graphStore.readWorkspaceGraph(tempDir);
+      expect(disk.revision).toBe(first.graph.revision);
+      expect(Object.values(disk.nodes).filter((node) => node.name === "One")).toHaveLength(1);
+    });
+
+    it("uses one queue for relative and absolute aliases of the same workspace", async () => {
+      projectFixture(tempDir);
+      const relative = path.relative(process.cwd(), tempDir);
+      const initial = await graphStore.readWorkspaceGraph(tempDir);
+      const command = (name) => ({ type: "create-node", parentId: initial.rootId, node: { name } });
+      const outcomes = await Promise.allSettled([
+        exec(tempDir, command("Absolute"), initial.revision, "graph"),
+        exec(relative, command("Relative"), initial.revision, "graph"),
+      ]);
+      expect(outcomes.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+      expect(outcomes.filter((result) => result.status === "rejected")).toHaveLength(1);
+      const after = await graphStore.readWorkspaceGraph(tempDir);
+      expect(after.revision).toBe(initial.revision + 1);
+    });
+
+    it("recognizes a workspace folder", async () => {
+      expect(graphStore.isWorkspaceFolder(tempDir)).toBe(false);
+      projectFixture(tempDir);
+      await graphStore.readWorkspaceGraph(tempDir);
+      expect(graphStore.isWorkspaceFolder(tempDir)).toBe(true);
+    });
   });
 
-  it("reads the graph again when another process rewrites the file", async () => {
-    projectFixture(tempDir);
-    await graphStore.readWorkspaceGraph(tempDir);
-    const filePath = graphStore.graphPath(tempDir);
-    const stored = JSON.parse(fs.readFileSync(filePath, "utf8"));
-    stored.graph.nodes["task-a"].name = "Edited elsewhere";
-    stored.graph.revision += 1;
-    fs.writeFileSync(filePath, JSON.stringify(stored, null, 2));
-    const later = new Date(Date.now() + 5000);
-    fs.utimesSync(filePath, later, later);
-    expect((await graphStore.readWorkspaceGraph(tempDir)).nodes["task-a"].name).toBe(
-      "Edited elsewhere"
-    );
-  });
-
-  it("preserves explicit Undefined separately from an omitted status in JSON", async () => {
-    projectFixture(tempDir);
-    let current = await graphStore.readWorkspaceGraph(tempDir);
-    current = (
-      await graphStore.executeWorkspaceGraphCommand(
-        tempDir,
-        { type: "update-node", nodeId: "task-a", changes: { status: "Undefined" } },
-        "graph",
-        current.revision
-      )
-    ).graph;
-    expect((await graphStore.readWorkspaceGraph(tempDir)).nodes["task-a"].status).toBe("Undefined");
-    await graphStore.executeWorkspaceGraphCommand(
-      tempDir,
-      { type: "update-node", nodeId: "task-a", changes: { status: undefined } },
-      "graph",
-      current.revision
-    );
-    expect(
-      Object.prototype.hasOwnProperty.call(
-        (await graphStore.readWorkspaceGraph(tempDir)).nodes["task-a"],
-        "status"
-      )
-    ).toBe(false);
-  });
-
-  it("keeps copied canonical assets usable after deleting the source node", async () => {
-    projectFixture(tempDir);
-    let graph = await graphStore.readWorkspaceGraph(tempDir);
-    const saved = await graphStore.saveNodeAsset(
-      tempDir,
-      "task-a",
-      "note.txt",
-      Buffer.from("asset")
-    );
-    graph = (
-      await graphStore.executeWorkspaceGraphCommand(
+  describe("writing", () => {
+    it("writes only the file of the node that changed, plus one history step", async () => {
+      projectFixture(tempDir);
+      const initial = await graphStore.readWorkspaceGraph(tempDir);
+      const projectFile = path.join(tempDir, "alpha", "_project.md");
+      const projectBefore = read(projectFile);
+      const result = await exec(
         tempDir,
         {
           type: "update-node",
           nodeId: "task-a",
-          changes: {
-            attachments: [{ id: "x", name: "note.txt", relativePath: saved.relativePath, size: 5 }],
-          },
+          changes: { name: "Renamed: with colon" },
         },
-        "graph",
+        initial.revision
+      );
+      expect(read(taskFile)).toContain('name: "Renamed: with colon"');
+      expect(read(taskFile)).toContain("Task body");
+      expect(read(projectFile)).toBe(projectBefore);
+      // 結果は、変わったノードだけの差分。
+      expect(Object.keys(result.delta.nodes)).toEqual(["task-a"]);
+      expect(result.delta.baseRevision).toBe(initial.revision);
+      expect(result.delta.revision).toBe(initial.revision + 1);
+      expect(result.delta.history).toEqual({ undo: 1, redo: 0 });
+      expect(fs.readdirSync(path.join(tempDir, ".task-manage", "history", "undo"))).toEqual([
+        "000000001.json",
+      ]);
+    });
+
+    it("keeps the keys it does not know when it rewrites a file", async () => {
+      projectFixture(tempDir);
+      fs.writeFileSync(
+        taskFile,
+        "---\nid: task-a\nname: Task A\nparents:\n  - id: project-a\n    order: 0\nsummary: by an assistant\ncreated: 2026-01-02\n---\nTask body\n"
+      );
+      const initial = await graphStore.readWorkspaceGraph(tempDir);
+      await exec(
+        tempDir,
+        {
+          type: "update-node",
+          nodeId: "task-a",
+          changes: { status: "Open" },
+        },
+        initial.revision
+      );
+      expect(read(taskFile)).toContain("summary: by an assistant");
+      expect(read(taskFile)).toContain("status: Open");
+    });
+
+    it("preserves explicit Undefined separately from an omitted status", async () => {
+      projectFixture(tempDir);
+      let current = await graphStore.readWorkspaceGraph(tempDir);
+      current = (
+        await exec(
+          tempDir,
+          {
+            type: "update-node",
+            nodeId: "task-a",
+            changes: { status: "Undefined" },
+          },
+          current.revision
+        )
+      ).graph;
+      expect(read(taskFile)).toContain("status: Undefined");
+      graphStore.forgetWorkspace(tempDir);
+      expect((await graphStore.readWorkspaceGraph(tempDir)).nodes["task-a"].status).toBe(
+        "Undefined"
+      );
+      current = await graphStore.readWorkspaceGraph(tempDir);
+      const result = await exec(
+        tempDir,
+        {
+          type: "update-node",
+          nodeId: "task-a",
+          changes: { status: undefined },
+        },
+        current.revision
+      );
+      expect(Object.prototype.hasOwnProperty.call(result.graph.nodes["task-a"], "status")).toBe(
+        false
+      );
+      expect(read(taskFile)).not.toContain("status:");
+    });
+
+    it("puts a new node beside its parent and a new project in its own folder", async () => {
+      projectFixture(tempDir);
+      let graph = await graphStore.readWorkspaceGraph(tempDir);
+      const child = await exec(
+        tempDir,
+        {
+          type: "create-node",
+          parentId: "task-a",
+          node: { name: "Child" },
+        },
         graph.revision
-      )
-    ).graph;
-    const copied = await graphStore.executeWorkspaceGraphCommand(
-      tempDir,
-      { type: "copy", nodeId: "task-a", targetParentId: graph.rootId, mode: "node" },
-      "graph",
-      graph.revision
-    );
-    const copyId = copied.selectedNodeIds[0];
-    const copySaved = await graphStore.saveNodeAsset(
-      tempDir,
-      copyId,
-      "copy.txt",
-      Buffer.from("copy")
-    );
-    await expect(
-      graphStore.resolveNodeAsset(tempDir, copyId, copySaved.relativePath)
-    ).resolves.toMatch(/copy\.txt$/);
-    const deleted = await graphStore.executeWorkspaceGraphCommand(
-      tempDir,
-      { type: "delete-node", nodeId: "task-a" },
-      "graph",
-      copied.graph.revision
-    );
-    const copiedPath = deleted.graph.nodes[copyId].attachments[0].relativePath;
-    expect(copiedPath).toContain(`assets/${copyId}/`);
-    await expect(graphStore.resolveNodeAsset(tempDir, copyId, copiedPath)).resolves.toMatch(
-      /note\.txt$/
-    );
-    await expect(graphStore.resolveNodeAsset(tempDir, copyId, "../outside.txt")).rejects.toThrow(
-      /escapes|belong/
-    );
-    const undone = await graphStore.undoWorkspaceGraph(tempDir, deleted.graph.revision);
-    await expect(
-      graphStore.resolveNodeAsset(tempDir, "task-a", saved.relativePath)
-    ).resolves.toMatch(/note\.txt$/);
-    expect(undone.graph.nodes["task-a"]).toBeTruthy();
-  });
-
-  it("fails migration on a malformed task before activating graph storage", async () => {
-    projectFixture(tempDir);
-    const bad = path.join(tempDir, "alpha", "bad-task");
-    fs.mkdirSync(bad);
-    fs.writeFileSync(path.join(bad, "_index.md"), "---\nname: Missing id\n---\n");
-    await expect(graphStore.readWorkspaceGraph(tempDir)).rejects.toThrow(/Invalid legacy task/);
-    expect(fs.existsSync(graphStore.graphPath(tempDir))).toBe(false);
-  });
-
-  it("fails migration on duplicate ids inside one project", async () => {
-    projectFixture(tempDir);
-    const duplicate = path.join(tempDir, "alpha", "duplicate-task");
-    fs.mkdirSync(duplicate);
-    fs.writeFileSync(path.join(duplicate, "_index.md"), "---\nid: task-a\nname: Duplicate\n---\n");
-    await expect(graphStore.readWorkspaceGraph(tempDir)).rejects.toThrow(/Duplicate node id/);
-    expect(fs.existsSync(graphStore.graphPath(tempDir))).toBe(false);
-  });
-
-  it("imports two legacy projects that share task ids by renumbering the later copy", async () => {
-    // v0.40 のエクスポートはルート以外の id を db.json から引き継いだので、
-    // 同じプロジェクトを 2 回エクスポートすると別プロジェクトに同じ id が並ぶ。
-    projectFixture(tempDir);
-    const betaDir = path.join(tempDir, "beta");
-    const betaTask = path.join(betaDir, "task-a");
-    const betaChild = path.join(betaDir, "task-b");
-    fs.mkdirSync(path.join(betaTask, "assets"), { recursive: true });
-    fs.mkdirSync(betaChild, { recursive: true });
-    fs.writeFileSync(
-      path.join(betaDir, "_project.md"),
-      "---\nid: project-b\nname: Beta\norder: 1\n---\n"
-    );
-    fs.writeFileSync(
-      path.join(betaTask, "_index.md"),
-      "---\nid: task-a\nname: Beta Task A\nparents:\n  - id: project-b\n    order: 0\n---\n![img](./assets/beta.png)\n"
-    );
-    fs.writeFileSync(path.join(betaTask, "assets", "beta.png"), "beta-image");
-    fs.writeFileSync(
-      path.join(betaTask, "memo.md"),
-      "---\nid: memo-b\ntitle: Beta memo\n---\nMemo body\n"
-    );
-    fs.writeFileSync(
-      path.join(betaChild, "_index.md"),
-      "---\nid: task-b\nname: Beta Task B\nparents:\n  - id: task-a\n    order: 0\n---\n"
-    );
-
-    const graph = await graphStore.readWorkspaceGraph(tempDir);
-
-    expect(graph.nodes["task-a"].name).toBe("Task A");
-    expect(graph.nodes["task-a"].parents).toEqual([{ id: "project-a", order: 0 }]);
-    const renamed = Object.values(graph.nodes).filter((node) => node.name === "Beta Task A");
-    expect(renamed).toHaveLength(1);
-    const betaTaskId = renamed[0].id;
-    expect(betaTaskId).not.toBe("task-a");
-    expect(renamed[0].parents).toEqual([{ id: "project-b", order: 0 }]);
-    expect(renamed[0].assetOwnerId).toBe(betaTaskId);
-    expect(renamed[0].body).toContain(`assets/${betaTaskId}/assets/beta.png`);
-    expect(graph.nodes["task-b"].parents).toEqual([{ id: betaTaskId, order: 0 }]);
-    expect(graph.nodes["memo-b"].parents[0].id).toBe(betaTaskId);
-    await expect(
-      graphStore.resolveNodeAsset(tempDir, betaTaskId, `assets/${betaTaskId}/assets/beta.png`)
-    ).resolves.toMatch(/beta\.png$/);
-    await expect(
-      graphStore.resolveNodeAsset(tempDir, "task-a", "assets/task-a/assets/legacy.png")
-    ).resolves.toMatch(/legacy\.png$/);
-  });
-
-  it("imports memos that a pasted task copy shares with its source", async () => {
-    // v0.40 の貼り付けはタスクに新しい id を振るが、メモの配列はそのまま
-    // コピーしたので、同じプロジェクトの別タスクに同じ id のメモ
-    // ファイル（`<memo id>.md`）が並ぶ。
-    projectFixture(tempDir);
-    const alphaDir = path.join(tempDir, "alpha");
-    fs.writeFileSync(
-      path.join(alphaDir, "task-a", "memo-x.md"),
-      "---\nid: memo-x\ntitle: Shared memo\norder: 0\n---\nOriginal body\n"
-    );
-    const pasted = path.join(alphaDir, "task-c");
-    fs.mkdirSync(path.join(pasted, "assets"), { recursive: true });
-    fs.writeFileSync(path.join(pasted, "assets", "pasted.png"), "pasted-image");
-    fs.writeFileSync(
-      path.join(pasted, "_index.md"),
-      "---\nid: task-c\nname: Task A copy\nparents:\n  - id: project-a\n    order: 1\n---\n"
-    );
-    fs.writeFileSync(
-      path.join(pasted, "memo-x.md"),
-      "---\nid: memo-x\ntitle: Shared memo\norder: 0\n---\nEdited after paste\n![img](./assets/pasted.png)\n"
-    );
-
-    const graph = await graphStore.readWorkspaceGraph(tempDir);
-
-    const memos = Object.values(graph.nodes).filter((node) => node.name === "Shared memo");
-    expect(memos).toHaveLength(2);
-    expect(memos.map((memo) => memo.parents[0].id).sort()).toEqual(["task-a", "task-c"]);
-    const original = memos.find((memo) => memo.parents[0].id === "task-a");
-    const copy = memos.find((memo) => memo.parents[0].id === "task-c");
-    expect(original.body).toContain("Original body");
-    expect(copy.body).toContain("Edited after paste");
-    expect(new Set(memos.map((memo) => memo.id)).size).toBe(2);
-    expect(memos.map((memo) => memo.id)).toContain("memo-x");
-    expect(copy.body).toContain(`assets/${copy.id}/assets/pasted.png`);
-    await expect(
-      graphStore.resolveNodeAsset(tempDir, copy.id, `assets/${copy.id}/assets/pasted.png`)
-    ).resolves.toMatch(/pasted\.png$/);
-  });
-
-  it("fails migration when a legacy memo id collides with a task id", async () => {
-    projectFixture(tempDir);
-    fs.writeFileSync(
-      path.join(tempDir, "alpha", "task-a", "memo.md"),
-      "---\nid: project-a\ntitle: Collision\n---\nMemo\n"
-    );
-    await expect(graphStore.readWorkspaceGraph(tempDir)).rejects.toThrow(/Duplicate legacy memo/);
-    expect(fs.existsSync(graphStore.graphPath(tempDir))).toBe(false);
-  });
-
-  it("fails migration when a legacy memo cannot be read", async () => {
-    projectFixture(tempDir);
-    const memoPath = path.join(tempDir, "alpha", "task-a", "memo.md");
-    fs.writeFileSync(memoPath, "---\nid: memo-a\n---\nMemo\n");
-    const originalReadFile = fs.promises.readFile.bind(fs.promises);
-    const read = vi
-      .spyOn(fs.promises, "readFile")
-      .mockImplementation((file, ...args) =>
-        path.resolve(String(file)) === path.resolve(memoPath)
-          ? Promise.reject(Object.assign(new Error("access denied"), { code: "EACCES" }))
-          : originalReadFile(file, ...args)
       );
-    await expect(graphStore.readWorkspaceGraph(tempDir)).rejects.toThrow(/Cannot read legacy memo/);
-    read.mockRestore();
-    expect(fs.existsSync(graphStore.graphPath(tempDir))).toBe(false);
+      const childId = child.selectedNodeIds[0];
+      expect(fs.existsSync(path.join(tempDir, "alpha", childId, "_index.md"))).toBe(true);
+      graph = child.graph;
+      const created = await exec(
+        tempDir,
+        {
+          type: "create-node",
+          parentId: graph.rootId,
+          node: { name: "New Project" },
+        },
+        graph.revision
+      );
+      const projectId = created.selectedNodeIds[0];
+      expect(read(path.join(tempDir, "new-project", "_project.md"))).toContain(`id: ${projectId}`);
+      // 名前を変えても、フォルダーは動かさない。
+      await exec(
+        tempDir,
+        {
+          type: "update-node",
+          nodeId: projectId,
+          changes: { name: "Renamed project" },
+        },
+        created.graph.revision
+      );
+      expect(read(path.join(tempDir, "new-project", "_project.md"))).toContain(
+        "name: Renamed project"
+      );
+      graphStore.forgetWorkspace(tempDir);
+      const reopened = await graphStore.readWorkspaceGraph(tempDir);
+      expect(reopened.nodes[projectId].name).toBe("Renamed project");
+      expect(reopened.nodes[childId].parents).toEqual([{ id: "task-a", order: 0 }]);
+    });
+
+    it("keeps a node that belongs to several parents, each with its own order", async () => {
+      projectFixture(tempDir);
+      let graph = await graphStore.readWorkspaceGraph(tempDir);
+      graph = (
+        await exec(
+          tempDir,
+          { type: "create-node", parentId: graph.rootId, node: { name: "Beta" } },
+          graph.revision
+        )
+      ).graph;
+      const beta = Object.values(graph.nodes).find((node) => node.name === "Beta");
+      graph = (
+        await exec(
+          tempDir,
+          { type: "link", childId: "task-a", parentId: beta.id, order: 7 },
+          graph.revision
+        )
+      ).graph;
+      graph = (
+        await exec(
+          tempDir,
+          {
+            type: "archive-edge",
+            childId: "task-a",
+            parentId: "project-a",
+            archived: true,
+          },
+          graph.revision
+        )
+      ).graph;
+      graphStore.forgetWorkspace(tempDir);
+      const reopened = await graphStore.readWorkspaceGraph(tempDir);
+      expect(reopened.nodes["task-a"].parents).toEqual([
+        expect.objectContaining({ id: "project-a", order: 0, archived: true }),
+        { id: beta.id, order: 7 },
+      ]);
+    });
+
+    it("keeps the Inbox mark and the graph view positions across restarts", async () => {
+      projectFixture(tempDir);
+      let graph = await graphStore.readWorkspaceGraph(tempDir);
+      graph = (
+        await exec(
+          tempDir,
+          { type: "create-node", parentId: graph.rootId, node: { name: "Inbox" } },
+          graph.revision
+        )
+      ).graph;
+      const inbox = Object.values(graph.nodes).find((node) => node.name === "Inbox");
+      // 次の操作で Inbox が見つかり、その指定がファイルに残る。
+      graph = (
+        await exec(
+          tempDir,
+          { type: "set-position", nodeId: "task-a", x: 10, y: 20 },
+          graph.revision,
+          "graph"
+        )
+      ).graph;
+      expect(graph.inboxId).toBe(inbox.id);
+      graphStore.forgetWorkspace(tempDir);
+      const reopened = await graphStore.readWorkspaceGraph(tempDir);
+      expect(reopened.inboxId).toBe(inbox.id);
+      expect(reopened.positions).toEqual({ "task-a": { x: 10, y: 20 } });
+    });
   });
 
-  it("does not change the graph or history when atomic persistence fails", async () => {
-    projectFixture(tempDir);
-    const initial = await graphStore.readWorkspaceGraph(tempDir);
-    const rename = vi
-      .spyOn(fs.promises, "rename")
-      .mockRejectedValueOnce(new Error("disk unavailable"));
-    await expect(
-      graphStore.executeWorkspaceGraphCommand(
+  describe("undo and redo", () => {
+    it("persists undo and redo across restarts", async () => {
+      projectFixture(tempDir);
+      const initial = await graphStore.readWorkspaceGraph(tempDir);
+      const changed = await exec(
         tempDir,
-        { type: "update-node", nodeId: "task-a", changes: { name: "Must not persist" } },
-        "graph",
-        initial.revision
-      )
-    ).rejects.toThrow(/disk unavailable/);
-    rename.mockRestore();
-    const after = await graphStore.readWorkspaceGraph(tempDir);
-    expect(after.revision).toBe(initial.revision);
-    expect(after.nodes["task-a"].name).toBe("Task A");
-    const undo = await graphStore.undoWorkspaceGraph(tempDir, after.revision);
-    expect(undo.changed).toBe(false);
+        {
+          type: "update-node",
+          nodeId: "task-a",
+          changes: { name: "Changed" },
+        },
+        initial.revision,
+        "graph"
+      );
+      const undone = await graphStore.undoWorkspaceGraph(tempDir, changed.graph.revision);
+      expect(undone.graph.nodes["task-a"].name).toBe("Task A");
+      expect(read(taskFile)).toContain("name: Task A");
+      expect(undone.delta.nodes["task-a"].name).toBe("Task A");
+
+      graphStore.forgetWorkspace(tempDir);
+      const reopened = await graphStore.readWorkspaceGraph(tempDir);
+      expect(reopened.history).toEqual({ undo: 0, redo: 1 });
+      const redone = await graphStore.redoWorkspaceGraph(tempDir, reopened.revision);
+      expect(redone.graph.nodes["task-a"].name).toBe("Changed");
+      expect(read(taskFile)).toContain("name: Changed");
+    });
+
+    it("redoes in the order the steps were undone, even after a restart", async () => {
+      projectFixture(tempDir);
+      let graph = await graphStore.readWorkspaceGraph(tempDir);
+      for (const name of ["One", "Two", "Three"]) {
+        graph = (
+          await exec(
+            tempDir,
+            {
+              type: "update-node",
+              nodeId: "task-a",
+              changes: { name },
+            },
+            graph.revision
+          )
+        ).graph;
+      }
+      for (let index = 0; index < 3; index += 1)
+        graph = (await graphStore.undoWorkspaceGraph(tempDir, graph.revision)).graph;
+      expect(graph.nodes["task-a"].name).toBe("Task A");
+      graphStore.forgetWorkspace(tempDir);
+      graph = await graphStore.readWorkspaceGraph(tempDir);
+      const seen = [];
+      for (let index = 0; index < 3; index += 1) {
+        graph = (await graphStore.redoWorkspaceGraph(tempDir, graph.revision)).graph;
+        seen.push(graph.nodes["task-a"].name);
+      }
+      expect(seen).toEqual(["One", "Two", "Three"]);
+      expect((await graphStore.redoWorkspaceGraph(tempDir, graph.revision)).changed).toBe(false);
+    });
+
+    it("keeps only the changed nodes in each history step", async () => {
+      projectFixture(tempDir);
+      const bigDir = path.join(tempDir, "alpha", "big-task");
+      fs.mkdirSync(bigDir);
+      fs.writeFileSync(
+        path.join(bigDir, "_index.md"),
+        `---\nid: big-task\nname: Big\nparents:\n  - id: project-a\n    order: 1\n---\n${"x".repeat(200_000)}\n`
+      );
+      let graph = await graphStore.readWorkspaceGraph(tempDir);
+      for (let index = 0; index < 20; index += 1) {
+        graph = (
+          await exec(
+            tempDir,
+            {
+              type: "update-node",
+              nodeId: "task-a",
+              changes: { name: `Rename ${index}` },
+            },
+            graph.revision
+          )
+        ).graph;
+      }
+      const steps = fs.readdirSync(path.join(tempDir, ".task-manage", "history", "undo"));
+      expect(steps).toHaveLength(20);
+      for (const name of steps) {
+        const file = path.join(tempDir, ".task-manage", "history", "undo", name);
+        // 1 段は、名前を変えたノード 1 つぶんだけ（200KB の本文は入らない）。
+        expect(fs.statSync(file).size).toBeLessThan(2000);
+        expect(Object.keys(JSON.parse(read(file)).patch.nodes)).toEqual(["task-a"]);
+      }
+      const undone = await graphStore.undoWorkspaceGraph(tempDir, graph.revision);
+      expect(undone.graph.nodes["task-a"].name).toBe("Rename 18");
+      expect(undone.graph.revision).toBe(graph.revision + 1);
+      expect(undone.graph.nodes["big-task"].body).toHaveLength(200_000);
+    });
+
+    it("drops the oldest steps beyond the limit", async () => {
+      projectFixture(tempDir);
+      let graph = await graphStore.readWorkspaceGraph(tempDir);
+      for (let index = 0; index < 55; index += 1) {
+        graph = (
+          await exec(
+            tempDir,
+            {
+              type: "update-node",
+              nodeId: "task-a",
+              changes: { name: `Rename ${index}` },
+            },
+            graph.revision
+          )
+        ).graph;
+      }
+      expect(graph.history.undo).toBe(50);
+      expect(fs.readdirSync(path.join(tempDir, ".task-manage", "history", "undo"))).toHaveLength(
+        50
+      );
+    });
+
+    it("drops the redo steps when a new operation is made", async () => {
+      projectFixture(tempDir);
+      let graph = await graphStore.readWorkspaceGraph(tempDir);
+      graph = (
+        await exec(
+          tempDir,
+          { type: "update-node", nodeId: "task-a", changes: { name: "One" } },
+          graph.revision
+        )
+      ).graph;
+      graph = (await graphStore.undoWorkspaceGraph(tempDir, graph.revision)).graph;
+      expect(graph.history).toEqual({ undo: 0, redo: 1 });
+      graph = (
+        await exec(
+          tempDir,
+          { type: "update-node", nodeId: "task-a", changes: { name: "Two" } },
+          graph.revision
+        )
+      ).graph;
+      expect(graph.history).toEqual({ undo: 1, redo: 0 });
+      expect(fs.readdirSync(path.join(tempDir, ".task-manage", "history", "redo"))).toEqual([]);
+    });
   });
 
-  it("retries a transient Windows rename lock without duplicating history", async () => {
-    projectFixture(tempDir);
-    const initial = await graphStore.readWorkspaceGraph(tempDir);
-    const rename = vi
-      .spyOn(fs.promises, "rename")
-      .mockRejectedValueOnce(Object.assign(new Error("locked"), { code: "EPERM" }));
-    try {
-      const result = await graphStore.executeWorkspaceGraphCommand(
+  describe("deleting and the trash", () => {
+    it("brings a deleted node back with its images and attachments", async () => {
+      projectFixture(tempDir);
+      const initial = await graphStore.readWorkspaceGraph(tempDir);
+      const deleted = await exec(
         tempDir,
-        { type: "update-node", nodeId: "task-a", changes: { name: "Saved after retry" } },
-        "tree",
+        { type: "delete-node", nodeId: "task-a" },
         initial.revision
       );
+      expect(fs.existsSync(path.join(tempDir, "alpha", "task-a"))).toBe(false);
+      expect(fs.existsSync(path.join(tempDir, ".task-manage", "trash"))).toBe(true);
+      expect(deleted.delta.nodes["task-a"]).toBeNull();
+
+      // 再起動しても、戻すと画像も添付も戻る。
+      graphStore.forgetWorkspace(tempDir);
+      const reopened = await graphStore.readWorkspaceGraph(tempDir);
+      const undone = await graphStore.undoWorkspaceGraph(tempDir, reopened.revision);
+      expect(undone.graph.nodes["task-a"].name).toBe("Task A");
+      expect(read(path.join(tempDir, "alpha", "task-a", "attachments", "note.txt"))).toBe(
+        "attachment"
+      );
+      await expect(
+        graphStore.resolveNodeAsset(tempDir, "task-a", "./assets/legacy.png")
+      ).resolves.toMatch(/legacy\.png$/);
+      expect(read(taskFile)).toContain("Task body");
+    });
+
+    it("removes a node created by a step when that step is undone, and restores it on redo", async () => {
+      projectFixture(tempDir);
+      let graph = await graphStore.readWorkspaceGraph(tempDir);
+      const created = await exec(
+        tempDir,
+        {
+          type: "create-node",
+          parentId: "project-a",
+          node: { name: "Made" },
+        },
+        graph.revision
+      );
+      const id = created.selectedNodeIds[0];
+      const saved = await graphStore.saveNodeAsset(tempDir, id, "spec.pdf", Buffer.from("pdf"));
+      expect(saved.relativePath).toBe("./attachments/spec.pdf");
+      graph = created.graph;
+      const undone = await graphStore.undoWorkspaceGraph(tempDir, graph.revision);
+      expect(undone.graph.nodes[id]).toBeUndefined();
+      expect(fs.existsSync(path.join(tempDir, "alpha", id))).toBe(false);
+      const redone = await graphStore.redoWorkspaceGraph(tempDir, undone.graph.revision);
+      expect(redone.graph.nodes[id].name).toBe("Made");
+      expect(read(path.join(tempDir, "alpha", id, "attachments", "spec.pdf"))).toBe("pdf");
+    });
+
+    it("deletes a project's own files without touching the nodes it held", async () => {
+      projectFixture(tempDir);
+      const initial = await graphStore.readWorkspaceGraph(tempDir);
+      const result = await exec(
+        tempDir,
+        { type: "delete-node", nodeId: "project-a" },
+        initial.revision
+      );
+      expect(fs.existsSync(path.join(tempDir, "alpha", "_project.md"))).toBe(false);
+      expect(fs.existsSync(taskFile)).toBe(true);
+      // 親を失った子は、ワークスペース直下へ（プロジェクトになる）。
+      expect(result.graph.nodes["task-a"].parents.map((link) => link.id)).toEqual([
+        result.graph.rootId,
+      ]);
+      graphStore.forgetWorkspace(tempDir);
+      const reopened = await graphStore.readWorkspaceGraph(tempDir);
+      expect(reopened.nodes["task-a"].parents.map((link) => link.id)).toEqual([reopened.rootId]);
+      expect(reopened.nodes["project-a"]).toBeUndefined();
+      const undone = await graphStore.undoWorkspaceGraph(tempDir, reopened.revision);
+      expect(undone.graph.nodes["project-a"].name).toBe("Alpha");
+      expect(undone.graph.nodes["task-a"].parents).toEqual([{ id: "project-a", order: 0 }]);
+    });
+  });
+
+  describe("copying", () => {
+    it("copies the node's images and attachments, and they stay after the source is deleted", async () => {
+      projectFixture(tempDir);
+      let graph = await graphStore.readWorkspaceGraph(tempDir);
+      const copied = await exec(
+        tempDir,
+        {
+          type: "copy",
+          nodeId: "task-a",
+          targetParentId: "project-a",
+          mode: "node",
+        },
+        graph.revision
+      );
+      const copyId = copied.selectedNodeIds[0];
+      expect(copyId).not.toBe("task-a");
+      expect(read(path.join(tempDir, "alpha", copyId, "attachments", "note.txt"))).toBe(
+        "attachment"
+      );
+      graph = copied.graph;
+      const deleted = await exec(
+        tempDir,
+        { type: "delete-node", nodeId: "task-a" },
+        graph.revision
+      );
+      await expect(
+        graphStore.resolveNodeAsset(tempDir, copyId, "./assets/legacy.png")
+      ).resolves.toMatch(/legacy\.png$/);
+      await expect(graphStore.resolveNodeAsset(tempDir, copyId, "../outside.txt")).rejects.toThrow(
+        /escapes/
+      );
+      expect(deleted.graph.nodes[copyId].body).toContain("./assets/legacy.png");
+    });
+  });
+
+  describe("images and attachments", () => {
+    it("saves images under assets and attachments under attachments, with unique names", async () => {
+      projectFixture(tempDir);
+      await graphStore.readWorkspaceGraph(tempDir);
+      const image = await graphStore.saveNodeAsset(
+        tempDir,
+        "task-a",
+        "pasted-image.png",
+        Buffer.from("png"),
+        "image"
+      );
+      expect(image.relativePath).toMatch(/^\.\/assets\/pasted-\d+-[0-9a-f]{8}\.png$/);
+      const one = await graphStore.saveNodeAsset(tempDir, "task-a", "note.txt", Buffer.from("a"));
+      const two = await graphStore.saveNodeAsset(tempDir, "task-a", "note.txt", Buffer.from("b"));
+      // 読みやすいよう、元のファイル名を残す（`note.txt` はすでにあるので `-2`、`-3`）。
+      expect([one.relativePath, two.relativePath]).toEqual([
+        "./attachments/note-2.txt",
+        "./attachments/note-3.txt",
+      ]);
+      await expect(
+        graphStore.resolveNodeAsset(tempDir, "task-a", two.relativePath)
+      ).resolves.toMatch(/note-3\.txt$/);
+    });
+
+    it("refuses to read outside the node's folder", async () => {
+      projectFixture(tempDir);
+      await graphStore.readWorkspaceGraph(tempDir);
+      for (const bad of ["../_index.md", "assets/../_index.md", "_index.md", "/etc/passwd"]) {
+        await expect(graphStore.resolveNodeAsset(tempDir, "task-a", bad)).rejects.toThrow();
+      }
+      await expect(
+        graphStore.saveNodeAsset(tempDir, "missing", "a.txt", Buffer.from("a"))
+      ).rejects.toThrow(/Unknown node/);
+    });
+
+    it("does not bring removed attachments back from the folder", async () => {
+      projectFixture(tempDir);
+      let graph = await graphStore.readWorkspaceGraph(tempDir);
+      expect(graph.nodes["task-a"].attachments.map((entry) => entry.name)).toEqual(["note.txt"]);
+      graph = (
+        await exec(
+          tempDir,
+          {
+            type: "update-node",
+            nodeId: "task-a",
+            changes: { attachments: [] },
+          },
+          graph.revision
+        )
+      ).graph;
+      expect(read(taskFile)).toContain("attachments: []");
+      graphStore.forgetWorkspace(tempDir);
+      expect((await graphStore.readWorkspaceGraph(tempDir)).nodes["task-a"].attachments).toEqual(
+        []
+      );
+      // ファイルは消さない（元に戻すで、添付を戻せる）。
+      expect(fs.existsSync(path.join(tempDir, "alpha", "task-a", "attachments", "note.txt"))).toBe(
+        true
+      );
+    });
+
+    it("moves a legacy memo file into its own folder when the node is saved", async () => {
+      projectFixture(tempDir);
+      const memoFile = path.join(tempDir, "alpha", "task-a", "memo-x.md");
+      fs.writeFileSync(
+        memoFile,
+        "---\nid: memo-x\ntitle: A memo\n---\nmemo ![i](./assets/legacy.png)\n"
+      );
+      const initial = await graphStore.readWorkspaceGraph(tempDir);
+      expect(initial.nodes["memo-x"].name).toBe("A memo");
+      await exec(
+        tempDir,
+        {
+          type: "update-node",
+          nodeId: "memo-x",
+          changes: { name: "Renamed memo" },
+        },
+        initial.revision
+      );
+      const moved = path.join(tempDir, "alpha", "memo-x");
+      expect(read(path.join(moved, "_index.md"))).toContain("name: Renamed memo");
+      // 参照していた画像は、新しいフォルダーへ写る。元のメモのファイルは消える。
+      expect(read(path.join(moved, "assets", "legacy.png"))).toBe("legacy-image");
+      expect(fs.existsSync(memoFile)).toBe(false);
+      graphStore.forgetWorkspace(tempDir);
+      const reopened = await graphStore.readWorkspaceGraph(tempDir);
+      expect(reopened.nodes["memo-x"].name).toBe("Renamed memo");
+      expect(reopened.nodes["memo-x"].parents[0].id).toBe("task-a");
+    });
+  });
+
+  describe("failures", () => {
+    it("does not change the graph, the files or the history when a write fails", async () => {
+      projectFixture(tempDir);
+      const initial = await graphStore.readWorkspaceGraph(tempDir);
+      const before = read(taskFile);
+      vi.spyOn(fs.promises, "rename").mockRejectedValueOnce(new Error("disk unavailable"));
+      await expect(
+        exec(
+          tempDir,
+          {
+            type: "update-node",
+            nodeId: "task-a",
+            changes: { name: "Must not persist" },
+          },
+          initial.revision,
+          "graph"
+        )
+      ).rejects.toThrow(/disk unavailable/);
+      vi.restoreAllMocks();
+      const after = await graphStore.readWorkspaceGraph(tempDir);
+      expect(after.revision).toBe(initial.revision);
+      expect(after.nodes["task-a"].name).toBe("Task A");
+      expect(read(taskFile)).toBe(before);
+      expect((await graphStore.undoWorkspaceGraph(tempDir, after.revision)).changed).toBe(false);
+      expect(fs.existsSync(path.join(tempDir, ".task-manage", "history", "undo"))).toBe(false);
+    });
+
+    it("puts back the files it already wrote when a later write of the same operation fails", async () => {
+      projectFixture(tempDir);
+      const projectFile = path.join(tempDir, "alpha", "_project.md");
+      const initial = await graphStore.readWorkspaceGraph(tempDir);
+      const before = [read(taskFile), read(projectFile)];
+      const original = fs.promises.rename.bind(fs.promises);
+      let calls = 0;
+      vi.spyOn(fs.promises, "rename").mockImplementation((...args) => {
+        calls += 1;
+        return calls === 2 ? Promise.reject(new Error("disk unavailable")) : original(...args);
+      });
+      await expect(
+        exec(
+          tempDir,
+          {
+            type: "batch",
+            commands: [
+              { type: "update-node", nodeId: "task-a", changes: { name: "X" } },
+              { type: "update-node", nodeId: "project-a", changes: { name: "Y" } },
+            ],
+          },
+          initial.revision
+        )
+      ).rejects.toThrow(/disk unavailable/);
+      vi.restoreAllMocks();
+      expect([read(taskFile), read(projectFile)]).toEqual(before);
+      const after = await graphStore.readWorkspaceGraph(tempDir);
+      expect(after.revision).toBe(initial.revision);
+      expect(after.nodes["task-a"].name).toBe("Task A");
+    });
+
+    it("retries a transient Windows rename lock without duplicating history", async () => {
+      projectFixture(tempDir);
+      const initial = await graphStore.readWorkspaceGraph(tempDir);
+      vi.spyOn(fs.promises, "rename").mockRejectedValueOnce(
+        Object.assign(new Error("locked"), { code: "EPERM" })
+      );
+      const result = await exec(
+        tempDir,
+        {
+          type: "update-node",
+          nodeId: "task-a",
+          changes: { name: "Saved after retry" },
+        },
+        initial.revision
+      );
+      vi.restoreAllMocks();
       expect(result.graph.revision).toBe(initial.revision + 1);
       const undo = await graphStore.undoWorkspaceGraph(tempDir, result.graph.revision);
       expect(undo.graph.nodes["task-a"].name).toBe("Task A");
@@ -461,8 +718,79 @@ describe("workspace graph persistence", () => {
       );
       const redo = await graphStore.redoWorkspaceGraph(tempDir, undo.graph.revision);
       expect(redo.graph.nodes["task-a"].name).toBe("Saved after retry");
-    } finally {
-      rename.mockRestore();
-    }
+    });
+  });
+
+  describe("files changed outside the app", () => {
+    it("refuses to overwrite a file that was edited elsewhere, until the workspace is reloaded", async () => {
+      projectFixture(tempDir);
+      const initial = await graphStore.readWorkspaceGraph(tempDir);
+      fs.writeFileSync(
+        taskFile,
+        "---\nid: task-a\nname: Edited by an assistant\nparents:\n  - id: project-a\n    order: 0\ncreated: 2026-01-02\n---\nTask body\n"
+      );
+      await expect(
+        exec(
+          tempDir,
+          { type: "update-node", nodeId: "task-a", changes: { status: "Open" } },
+          initial.revision
+        )
+      ).rejects.toThrow(/アプリの外で変更/);
+      expect(read(taskFile)).toContain("Edited by an assistant");
+      // 読み直すと外の変更が見え、リビジョンは戻らない。
+      const reloaded = await graphStore.reloadWorkspaceGraph(tempDir);
+      expect(reloaded.nodes["task-a"].name).toBe("Edited by an assistant");
+      expect(reloaded.revision).toBeGreaterThan(initial.revision);
+      const result = await exec(
+        tempDir,
+        {
+          type: "update-node",
+          nodeId: "task-a",
+          changes: { status: "Open" },
+        },
+        reloaded.revision
+      );
+      expect(read(taskFile)).toContain("name: Edited by an assistant");
+      expect(read(taskFile)).toContain("status: Open");
+      expect(result.graph.revision).toBe(reloaded.revision + 1);
+    });
+
+    it("does not mind a file that was only touched", async () => {
+      projectFixture(tempDir);
+      const initial = await graphStore.readWorkspaceGraph(tempDir);
+      const later = new Date(Date.now() + 5000);
+      fs.utimesSync(taskFile, later, later);
+      await expect(
+        exec(
+          tempDir,
+          { type: "update-node", nodeId: "task-a", changes: { status: "Open" } },
+          initial.revision
+        )
+      ).resolves.toBeTruthy();
+    });
+
+    it("keeps the history across a reload", async () => {
+      projectFixture(tempDir);
+      const initial = await graphStore.readWorkspaceGraph(tempDir);
+      await exec(
+        tempDir,
+        { type: "update-node", nodeId: "task-a", changes: { name: "One" } },
+        initial.revision
+      );
+      const reloaded = await graphStore.reloadWorkspaceGraph(tempDir);
+      expect(reloaded.history).toEqual({ undo: 1, redo: 0 });
+      const undone = await graphStore.undoWorkspaceGraph(tempDir, reloaded.revision);
+      expect(undone.graph.nodes["task-a"].name).toBe("Task A");
+    });
+  });
+
+  it("reports whether writes are pending", async () => {
+    projectFixture(tempDir);
+    expect(graphStore.hasPendingWrites()).toBe(false);
+    const pending = graphStore.readWorkspaceGraph(tempDir);
+    expect(graphStore.hasPendingWrites()).toBe(true);
+    await graphStore.whenIdle();
+    await pending;
+    expect(graphStore.hasPendingWrites()).toBe(false);
   });
 });

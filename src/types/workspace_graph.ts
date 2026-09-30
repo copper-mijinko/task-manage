@@ -10,11 +10,6 @@ export type WorkspaceNodeStatus =
 
 export interface WorkspaceGraphNode extends Omit<WorkspaceTask, "status"> {
   status?: WorkspaceNodeStatus;
-  /** Import provenance used by the main process to resolve existing assets. */
-  sourceProjectDir?: string;
-  sourceTaskDir?: string;
-  /** Node whose canonical asset directory this node may read after a copy. */
-  assetOwnerId?: string;
   attachments?: WorkspaceAttachment[];
 }
 
@@ -27,9 +22,9 @@ export interface WorkspaceGraph {
   nodes: Record<string, WorkspaceGraphNode>;
   positions?: Record<string, { x: number; y: number }>;
   /**
-   * 元に戻す / やり直しの残り段数。main プロセスが読み出し経路でだけ添える
-   * 非永続フィールドで、`graph-v1.json` には書かれない。ツールバーの
-   * 「元に戻す」「やり直し」を正しく無効化するために使う。
+   * 元に戻す / やり直しの残り段数。main プロセスが添える非永続フィールドで、
+   * ファイルには書かれない。ツールバーの「元に戻す」「やり直し」を正しく
+   * 無効化するために使う。
    */
   history?: { undo: number; redo: number };
 }
@@ -70,7 +65,30 @@ export type WorkspaceGraphCommand =
       mode: "node" | "share-children" | "subgraph";
     };
 
+/**
+ * 操作の結果を、変わったノードだけで伝える形。画面は持っているグラフ
+ * （`baseRevision`）にこれを当てて、新しいグラフ（`revision`）を作る。
+ */
+export interface WorkspaceGraphDelta {
+  baseRevision: number;
+  revision: number;
+  /** 変わった・増えたノード。`null` はそのノードが消えたこと。 */
+  nodes: Record<string, WorkspaceGraphNode | null>;
+  /** ノード以外の欄（`inboxId`・`positions`）で変わったもの。`null` はその欄が無くなったこと。 */
+  fields: { inboxId?: string | null; positions?: WorkspaceGraph["positions"] | null };
+  history: { undo: number; redo: number };
+}
+
+/** コマンドの結果。main は差分（`delta`）で返し、全体（`graph`）は読み直したときだけ。 */
 export interface WorkspaceGraphCommandResult {
-  graph: WorkspaceGraph;
   selectedNodeIds: string[];
+  graph?: WorkspaceGraph;
+  delta?: WorkspaceGraphDelta | null;
+}
+
+/** 元に戻す / やり直しの結果。 */
+export interface WorkspaceGraphHistoryResult {
+  changed: boolean;
+  graph?: WorkspaceGraph;
+  delta?: WorkspaceGraphDelta | null;
 }

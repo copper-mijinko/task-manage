@@ -1,11 +1,15 @@
 // 日々の流れ: クイック追加から Inbox を片付ける、見た目の設定が起動し直しても
 // 残る、大きいワークスペースでも探して選んで直せる。
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { test, expect } from "@playwright/test";
 import {
   childrenOf,
   createWorkspace,
   graphOf,
   largeNodes,
+  nodesNamed,
   overflow,
   row,
   rowMenu,
@@ -163,37 +167,104 @@ test("adding a project starts naming it, and Esc cancels the new project", async
   });
 });
 
-test("importing a Markdown project shows it right away and can be undone", async () => {
-  const files = {
-    "old/_project.md": "---\nid: old\nname: Old project\norder: 0\ncreatedAt: 2026-01-01\n---\n",
-    "old/task/_index.md":
-      "---\nid: old-task\nname: Old task\nparents:\n  - id: old\n    order: 0\ncreatedAt: 2026-01-02\n---\n",
-  };
-  await run(createWorkspace(undefined, { files }), async (app) => {
+/** 旧 Markdown 形式のプロジェクト（id と名前だけ持つルートと、ノード 1 つ）を置く。 */
+function legacyProject(workspacePath, dir, { id, name, task }) {
+  const projectDir = path.join(workspacePath, dir);
+  fs.mkdirSync(path.join(projectDir, `${id}-task`), { recursive: true });
+  fs.writeFileSync(
+    path.join(projectDir, "_project.md"),
+    `---\nid: ${id}\nname: ${name}\norder: 0\ncreated: 2026-01-01\n---\n`
+  );
+  fs.writeFileSync(
+    path.join(projectDir, `${id}-task`, "_index.md"),
+    `---\nid: ${id}-task\nname: ${task}\nparents:\n  - id: ${id}\n    order: 0\ncreated: 2026-01-02\n---\n${task} の本文\n`
+  );
+}
+
+test("an old Markdown folder opens as it is, and edits go back into its files", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "tm-legacy-"));
+  const workspacePath = path.join(tempDir, "workspace");
+  legacyProject(workspacePath, "old-alpha", {
+    id: "old-a",
+    name: "旧プロジェクトA",
+    task: "旧タスク",
+  });
+  fs.writeFileSync(
+    path.join(tempDir, "meta.json"),
+    JSON.stringify({
+      theme: "dark",
+      workspaces: [{ label: "Legacy", path: workspacePath }],
+      activeWorkspace: workspacePath,
+    })
+  );
+  await run({ tempDir, workspacePath }, async (app) => {
     const page = app.window;
-    const manage = page.getByRole("button", { name: "ワークスペースを管理", exact: true });
-    if (!(await manage.isVisible()))
-      await page.getByRole("button", { name: "サイドバーを表示", exact: true }).click();
-    await manage.click();
-    await page.getByRole("button", { name: "取り込めるプロジェクトを探す..." }).click();
-    const option = page.getByRole("checkbox", { name: "Old project" });
-    await expect(option).toBeChecked();
-    await page.getByRole("button", { name: "選んだ 1 件を取り込む" }).click();
-    await expect(page.getByText("取り込み済み")).toBeVisible();
+    // 取り込みの操作なしで、開いた直後から画面に出る。
+    const rootId = graphOf(app).rootId;
+    await expect(row(page, `${rootId}/old-a/old-a-task`)).toBeVisible();
+    await select(page, `${rootId}/old-a/old-a-task`);
+    await page.keyboard.press("F2");
+    await page.locator('.TableRow input[type="text"]:focus').fill("旧タスク（直した）");
+    await page.keyboard.press("Enter");
+    // 旧形式のファイルのまま、そのノードのファイルだけが書き換わる。
+    await expect
+      .poll(() =>
+        fs.readFileSync(path.join(workspacePath, "old-alpha", "old-a-task", "_index.md"), "utf8")
+      )
+      .toContain("name: 旧タスク（直した）");
+    expect(fs.readFileSync(path.join(workspacePath, "old-alpha", "_project.md"), "utf8")).toContain(
+      "name: 旧プロジェクトA"
+    );
+    // 元に戻すと、ファイルも戻る。
+    await page.keyboard.press("Control+z");
+    await expect
+      .poll(() =>
+        fs.readFileSync(path.join(workspacePath, "old-alpha", "old-a-task", "_index.md"), "utf8")
+      )
+      .toContain("name: 旧タスク\n");
+  });
+});
 
-    // もう一度選ぶと複製されることを知らせる。
-    await option.check();
-    await expect(page.getByText(/同じプロジェクトがもう 1 つ複製されます/)).toBeVisible();
+test("a project folder put in from outside appears after reloading from the disk", async () => {
+  await run(createWorkspace(), async (app) => {
+    const page = app.window;
+    legacyProject(app.workspacePath, "added-later", {
+      id: "later",
+      name: "後から置いた",
+      task: "後のタスク",
+    });
+    await page.getByRole("button", { name: "サイドバーを表示", exact: true }).click();
+    await page.getByRole("button", { name: "ワークスペースを管理", exact: true }).click();
+    await page.getByRole("button", { name: "読み込み直す", exact: true }).click();
+    await expect(page.getByText("ディスクの内容を読み込み直しました。")).toBeVisible();
     await page.getByRole("button", { name: "閉じる", exact: true }).click();
+    await expect(row(page, "root/later")).toBeVisible();
+    await expect(row(page, "root/later/later-task")).toBeVisible();
+    // 読み直したあとも、元に戻す履歴と編集はそのまま使える。
+    await select(page, "root/later/later-task");
+    await page.keyboard.press("F2");
+    await page.locator('.TableRow input[type="text"]:focus').fill("後のタスク2");
+    await page.keyboard.press("Enter");
+    await expect.poll(() => nodesNamed(app, "後のタスク2").length).toBe(1);
+  });
+});
 
-    // 画面を操作し直さなくても、取り込んだ行が出て「元に戻す」が効く。
-    await expect(row(page, "root/old")).toBeVisible();
-    await expect(row(page, "root/old/old-task")).toBeVisible();
-    const undo = page.getByRole("button", { name: "元に戻す", exact: true });
-    await expect(undo).toBeEnabled();
-    await undo.click();
-    await expect(row(page, "root/old")).toHaveCount(0);
-    await expect.poll(() => graphOf(app).nodes.old).toBeUndefined();
+test("a node's file changed outside the app is not overwritten until the workspace is reloaded", async () => {
+  await run(createWorkspace(), async (app) => {
+    const page = app.window;
+    const file = path.join(app.workspacePath, "work", "spec", "_index.md");
+    fs.writeFileSync(
+      file,
+      fs.readFileSync(file, "utf8").replace("name: Spec", "name: Spec (by an assistant)")
+    );
+    await select(page, "root/work/spec");
+    await page.keyboard.press("F2");
+    await page.locator('.TableRow input[type="text"]:focus').fill("Spec v2");
+    await page.keyboard.press("Enter");
+    await expect(page.getByText(/アプリの外で変更されています/)).toBeVisible();
+    // 外での変更はそのまま残り、保存失敗にはならない。
+    expect(fs.readFileSync(file, "utf8")).toContain("Spec (by an assistant)");
+    await expect(page.getByRole("status").filter({ hasText: "保存失敗" })).toHaveCount(0);
   });
 });
 
