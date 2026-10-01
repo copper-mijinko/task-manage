@@ -49,9 +49,13 @@ describe("workspace graph persistence", () => {
       const before = read(taskFile);
       const first = await graphStore.readWorkspaceGraph(tempDir);
       expect(first.nodes["project-a"].parents[0].id).toBe(first.rootId);
-      expect(first.nodes["task-a"].body).toContain("Task body");
+      // 読み込みでは本文を読まない（`bodyLoaded: false`）。本文は、読む操作で取り出す。
+      expect(first.nodes["task-a"].bodyLoaded).toBe(false);
+      expect(first.nodes["task-a"].body).toBeUndefined();
+      const { body } = await graphStore.readNodeBody(tempDir, "task-a");
+      expect(body).toContain("Task body");
       // 画像への参照は、ノードのフォルダーからの相対のまま（書き換えない）。
-      expect(first.nodes["task-a"].body).toContain("./assets/legacy.png");
+      expect(body).toContain("./assets/legacy.png");
       expect(read(taskFile)).toBe(before);
       expect(fs.existsSync(path.join(tempDir, "_workspace.md"))).toBe(true);
       await expect(
@@ -386,7 +390,7 @@ describe("workspace graph persistence", () => {
       const undone = await graphStore.undoWorkspaceGraph(tempDir, graph.revision);
       expect(undone.graph.nodes["task-a"].name).toBe("Rename 18");
       expect(undone.graph.revision).toBe(graph.revision + 1);
-      expect(undone.graph.nodes["big-task"].body).toHaveLength(200_000);
+      expect((await graphStore.readNodeBody(tempDir, "big-task")).body).toHaveLength(200_000);
     });
 
     it("drops the oldest steps beyond the limit", async () => {
@@ -533,7 +537,9 @@ describe("workspace graph persistence", () => {
 
       graphStore.forgetWorkspace(tempDir);
       const reopened = await graphStore.readWorkspaceGraph(tempDir);
-      expect(reopened.nodes["memo-x"].body).toContain("./assets/legacy.png");
+      expect((await graphStore.readNodeBody(tempDir, "memo-x")).body).toContain(
+        "./assets/legacy.png"
+      );
       const undone = await graphStore.undoWorkspaceGraph(tempDir, reopened.revision);
       expect(undone.graph.nodes["task-a"].name).toBe("Task A");
       expect(undone.graph.nodes["memo-x"].parents.map((link) => link.id)).toEqual(["task-a"]);

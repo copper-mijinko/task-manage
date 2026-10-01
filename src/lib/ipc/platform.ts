@@ -252,6 +252,25 @@ export function wsReloadWorkspace(workspacePath: string): Promise<WorkspaceGraph
   return fn(workspacePath);
 }
 
+/** ノードの本文を読む（読み込みでは本文を読まないので、開いたときに読む）。 */
+export function wsReadNodeBody(
+  workspacePath: string,
+  nodeId: string
+): Promise<{ body: unknown; format: string }> {
+  const fn = api()?.wsReadNodeBody;
+  if (!fn) return Promise.reject(new Error("Workspace graph API unavailable"));
+  return fn(workspacePath, nodeId);
+}
+
+/** 全ノードの本文（本文の検索・全メモの形式変換のとき）。 */
+export function wsReadAllNodeBodies(
+  workspacePath: string
+): Promise<Record<string, { body: unknown; format: string }>> {
+  const fn = api()?.wsReadAllNodeBodies;
+  if (!fn) return Promise.reject(new Error("Workspace graph API unavailable"));
+  return fn(workspacePath);
+}
+
 export function wsSaveGraphAsset(
   workspacePath: string,
   nodeId: string,

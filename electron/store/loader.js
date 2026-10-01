@@ -30,6 +30,7 @@ const {
   validateGraph,
 } = require("../workspace-graph-engine");
 const { parseNodeFile } = require("./node-file");
+const { hasCompleteFrontmatter, parseFrontmatter, splitFrontmatterRaw } = require("./frontmatter");
 
 const STORE_DIR = ".task-manage";
 const WORKSPACE_FILE = "_workspace.md";
@@ -71,8 +72,9 @@ function hasAttachmentsKey(text) {
 /**
  * @typedef {object} RawNodeDir
  * @property {string} rel ワークスペースからの相対パス（`/` 区切り。ワークスペース自身は ""）
- * @property {string | null} text 予約ファイル（`_workspace.md` など）の中身
- * @property {{ fileName: string, text: string }[]} memos 旧メモ（それ以外の `.md`）
+ * @property {string | null} text 予約ファイル（`_workspace.md` など）の中身。`lazy` の読みでは
+ *   frontmatter までを含む先頭部分（本文は続きが無いことがある）
+ * @property {{ fileName: string, text: string }[]} memos 旧メモ（それ以外の `.md`）。同上
  * @property {{ name: string, size: number }[] | null} attachmentFiles 添付フォルダーの中身
  */
 
@@ -81,6 +83,7 @@ function hasAttachmentsKey(text) {
  * @property {RawNodeDir} workspace
  * @property {{ rel: string, project: RawNodeDir, nodes: RawNodeDir[] }[]} projects
  * @property {string | null} layoutText
+ * @property {boolean} [lazy] ノードのファイルを frontmatter までしか読んでいない（本文は読まない）
  */
 
 /** 同時実行数を制限する。 */
@@ -134,6 +137,40 @@ function readSmallText(filePath) {
   });
 }
 
+/** 先頭から最初に読む大きさ。ノードの frontmatter はほとんどこれに収まる。 */
+const HEAD_BYTES = 4096;
+
+/**
+ * ファイルの先頭を、frontmatter が最後まで読めるまで読む（本文は読まない）。
+ * 収まらなければ読む量を 4 倍にして先頭から読み直し、ファイルの終わりまで読んでも
+ * 閉じる `---` が無ければ、読めた分をそのまま返す。frontmatter の解釈は、全文を
+ * 読んだときと変わらない（同じ範囲を同じ規則で読むため）。
+ */
+function readHeadText(filePath) {
+  return new Promise((resolve, reject) => {
+    fs.open(filePath, "r", (openError, fd) => {
+      if (openError) {
+        reject(openError);
+        return;
+      }
+      const finish = (error, value) => fs.close(fd, () => (error ? reject(error) : resolve(value)));
+      const attempt = (size) => {
+        const buffer = Buffer.allocUnsafe(size);
+        fs.read(fd, buffer, 0, size, 0, (readError, bytesRead) => {
+          if (readError) {
+            finish(readError);
+            return;
+          }
+          const text = buffer.toString("utf8", 0, bytesRead);
+          if (hasCompleteFrontmatter(text, bytesRead < size)) finish(null, text);
+          else attempt(size * 4);
+        });
+      };
+      attempt(HEAD_BYTES);
+    });
+  });
+}
+
 /** 非同期の読み（ファイル操作はまとめて同時実行数を制限する）。 */
 function createAsyncReader() {
   const limit = createLimiter(IO_CONCURRENCY);
@@ -141,6 +178,15 @@ function createAsyncReader() {
     async readText(filePath) {
       try {
         return await limit(() => readSmallText(filePath));
+      } catch (error) {
+        if (isMissing(error)) return null;
+        throw new Error(`ファイルを読めませんでした: ${filePath}（${error.message}）`);
+      }
+    },
+    /** frontmatter までの先頭部分（本文は含まないことがある）。 */
+    async readHead(filePath) {
+      try {
+        return await limit(() => readHeadText(filePath));
       } catch (error) {
         if (isMissing(error)) return null;
         throw new Error(`ファイルを読めませんでした: ${filePath}（${error.message}）`);
@@ -171,6 +217,9 @@ function createSyncReader() {
         throw error;
       }
     },
+    readHead(filePath) {
+      return this.readText(filePath);
+    },
     readDirents(dirPath) {
       try {
         return fs.readdirSync(dirPath, { withFileTypes: true });
@@ -186,16 +235,29 @@ function createSyncReader() {
 }
 
 /**
+ * 旧メモの先頭部分。`title:` が無い旧メモは、本文の最初の見出しが名前になるので、
+ * 先頭だけでは足りない。その場合は全文を読む。
+ */
+async function readMemoHead(reader, filePath) {
+  const head = await reader.readHead(filePath);
+  if (head === null) return null;
+  return parseFrontmatter(head).data.title ? head : reader.readText(filePath);
+}
+
+/**
  * ノード 1 つぶんのフォルダー（予約ファイル・旧メモ・添付フォルダー）を読む。
  * `reader` は同期・非同期のどちらでもよい（結果は `await` で受ける）。
  */
-async function readNodeDir(reader, absDir, rel, reservedName, { memos }, knownEntries) {
+async function readNodeDir(reader, absDir, rel, reservedName, { memos, lazy }, knownEntries) {
   const entries = knownEntries ?? (await reader.readDirents(absDir));
   /** @type {RawNodeDir} */
   const result = { rel, text: null, memos: [], attachmentFiles: null };
   if (!entries) return result;
   const names = new Set(entries.map((entry) => entry.name));
-  if (names.has(reservedName)) result.text = await reader.readText(path.join(absDir, reservedName));
+  if (names.has(reservedName)) {
+    const file = path.join(absDir, reservedName);
+    result.text = lazy ? await reader.readHead(file) : await reader.readText(file);
+  }
   if (result.text === null) return result;
   if (memos) {
     const memoNames = entries
@@ -211,7 +273,9 @@ async function readNodeDir(reader, absDir, rel, reservedName, { memos }, knownEn
     const read = await Promise.all(
       memoNames.map(async (fileName) => ({
         fileName,
-        text: await reader.readText(path.join(absDir, fileName)),
+        text: lazy
+          ? await readMemoHead(reader, path.join(absDir, fileName))
+          : await reader.readText(path.join(absDir, fileName)),
       }))
     );
     result.memos = read.filter((memo) => memo.text !== null);
@@ -231,10 +295,13 @@ async function readNodeDir(reader, absDir, rel, reservedName, { memos }, knownEn
   return result;
 }
 
-async function gatherWith(reader, workspacePath) {
+async function gatherWith(reader, workspacePath, { lazy = false } = {}) {
   const top = await reader.readDirents(workspacePath);
   if (!top) throw new Error(`ワークスペースのフォルダーが見つかりません: ${workspacePath}`);
-  const workspace = await readNodeDir(reader, workspacePath, "", WORKSPACE_FILE, { memos: false });
+  const workspace = await readNodeDir(reader, workspacePath, "", WORKSPACE_FILE, {
+    memos: false,
+    lazy,
+  });
   const dirNames = top
     .filter((entry) => entry.isDirectory() && isProjectDirName(entry.name))
     .map((entry) => entry.name)
@@ -249,7 +316,7 @@ async function gatherWith(reader, workspacePath) {
         projectAbs,
         name,
         PROJECT_FILE,
-        { memos: true },
+        { memos: true, lazy },
         entries
       );
       const nodeDirNames = entries
@@ -260,6 +327,7 @@ async function gatherWith(reader, workspacePath) {
         nodeDirNames.map((nodeName) =>
           readNodeDir(reader, path.join(projectAbs, nodeName), `${name}/${nodeName}`, NODE_FILE, {
             memos: true,
+            lazy,
           })
         )
       );
@@ -271,6 +339,7 @@ async function gatherWith(reader, workspacePath) {
     workspace,
     projects: projects.filter((entry) => entry.project.text !== null || entry.nodes.length > 0),
     layoutText: await reader.readText(path.join(workspacePath, STORE_DIR, LAYOUT_FILE)),
+    lazy,
   };
 }
 
@@ -278,10 +347,12 @@ async function gatherWith(reader, workspacePath) {
  * フォルダーを歩いて、ファイルの中身を集める。
  *
  * @param {string} workspacePath
+ * @param {{ lazy?: boolean }} [options] `lazy` で、ノードのファイルは frontmatter までしか
+ *   読まない（本文は選んだときに別に読む。アプリの読み込み用）
  * @returns {Promise<RawWorkspace>}
  */
-function gatherWorkspace(workspacePath) {
-  return gatherWith(createAsyncReader(), workspacePath);
+function gatherWorkspace(workspacePath, options) {
+  return gatherWith(createAsyncReader(), workspacePath, options);
 }
 
 /**
@@ -355,11 +426,25 @@ function gatherWorkspaceSync(workspacePath) {
     workspace,
     projects,
     layoutText: reader.readText(path.join(workspacePath, STORE_DIR, LAYOUT_FILE)),
+    lazy: false,
   };
 }
 
 function today() {
   return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * ファイルの中身の照合用の値（外から変えられたかの判定に使う）。frontmatter と本文を
+ * 別々に持つ。本文を読んでいない（`lazy`）ときは frontmatter だけ。
+ *
+ * @param {string} text
+ * @param {boolean} [lazy]
+ * @returns {{ fmHash: string, bodyHash?: string }}
+ */
+function contentHashes(text, lazy = false) {
+  const { head, body } = splitFrontmatterRaw(text);
+  return lazy ? { fmHash: sha1(head) } : { fmHash: sha1(head), bodyHash: sha1(body) };
 }
 
 /** 重複した id の置き換え先。ファイルの場所から決めるので、読むたびに同じ値になる。 */
@@ -424,8 +509,9 @@ function assembleWorkspace(raw, { workspacePath }) {
   const nodes = {};
   /** @type {Map<string, { dir: string, file: string, memo?: boolean }>} */
   const locations = new Map();
-  /** @type {Map<string, { hash?: string, attachmentKey: boolean }>} */
+  /** @type {Map<string, { fmHash?: string, bodyHash?: string, attachmentKey: boolean }>} */
   const fileInfo = new Map();
+  const lazy = raw.lazy === true;
   /** ノードが属するプロジェクトのルート（親を失ったノードの行き先）。 */
   const homeRoot = new Map();
   /** 読み込み時に書き直すノード（重複 id を振り直したもの）。 */
@@ -434,7 +520,8 @@ function assembleWorkspace(raw, { workspacePath }) {
   // ── ワークスペース自身 ───────────────────────────────────────────────
   let rootNode;
   let rootCreated = false;
-  const parsedRoot = raw.workspace.text === null ? null : parseNodeFile(raw.workspace.text);
+  const parsedRoot =
+    raw.workspace.text === null ? null : parseNodeFile(raw.workspace.text, { lazy });
   if (parsedRoot) {
     rootNode = { ...parsedRoot.node, parents: [] };
     // ルートはアーカイブできない。手で書かれていても無視する。
@@ -446,7 +533,7 @@ function assembleWorkspace(raw, { workspacePath }) {
     if (!rootNode.createdAt) rootNode.createdAt = today();
     rootNode.attachments = attachmentsFor(rootNode, raw.workspace);
     fileInfo.set(rootNode.id, {
-      hash: sha1(raw.workspace.text),
+      ...contentHashes(raw.workspace.text, lazy),
       attachmentKey: parsedRoot.hasAttachments || rootNode.attachments.length > 0,
     });
     warnings.push(...parsedRoot.warnings.map((message) => `${WORKSPACE_FILE}: ${message}`));
@@ -471,7 +558,7 @@ function assembleWorkspace(raw, { workspacePath }) {
     /** @type {{ parsed: any, dirRaw: RawNodeDir, file: string, isRoot: boolean }[]} */
     const files = [];
     const add = (dirRaw, file, isRoot) => {
-      const parsed = dirRaw.text === null ? null : parseNodeFile(dirRaw.text);
+      const parsed = dirRaw.text === null ? null : parseNodeFile(dirRaw.text, { lazy });
       if (!parsed) {
         if (dirRaw.text !== null)
           warnings.push(`${dirRaw.rel}/${file} を読めませんでした（id がありません）`);
@@ -531,7 +618,7 @@ function assembleWorkspace(raw, { workspacePath }) {
       locations.set(id, { dir: dirRaw.rel, file: isRoot ? PROJECT_FILE : NODE_FILE });
       homeRoot.set(id, projectRootId);
       fileInfo.set(id, {
-        hash: sha1(dirRaw.text),
+        ...contentHashes(dirRaw.text, lazy),
         attachmentKey: parsed.hasAttachments || node.attachments.length > 0,
       });
     });
@@ -542,7 +629,7 @@ function assembleWorkspace(raw, { workspacePath }) {
       const ownerId = assigned[index];
       const memos = sortMemoEntries(
         file.dirRaw.memos.map((memo, fileIndex) =>
-          buildMemoEntry(memo.fileName, fileIndex, memo.text, true, file.dirRaw.rel)
+          buildMemoEntry(memo.fileName, fileIndex, memo.text, !lazy, file.dirRaw.rel)
         )
       );
       memos.forEach((memo, memoIndex) => {
@@ -557,11 +644,11 @@ function assembleWorkspace(raw, { workspacePath }) {
           id,
           name: memo.title || "memo",
           parents: [{ id: ownerId, order: LEGACY_MEMO_ORDER_BASE + memoIndex }],
-          body: memo.content,
           format: memo.format,
           tags: memo.tags ?? [],
           attachments: [],
           createdAt: nodes[ownerId].createdAt || today(),
+          ...(lazy ? { bodyLoaded: false } : { body: memo.content }),
         };
         locations.set(id, { dir: file.dirRaw.rel, file: memo.fileName, memo: true });
         homeRoot.set(id, projectRootId);
@@ -623,8 +710,8 @@ function assembleWorkspace(raw, { workspacePath }) {
 }
 
 /** ワークスペースを読む。 */
-async function loadWorkspace(workspacePath) {
-  return assembleWorkspace(await gatherWorkspace(workspacePath), { workspacePath });
+async function loadWorkspace(workspacePath, options) {
+  return assembleWorkspace(await gatherWorkspace(workspacePath, options), { workspacePath });
 }
 
 /** ワークスペースを同期で読む（テストとツール用）。 */
@@ -645,5 +732,6 @@ module.exports = {
   loadWorkspace,
   loadWorkspaceSync,
   sha1,
+  contentHashes,
   hasAttachmentsKey,
 };

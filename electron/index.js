@@ -8,6 +8,16 @@ const path = require("path");
 const { performance } = require("perf_hooks");
 const log = require("electron-log/main");
 const workspaceGraph = require("./workspace-graph");
+const { startEarlyWorkspaceRead } = require("./early-read");
+
+// Electron が起動しきる（ready）のを待たずに、開いているワークスペースを読み始める。
+// 残りのモジュールの読み込み・ウィンドウの作成・画面の読み込みと並行して進む。
+workspaceGraph.setWarningHandler((message) => log.warn(message));
+startEarlyWorkspaceRead({
+  metaPath: resolveAppDataPath("meta.json"),
+  read: (workspacePath) => workspaceGraph.readWorkspaceGraph(workspacePath),
+  onError: (err) => log.warn("Could not read the active workspace early:", err.message),
+});
 const { createSettingsStore } = require("./settings-store");
 const { createIpcRegistrar, broadcast } = require("./ipc-registrar");
 const { loadWindowState, trackWindowState } = require("./window-state");
@@ -134,16 +144,6 @@ app.on("ready", () => {
     mainWindow.loadFile(path.join(__dirname, "../renderer/index.html"));
   }
   if (shouldOpenDevTools()) mainWindow.webContents.openDevTools();
-
-  // 画面の読み込みと並行して、開いているワークスペースのグラフを先に読む。
-  // 読んだ結果は main 側で保持されるので、画面からの最初の要求はそれを使う。
-  // 失敗しても、画面からの要求で改めて読んでエラーを出すので、ここでは記録だけ。
-  const activeWorkspace = settings.get("activeWorkspace");
-  if (typeof activeWorkspace === "string" && activeWorkspace) {
-    workspaceApplication.read(activeWorkspace).catch((err) => {
-      log.warn("Could not prefetch the active workspace graph:", err.message);
-    });
-  }
 
   mainWindow.on("closed", () => {
     mainWindow = null;

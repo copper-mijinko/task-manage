@@ -1,6 +1,13 @@
 import { get } from "svelte/store";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { workspace_graph, workspace_graph_store } from "@features/workspace/stores/graph";
+import {
+  bodies_epoch,
+  ensureAllBodies,
+  node_bodies,
+  workspace_graph,
+  workspace_graph_store,
+} from "@features/workspace/stores/graph";
+import { filter } from "@features/search/stores/search";
 import { saveStatus } from "@stores/save_status";
 
 const mocks = vi.hoisted(() => ({
@@ -9,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   undoGraph: vi.fn(),
   redoGraph: vi.fn(),
   reloadWorkspace: vi.fn(),
+  readAllBodies: vi.fn(),
   graphUpdated: undefined as
     | ((event: { workspacePath: string; graph?: unknown; delta?: unknown }) => void)
     | undefined,
@@ -20,6 +28,7 @@ vi.mock("@lib/ipc/platform", () => ({
   wsUndoGraph: (...args: unknown[]) => mocks.undoGraph(...args),
   wsRedoGraph: (...args: unknown[]) => mocks.redoGraph(...args),
   wsReloadWorkspace: (...args: unknown[]) => mocks.reloadWorkspace(...args),
+  wsReadAllNodeBodies: (...args: unknown[]) => mocks.readAllBodies(...args),
   onWorkspaceGraphUpdated: (callback: typeof mocks.graphUpdated) => {
     mocks.graphUpdated = callback;
   },
@@ -425,5 +434,95 @@ describe("workspace graph store deltas", () => {
     mocks.reloadWorkspace.mockResolvedValue(reloaded);
     await workspace_graph_store.reload("d");
     expect(get(workspace_graph)).toBe(reloaded);
+  });
+});
+
+describe("workspace graph store bodies", () => {
+  const node = (id: string, extra: Record<string, unknown> = {}) => ({
+    id,
+    name: id,
+    parents: [{ id: "root", order: 0 }],
+    createdAt: "2026-01-01",
+    ...extra,
+  });
+  const bodies = { a: { body: "from disk", format: "markdown" } };
+
+  async function loaded(name: string) {
+    mocks.readGraph.mockResolvedValue({
+      ...graph(name, 1),
+      nodes: { ...graph(name, 1).nodes, a: node("a", { bodyLoaded: false }) },
+    });
+    await workspace_graph_store.load(name);
+  }
+
+  beforeEach(() => {
+    mocks.readGraph.mockReset();
+    mocks.readAllBodies.mockReset();
+    mocks.reloadWorkspace.mockReset();
+    mocks.readAllBodies.mockResolvedValue(bodies);
+    filter.set({});
+  });
+
+  it("reads every body once, and keeps them until the workspace is loaded again", async () => {
+    await loaded("bodies-1");
+    expect(get(node_bodies)).toEqual({});
+    await ensureAllBodies();
+    await ensureAllBodies();
+    expect(mocks.readAllBodies).toHaveBeenCalledTimes(1);
+    expect(mocks.readAllBodies).toHaveBeenCalledWith("bodies-1");
+    expect(get(node_bodies)).toEqual(bodies);
+    const epoch = get(bodies_epoch);
+    await loaded("bodies-2");
+    expect(get(node_bodies)).toEqual({});
+    expect(get(bodies_epoch)).toBeGreaterThan(epoch);
+  });
+
+  it("reads every body when the body search is turned on", async () => {
+    await loaded("bodies-3");
+    filter.set({ search_memo: ["1"] });
+    await vi.waitFor(() => expect(get(node_bodies)).toEqual(bodies));
+    expect(mocks.readAllBodies).toHaveBeenCalledTimes(1);
+  });
+
+  it("forgets the body it read for a node whose edit brings the body", async () => {
+    await loaded("bodies-4");
+    await ensureAllBodies();
+    mocks.executeGraphCommand.mockResolvedValue({
+      delta: {
+        baseRevision: 1,
+        revision: 2,
+        nodes: { a: node("a", { body: "edited" }) },
+        fields: {},
+        history: { undo: 1, redo: 0 },
+      },
+    });
+    await workspace_graph_store.execute({ type: "update-node", nodeId: "a", changes: {} } as never);
+    expect(get(node_bodies)).toEqual({});
+    expect(get(workspace_graph)!.nodes.a.body).toBe("edited");
+  });
+
+  it("reads again when a node without a body appears while the body search is on", async () => {
+    await loaded("bodies-5");
+    filter.set({ search_memo: ["1"] });
+    await vi.waitFor(() => expect(mocks.readAllBodies).toHaveBeenCalledTimes(1));
+    mocks.graphUpdated?.({
+      workspacePath: "bodies-5",
+      delta: {
+        baseRevision: 1,
+        revision: 2,
+        nodes: { b: node("b", { bodyLoaded: false }) },
+        fields: {},
+        history: { undo: 1, redo: 0 },
+      },
+    });
+    await vi.waitFor(() => expect(mocks.readAllBodies).toHaveBeenCalledTimes(2));
+  });
+
+  it("drops the bodies it read when the workspace is read again from the disk", async () => {
+    await loaded("bodies-6");
+    await ensureAllBodies();
+    mocks.reloadWorkspace.mockResolvedValue(graph("bodies-6", 5));
+    await workspace_graph_store.reload("bodies-6");
+    expect(get(node_bodies)).toEqual({});
   });
 });

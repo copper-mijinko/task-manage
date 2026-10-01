@@ -16,7 +16,8 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const { executeGraphCommand, validateGraph } = require("./workspace-graph-engine");
-const { STORE_DIR, WORKSPACE_FILE, loadWorkspace } = require("./store/loader");
+const { STORE_DIR, WORKSPACE_FILE, loadWorkspace, sha1 } = require("./store/loader");
+const { readBody, bodyHashSource } = require("./store/body");
 const {
   HISTORY_LIMIT,
   loadHistoryIndex,
@@ -74,7 +75,7 @@ function enqueue(workspacePath, operation) {
  * @property {string} workspacePath
  * @property {any} graph
  * @property {Map<string, { dir: string, file: string, memo?: boolean }>} locations
- * @property {Map<string, { hash?: string, attachmentKey: boolean }>} fileInfo
+ * @property {Map<string, { fmHash?: string, bodyHash?: string, attachmentKey: boolean }>} fileInfo
  * @property {{ undo: number[], redo: number[], nextSeq: number }} history
  */
 
@@ -131,7 +132,8 @@ async function ensureStoreGitignore(workspacePath) {
 /** ワークスペースを開く（旧形式からの変換・読み込み・修復・履歴の読み込み）。 */
 async function openWorkspace(workspacePath, revision = 0) {
   await migrateGraphJson(workspacePath, { onWarn: warnHandler });
-  const loaded = await loadWorkspace(workspacePath);
+  // frontmatter までしか読まない。本文は、選んだとき・書き戻すときに読む（`bodyLoaded: false`）。
+  const loaded = await loadWorkspace(workspacePath, { lazy: true });
   /** @type {WorkspaceState} */
   const state = {
     workspacePath,
@@ -210,17 +212,107 @@ async function tidyHistory(state, droppedSeqs) {
   ).catch(() => {});
 }
 
+const BODY_READ_CONCURRENCY = 16;
+
+/** 同時に `limit` 個まで走らせて、全部の結果を待つ。 */
+async function mapLimit(items, limit, fn) {
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const item = items[next];
+      next += 1;
+      await fn(item);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+}
+
+/**
+ * 本文を読んでいないノードの本文を読み、グラフのそのノードを本文つきにする（リビジョンは
+ * 変えない）。操作の前に呼ぶ。読めなければ投げて、操作ごと止める（本文が空のまま
+ * 履歴やコピーに入らないように）。
+ *
+ * @param {WorkspaceState} state
+ * @param {Iterable<string>} ids
+ */
+async function hydrateBodies(state, ids) {
+  const targets = [...new Set(ids)].filter((id) => state.graph.nodes[id]?.bodyLoaded === false);
+  if (targets.length === 0) return;
+  /** @type {Map<string, { body: any, text: string }>} */
+  const loaded = new Map();
+  await mapLimit(targets, BODY_READ_CONCURRENCY, async (id) => {
+    const location = state.locations.get(id);
+    if (!location) throw new Error(`本文を読めませんでした（置き場所が分かりません）: ${id}`);
+    loaded.set(id, await readBody(state.workspacePath, state.graph.nodes[id], location));
+  });
+  const nodes = { ...state.graph.nodes };
+  for (const [id, { body, text }] of loaded) {
+    const { bodyLoaded: _unloaded, ...rest } = nodes[id];
+    nodes[id] = { ...rest, body };
+    const info = state.fileInfo.get(id);
+    // 読んだ本文を、保存の直前の照合に使う（読んだあとに外で変えられたら止める）。
+    if (info) info.bodyHash = sha1(bodyHashSource(text));
+  }
+  state.graph = { ...state.graph, nodes };
+}
+
+/** `nodeId` とその子孫（子の方向に辿れるノード）。 */
+function descendantsOf(graph, nodeId) {
+  const children = new Map();
+  for (const node of Object.values(graph.nodes))
+    for (const link of node.parents ?? []) {
+      if (!children.has(link.id)) children.set(link.id, []);
+      children.get(link.id).push(node.id);
+    }
+  const seen = new Set();
+  const queue = [nodeId];
+  while (queue.length) {
+    const id = queue.shift();
+    if (seen.has(id)) continue;
+    seen.add(id);
+    queue.push(...(children.get(id) ?? []));
+  }
+  return seen;
+}
+
+/**
+ * コマンドが本文を使うノード。本文を変える・形式を変えるノードは、元の本文が履歴
+ * （元に戻す）に要る。コピーは、コピー元の本文を写す。
+ *
+ * @param {any} graph
+ * @param {any} command
+ * @returns {Set<string>}
+ */
+function bodiesNeededBy(graph, command) {
+  const ids = new Set();
+  const visit = (item) => {
+    if (item?.type === "batch") {
+      for (const inner of item.commands ?? []) visit(inner);
+    } else if (item?.type === "update-node") {
+      if (item.changes && ("body" in item.changes || "format" in item.changes))
+        ids.add(item.nodeId);
+    } else if (item?.type === "copy") {
+      const sources = item.mode === "subgraph" ? descendantsOf(graph, item.nodeId) : [item.nodeId];
+      for (const id of sources) ids.add(id);
+    }
+  };
+  visit(command);
+  return ids;
+}
+
 /**
  * 操作 1 回ぶんを、ファイルと履歴に反映する。
  *
  * @param {string} workspacePath
  * @param {number | undefined} expectedRevision
  * @param {(state: WorkspaceState) => Promise<{ after: any, selectedNodeIds?: string[], copiedFrom?: Record<string, string> }>} action
+ * @param {(state: WorkspaceState) => Iterable<string>} [bodiesNeeded] 操作の前に本文を読むノード
  */
-async function mutate(workspacePath, expectedRevision, action) {
+async function mutate(workspacePath, expectedRevision, action, bodiesNeeded) {
   return enqueue(workspacePath, async () => {
     const state = await getState(workspacePath);
     checkRevision(state, expectedRevision);
+    if (bodiesNeeded) await hydrateBodies(state, bodiesNeeded(state));
     const before = state.graph;
     const { after, selectedNodeIds = [], copiedFrom = {} } = await action(state);
     const seq = state.history.nextSeq;
@@ -254,14 +346,59 @@ async function mutate(workspacePath, expectedRevision, action) {
 }
 
 async function executeWorkspaceGraphCommand(workspacePath, command, origin, expectedRevision) {
-  return mutate(workspacePath, expectedRevision, async (state) => {
-    const result = executeGraphCommand(state.graph, command, origin);
-    return {
-      after: result.graph,
-      selectedNodeIds: result.selectedNodeIds,
-      copiedFrom: result.copiedFrom,
-    };
+  const bodiesNeeded = (state) => bodiesNeededBy(state.graph, command);
+  return mutate(
+    workspacePath,
+    expectedRevision,
+    async (state) => {
+      const result = executeGraphCommand(state.graph, command, origin);
+      return {
+        after: result.graph,
+        selectedNodeIds: result.selectedNodeIds,
+        copiedFrom: result.copiedFrom,
+      };
+    },
+    bodiesNeeded
+  );
+}
+
+/**
+ * ノードの本文を読む（詳細を開いたとき）。すでに本文を持っていればそれを、無ければ
+ * ディスクから読む。グラフは変えない。
+ */
+async function readNodeBody(workspacePath, nodeId) {
+  const state = await enqueue(workspacePath, () => getState(workspacePath));
+  const node = state.graph.nodes[nodeId];
+  if (!node) throw new Error(`Unknown node: ${nodeId}`);
+  if (node.bodyLoaded !== false)
+    return { body: node.body ?? "", format: node.format ?? "markdown" };
+  const location = state.locations.get(nodeId);
+  if (!location) throw new Error(`本文を読めませんでした（置き場所が分かりません）: ${nodeId}`);
+  const { body, format } = await readBody(workspacePath, node, location);
+  return { body, format };
+}
+
+/**
+ * 全ノードの本文を読む（本文の検索・全メモの形式変換のとき）。グラフは変えない。
+ *
+ * @returns {Promise<Record<string, { body: any, format: string }>>}
+ */
+async function readAllNodeBodies(workspacePath) {
+  const state = await enqueue(workspacePath, () => getState(workspacePath));
+  /** @type {Record<string, { body: any, format: string }>} */
+  const bodies = {};
+  const unloaded = [];
+  for (const node of Object.values(state.graph.nodes)) {
+    if (node.bodyLoaded === false) unloaded.push(node);
+    else bodies[node.id] = { body: node.body ?? "", format: node.format ?? "markdown" };
+  }
+  await mapLimit(unloaded, BODY_READ_CONCURRENCY, async (node) => {
+    const location = state.locations.get(node.id);
+    if (!location) return;
+    const { body, format } = await readBody(workspacePath, node, location);
+    bodies[node.id] = { body, format };
   });
+  return bodies;
 }
 
 async function changeHistory(workspacePath, direction, expectedRevision) {
@@ -396,6 +533,8 @@ module.exports = {
   reloadWorkspaceGraph,
   forgetWorkspace,
   executeWorkspaceGraphCommand,
+  readNodeBody,
+  readAllNodeBodies,
   undoWorkspaceGraph: (workspacePath, revision) => changeHistory(workspacePath, "undo", revision),
   redoWorkspaceGraph: (workspacePath, revision) => changeHistory(workspacePath, "redo", revision),
   saveNodeAsset,

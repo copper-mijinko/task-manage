@@ -4,6 +4,7 @@ import { saveStatus } from "@stores/save_status";
 import { toUserError, userErrorMessage } from "@lib/utils/error_messages";
 import { showNotice } from "@stores/notice";
 import { describeHistoryStep } from "@features/workspace/utils/graph_change";
+import { filter } from "@features/search/stores/search";
 import type {
   GraphCommandOrigin,
   WorkspaceGraph,
@@ -26,6 +27,83 @@ const state = writable<GraphStoreState>({
 });
 let operation = Promise.resolve<unknown>(undefined);
 let generation = 0;
+
+/**
+ * 全ノードの本文。読み込みでは本文を読まない（`bodyLoaded: false`）ので、本文の検索や
+ * 全メモの形式変換のように、全ノードの本文が要るときだけまとめて読んで、ここに置く。
+ * 1 つのノードの本文は、開いたときに `application.loadBody` が読む。
+ */
+export interface NodeBody {
+  body: unknown;
+  format: string;
+}
+export const node_bodies = writable<Record<string, NodeBody>>({});
+/** 読んだ本文が古くなった（ワークスペースを読み込み直した）ときに増える。 */
+export const bodies_epoch = writable(0);
+let bodiesKey = "";
+let bodiesPending: Promise<Record<string, NodeBody>> | undefined;
+
+function clearNodeBodies() {
+  bodies_epoch.update((epoch) => epoch + 1);
+  node_bodies.set({});
+  bodiesKey = "";
+  bodiesPending = undefined;
+}
+
+/** 全ノードの本文を読む（読んだものは、ワークスペースを読み直すまで持つ）。 */
+export function ensureAllBodies(): Promise<Record<string, NodeBody>> {
+  const workspacePath = get(state).workspacePath;
+  if (!workspacePath) return Promise.resolve({});
+  const key = `${workspacePath}\0${generation}`;
+  if (bodiesKey === key && bodiesPending) return bodiesPending;
+  bodiesKey = key;
+  const pending = platform
+    .wsReadAllNodeBodies(workspacePath)
+    .then((bodies) => {
+      if (bodiesKey === key) node_bodies.set(bodies);
+      return bodies;
+    })
+    .catch((error) => {
+      // 読めなかったら、次に必要になったときにもう一度読む。
+      if (bodiesKey === key) bodiesKey = "";
+      throw error;
+    });
+  bodiesPending = pending;
+  return pending;
+}
+
+/** 本文の検索がオンか。 */
+const bodySearchOn = () => (get(filter)?.search_memo?.length ?? 0) > 0;
+
+/**
+ * 差分で本文を持つノード（編集の結果）は、本文を読んだものを捨てる。本文を持たない
+ * ノードが増えたとき（作成の取り消しなど）は、本文の検索がオンなら読み直す。
+ */
+function syncBodiesWithDelta(delta: WorkspaceGraphDelta) {
+  const dropped: string[] = [];
+  let unread = false;
+  for (const [id, node] of Object.entries(delta.nodes)) {
+    if (node === null || node.bodyLoaded !== false) dropped.push(id);
+    else unread = true;
+  }
+  if (dropped.length > 0) {
+    const current = get(node_bodies);
+    if (dropped.some((id) => id in current)) {
+      const next = { ...current };
+      for (const id of dropped) delete next[id];
+      node_bodies.set(next);
+    }
+  }
+  if (unread && bodySearchOn()) {
+    bodiesKey = "";
+    void ensureAllBodies().catch(() => {});
+  }
+}
+
+// 本文の検索をオンにしたら、全ノードの本文を読む。
+filter.subscribe(() => {
+  if (bodySearchOn() && get(state).graph) void ensureAllBodies().catch(() => {});
+});
 
 /**
  * 条件を満たすときだけ状態を置き換える。
@@ -86,6 +164,7 @@ function graphFromPayload(
   // もう持っている（自分の操作の結果が、通知より先に届いたときなど）。
   if (delta.revision <= current.revision) return current;
   if (delta.baseRevision !== current.revision) return undefined;
+  syncBodiesWithDelta(delta);
   return applyGraphDelta(current, delta);
 }
 
@@ -184,6 +263,7 @@ export const workspace_graph_store = {
   subscribe: state.subscribe,
   async load(workspacePath: string) {
     const loadGeneration = ++generation;
+    clearNodeBodies();
     state.set({ graph: null, workspacePath, loading: true, error: null });
     try {
       const graph = await platform.wsReadGraph(workspacePath);
@@ -247,6 +327,9 @@ export const workspace_graph_store = {
         ? { ...current, graph, loading: false, error: null }
         : null
     );
+    // ディスクの内容に置き換わったので、読んでいた本文は古い。
+    clearNodeBodies();
+    if (bodySearchOn()) void ensureAllBodies().catch(() => {});
     return graph;
   },
   /** `quiet` は通知を出さない（作成の取り消しなど、利用者が戻したと思っていない段）。 */

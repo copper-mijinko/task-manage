@@ -110,10 +110,14 @@ function oneLine(value) {
  * 誤りがあっても、ワークスペース全体が開けなくならないよう、誤った値は
  * 捨てて警告に積む（ファイルは、そのノードを次に保存するまで変わらない）。
  *
+ * `lazy` のときは本文を読まない。ノードは `bodyLoaded: false` で、`body` を持たない
+ * （frontmatter だけが分かればよい読み込みで、本文は選んだときに別に読む）。
+ *
  * @param {string} text
+ * @param {{ lazy?: boolean }} [options]
  * @returns {ParsedNodeFile | null}
  */
-function parseNodeFile(text) {
+function parseNodeFile(text, { lazy = false } = {}) {
   const { data, body, blocks } = parseFrontmatterDetailed(text);
   if (typeof data.id !== "string" || data.id === "") return null;
 
@@ -139,10 +143,11 @@ function parseNodeFile(text) {
     name: data.name == null ? "" : String(data.name),
     parents: normalizeParentLinks(data.parents, legacyOrder),
     format,
-    body: parseNodeBody(body, format),
     tags: normalizeTaskTags(data.tags),
     createdAt: created || "",
   };
+  if (lazy) node.bodyLoaded = false;
+  else node.body = parseNodeBody(body, format);
   if (status) node.status = status;
   if (startDate) node.startDate = startDate;
   if (dueDate) node.dueDate = dueDate;
@@ -212,6 +217,10 @@ function renderNodeFile(
   node,
   { inbox = false, keepAttachments = false, extraBlocks = [], today = "" } = {}
 ) {
+  // 本文を読んでいないノードをそのまま書くと、本文が空のファイルになる。呼ぶ側が、
+  // ディスクの本文を読んでから渡す（`writer.js`）。
+  if (node.bodyLoaded === false)
+    throw new Error(`本文を読んでいないノードは書けません: ${node.id}`);
   /** @type {Record<string, any>} */
   const data = { id: node.id, name: oneLine(node.name) };
   // ステータス無しは `status:` キーごと書かない。空文字を書くと、次に読んだとき

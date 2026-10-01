@@ -4,6 +4,9 @@ import {
   workspace_graph,
   can_undo_graph,
   can_redo_graph,
+  node_bodies,
+  bodies_epoch,
+  ensureAllBodies,
 } from "../stores/graph";
 import { createExpansionState } from "./expansion";
 import { projectTreeGrid, nodeChanges } from "./tree_projection";
@@ -61,8 +64,8 @@ export function markJustCreated(record) {
 export function createTreeGridApplication(workspacePath) {
   const scope = writable("");
   const error = writable("");
-  const tree = derived([workspace_graph, scope], ([graph, root]) =>
-    projectTreeGrid(graph, root || graph?.rootId)
+  const tree = derived([workspace_graph, scope, node_bodies], ([graph, root, bodies]) =>
+    projectTreeGrid(graph, root || graph?.rootId, bodies)
   );
   const closed_row_paths = createExpansionState(tree, scope, workspacePath);
   const filtered = derived(
@@ -400,6 +403,34 @@ export function createTreeGridApplication(workspacePath) {
     isProtected: (id) => id === graphNow()?.rootId || id === graphNow()?.inboxId,
     update,
     updateMany,
+    /**
+     * ノードの本文。読み込みでは本文を読まない（`bodyLoaded: false`）ので、開いたときに
+     * 読む。本文を持っていればそれを返す。読めなければ `undefined`（呼ぶ側は、空の本文と
+     * みなして保存しないこと）。
+     */
+    async loadBody(id) {
+      const node = graphNow()?.nodes[id];
+      if (!node) return undefined;
+      if (node.bodyLoaded !== false) return { body: node.body ?? "", format: node.format };
+      const cached = get(node_bodies)[id];
+      if (cached) return cached;
+      try {
+        return await platform.wsReadNodeBody(workspacePath, id);
+      } catch (e) {
+        error.set(e.message);
+        return undefined;
+      }
+    },
+    /** 全ノードの本文（`id` → `{ body, format }`）。全メモの形式変換のとき。 */
+    bodiesEpoch: bodies_epoch,
+    async loadAllBodies() {
+      try {
+        return await ensureAllBodies();
+      } catch (e) {
+        error.set(e.message);
+        return undefined;
+      }
+    },
     add,
     move,
     dispatch,

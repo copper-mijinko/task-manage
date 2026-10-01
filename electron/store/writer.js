@@ -13,7 +13,9 @@ const fs = require("fs");
 const path = require("path");
 const { atomicWriteFile } = require("../workspace");
 const { extraBlocksOf, renderNodeFile } = require("./node-file");
-const { sha1, STORE_DIR, LAYOUT_FILE, NODE_FILE } = require("./loader");
+const { sha1, contentHashes, STORE_DIR, LAYOUT_FILE, NODE_FILE } = require("./loader");
+const { splitFrontmatterRaw } = require("./frontmatter");
+const { absoluteDir, fileOfLocation, bodyFromText } = require("./body");
 const { assignLocations, nodeDirName, projectOf } = require("./layout");
 const { moveToTrash, restoreFromTrash } = require("./trash");
 const { copyDirectory, copyReferencedAssets, exists } = require("./files");
@@ -21,13 +23,7 @@ const { copyDirectory, copyReferencedAssets, exists } = require("./files");
 const WRITE_CONCURRENCY = 8;
 
 /** 画面やファイルに持たない、旧保存方式の名残のフィールド。 */
-const OBSOLETE_FIELDS = [
-  "assetOwnerId",
-  "sourceProjectDir",
-  "sourceTaskDir",
-  "importSource",
-  "bodyLoaded",
-];
+const OBSOLETE_FIELDS = ["assetOwnerId", "sourceProjectDir", "sourceTaskDir", "importSource"];
 
 /** ディスクに書いたものと同じ形の写し（`undefined` の欄は消える）。 */
 function jsonCopy(value) {
@@ -37,6 +33,8 @@ function jsonCopy(value) {
 function normalizeNode(node) {
   const copy = jsonCopy(node);
   for (const key of OBSOLETE_FIELDS) delete copy[key];
+  // 本文を読んでいない印（`bodyLoaded: false`）は残す。読んでいるときは印を付けない。
+  if (copy.bodyLoaded !== false) delete copy.bodyLoaded;
   return copy;
 }
 
@@ -131,13 +129,8 @@ async function runAll(items, limit, fn) {
   if (failure) throw failure;
 }
 
-function absolute(workspacePath, location) {
-  return path.join(workspacePath, ...location.dir.split("/").filter(Boolean));
-}
-
-function fileOf(workspacePath, location) {
-  return path.join(absolute(workspacePath, location), location.file);
-}
+const absolute = absoluteDir;
+const fileOf = fileOfLocation;
 
 async function readTextIfExists(filePath) {
   try {
@@ -158,6 +151,44 @@ class ExternalChangeError extends Error {
 }
 
 /**
+ * 保存の直前に、ファイルが最後に読んだ・書いたときのままかを確かめる。違えば、外で
+ * 変えられている（古い内容で上書きしてしまう）ので、何も書かずに止める。frontmatter は
+ * 必ず、本文は読んでいる（照合の値がある）ときだけ照合する。読んでいない本文は、
+ * ディスクの最新のものをそのまま残すので、外で変えられていても構わない。
+ *
+ * @param {string | null} existing ディスクの中身（無ければ null）
+ * @param {{ fmHash?: string, bodyHash?: string } | undefined} info
+ * @param {string} relativePath
+ */
+function assertUnchanged(existing, info, relativePath) {
+  if (existing === null || !info) return;
+  const { head, body } = splitFrontmatterRaw(existing);
+  if (info.fmHash !== undefined && sha1(head) !== info.fmHash)
+    throw new ExternalChangeError(relativePath);
+  if (info.bodyHash !== undefined && sha1(body) !== info.bodyHash)
+    throw new ExternalChangeError(relativePath);
+}
+
+/**
+ * 書くノード。本文を読んでいなければ、ディスクの本文で補う（読めなければ投げて、
+ * 空の本文で上書きしない）。
+ *
+ * @param {any} node
+ * @param {{ dir: string, file: string, memo?: boolean }} location 本文を読むファイル
+ * @param {string | null} text その場所のファイルの中身（読んであれば）
+ */
+function withBodyFromDisk(node, location, text) {
+  if (node.bodyLoaded !== false) return node;
+  if (text === null)
+    throw new Error(
+      `本文を読めないため保存しませんでした: ${location.dir ? `${location.dir}/` : ""}${location.file}`
+    );
+  const { body } = bodyFromText(text, node, location);
+  const { bodyLoaded: _unloaded, ...rest } = node;
+  return { ...rest, body };
+}
+
+/**
  * グラフの変更をファイルに反映する。
  *
  * 戻り値の `rollback()` は反映を取り消し、`finalize()` は確定後の後片付け
@@ -174,7 +205,7 @@ async function applyToDisk(state, before, after, { seq, trashedIn = {}, copiedFr
   const undoThunks = [];
   /** @type {[string, any][]} */
   const locationUndo = [];
-  /** @type {Map<string, { hash: string, attachmentKey: boolean }>} */
+  /** @type {Map<string, { fmHash: string, bodyHash?: string, attachmentKey: boolean }>} */
   const pendingInfo = new Map();
   /** @type {Record<string, any>} */
   const trashed = {};
@@ -233,10 +264,11 @@ async function applyToDisk(state, before, after, { seq, trashedIn = {}, copiedFr
       for (const id of [before.inboxId, after.inboxId]) if (id && after.nodes[id]) writeIds.add(id);
     const today = new Date().toISOString().slice(0, 10);
     await runAll([...writeIds], WRITE_CONCURRENCY, async (id) => {
-      const node = after.nodes[id];
+      const listed = after.nodes[id];
       let location = state.locations.get(id);
       if (!location) return;
       const info = state.fileInfo.get(id);
+      const readFrom = location;
       /** @type {string | null} */
       let migrateFrom = null;
       /** @type {string | null} */
@@ -251,9 +283,13 @@ async function applyToDisk(state, before, after, { seq, trashedIn = {}, copiedFr
       }
       const file = fileOf(workspacePath, location);
       const existing = await readTextIfExists(file);
-      if (existing !== null && info?.hash && sha1(existing) !== info.hash) {
-        throw new ExternalChangeError(`${location.dir ? `${location.dir}/` : ""}${location.file}`);
-      }
+      assertUnchanged(existing, info, `${location.dir ? `${location.dir}/` : ""}${location.file}`);
+      // 旧メモは移る前のファイルから本文を読む。それ以外は、書くファイルそのもの。
+      const node = withBodyFromDisk(
+        listed,
+        readFrom,
+        readFrom.memo ? await readTextIfExists(fileOf(workspacePath, readFrom)) : existing
+      );
       const attachmentKey = Boolean(info?.attachmentKey) || (node.attachments?.length ?? 0) > 0;
       const text = renderNodeFile(node, {
         inbox: after.inboxId === id,
@@ -280,7 +316,10 @@ async function applyToDisk(state, before, after, { seq, trashedIn = {}, copiedFr
           else await atomicWriteFile(file, existing, "utf8");
         });
       }
-      pendingInfo.set(id, { hash: sha1(text), attachmentKey });
+      pendingInfo.set(id, {
+        ...contentHashes(text, listed.bodyLoaded === false),
+        attachmentKey,
+      });
       if (oldMemoFile !== null) {
         // 移し終えたので、元のメモのファイルは消す（親のフォルダーに残すと、読み込みのたびに
         // 同じメモが別のノードとして現れる）。戻すときのため、中身を控えておく。
@@ -368,11 +407,12 @@ async function applyToDisk(state, before, after, { seq, trashedIn = {}, copiedFr
 async function rewriteNodes(state, ids) {
   const today = new Date().toISOString().slice(0, 10);
   await runAll(ids, WRITE_CONCURRENCY, async (id) => {
-    const node = state.graph.nodes[id];
+    const listed = state.graph.nodes[id];
     const location = state.locations.get(id);
-    if (!node || !location || location.memo) return;
+    if (!listed || !location || location.memo) return;
     const file = fileOf(state.workspacePath, location);
     const existing = await readTextIfExists(file);
+    const node = withBodyFromDisk(listed, location, existing);
     const info = state.fileInfo.get(id);
     const attachmentKey = Boolean(info?.attachmentKey) || (node.attachments?.length ?? 0) > 0;
     const text = renderNodeFile(node, {
@@ -382,7 +422,10 @@ async function rewriteNodes(state, ids) {
       today,
     });
     if (existing !== text) await atomicWriteFile(file, text, "utf8");
-    state.fileInfo.set(id, { hash: sha1(text), attachmentKey });
+    state.fileInfo.set(id, {
+      ...contentHashes(text, listed.bodyLoaded === false),
+      attachmentKey,
+    });
   });
 }
 

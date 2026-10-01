@@ -43,6 +43,16 @@ function createWorkspaceApplication({ authorize, initialize, repository, publish
       publish(workspacePath, { graph }, requester);
       return graph;
     },
+    /** ノードの本文（読み込みでは本文を読まないので、詳細を開くときに読む）。 */
+    async readBody({ workspacePath, nodeId }) {
+      await prepare(workspacePath);
+      return repository.readNodeBody(workspacePath, nodeId);
+    },
+    /** 全ノードの本文（本文の検索・全メモの形式変換のとき）。 */
+    async readAllBodies({ workspacePath }) {
+      await prepare(workspacePath);
+      return repository.readAllNodeBodies(workspacePath);
+    },
     async saveAsset({ workspacePath, nodeId, fileName, bytes, kind }) {
       await prepare(workspacePath);
       return repository.saveNodeAsset(workspacePath, nodeId, fileName, bytes, kind);

@@ -63,6 +63,10 @@ const electronAPI = {
   onWorkspaceGraphUpdated: listen("workspace-graph-updated"),
   wsReloadWorkspace: (workspacePath) =>
     ipcRenderer.invoke("ws:reload-workspace", { workspacePath }),
+  wsReadNodeBody: (workspacePath, nodeId) =>
+    ipcRenderer.invoke("ws:read-node-body", { workspacePath, nodeId }),
+  wsReadAllNodeBodies: (workspacePath) =>
+    ipcRenderer.invoke("ws:read-all-node-bodies", { workspacePath }),
   wsSaveGraphAsset: (workspacePath, nodeId, fileName, bytes, kind) =>
     ipcRenderer.invoke("ws:save-graph-asset", { workspacePath, nodeId, fileName, bytes, kind }),
   wsResolveGraphAsset: (workspacePath, nodeId, relativePath) =>

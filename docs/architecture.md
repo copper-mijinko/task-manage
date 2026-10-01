@@ -19,7 +19,7 @@ electron/                        # main プロセス
 ├── ipc-security.js              # 外部 URL・ワークスペースパスの検証
 ├── ipc/
 │   ├── settings-ipc.js          # get/set/delete-meta-data・テーマ
-│   ├── workspace-ipc.js         # ws:* チャネル（グラフの読み書き・Undo/Redo・読み直し・画像/添付）
+│   ├── workspace-ipc.js         # ws:* チャネル（グラフの読み書き・本文の読み込み・Undo/Redo・読み直し・画像/添付）
 │   ├── external-ipc.js          # 外部リンク・画像の表示
 │   └── find-in-page-ipc.js      # 画面内検索
 ├── task-detail-window.js        # ノード詳細の別ウィンドウ
@@ -27,11 +27,13 @@ electron/                        # main プロセス
 ├── window-state.js              # ウィンドウ位置・大きさの保存と復元
 ├── os-open.js                   # OS のファイラ・プログラム選択で開く
 ├── workspace-application.js     # ワークスペース単位のアプリケーション層（読込・コマンド実行・通知）
-├── workspace-graph.js           # ワークスペースの保存の入口（読み込み・コマンド実行・Undo/Redo・資産）
+├── early-read.js                # Electron の ready より前に、開いているワークスペースを読み始める
+├── workspace-graph.js           # ワークスペースの保存の入口（読み込み・本文の読み込み・コマンド実行・Undo/Redo・資産）
 ├── store/                       # Markdown ファイルの読み書き（1 ノード 1 ファイル）
 │   ├── frontmatter.js           # frontmatter の読み書き（未知のキーは元の行のまま残す）
 │   ├── node-file.js             # ノード ⇄ ファイル内容
-│   ├── loader.js                # フォルダー → グラフ（読み込み時の修復を含む）
+│   ├── loader.js                # フォルダー → グラフ（読み込み時の修復を含む。frontmatter だけを読む `lazy` あり）
+│   ├── body.js                  # ノードの本文をディスクから読む（読んでいないノードの本文）
 │   ├── writer.js                # グラフの変化 → 変わったファイルだけの書き込み（競合検出・巻き戻し）
 │   ├── history.js / trash.js    # 元に戻す履歴（1 段 1 ファイル）・削除したノードのごみ箱
 │   ├── layout.js                # グラフビューの座標（.task-manage/layout.json）
@@ -395,6 +397,10 @@ CI（`.github/workflows/`）と同じ `npm run lint` / `npm run check` / `npm te
 ```
 
 起動時（と「読み込み直す」）は、`store/loader.js` がフォルダーを読んでグラフを組み立てる。
+ノードのファイルは frontmatter までしか読まない（本文は `bodyLoaded: false`）。本文は、詳細を
+開いたとき（`ws:read-node-body`）、本文の検索・全メモの形式変換のとき（`ws:read-all-node-bodies`）
+に読む。本文を使うコマンド（本文の変更・コピー）は、実行の前に main がそのノードの本文を読み、
+読んでいないノードの書き戻しは、ディスクの本文を残す（`store/writer.js`）。
 ファイルの読み込み（非同期 I/O）と、組み立て・修復（純粋関数）を分けてあり、組み立ての部分は
 ファイルなしでテストできる。読み込んだグラフはメモリに持ち続け、ファイルの監視はしない。
 
@@ -408,6 +414,7 @@ CI（`.github/workflows/`）と同じ `npm run lint` / `npm run check` / `npm te
 | アプリケーション層 | `electron/workspace-application.js` | ワークスペースの認可済みパスでの読込とコマンド実行、更新の通知 |
 | IPC | `electron/ipc/workspace-ipc.js` | `ws:*` チャネルの登録。登録済みでないワークスペースへのアクセスは拒否する |
 | renderer ストア | `src/features/workspace/stores/graph.ts` | グラフの写し、差分の適用（`applyGraphDelta`）、`execute` / `undo` / `redo` / `reload`、`saveStatus` の更新 |
+| 本文の読み込み（renderer） | `graph.ts` の `node_bodies` / `ensureAllBodies`、`application.loadBody`、`TaskDetail.svelte` | 本文を読んでいないノード（`bodyLoaded: false`）の本文。詳細を開いたとき 1 つだけ読み、本文の検索・全メモの形式変換のときは全ノード分をまとめて読む。読むまでは、本文のエディターを出さない（空の本文を保存させない） |
 
 #### 保存状態
 

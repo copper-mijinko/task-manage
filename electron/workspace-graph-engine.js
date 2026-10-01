@@ -176,7 +176,6 @@ function executeGraphCommand(input, command, origin = "graph") {
       "dueDate",
       "body",
       "format",
-      "bodyLoaded",
       "tags",
       "attachments",
       "createdAt",
@@ -226,7 +225,6 @@ function executeGraphCommand(input, command, origin = "graph") {
       "dueDate",
       "body",
       "format",
-      "bodyLoaded",
       "tags",
       "attachments",
       "archived",
@@ -235,7 +233,11 @@ function executeGraphCommand(input, command, origin = "graph") {
     if (Object.keys(command.changes).some((key) => !allowed.has(key))) {
       throw new Error("Structural fields require a graph command");
     }
-    graph.nodes[command.nodeId] = { ...node, ...clone(command.changes), id: command.nodeId };
+    const updated = { ...node, ...clone(command.changes), id: command.nodeId };
+    // 本文を渡したなら、そのノードは本文を持っている（読み込みで付く `bodyLoaded: false` の
+    // 印が残ると、書くときにディスクの本文で上書きされてしまう）。
+    if ("body" in command.changes) delete updated.bodyLoaded;
+    graph.nodes[command.nodeId] = updated;
     selectedNodeIds.push(command.nodeId);
   } else if (command.type === "link") {
     assertEdgeAllowed(graph, command.childId, command.parentId, origin);

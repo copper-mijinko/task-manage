@@ -73,6 +73,42 @@ function parseValue(key, raw) {
   return parseScalar(value);
 }
 
+/** frontmatter の範囲（先頭の `---` から閉じる `---` の行の終わりまで）。 */
+const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/;
+/** 閉じる `---` が改行で終わっているもの。途中までしか読んでいない文字列では、こちらで確かめる。 */
+const FRONTMATTER_CLOSED = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/;
+
+/**
+ * ファイルの中身を、frontmatter と本文に、元の文字のまま分ける（本文は整形しない）。
+ * frontmatter が無ければ `head` は空。外から変えられたかの照合に使う。
+ *
+ * @param {string} content
+ * @returns {{ head: string, body: string }}
+ */
+function splitFrontmatterRaw(content) {
+  const source = String(content ?? "").replace(/^\uFEFF/, "");
+  const match = source.match(FRONTMATTER);
+  if (!match) return { head: "", body: source };
+  return { head: match[0], body: source.slice(match[0].length) };
+}
+
+/**
+ * ここまで読んだ文字列で、frontmatter が最後まで読めているか。ファイルの先頭だけ
+ * 読んだときに、続きを読む必要があるかの判定に使う（`atEnd` はファイルの終わりまで
+ * 読んだとき）。frontmatter が無いファイル（`---` で始まらない）は、読めている扱い。
+ *
+ * @param {string} text
+ * @param {boolean} atEnd
+ */
+function hasCompleteFrontmatter(text, atEnd) {
+  const source = text.replace(/^\uFEFF/, "");
+  if (atEnd) return true;
+  // `---` まで読めていない（先頭の数文字だけ）ときは、続きを読む。
+  if (source.length < 4) return false;
+  if (!source.startsWith("---")) return true;
+  return FRONTMATTER_CLOSED.test(source);
+}
+
 /**
  * frontmatter を読む。`blocks` は最上位のキーごとの元の行（未知のキーを
  * 書き戻すときに使う）。
@@ -82,7 +118,7 @@ function parseValue(key, raw) {
  */
 function parseFrontmatterDetailed(content) {
   const source = String(content ?? "").replace(/^\uFEFF/, "");
-  const match = source.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
+  const match = source.match(FRONTMATTER);
   if (!match) return { data: {}, body: source, blocks: [] };
 
   const body = source.slice(match[0].length).trim();
@@ -233,6 +269,8 @@ function stringifyFrontmatter(data, body = "", { rawKeys = new Set(), extraBlock
 module.exports = {
   parseFrontmatter,
   parseFrontmatterDetailed,
+  splitFrontmatterRaw,
+  hasCompleteFrontmatter,
   stringifyFrontmatter,
   formatScalar,
 };

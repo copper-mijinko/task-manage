@@ -130,8 +130,12 @@ describe("migrating graph-v1.json to Markdown files", () => {
       archived: true,
       archivedAt: "2026-09-01T00:00:00.000Z",
     });
-    expect(loaded.nodes["task-b"].body).toEqual({ ops: [{ insert: "Rich\n" }] });
-    expect(loaded.nodes["workspace-ws"].body).toBe("About this workspace");
+    // 読み込みでは本文を読まない。本文は、読む操作で取り出す。
+    expect(loaded.nodes["task-b"].bodyLoaded).toBe(false);
+    expect((await graphStore.readNodeBody(root, "task-b")).body).toEqual({
+      ops: [{ insert: "Rich\n" }],
+    });
+    expect((await graphStore.readNodeBody(root, "workspace-ws")).body).toBe("About this workspace");
     expect(loaded.inboxId).toBe("inbox");
     expect(loaded.positions).toEqual({ "task-a": { x: 5, y: 6 } });
     expect(loaded.rootId).toBe("workspace-ws");
@@ -154,7 +158,7 @@ describe("migrating graph-v1.json to Markdown files", () => {
   it("copies images and attachments into the node's folder and rewrites the references", async () => {
     fixture();
     const loaded = await graphStore.readWorkspaceGraph(root);
-    const body = loaded.nodes["task-a"].body;
+    const { body } = await graphStore.readNodeBody(root, "task-a");
     expect(body).toContain("![legacy](./assets/legacy.png)");
     expect(body).toContain(`![pasted](./assets/${UUID}-pasted.png)`);
     const folder = path.join(root, "alpha", "task-a");

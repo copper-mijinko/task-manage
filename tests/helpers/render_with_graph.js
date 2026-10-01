@@ -13,10 +13,11 @@ import { TEST_WORKSPACE, graphFromTree, installGraphBackend } from "./graph_back
  * @param {string} [options.scopeId] 開くプロジェクト。既定は木のルート
  * @param {object} [options.props] コンポーネントへ渡す props
  * @param {object} [options.api] `window.electronAPI` に足す／上書きするもの
+ * @param {object} [options.diskBodies] 本文を読んでいないノードの本文（`makeBodiesLazy`）
  */
 export async function renderWithGraph(component, options = {}) {
   const graph = options.graph ?? graphFromTree(options.tree);
-  const backend = installGraphBackend(graph, options.api);
+  const backend = installGraphBackend(graph, options.api, { diskBodies: options.diskBodies });
   const treeRoot = options.tree?.data?.id !== undefined ? options.tree.data : options.tree;
   const scopeId = options.scopeId ?? treeRoot?.id;
   let application;

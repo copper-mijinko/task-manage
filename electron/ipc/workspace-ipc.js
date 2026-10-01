@@ -132,6 +132,12 @@ function registerWorkspaceIpc(ipc, { settings, workspaceAuthorizer, knownWorkspa
   ipc.handle("ws:reload-workspace", (event, { workspacePath }) =>
     application.reload({ workspacePath, requester: event.sender })
   );
+  ipc.handle("ws:read-node-body", (_event, { workspacePath, nodeId }) =>
+    application.readBody({ workspacePath, nodeId })
+  );
+  ipc.handle("ws:read-all-node-bodies", (_event, { workspacePath }) =>
+    application.readAllBodies({ workspacePath })
+  );
   ipc.handle("ws:open-graph-asset", (_event, request) => application.openAsset(request));
   ipc.handle("ws:save-graph-asset", (_event, { workspacePath, nodeId, fileName, bytes, kind }) =>
     application.saveAsset({ workspacePath, nodeId, fileName, bytes, kind })

@@ -1,5 +1,5 @@
 <script>
-  import { getContext, onDestroy, tick } from "svelte";
+  import { getContext, onDestroy, tick, untrack } from "svelte";
   import { statusLabel } from "@lib/utils/status_labels";
   import { get } from "svelte/store";
   import debounce from "lodash/debounce";
@@ -196,6 +196,9 @@
   // Capture the identity before an editor can finish an asynchronous save.
   const bodySaveCallback = (target) => (editedContent) => {
     if (!target) return false;
+    // 本文をまだ読んでいないノードには、保存しない（空の本文で上書きしないため）。
+    if (target.data.bodyLoaded === false && !isFetched(target, get(application.bodiesEpoch)))
+      return false;
     const currentTarget = get(records)[target.id];
     const targetFormat = normalizeMemoFormat(
       currentTarget?.format ?? target.data.format,
@@ -204,6 +207,16 @@
     const sourceFormat = isQuillDelta(editedContent) ? "quill" : "markdown";
     const body = convertMemoContent(editedContent, sourceFormat, targetFormat);
     return application.update(target.id, { body }).then(Boolean);
+  };
+
+  /**
+   * ノードの本文。読み込みでは本文を読まない（`bodyLoaded: false`）ので、読んでいなければ
+   * 読む。読めなければ `undefined`。
+   */
+  const currentBodyOf = async (target) => {
+    if (target.data.bodyLoaded !== false) return target.data.body;
+    const result = await application.loadBody(target.id);
+    return result ? result.body : undefined;
   };
 
   let show_format_confirm = $state(false);
@@ -231,8 +244,10 @@
     const liveNode = getLiveNode(getEditContext());
     if (!liveNode) return;
     if (normalizeMemoFormat(liveNode.data.format, defaultMemoFormat) === nextFormat) return;
+    const current = await currentBodyOf(liveNode);
+    if (current === undefined) return;
     pendingBodyFormat = nextFormat;
-    if (isEmptyMemoContent(liveNode.data.body)) {
+    if (isEmptyMemoContent(current)) {
       callback_format_confirm();
       return;
     }
@@ -240,15 +255,14 @@
   };
 
   /** 本文の形式を切り替える。中身も合わせて変換する。 */
-  const applyBodyFormat = (nextFormat) => {
+  const applyBodyFormat = async (nextFormat) => {
     const current = getLiveNode();
     if (!current) return false;
+    // 本文を読んでいなければ読む（読めなければ変換しない。空の本文に変換して上書きしない）。
+    const body = await currentBodyOf(current);
+    if (body === undefined) return false;
     void application.update(current.id, {
-      body: convertMemoContent(
-        current.data.body,
-        current.data.format || defaultMemoFormat,
-        nextFormat
-      ),
+      body: convertMemoContent(body, current.data.format || defaultMemoFormat, nextFormat),
       format: nextFormat,
     });
     return true;
@@ -293,7 +307,38 @@
   );
   let name = $derived(node ? node.data["name"] : "");
   let cardTitle = $derived(titleOverride || name);
-  let nodeBody = $derived(node ? (node.data["body"] ?? "") : "");
+  // 本文は、読み込みでは読まない（`bodyLoaded: false`）。開いたノードの本文だけ読みに行く。
+  // 読むまでは、本文のエディターを出さない（空の本文を編集・保存させないため）。
+  // ワークスペースを読み込み直したあとは、読んだ本文は古い（`epoch`）ので読み直す。
+  const bodiesEpoch = application.bodiesEpoch;
+  let fetchedBody = $state(null);
+  const isFetched = (target, epoch) => fetchedBody?.id === target.id && fetchedBody.epoch === epoch;
+  let bodyUnread = $derived(
+    Boolean(node) && node.data.bodyLoaded === false && !isFetched(node, $bodiesEpoch)
+  );
+  let nodeBody = $derived(
+    node
+      ? node.data.bodyLoaded === false
+        ? isFetched(node, $bodiesEpoch)
+          ? fetchedBody.body
+          : ""
+        : (node.data["body"] ?? "")
+      : ""
+  );
+  $effect(() => {
+    const target = node;
+    const epoch = $bodiesEpoch;
+    if (!target || target.data.bodyLoaded !== false) return;
+    const id = target.id;
+    if (untrack(() => isFetched(target, epoch))) return;
+    let cancelled = false;
+    application.loadBody(id).then((result) => {
+      if (!cancelled && result) fetchedBody = { id, body: result.body, epoch };
+    });
+    return () => {
+      cancelled = true;
+    };
+  });
   let bodyFormat = $derived(normalizeMemoFormat(node?.data?.["format"], defaultMemoFormat));
   // `[[…]]` の補完候補。自分の子ノードの名前（旧メモは子ノードになる）。
   let siblingNodeNames = $derived(
@@ -689,7 +734,9 @@
                  このコンポーネントが memoEditor.flush() を呼んでいる。 -->
           </div>
           <div class="body-editor">
-            {#if bodyVisited}
+            {#if bodyVisited && bodyUnread}
+              <p class="body-loading" role="status">本文を読み込んでいます…</p>
+            {:else if bodyVisited}
               {#key `${editContextKey}:${bodyFormat}`}
                 <Memo
                   bind:this={memoEditor}
@@ -1198,6 +1245,11 @@
     gap: var(--sp2);
     flex: 0 0 auto;
     padding: var(--sp1);
+  }
+  .body-loading {
+    margin: var(--sp3);
+    color: var(--fg-muted, inherit);
+    font-size: var(--font-body-sm);
   }
   .body-label {
     font-size: var(--font-label-sm);

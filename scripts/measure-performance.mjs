@@ -18,6 +18,13 @@ const sampleCount =
 const requestedNodes = Number.parseInt(process.env.PERF_NODES ?? "2", 10);
 const extraNodeCount =
   Number.isFinite(requestedNodes) && requestedNodes > 2 ? requestedNodes - 2 : 0;
+// 足すノードに付ける本文の長さ（文字数）。本文の大きさで読み込みの重さが変わるので、
+// 読み込みの変更を比べるときに指定する（例: PERF_BODY=1000）。既定は本文なし。
+const requestedBody = Number.parseInt(process.env.PERF_BODY ?? "0", 10);
+const bodyText =
+  Number.isFinite(requestedBody) && requestedBody > 0
+    ? "あいうえお本文テキスト ".repeat(Math.ceil(requestedBody / 12)).slice(0, requestedBody)
+    : "";
 const imageDataUrl =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 
@@ -78,6 +85,7 @@ function seedWorkspace(tempDir) {
       nodes.push({
         ...node(`${projectId}-${index}`, `Bulk task ${index}`, projectId, index % 100),
         status: "Open",
+        ...(bodyText ? { body: bodyText, format: "markdown" } : {}),
       });
   }
   writeWorkspaceFiles(workspacePath, nodes);

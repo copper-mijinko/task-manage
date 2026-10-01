@@ -1,7 +1,10 @@
 import { projectGraphTree } from "../utils/graph_projection";
 
 // A disposable view model. Domain records never become mutable TreeTable objects.
-export function projectTreeGrid(graph, rootId) {
+//
+// 読み込みでは本文を読まない（`bodyLoaded: false`）。`bodies` は、本文の検索などで
+// まとめて読んだ本文（`node_bodies`）で、あればそれを本文として渡す。
+export function projectTreeGrid(graph, rootId, bodies) {
   if (!graph?.nodes[rootId]) return undefined;
   const rows = projectGraphTree(graph, { rootId });
   const occurrences = new Map();
@@ -13,6 +16,7 @@ export function projectTreeGrid(graph, rootId) {
     const edge = row.parentId
       ? (node.parents || []).find((parent) => parent.id === row.parentId)
       : undefined;
+    const read = node.bodyLoaded === false ? bodies?.[node.id] : undefined;
     const item = {
       id: node.id,
       archived: node.archived || edge?.archived || undefined,
@@ -25,9 +29,9 @@ export function projectTreeGrid(graph, rootId) {
         "due date": node.dueDate,
         // グラフの値をそのまま渡す（下流では書き換えない）。深く複製すると、
         // 変更のたびに全ノードの本文と添付を写すことになる。
-        body: node.body,
+        body: read ? read.body : node.body,
         format: node.format,
-        bodyLoaded: true,
+        bodyLoaded: node.bodyLoaded !== false || Boolean(read),
         tags: node.tags || [],
         attachments: node.attachments || [],
       },
