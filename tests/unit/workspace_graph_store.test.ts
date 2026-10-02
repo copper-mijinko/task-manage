@@ -2,6 +2,7 @@ import { get } from "svelte/store";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   bodies_epoch,
+  bodies_status,
   ensureAllBodies,
   node_bodies,
   workspace_graph,
@@ -475,6 +476,25 @@ describe("workspace graph store bodies", () => {
     await loaded("bodies-2");
     expect(get(node_bodies)).toEqual({});
     expect(get(bodies_epoch)).toBeGreaterThan(epoch);
+  });
+
+  it("reports that bodies are loading, then idle; and an error when they cannot be read", async () => {
+    await loaded("bodies-status");
+    let release!: (value: unknown) => void;
+    mocks.readAllBodies.mockImplementationOnce(() => new Promise((resolve) => (release = resolve)));
+    const pending = ensureAllBodies();
+    expect(get(bodies_status)).toBe("loading");
+    release(bodies);
+    await pending;
+    expect(get(bodies_status)).toBe("idle");
+
+    await loaded("bodies-status-2");
+    mocks.readAllBodies.mockRejectedValueOnce(new Error("disk"));
+    await expect(ensureAllBodies()).rejects.toThrow("disk");
+    expect(get(bodies_status)).toBe("error");
+    // 読み直せる。
+    await ensureAllBodies();
+    expect(get(bodies_status)).toBe("idle");
   });
 
   it("reads every body when the body search is turned on", async () => {
