@@ -41,6 +41,7 @@
     can_redo_graph as canRedoGraph,
   } from "@features/workspace/stores/graph";
   import { selected_ids, clearSelection, show_archived } from "@stores/ui";
+  import { showNotice, dismissNotice } from "@stores/notice";
 
   // ページ内検索はstoresから共有
 
@@ -213,8 +214,14 @@
   let bulkBodies;
 
   async function requestBulkMemoFormat(targetFormat) {
-    // 本文を読んでいないノードがあるので、全ノードの本文を読んでから対象を決める。
-    bulkBodies = await application.loadAllBodies();
+    // 本文を読んでいないノードがあるので、全ノードの本文を読んでから対象を決める
+    // （数が多いと待つので、何をしているかを知らせる）。
+    const loadingNotice = showNotice("全ノードの本文を読み込んでいます…", { timeout: 60000 });
+    try {
+      bulkBodies = await application.loadAllBodies();
+    } finally {
+      dismissNotice(loadingNotice);
+    }
     if (!bulkBodies) return;
     bulkMemoTargetFormat = targetFormat;
     bulkMemoItems = collectProjectMemosForFormat(

@@ -38,12 +38,18 @@ export interface NodeBody {
   format: string;
 }
 export const node_bodies = writable<Record<string, NodeBody>>({});
+/**
+ * 全ノードの本文を読んでいる最中か（`loading`）、読めなかったか（`error`）。本文の検索は、
+ * 読み終わるまで結果（件数）が確定しないので、画面に出して知らせる。
+ */
+export const bodies_status = writable<"idle" | "loading" | "error">("idle");
 /** 読んだ本文が古くなった（ワークスペースを読み込み直した）ときに増える。 */
 export const bodies_epoch = writable(0);
 let bodiesKey = "";
 let bodiesPending: Promise<Record<string, NodeBody>> | undefined;
 
 function clearNodeBodies() {
+  bodies_status.set("idle");
   bodies_epoch.update((epoch) => epoch + 1);
   node_bodies.set({});
   bodiesKey = "";
@@ -57,15 +63,22 @@ export function ensureAllBodies(): Promise<Record<string, NodeBody>> {
   const key = `${workspacePath}\0${generation}`;
   if (bodiesKey === key && bodiesPending) return bodiesPending;
   bodiesKey = key;
+  bodies_status.set("loading");
   const pending = platform
     .wsReadAllNodeBodies(workspacePath)
     .then((bodies) => {
-      if (bodiesKey === key) node_bodies.set(bodies);
+      if (bodiesKey === key) {
+        node_bodies.set(bodies);
+        bodies_status.set("idle");
+      }
       return bodies;
     })
     .catch((error) => {
       // 読めなかったら、次に必要になったときにもう一度読む。
-      if (bodiesKey === key) bodiesKey = "";
+      if (bodiesKey === key) {
+        bodiesKey = "";
+        bodies_status.set("error");
+      }
       throw error;
     });
   bodiesPending = pending;
