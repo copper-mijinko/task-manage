@@ -31,7 +31,7 @@ Node には本文、画像・添付ファイル、タグを保存できます。
 
 親子関係（複数の親・親ごとの並び順・アーカイブ）は各ファイルの frontmatter の `parents:` に入っているので、グラフの機能（複数の親、循環、リンク、コピーの 3 モード、Undo/Redo）は従来どおり使えます。編集のたびに書き換わるのは、変えたノードのファイルだけです。
 
-旧 Markdown 形式のワークスペースは、そのまま開けます。以前の版の単一 JSON（`.task-manage/graph-v1.json`）は、開いたときに一度だけ Markdown へ変換します（元のファイルは消さず、`graph-v1.json.migrated` として残します）。
+旧 Markdown 形式のワークスペースは、そのまま開けます。旧メモを整理したいときは、ワークスペース管理ダイアログの「旧形式のフォルダーを変換...」で、別の空のフォルダーへ変換して書き出せます（移行のための一時的な機能。詳細は [docs/data.md](docs/data.md) § 7.3）。以前の版の単一 JSON（`.task-manage/graph-v1.json`）は、開いたときに一度だけ Markdown へ変換します（元のファイルは消さず、`graph-v1.json.migrated` として残します）。
 
 アプリの外でファイルを編集したときは、ワークスペース管理ダイアログの「ディスクから読み込み直す」で反映します。アプリが最後に読み書きした内容と違うファイルは、上書きせずにエラーにします。
 
@@ -66,5 +66,5 @@ npm ci
 - [docs/architecture.md](docs/architecture.md) — ソース構成
 - [docs/performance.md](docs/performance.md) — 起動・読み込み・保存の性能
 - [docs/testing.md](docs/testing.md) — テスト方針
-- [docs/how-to-contribute.md](docs/how-to-contribute.md) — 開発と貢献の手順
+- [docs/how-to-contribute.md](docs/how-to-contribute.md) — 開発と貢献の手順（リリースの手順は [Release](docs/how-to-contribute.md#release) 節）
 - [docs/agent-ui-development.md](docs/agent-ui-development.md) — Agent UI の開発手順
