@@ -22,7 +22,7 @@ import TreeTable from "@features/tasks/components/TreeTable.svelte";
 import { column_settings, table_selected_id, theme } from "@stores";
 import { active_row_path, clearSelection, selected_ids } from "@stores/ui";
 import { filter, pageSearchCountIsPartial, pageSearchQuery } from "@features/search/stores/search";
-import { bodies_status } from "@features/workspace/stores/graph";
+import { bodies_slow, bodies_status } from "@features/workspace/stores/graph";
 import { renderWithGraph, settle } from "../helpers/render_with_graph.js";
 
 let project;
@@ -591,6 +591,7 @@ describe("TreeTable while the bodies are read for the body search", () => {
   afterEach(() => {
     filter.set({});
     bodies_status.set("idle");
+    bodies_slow.set(false);
   });
 
   // 本文の検索は、全ノードの本文を読み終えるまで確定しない。読む間に「一致するノードが
@@ -601,6 +602,11 @@ describe("TreeTable while the bodies are read for the body search", () => {
     await renderTree();
     // ワークスペースの読み込みが状態を戻すので、描画のあとに「読み込み中」にする。
     bodies_status.set("loading");
+    // 速く終わる読み込みでは、何も出さずに待つ（表示が一瞬出て消えて、画面がちらつかないように）。
+    await settle();
+    expect(screen.queryByTestId("tree-body-loading")).toBeNull();
+    expect(screen.queryByText("一致するノードがありません")).toBeNull();
+    bodies_slow.set(true);
     await settle();
     expect(screen.getByTestId("tree-body-loading")).toHaveTextContent("本文を読み込み中です");
     expect(screen.queryByText("一致するノードがありません")).toBeNull();

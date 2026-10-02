@@ -11,7 +11,11 @@ vi.mock("@lib/ipc/platform", () => ({
 import ActiveFilterBar from "@features/search/components/ActiveFilterBar.svelte";
 import { filter } from "@features/search/stores/search";
 import * as platform from "@lib/ipc/platform";
-import { bodies_status, workspace_graph_store } from "@features/workspace/stores/graph";
+import {
+  bodies_slow,
+  bodies_status,
+  workspace_graph_store,
+} from "@features/workspace/stores/graph";
 
 /**
  * 本文の検索は、全ノードの本文を読み終えるまで結果（件数）が確定しない。
@@ -21,22 +25,33 @@ describe("ActiveFilterBar body search status", () => {
   beforeEach(() => {
     filter.set({ full_text: ["needle"], search_memo: ["1"] });
     bodies_status.set("idle");
+    bodies_slow.set(false);
   });
 
   test("says the result is not final while the bodies are being read", async () => {
     bodies_status.set("loading");
+    bodies_slow.set(true);
     render(ActiveFilterBar);
-    expect(await screen.findByTestId("body-search-loading")).toHaveTextContent(
-      "検索結果は読み込み後に確定します"
-    );
+    const status = await screen.findByTestId("body-search-loading");
+    expect(status).toHaveTextContent("本文を読み込み中");
+    expect(status).toHaveAttribute("title", expect.stringContaining("読み込み後に確定"));
     bodies_status.set("idle");
     await Promise.resolve();
+    expect(screen.queryByTestId("body-search-loading")).toBeNull();
+  });
+
+  // 速い読み込みで、表示が一瞬出て消える（画面がちらつく）のを避ける。
+  test("says nothing yet while the loading is still quick", () => {
+    bodies_status.set("loading");
+    bodies_slow.set(false);
+    render(ActiveFilterBar);
     expect(screen.queryByTestId("body-search-loading")).toBeNull();
   });
 
   test("does not say anything when the body search is off", () => {
     filter.set({ full_text: ["needle"] });
     bodies_status.set("loading");
+    bodies_slow.set(true);
     render(ActiveFilterBar);
     expect(screen.queryByTestId("body-search-loading")).toBeNull();
   });
@@ -53,7 +68,7 @@ describe("ActiveFilterBar body search status", () => {
     bodies_status.set("error");
     render(ActiveFilterBar);
     expect(await screen.findByTestId("body-search-error")).toHaveTextContent(
-      "本文を読み込めませんでした"
+      "本文を読めませんでした"
     );
     await fireEvent.click(screen.getByRole("button", { name: "再読み込み" }));
     expect(platform.wsReadAllNodeBodies).toHaveBeenCalledWith("w");

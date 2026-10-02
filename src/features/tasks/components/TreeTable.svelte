@@ -64,7 +64,7 @@
   } from "@stores/ui";
   import { navigation_history } from "@stores/navigation_history";
   import { filter } from "@features/search/stores/search";
-  import { bodies_status } from "@features/workspace/stores/graph";
+  import { bodies_slow, bodies_status } from "@features/workspace/stores/graph";
   import {
     hasSelectedDocumentText,
     hasSelectedMemoText,
@@ -1563,6 +1563,8 @@
         </svg>
         <p class="EmptyTitle">ノードがありません</p>
         <p class="EmptyHint">ヘッダーの + ボタンか、右クリックメニューからノードを追加できます</p>
+      {:else if $filter.search_memo?.length && $bodies_status === "loading" && !$bodies_slow}
+        <!-- 読み込みが速ければ、何も出さずに結果を待つ（「読み込み中」が一瞬出て消えるのを避ける）。 -->
       {:else if $filter.search_memo?.length && $bodies_status === "loading"}
         <!-- 本文の検索は、全ノードの本文を読み終えるまで確定しない。読む間は「一致なし」と
              言わない（まだ探し終えていないだけ）。 -->

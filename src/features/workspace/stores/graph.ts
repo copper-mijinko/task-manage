@@ -43,12 +43,25 @@ export const node_bodies = writable<Record<string, NodeBody>>({});
  * 読み終わるまで結果（件数）が確定しないので、画面に出して知らせる。
  */
 export const bodies_status = writable<"idle" | "loading" | "error">("idle");
+/**
+ * 読み込みが `BODIES_SLOW_MS` を超えて続いているか。速い読み込みで「読み込み中」の表示が
+ * 一瞬だけ出て消える（ちらつく）のを避けるため、表示はこちらを使う。
+ */
+export const BODIES_SLOW_MS = 250;
+export const bodies_slow = writable(false);
+let slowTimer: ReturnType<typeof setTimeout> | undefined;
+function stopSlowTimer() {
+  clearTimeout(slowTimer);
+  slowTimer = undefined;
+  bodies_slow.set(false);
+}
 /** 読んだ本文が古くなった（ワークスペースを読み込み直した）ときに増える。 */
 export const bodies_epoch = writable(0);
 let bodiesKey = "";
 let bodiesPending: Promise<Record<string, NodeBody>> | undefined;
 
 function clearNodeBodies() {
+  stopSlowTimer();
   bodies_status.set("idle");
   bodies_epoch.update((epoch) => epoch + 1);
   node_bodies.set({});
@@ -64,11 +77,16 @@ export function ensureAllBodies(): Promise<Record<string, NodeBody>> {
   if (bodiesKey === key && bodiesPending) return bodiesPending;
   bodiesKey = key;
   bodies_status.set("loading");
+  clearTimeout(slowTimer);
+  slowTimer = setTimeout(() => {
+    if (bodiesKey === key && get(bodies_status) === "loading") bodies_slow.set(true);
+  }, BODIES_SLOW_MS);
   const pending = platform
     .wsReadAllNodeBodies(workspacePath)
     .then((bodies) => {
       if (bodiesKey === key) {
         node_bodies.set(bodies);
+        stopSlowTimer();
         bodies_status.set("idle");
       }
       return bodies;
@@ -77,6 +95,7 @@ export function ensureAllBodies(): Promise<Record<string, NodeBody>> {
       // 読めなかったら、次に必要になったときにもう一度読む。
       if (bodiesKey === key) {
         bodiesKey = "";
+        stopSlowTimer();
         bodies_status.set("error");
       }
       throw error;
