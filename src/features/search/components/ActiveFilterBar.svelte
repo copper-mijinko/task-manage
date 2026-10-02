@@ -3,7 +3,7 @@
   import { active_tag } from "@features/memos/stores/tags";
   import { tokenizeFullTextQuery } from "@features/tasks/utils/tree_control";
   import { statusLabel } from "@lib/utils/status_labels";
-  import { bodies_status, ensureAllBodies } from "@features/workspace/stores/graph";
+  import { bodies_slow, bodies_status, ensureAllBodies } from "@features/workspace/stores/graph";
   const labels: Record<string, string> = {
     full_text: "検索",
     name: "ノード名",
@@ -80,15 +80,17 @@
       </span>
     {/each}
     <button type="button" class="ClearAll" onclick={clearAll}>すべてクリア</button>
-    {#if $filter.search_memo?.length && $bodies_status === "loading"}
+    {#if $filter.search_memo?.length && $bodies_status === "loading" && $bodies_slow}
       <!-- 本文は読み込みでは読まないので、本文の検索は全ノードの本文を読み終えるまで確定しない。
            途中の件数は少なく見えるので、そう伝える。 -->
-      <span class="BodyStatus" data-testid="body-search-loading"
-        >本文を読み込み中です。検索結果は読み込み後に確定します…</span
+      <span
+        class="BodyStatus"
+        data-testid="body-search-loading"
+        title="検索結果は、本文の読み込み後に確定します">本文を読み込み中…</span
       >
     {:else if $filter.search_memo?.length && $bodies_status === "error"}
       <span class="BodyStatus BodyError" data-testid="body-search-error"
-        >本文を読み込めませんでした。検索結果に本文が含まれていません。
+        >本文を読めませんでした（結果に本文を含みません）
         <button type="button" class="ClearAll" onclick={() => ensureAllBodies().catch(() => {})}
           >再読み込み</button
         ></span
@@ -112,9 +114,11 @@
     font-size: var(--font-label-md);
     flex-shrink: 0;
   }
+  /* 帯の高さを変えない（出入りで下のツリーがガタつかないよう、同じ行の右端に置く）。 */
   .BodyStatus {
-    flex-basis: 100%;
+    margin-left: auto;
     font-size: var(--font-label-md);
+    white-space: nowrap;
   }
   .BodyError {
     color: var(--theme-color-Error-main);

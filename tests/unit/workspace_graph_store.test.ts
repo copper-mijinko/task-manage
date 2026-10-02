@@ -2,7 +2,9 @@ import { get } from "svelte/store";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   bodies_epoch,
+  bodies_slow,
   bodies_status,
+  BODIES_SLOW_MS,
   ensureAllBodies,
   node_bodies,
   workspace_graph,
@@ -495,6 +497,41 @@ describe("workspace graph store bodies", () => {
     // 読み直せる。
     await ensureAllBodies();
     expect(get(bodies_status)).toBe("idle");
+  });
+
+  // 速く終わる読み込みで、「読み込み中」の表示が一瞬だけ出て消えると、画面がちらつく。
+  it("marks the loading as slow only after it has lasted a while", async () => {
+    vi.useFakeTimers();
+    try {
+      await loaded("bodies-slow");
+      let release!: (value: unknown) => void;
+      mocks.readAllBodies.mockImplementationOnce(
+        () => new Promise((resolve) => (release = resolve))
+      );
+      const pending = ensureAllBodies();
+      expect(get(bodies_status)).toBe("loading");
+      expect(get(bodies_slow)).toBe(false);
+      await vi.advanceTimersByTimeAsync(BODIES_SLOW_MS + 10);
+      expect(get(bodies_slow)).toBe(true);
+      release(bodies);
+      await pending;
+      expect(get(bodies_slow)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("never marks a quick loading as slow", async () => {
+    vi.useFakeTimers();
+    try {
+      await loaded("bodies-quick");
+      await ensureAllBodies();
+      await vi.advanceTimersByTimeAsync(BODIES_SLOW_MS * 2);
+      expect(get(bodies_slow)).toBe(false);
+      expect(get(bodies_status)).toBe("idle");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("reads every body when the body search is turned on", async () => {
