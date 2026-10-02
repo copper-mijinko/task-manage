@@ -4,6 +4,7 @@
   import IconButton from "@lib/primitives/IconButton.svelte";
   import { workspace_store } from "@features/workspace/stores/workspace";
   import { workspace_graph_store } from "@features/workspace/stores/graph";
+  import * as platform from "@lib/ipc/platform";
 
   interface Props {
     show?: boolean;
@@ -31,6 +32,32 @@
       reloadMessage = userErrorMessage(error);
     } finally {
       reloadBusy = false;
+    }
+  }
+
+  // 旧形式のフォルダーを、別の場所へ変換して書き出す（移行のための一時的な機能）。
+  let convertBusy = $state(false);
+  let convertMessage = $state("");
+
+  async function convertLegacy() {
+    if (convertBusy) return;
+    convertBusy = true;
+    convertMessage = "";
+    errorMessage = "";
+    try {
+      const result = await platform.wsConvertLegacy();
+      if (result.error) {
+        errorMessage = result.error;
+      } else if (result.path) {
+        // 書き出した先を、追加できる状態にする（「追加」を押すと開く）。
+        pendingPath = result.path;
+        pendingLabel = result.path.split(/[/\\]/).pop() ?? "";
+        convertMessage = `書き出しました（本文にまとめたメモ: ${result.merged ?? 0} 件）。「追加」で開けます。`;
+      }
+    } catch (error) {
+      errorMessage = userErrorMessage(error);
+    } finally {
+      convertBusy = false;
     }
   }
 
@@ -142,6 +169,19 @@
       {#if errorMessage}
         <p class="error">{errorMessage}</p>
       {/if}
+
+      <p class="section-label">旧形式から変換して書き出す</p>
+      <div class="migrate-area">
+        <p class="migrate-note">
+          旧形式（メモを別ファイルで持つ形）のフォルダーを、別の空のフォルダーへ書き出します。メモが
+          1
+          つだけで名前が「memo」、かつ親の本文が空のものは、親の本文にまとめます。元のフォルダーは変更しません。
+        </p>
+        <button class="action-btn confirm-btn" disabled={convertBusy} onclick={convertLegacy}>
+          {convertBusy ? "変換中..." : "旧形式のフォルダーを変換..."}
+        </button>
+        {#if convertMessage}<p class="migrate-note" role="status">{convertMessage}</p>{/if}
+      </div>
 
       {#if activeWorkspacePath}
         <p class="section-label">ディスクから読み込み直す</p>

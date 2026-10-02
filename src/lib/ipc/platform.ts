@@ -252,6 +252,13 @@ export function wsReloadWorkspace(workspacePath: string): Promise<WorkspaceGraph
   return fn(workspacePath);
 }
 
+/** 旧形式のフォルダーを別の場所へ変換して書き出す。 */
+export function wsConvertLegacy() {
+  const fn = api()?.wsConvertLegacy;
+  if (!fn) return Promise.reject(new Error("Workspace graph API unavailable"));
+  return fn();
+}
+
 /** ノードの本文を読む（読み込みでは本文を読まないので、開いたときに読む）。 */
 export function wsReadNodeBody(
   workspacePath: string,

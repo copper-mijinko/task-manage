@@ -285,3 +285,14 @@ attachments:
 - 途中で止まっても、次に開いたときに続きから変換する（`.task-manage/migration.json` に書き終えたフォルダーを記録する）
 
 回帰テストは `tests/unit/markdown-format.test.js`・`tests/unit/markdown-loader.test.js`・`tests/unit/workspace-graph-persistence.test.js`・`tests/unit/workspace-graph-migration.test.js`。
+
+### 7.3 旧メモの整理（一時的な移行機能）
+
+旧メモはすべてノードとして読むため、メモが 1 つしか無いノードでも子ノードが 1 つ増えて見づらくなる。これを整理するため、ワークスペース管理画面の「旧形式のフォルダーを変換...」で、**別の空のフォルダーへ**変換して書き出せる（`electron/store/convert-legacy.js`、`ws:convert-legacy`）。移行のための一時的な機能で、不要になったら削除してよい。
+
+- 元のフォルダーは変更しない。`.task-manage/`・`.git`・`node_modules` 以外を書き出し先へ写し、書き出し先の履歴とゴミ箱は空にする
+- メモが **1 つだけ** で、名前が `memo`（タイトルも見出しも無く、ファイル名が id と同じ）、かつ **親の本文が空** のとき、本文・形式・タグを親へ移し、メモのノードを消す
+- メモが複数あるとき、または名前が `memo` 以外のときは、特別な扱いをしない（子ノードのまま）。親に本文があるときも上書きせず、子ノードのまま残す
+- 旧 Quill 形式は変換しない（本文はそのまま）
+
+回帰テストは `tests/unit/convert-legacy.test.js`。

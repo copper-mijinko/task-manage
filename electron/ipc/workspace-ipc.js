@@ -6,6 +6,7 @@ const workspaceGraph = require("../workspace-graph");
 const { createWorkspaceApplication } = require("../workspace-application");
 const { normalizePathForCompare, validateWorkspaceConfig } = require("../ipc-security");
 const { openDirectoryInExplorer, openPathWithProgramPicker } = require("../os-open");
+const { planConversion, convertLegacyWorkspace } = require("../store/convert-legacy");
 const { broadcast } = require("../ipc-registrar");
 
 const IMAGE_MIME_TYPES = {
@@ -117,6 +118,52 @@ function registerWorkspaceIpc(ipc, { settings, workspaceAuthorizer, knownWorkspa
     }
     approvedWorkspacePaths.add(normalizePathForCompare(selected));
     return { path: selected };
+  });
+
+  // 旧形式のフォルダーを、別の場所へ変換して書き出す（移行のための一時的な機能）。
+  // 元のフォルダーと書き出し先は、ここでダイアログから選ばせる。書き出し先は、そのまま
+  // ワークスペースとして登録できるよう、承認済みにする。
+  ipc.handle("ws:convert-legacy", async () => {
+    try {
+      const picked = await dialog.showOpenDialog({
+        properties: ["openDirectory"],
+        title: "変換する旧形式のフォルダーを選択",
+      });
+      if (picked.canceled || !picked.filePaths[0]) return { path: null };
+      const source = picked.filePaths[0];
+      const plan = planConversion(source);
+      const confirmed = await dialog.showMessageBox({
+        type: "question",
+        buttons: ["書き出し先を選ぶ", "キャンセル"],
+        defaultId: 0,
+        cancelId: 1,
+        title: "旧形式から変換",
+        message: `メモのノード ${plan.memoNodes} 件のうち、${plan.merge.length} 件を親の本文にまとめます。`,
+        detail:
+          "メモが 1 つだけで名前が「memo」、かつ親の本文が空のものだけです。" +
+          (plan.keep.length > 0
+            ? `親に本文があるため、そのままにするもの: ${plan.keep.length} 件。`
+            : "") +
+          "\n元のフォルダーは変更しません。別の空のフォルダーへ書き出します。",
+      });
+      if (confirmed.response !== 0) return { path: null };
+      const target = await dialog.showOpenDialog({
+        properties: ["openDirectory", "createDirectory"],
+        title: "書き出し先の空のフォルダーを選択",
+      });
+      if (target.canceled || !target.filePaths[0]) return { path: null };
+      const dest = target.filePaths[0];
+      await convertLegacyWorkspace(source, dest, {
+        read: (workspace) => workspaceGraph.readWorkspaceGraph(workspace),
+        execute: (...args) => workspaceGraph.executeWorkspaceGraphCommand(...args),
+        forget: (workspace) => workspaceGraph.forgetWorkspace(workspace),
+      });
+      approvedWorkspacePaths.add(normalizePathForCompare(dest));
+      return { path: dest, merged: plan.merge.length, kept: plan.keep.length };
+    } catch (err) {
+      log.error("ws:convert-legacy error:", err.message);
+      return { path: null, error: err.message };
+    }
   });
 
   ipc.handle("ws:read-graph", (_event, { workspacePath }) => application.read(workspacePath));

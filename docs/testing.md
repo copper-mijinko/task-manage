@@ -31,6 +31,7 @@ Electron アプリ全体を起動して確認する。
 | `markdown-format.test.js` | `electron/store/frontmatter.js` / `node-file.js`：frontmatter とノードのファイルの往復（親の並び順・辺のアーカイブ・本文に水平線・未知のキーの保持・誤った値の扱い） |
 | `markdown-loader.test.js` | `electron/store/loader.js`：フォルダーからグラフの組み立てと読み込み時の修復（id の重複・親の欠落・到達不能・旧メモ・旧形式の各書き方） |
 | `lazy-bodies.test.js` | 本文の遅延ロード: frontmatter だけの読み込み（長い frontmatter・CRLF・BOM・旧メモ）、本文を読んでいないノードの書き戻しで本文が残ること・空の本文で上書きしないこと、外からの変更の照合、本文を使うコマンド（本文の変更・コピー・削除と Undo）、本文の読み込み |
+| `convert-legacy.test.js` | 旧形式の変換（一時機能）: 単一の `memo` を親の本文へ移すこと、複数メモ・名前付き・親に本文ありは移さないこと、元のフォルダーを変更しないこと、書き出し先の検証 |
 | `early-read.test.js` | `electron/early-read.js`：起動の最初にワークスペースを読み始める |
 | `workspace-graph-persistence.test.js` | `electron/workspace-graph.js` と `electron/store/`：差分書き込み（変えたファイルだけ）・revision 照合・Undo/Redo と再起動後の履歴・削除のごみ箱と復元・外部変更の検出・失敗時の巻き戻し・読み直し・資産の保存と解決・パスの脱出拒否 |
 | `workspace-graph-migration.test.js` | `electron/store/migrate-graph-json.js`：旧 `graph-v1.json` から Markdown への一度きりの変換（本文・画像・添付・旧フォルダーの退避・途中で止まった場合の再開） |

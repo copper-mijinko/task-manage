@@ -48,6 +48,7 @@ const electronAPI = {
   wsSetWorkspaces: (config) => ipcRenderer.send("ws:set-workspaces", config),
   wsOpenWorkspace: (workspacePath) => ipcRenderer.invoke("ws:open-workspace", { workspacePath }),
   wsSelectDirectory: () => ipcRenderer.invoke("ws:select-directory"),
+  wsConvertLegacy: () => ipcRenderer.invoke("ws:convert-legacy"),
   wsReadGraph: (workspacePath) => ipcRenderer.invoke("ws:read-graph", { workspacePath }),
   wsExecuteGraphCommand: (workspacePath, command, origin, expectedRevision) =>
     ipcRenderer.invoke("ws:execute-graph-command", {
