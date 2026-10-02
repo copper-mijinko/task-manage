@@ -21,7 +21,8 @@ vi.mock("@lib/primitives/Dialog.svelte", async () => {
 import TreeTable from "@features/tasks/components/TreeTable.svelte";
 import { column_settings, table_selected_id, theme } from "@stores";
 import { active_row_path, clearSelection, selected_ids } from "@stores/ui";
-import { pageSearchCountIsPartial, pageSearchQuery } from "@features/search/stores/search";
+import { filter, pageSearchCountIsPartial, pageSearchQuery } from "@features/search/stores/search";
+import { bodies_status } from "@features/workspace/stores/graph";
 import { renderWithGraph, settle } from "../helpers/render_with_graph.js";
 
 let project;
@@ -583,5 +584,40 @@ describe("TreeTable", () => {
       expect(last).not.toBeNull();
       expect(document.activeElement).toBe(last);
     });
+  });
+});
+
+describe("TreeTable while the bodies are read for the body search", () => {
+  afterEach(() => {
+    filter.set({});
+    bodies_status.set("idle");
+  });
+
+  // 本文の検索は、全ノードの本文を読み終えるまで確定しない。読む間に「一致するノードが
+  // ありません」と出すと、まだ探し終えていないだけなのに、無いと言ってしまう。
+  test("says the bodies are loading, not that nothing matches, while they are read", async () => {
+    project = createProjectData();
+    filter.set({ full_text: ["no-such-word-anywhere"], search_memo: ["1"] });
+    await renderTree();
+    // ワークスペースの読み込みが状態を戻すので、描画のあとに「読み込み中」にする。
+    bodies_status.set("loading");
+    await settle();
+    expect(screen.getByTestId("tree-body-loading")).toHaveTextContent("本文を読み込み中です");
+    expect(screen.queryByText("一致するノードがありません")).toBeNull();
+
+    bodies_status.set("idle");
+    await settle();
+    expect(screen.queryByTestId("tree-body-loading")).toBeNull();
+    expect(screen.getByText("一致するノードがありません")).toBeInTheDocument();
+  });
+
+  test("still says nothing matches when the body search is off", async () => {
+    project = createProjectData();
+    filter.set({ full_text: ["no-such-word-anywhere"] });
+    await renderTree();
+    bodies_status.set("loading");
+    await settle();
+    expect(screen.queryByTestId("tree-body-loading")).toBeNull();
+    expect(screen.getByText("一致するノードがありません")).toBeInTheDocument();
   });
 });

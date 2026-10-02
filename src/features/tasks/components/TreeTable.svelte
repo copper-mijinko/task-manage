@@ -63,6 +63,8 @@
     show_archived,
   } from "@stores/ui";
   import { navigation_history } from "@stores/navigation_history";
+  import { filter } from "@features/search/stores/search";
+  import { bodies_status } from "@features/workspace/stores/graph";
   import {
     hasSelectedDocumentText,
     hasSelectedMemoText,
@@ -1561,6 +1563,13 @@
         </svg>
         <p class="EmptyTitle">ノードがありません</p>
         <p class="EmptyHint">ヘッダーの + ボタンか、右クリックメニューからノードを追加できます</p>
+      {:else if $filter.search_memo?.length && $bodies_status === "loading"}
+        <!-- 本文の検索は、全ノードの本文を読み終えるまで確定しない。読む間は「一致なし」と
+             言わない（まだ探し終えていないだけ）。 -->
+        <p class="EmptyTitle" role="status" data-testid="tree-body-loading">
+          本文を読み込み中です…
+        </p>
+        <p class="EmptyHint">読み込みが終わると、本文も含めた検索結果が表示されます</p>
       {:else}
         <svg class="EmptyIcon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <circle
