@@ -115,6 +115,13 @@ export interface ElectronAPI {
   onWorkspaceGraphUpdated: (callback: (event: WorkspaceGraphUpdate) => void) => void;
   /** ディスクから読み直す（外で書き換えたファイルを取り込む）。 */
   wsReloadWorkspace: (workspacePath: string) => Promise<WorkspaceGraph>;
+  /** 旧形式のフォルダーを別の場所へ変換して書き出す（ダイアログで選ぶ）。 */
+  wsConvertLegacy: () => Promise<{
+    path: string | null;
+    merged?: number;
+    kept?: number;
+    error?: string;
+  }>;
   /** ノードの本文。読み込みでは本文を読まない（`bodyLoaded: false`）ので、開いたときに読む。 */
   wsReadNodeBody: (
     workspacePath: string,
