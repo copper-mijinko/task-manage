@@ -8,7 +8,7 @@
 | ファイル | 内容 |
 | -------- | ---- |
 | [specification.md](specification.md) | 機能仕様・画面構成・実装上の挙動・状態管理 |
-| [data.md](data.md) | データ保存先・構造（meta.json / ワークスペースのグラフ graph-v1.json）・画像と添付・旧 Markdown 形式からの取り込み |
+| [data.md](data.md) | データ保存先・構造（meta.json / ワークスペースのノードごとの Markdown ファイル）・画像と添付・旧形式との関係 |
 | [architecture.md](architecture.md) | ソースコード階層・レイヤー責務・import 規約・ストア構成・主要パターン |
 | [performance.md](performance.md) | 起動時の遅延読み込み境界・グラフの読み込みと保存・性能計測 |
 | [testing.md](testing.md) | テスト種別・テストファイル一覧・実行コマンド |

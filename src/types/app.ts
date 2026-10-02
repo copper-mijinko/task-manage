@@ -4,7 +4,19 @@ import type {
   WorkspaceGraph,
   WorkspaceGraphCommand,
   WorkspaceGraphCommandResult,
+  WorkspaceGraphDelta,
+  WorkspaceGraphHistoryResult,
 } from "./workspace_graph";
+
+/** ノードのフォルダーへ保存するファイルの種類（本文に貼る画像 / 添付）。 */
+export type GraphAssetKind = "image" | "attachment";
+
+/** ほかのウィンドウの変更の通知。差分（`delta`）か、読み直した全体（`graph`）。 */
+export interface WorkspaceGraphUpdate {
+  workspacePath: string;
+  delta?: WorkspaceGraphDelta;
+  graph?: WorkspaceGraph;
+}
 
 export type ThemeName = "dark" | "light";
 export type SelectedType = "WorkspaceProject" | undefined;
@@ -51,14 +63,6 @@ export interface WindowState {
   isFullScreen: boolean;
 }
 
-/** 「Markdown から取り込む」で選べる、ワークスペース直下の旧形式プロジェクト。 */
-export interface MarkdownImportSource {
-  dirName: string;
-  name: string;
-  /** すでにグラフに入っているか（取り込み直すと新しい id の別ノードになる）。 */
-  imported: boolean;
-}
-
 export interface ElectronAPI {
   getMetaData: (key: string) => Promise<unknown>;
   setMetaData: (key: string, value: unknown) => void;
@@ -103,25 +107,29 @@ export interface ElectronAPI {
   wsUndoGraph: (
     workspacePath: string,
     expectedRevision: number
-  ) => Promise<{ graph: WorkspaceGraph; changed: boolean }>;
+  ) => Promise<WorkspaceGraphHistoryResult>;
   wsRedoGraph: (
     workspacePath: string,
     expectedRevision: number
-  ) => Promise<{ graph: WorkspaceGraph; changed: boolean }>;
-  onWorkspaceGraphUpdated: (
-    callback: (event: { workspacePath: string; graph: WorkspaceGraph }) => void
-  ) => void;
-  wsListMarkdownImports: (workspacePath: string) => Promise<MarkdownImportSource[]>;
-  wsImportMarkdownProjects: (
+  ) => Promise<WorkspaceGraphHistoryResult>;
+  onWorkspaceGraphUpdated: (callback: (event: WorkspaceGraphUpdate) => void) => void;
+  /** ディスクから読み直す（外で書き換えたファイルを取り込む）。 */
+  wsReloadWorkspace: (workspacePath: string) => Promise<WorkspaceGraph>;
+  /** ノードの本文。読み込みでは本文を読まない（`bodyLoaded: false`）ので、開いたときに読む。 */
+  wsReadNodeBody: (
     workspacePath: string,
-    dirNames: string[],
-    expectedRevision?: number
-  ) => Promise<WorkspaceGraphCommandResult>;
+    nodeId: string
+  ) => Promise<{ body: unknown; format: string }>;
+  /** 全ノードの本文（本文の検索・全メモの形式変換のとき）。 */
+  wsReadAllNodeBodies: (
+    workspacePath: string
+  ) => Promise<Record<string, { body: unknown; format: string }>>;
   wsSaveGraphAsset: (
     workspacePath: string,
     nodeId: string,
     fileName: string,
-    bytes: Uint8Array
+    bytes: Uint8Array,
+    kind?: GraphAssetKind
   ) => Promise<{ relativePath: string }>;
   wsResolveGraphAsset: (
     workspacePath: string,

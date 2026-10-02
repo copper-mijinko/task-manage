@@ -2,12 +2,12 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { test, expect, _electron as electron } from "@playwright/test";
+import { graphAt, writeWorkspaceFiles } from "./support.js";
 
 /** 1 つのプロジェクト（project-1）と 1 つのノード（task-1）を持つワークスペース。 */
 function createTempDataDirectory() {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "task-manage-"));
   const workspacePath = path.join(tempDir, "workspace");
-  fs.mkdirSync(path.join(workspacePath, ".task-manage"), { recursive: true });
   const node = (id, name, parentId, order, extra = {}) => ({
     id,
     name,
@@ -22,17 +22,7 @@ function createTempDataDirectory() {
     node("project-1", "Sample Project", "root", 0, { status: "Open" }),
     node("task-1", "First Task", "project-1", 0, { status: "Open" }),
   ];
-  const graph = {
-    schemaVersion: 1,
-    workspaceId: "smoke-test",
-    rootId: "root",
-    revision: 0,
-    nodes: Object.fromEntries(nodes.map((n) => [n.id, n])),
-  };
-  fs.writeFileSync(
-    path.join(workspacePath, ".task-manage", "graph-v1.json"),
-    JSON.stringify({ schemaVersion: 1, graph, undo: [], redo: [] })
-  );
+  writeWorkspaceFiles(workspacePath, nodes);
   fs.writeFileSync(
     path.join(tempDir, "meta.json"),
     JSON.stringify({
@@ -48,8 +38,7 @@ function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, "utf8"));
 }
 
-const graphOf = (app) =>
-  readJson(path.join(app.workspacePath, ".task-manage", "graph-v1.json")).graph;
+const graphOf = (app) => graphAt(app.workspacePath);
 
 async function launchSeededApp() {
   const { tempDir, workspacePath } = createTempDataDirectory();

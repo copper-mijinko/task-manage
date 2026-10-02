@@ -178,6 +178,8 @@ test("detail pane: name, status, dates, tags and body edits save, reject an inve
     const tags = detail.getByRole("textbox", { name: "ノードのタグ" });
     await tags.fill("urgent");
     await tags.press("Enter");
+    // 追加の結果が画面に出てから外す（古い一覧から組み立てた変更で、追加が消えないように）。
+    await expect(detail.getByRole("button", { name: "タグ urgent を外す" })).toBeVisible();
     await detail.getByRole("button", { name: "タグ design を外す" }).click();
     await expect.poll(() => graphOf(app).nodes.spec.tags).toEqual(["urgent"]);
 
@@ -227,6 +229,16 @@ const focusedRowName = (page) =>
       : null;
   });
 
+/**
+ * Work の下に見えている行（「深さ:名前」）。ファイルは画面より先に書き換わるので、
+ * ディスクだけを見て次のキーを押すと、画面が追いつく前のキーが取りこぼされる。
+ * 次のキーの前に、画面にも結果が出るのを待つ。
+ */
+const shownUnderWork = async (page) => {
+  const rows = await visibleRows(page);
+  return rows.slice(rows.indexOf("1:Work") + 1, rows.indexOf("1:Home"));
+};
+
 test("keyboard editing: Enter adds and keeps going, Ctrl+Enter adds a child, F2 renames, Tab and Alt+arrows move", async () => {
   await run(createWorkspace(), async (app) => {
     const page = app.window;
@@ -247,21 +259,36 @@ test("keyboard editing: Enter adds and keeps going, Ctrl+Enter adds a child, F2 
     // Tab でインデント（One の子に）、Shift+Tab で戻す。フォーカスは動いた行に付いていく。
     await page.keyboard.press("Tab");
     await expect.poll(() => childrenOf(app, nodesNamed(app, "One")[0].id)).toEqual(["Two"]);
+    await expect
+      .poll(() => shownUnderWork(page))
+      .toEqual(["2:Spec", "2:One", "3:Two", "2:Build", "2:Release"]);
     await expect.poll(() => focusedRowName(page)).toBe("Two");
     await page.keyboard.press("Shift+Tab");
     await expect
       .poll(() => childrenOf(app, "work"))
       .toEqual(["Spec", "One", "Two", "Build", "Release"]);
+    await expect
+      .poll(() => shownUnderWork(page))
+      .toEqual(["2:Spec", "2:One", "2:Two", "2:Build", "2:Release"]);
+    await expect.poll(() => focusedRowName(page)).toBe("Two");
 
     // Alt+↑ / Alt+↓ で兄弟の中を動く。
     await page.keyboard.press("Alt+ArrowUp");
     await expect
       .poll(() => childrenOf(app, "work"))
       .toEqual(["Spec", "Two", "One", "Build", "Release"]);
+    await expect
+      .poll(() => shownUnderWork(page))
+      .toEqual(["2:Spec", "2:Two", "2:One", "2:Build", "2:Release"]);
+    await expect.poll(() => focusedRowName(page)).toBe("Two");
     await page.keyboard.press("Alt+ArrowDown");
     await expect
       .poll(() => childrenOf(app, "work"))
       .toEqual(["Spec", "One", "Two", "Build", "Release"]);
+    await expect
+      .poll(() => shownUnderWork(page))
+      .toEqual(["2:Spec", "2:One", "2:Two", "2:Build", "2:Release"]);
+    await expect.poll(() => focusedRowName(page)).toBe("Two");
 
     // F2 で名前を変え、Esc で取り消すと元の名前のまま行にフォーカスが戻る。
     await page.keyboard.press("F2");

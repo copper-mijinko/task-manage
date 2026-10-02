@@ -19,8 +19,8 @@ const IMAGE_MIME_TYPES = {
 };
 
 /**
- * ワークスペースの IPC。データの正本は `<workspace>/.task-manage/graph-v1.json`
- * だけで、読み書きはすべてグラフのコマンドを通る。
+ * ワークスペースの IPC。データの正本はワークスペースのフォルダーの Markdown
+ * ファイル（1 ノード 1 ファイル）で、読み書きはすべてグラフのコマンドを通る。
  *
  * @param {ReturnType<import("../ipc-registrar").createIpcRegistrar>} ipc
  * @param {object} deps
@@ -33,13 +33,17 @@ function registerWorkspaceIpc(ipc, { settings, workspaceAuthorizer, knownWorkspa
   // ワークスペースとして登録できる。
   const approvedWorkspacePaths = new Set();
 
+  // 手で直したファイルの誤りなど、読み込み時の警告はログに残す。
+  workspaceGraph.setWarningHandler((message) => log.warn(message));
+
   const application = createWorkspaceApplication({
     authorize: (workspacePath) => workspaceAuthorizer.assertKnownWorkspace(workspacePath),
     initialize: (workspacePath) => workspaceGraph.readWorkspaceGraph(workspacePath),
     repository: workspaceGraph,
-    // 要求元のウィンドウは結果を戻り値で受け取るので送らない。
-    publish: (workspacePath, graph, requester) =>
-      broadcast("workspace-graph-updated", { workspacePath, graph }, requester),
+    // 要求元のウィンドウは結果を戻り値で受け取るので送らない。`payload` は
+    // 差分（`{ delta }`）か、読み直したときの全体（`{ graph }`）。
+    publish: (workspacePath, payload, requester) =>
+      broadcast("workspace-graph-updated", { workspacePath, ...payload }, requester),
     openAsset: async (resolvedPath, chooseProgram) => {
       if (chooseProgram) return openPathWithProgramPicker(resolvedPath);
       const error = await shell.openPath(resolvedPath);
@@ -95,11 +99,11 @@ function registerWorkspaceIpc(ipc, { settings, workspaceAuthorizer, knownWorkspa
       return { path: null, error: `フォルダの読み取りに失敗しました: ${err.message}` };
     }
 
-    // 受け付けるのは、空のフォルダー・既存のワークスペース（グラフあり）・
-    // 取り込める旧 Markdown プロジェクトを含むフォルダーのどれか。
+    // 受け付けるのは、空のフォルダー・既存のワークスペース・旧 Markdown
+    // プロジェクトを含むフォルダーのどれか。
     const isWorkspace =
       entries.length === 0 ||
-      workspaceGraph.isGraphActive(selected) ||
+      workspaceGraph.isWorkspaceFolder(selected) ||
       entries.some(
         (entry) =>
           entry.isDirectory() && fs.existsSync(path.join(selected, entry.name, "_project.md"))
@@ -125,15 +129,18 @@ function registerWorkspaceIpc(ipc, { settings, workspaceAuthorizer, knownWorkspa
   ipc.handle("ws:redo-graph", (event, request) =>
     application.history({ ...request, direction: "redo", requester: event.sender })
   );
-  ipc.handle("ws:list-markdown-imports", (_event, { workspacePath }) =>
-    application.listMarkdownImports(workspacePath)
+  ipc.handle("ws:reload-workspace", (event, { workspacePath }) =>
+    application.reload({ workspacePath, requester: event.sender })
   );
-  ipc.handle("ws:import-markdown-projects", (event, request) =>
-    application.importMarkdown({ ...request, requester: event.sender })
+  ipc.handle("ws:read-node-body", (_event, { workspacePath, nodeId }) =>
+    application.readBody({ workspacePath, nodeId })
+  );
+  ipc.handle("ws:read-all-node-bodies", (_event, { workspacePath }) =>
+    application.readAllBodies({ workspacePath })
   );
   ipc.handle("ws:open-graph-asset", (_event, request) => application.openAsset(request));
-  ipc.handle("ws:save-graph-asset", (_event, { workspacePath, nodeId, fileName, bytes }) =>
-    application.saveAsset({ workspacePath, nodeId, fileName, bytes })
+  ipc.handle("ws:save-graph-asset", (_event, { workspacePath, nodeId, fileName, bytes, kind }) =>
+    application.saveAsset({ workspacePath, nodeId, fileName, bytes, kind })
   );
   ipc.handle("ws:resolve-graph-asset", async (_event, { workspacePath, nodeId, relativePath }) => {
     const resolved = await application.resolveAsset({ workspacePath, nodeId, relativePath });

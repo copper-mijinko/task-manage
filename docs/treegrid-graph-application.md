@@ -11,7 +11,7 @@ MainPage / TreeTable が持つ検索、列別フィルター、カラム設定�
 | PR #233 の変更 | 判断 | 対応 |
 | --- | --- | --- |
 | Workspace 全体の Graph、ordered parent edges | Domain の進化 | 維持 |
-| command engine、revision、undo/redo、graph-v1、migration | Application / 保存機構の進化 | 維持 |
+| command engine、revision、undo/redo、graph-v1、migration | Application / 保存機構の進化 | command engine・revision・undo/redo は維持。保存はノードごとの Markdown に戻した（[node-graph-design.md](node-graph-design.md) § 永続化と互換性） |
 | Workspace Root による横断操作 | UX の改善 | TreeGrid の scope として維持 |
 | node 本文・タグ・添付、共有node編集 | 新モデルの能力 | 既存の詳細・本文 View に接続 |
 | WorkspaceProject → NodeWorkspacePage の全面置換 | 上記能力に必須ではなく、従来の操作能力を失う | MainPage を主要 View に戻す |

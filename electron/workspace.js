@@ -2,7 +2,7 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const { marked } = require("marked");
-const { performanceMetrics } = require("./performance-metrics");
+const { parseFrontmatter } = require("./store/frontmatter");
 
 // marked: gfm + 標準仕様(breaks:false) + 行頭4-space を code block 扱いしない。
 marked.use({
@@ -537,6 +537,11 @@ function markdownToQuillDelta(value) {
   return { ops: normalizeOps(ops) };
 }
 
+function memoContentToQuillDelta(content) {
+  if (isQuillDelta(content)) return content;
+  return markdownToQuillDelta(content);
+}
+
 function parseQuillMemoBody(body) {
   const trimmed = String(body || "").trim();
   const fenceMatch = trimmed.match(/^```(?:json|quill-delta)?\s*\r?\n([\s\S]*?)\r?\n```$/i);
@@ -565,57 +570,6 @@ function parseNodeBody(body, format) {
   return normalizeMemoFormat(format, "markdown") === "quill"
     ? parseQuillMemoBody(body)
     : String(body ?? "").trim();
-}
-
-/**
- * Parse YAML frontmatter from a markdown string.
- * Returns { data: Record<string, string | string[]>, body: string }.
- */
-function parseFrontmatter(content) {
-  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
-  if (!match) return { data: {}, body: content };
-
-  const yaml = match[1];
-  const body = content.slice(match[0].length).trim();
-  const data = {};
-  let currentKey = null;
-
-  // 直前に読んだリスト要素。マップ要素（`- id: x` に続く `    order: 1`）を
-  // そこへ足していくために覚えておく。
-  let currentListItem = null;
-
-  for (const line of yaml.split(/\r?\n/)) {
-    const listMatch = line.match(/^ {2}- (.+)/);
-    if (listMatch && currentKey) {
-      if (!Array.isArray(data[currentKey])) data[currentKey] = [];
-      const entry = listMatch[1].trim();
-      // `- key: value` はマップ要素の 1 行目。スカラー要素と区別する。
-      // Only parent links contain maps. Tags (including "owner: team") are strings.
-      const entryKv = currentKey === "parents" && entry.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
-      if (entryKv) {
-        currentListItem = { [entryKv[1]]: entryKv[2].trim() };
-        data[currentKey].push(currentListItem);
-      } else {
-        currentListItem = null;
-        data[currentKey].push(entry);
-      }
-      continue;
-    }
-    // マップ要素の 2 行目以降（`- ` より深いインデント）。
-    const nestedMatch = line.match(/^ {4}([A-Za-z0-9_-]+):\s*(.*)$/);
-    if (nestedMatch && currentListItem) {
-      currentListItem[nestedMatch[1]] = nestedMatch[2].trim();
-      continue;
-    }
-    const kvMatch = line.match(/^([^:]+):\s*(.*)/);
-    if (kvMatch) {
-      currentKey = kvMatch[1].trim();
-      currentListItem = null;
-      const value = kvMatch[2].trim();
-      data[currentKey] = value || null;
-    }
-  }
-  return { data, body };
 }
 
 const RETRYABLE_FS_CODES = new Set(["EBUSY", "EPERM", "ENOTEMPTY"]);
@@ -674,6 +628,15 @@ async function atomicWriteFile(filePath, data, options, onWritten) {
   }
 }
 
+/** ノード本文の書き。`parseNodeBody` の逆。 */
+function serializeNodeBody(task) {
+  const format = normalizeMemoFormat(task.format, "markdown");
+  if (format === "quill") {
+    return `\`\`\`json\n${JSON.stringify(memoContentToQuillDelta(task.body), null, 2)}\n\`\`\``;
+  }
+  return legacyMemoContentToMarkdown(task.body, task.name);
+}
+
 /**
  * Task tags round-trip through the `tags:` frontmatter list. Files are
  * hand-editable, so accept both the YAML list form and a comma separated
@@ -711,17 +674,7 @@ function parseArchivedValue(value) {
   return false;
 }
 
-function attachmentEntryFromStats(fileName, stats) {
-  return {
-    id: `./attachments/${fileName}`,
-    name: fileName,
-    relativePath: `./attachments/${fileName}`,
-    size: stats.size,
-    modifiedAt: stats.mtime.toISOString(),
-  };
-}
-
-/** Read the root task from _project.md inside projectDir. */
+/** frontmatter の並び順の値（数値に直せなければ undefined）。 */
 function parseOrderValue(value) {
   return value != null && Number.isFinite(Number(value)) ? Number(value) : undefined;
 }
@@ -745,34 +698,30 @@ function normalizeParentLinks(raw, fallbackOrder) {
   for (const entry of list) {
     let id;
     let order;
+    let archived = false;
+    let archivedAt;
     if (typeof entry === "string") {
       id = entry;
       order = fallbackOrder;
     } else if (entry && typeof entry === "object") {
       id = typeof entry.id === "string" ? entry.id : undefined;
       order = parseOrderValue(entry.order);
+      // 辺だけのアーカイブ（ノード自体の `archived` とは別）。
+      archived = parseArchivedValue(entry.archived);
+      if (archived && entry.archived_at) archivedAt = String(entry.archived_at);
     }
     if (!id || seen.has(id)) continue;
     seen.add(id);
-    result.push(order === undefined ? { id } : { id, order });
+    const link = order === undefined ? { id } : { id, order };
+    if (archived) {
+      link.archived = true;
+      if (archivedAt) link.archivedAt = archivedAt;
+    }
+    result.push(link);
   }
   return result;
 }
 
-/**
- * 旧メモ（`<task-dir>/<memo-id>.md`）をノードとして取り込む。
- *
- * 「1 つのメモ ＝ 1 つのノード」なので、メモはタスクの属性ではなく子ノードに
- * なる。ファイルの移動は保存時に行う（`migrateLegacyMemoNode`）ので、読みは
- * 置き場所を問わずノードとして見せることだけを引き受ける。
- *
- * 返り値の `legacyMemoFiles` は「まだ移行していないノード」の元ファイルを指す。
- * 保存側はこれを見て、移行先を書いてから元を消す。
- *
- * 同じ id のディレクトリが既にある場合は取り込まない。移行の途中で落ちると
- * 「新しいディレクトリ」と「消し残した旧ファイル」が並ぶが、そのときは
- * ディレクトリを正とする（旧ファイルは次の保存で消える）。
- */
 /** 旧メモをタスクの子として並べるときの順序の基点。実タスクの後ろに置く。 */
 const LEGACY_MEMO_ORDER_BASE = 1_000_000;
 
@@ -785,105 +734,6 @@ function legacyMemoId(id, taskDir, fileName) {
       .createHash("sha256")
       .update(JSON.stringify([taskDir, fileName]))
       .digest("hex")}`;
-  }
-}
-
-function promoteLegacyMemos(tasks, taskDirs, memosByTaskId) {
-  const legacyMemoFiles = new Map();
-
-  for (const [taskId, memos] of memosByTaskId) {
-    const parent = tasks.get(taskId);
-    if (!parent) continue;
-    const dirName = taskDirs.get(taskId);
-
-    for (const [index, memo] of memos.entries()) {
-      if (!memo.id) continue;
-      // 旧メモの id はこれからディレクトリ名になる。ファイルを手で書いた場合に
-      // 危険な id が入っていることがあり、そのまま通すと保存のたびに例外が出て
-      // **プロジェクト全体が保存できなくなる**。中身は捨てずに id だけ振り直す。
-      const id = memo.id;
-      if (tasks.has(id)) continue;
-
-      tasks.set(id, {
-        id,
-        name: memo.title || "memo",
-        // メモは進み具合を持たない。既定のステータスを与えると、ノート 1 つ
-        // 1 つが「未着手のタスク」として積み上がる。
-        status: undefined,
-        parents: [{ id: taskId, order: LEGACY_MEMO_ORDER_BASE + index }],
-        body: memo.content,
-        format: memo.format,
-        bodyLoaded: memo.bodyLoaded,
-        tags: memo.tags ?? [],
-        attachments: [],
-        createdAt: parent.createdAt || "",
-      });
-      // 画像は親ディレクトリの `assets/` にある。移行するまではそちらを見る。
-      taskDirs.set(id, dirName);
-      // 消すのは**ディスク上の実際のファイル名**。id から組み立てると、
-      // 振り直した id や危険な id のときに別の場所を指してしまう。
-      legacyMemoFiles.set(id, { dirName, fileName: memo.fileName });
-    }
-  }
-
-  return legacyMemoFiles;
-}
-
-/** `nodeFilePathFor` の非同期版。対話パスは同期 I/O を踏まないこと。 */
-async function nodeFilePathForAsync(projectDir, taskDirs, taskId) {
-  const dirName = taskDirs.get(taskId);
-  if (!dirName) throw new Error("Task directory was not found");
-  const taskDir = getTaskTargetDir(projectDir, taskDirs, taskId);
-  const indexFile = dirName === "_project" ? "_project.md" : "_index.md";
-  const indexPath = path.join(taskDir, indexFile);
-  const raw = await readFilePrefixAsync(indexPath);
-  if (parseFrontmatter(raw).data.id === taskId) return indexPath;
-  const memos = await readMemosAsync(taskDir, [indexFile], { includeMemoContent: false });
-  const memo = memos.find((entry) => entry.id === taskId);
-  if (!memo) throw new Error("Task body file was not found");
-  return path.join(taskDir, memo.fileName);
-}
-
-async function loadNodeBodiesAsync(projectDir, tasks, taskDirs) {
-  return Promise.all(
-    tasks.map(async (task) => {
-      if (!task || task.bodyLoaded !== false || !taskDirs.has(task.id)) return task;
-      // A failed read of an existing node must abort the save, never write an empty body.
-      const { body, format } = await readTaskBodyAsync(projectDir, task.id, taskDirs);
-      return { ...task, body, format, bodyLoaded: true };
-    })
-  );
-}
-
-async function readTaskBodyAsync(projectDir, taskId, taskDirs) {
-  return performanceMetrics.measureAsync("workspace.readTaskBodyAsync", async () => {
-    const raw = await fs.promises.readFile(
-      await nodeFilePathForAsync(projectDir, taskDirs, taskId),
-      "utf8"
-    );
-    const { data, body } = parseFrontmatter(raw);
-    return {
-      body: parseNodeBody(body, data.format),
-      format: normalizeMemoFormat(data.format, "markdown"),
-    };
-  });
-}
-
-// ── Async read mirrors ───────────────────────────────────────────────────
-// The sync readers above stay for batch/export, the reconciler, inbox helpers
-// and tests. The async mirrors below are used by the interactive IPC handlers
-// so that slow disks (e.g. OneDrive) cannot block the main process event loop —
-// which would otherwise stall *all* IPC, including window controls, and freeze
-// the whole UI. They use fs.promises and read sibling files concurrently.
-
-async function readFilePrefixAsync(filePath, maxBytes = 16 * 1024) {
-  const fh = await fs.promises.open(filePath, "r");
-  try {
-    const buffer = Buffer.alloc(maxBytes);
-    const { bytesRead } = await fh.read(buffer, 0, maxBytes, 0);
-    return buffer.subarray(0, bytesRead).toString("utf8");
-  } finally {
-    await fh.close();
   }
 }
 
@@ -932,221 +782,20 @@ function sortMemoEntries(memos) {
     .map(({ fileIndex: _fileIndex, ...memo }) => memo);
 }
 
-async function readMemosAsync(taskDir, reservedFiles = ["_index.md"], options = {}) {
-  const includeMemoContent = options.includeMemoContent !== false;
-  const reserved = new Set(reservedFiles);
-  const files = (await fs.promises.readdir(taskDir))
-    .filter((f) => f.endsWith(".md") && !reserved.has(f))
-    .sort();
-  const memos = await Promise.all(
-    files.map(async (file, fileIndex) => {
-      const filePath = path.join(taskDir, file);
-      const raw = includeMemoContent
-        ? await fs.promises.readFile(filePath, "utf8")
-        : await readFilePrefixAsync(filePath);
-      return buildMemoEntry(file, fileIndex, raw, includeMemoContent, taskDir);
-    })
-  );
-  return sortMemoEntries(memos);
-}
-
-async function readAttachmentsAsync(taskDir) {
-  const attachmentsDir = path.join(taskDir, "attachments");
-  let entries;
-  try {
-    entries = await fs.promises.readdir(attachmentsDir, { withFileTypes: true });
-  } catch (err) {
-    if (err.code === "ENOENT") return [];
-    throw err;
-  }
-
-  const fileNames = entries
-    .filter((entry) => entry.isFile())
-    .map((entry) => entry.name)
-    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
-
-  return Promise.all(
-    fileNames.map(async (fileName) => {
-      const filePath = path.join(attachmentsDir, fileName);
-      const stats = await fs.promises.stat(filePath);
-      return attachmentEntryFromStats(fileName, stats);
-    })
-  );
-}
-
-/**
- * ノード本文の 3 フィールドをまとめて作る。読み手が 4 箇所あるので、
- * 1 箇所でも欠けると「画面には出るがファイルに書かれない」形で壊れる。
- */
-function nodeBodyFields(body, data, includeBody) {
-  return {
-    format: normalizeMemoFormat(data.format, "markdown"),
-    body: includeBody ? parseNodeBody(body, data.format) : "",
-    bodyLoaded: includeBody,
-  };
-}
-
-function buildTaskFromFrontmatter(data, extra) {
-  const task = {
-    id: data.id,
-    name: data.name || "",
-    status: data.status || undefined,
-    startDate: data.start || undefined,
-    dueDate: data.due || undefined,
-    createdAt: data.created || "",
-    order: parseOrderValue(data.order),
-    tags: normalizeTaskTags(data.tags),
-    ...extra,
-  };
-  if (parseArchivedValue(data.archived)) {
-    task.archived = true;
-    if (data.archived_at) task.archivedAt = String(data.archived_at);
-  }
-  return task;
-}
-
-async function readRootTaskAsync(projectDir, options = {}) {
-  const includeBody = options.includeMemoContent !== false;
-  const filePath = path.join(projectDir, "_project.md");
-  const content = includeBody
-    ? await fs.promises.readFile(filePath, "utf8")
-    : await readFilePrefixAsync(filePath);
-  const { data, body } = parseFrontmatter(content);
-  const [memos, attachments] = await Promise.all([
-    readMemosAsync(projectDir, ["_project.md"], options),
-    readAttachmentsAsync(projectDir),
-  ]);
-  return buildTaskFromFrontmatter(data, {
-    parents: [],
-    memos,
-    attachments,
-    ...nodeBodyFields(body, data, includeBody),
-  });
-}
-
-async function readTaskDirAsync(taskDir, options = {}) {
-  const includeBody = options.includeMemoContent !== false;
-  const filePath = path.join(taskDir, "_index.md");
-  const content = includeBody
-    ? await fs.promises.readFile(filePath, "utf8")
-    : await readFilePrefixAsync(filePath);
-  const { data, body } = parseFrontmatter(content);
-  const parents = normalizeParentLinks(data.parents, parseOrderValue(data.order));
-  const [memos, attachments] = await Promise.all([
-    readMemosAsync(taskDir, ["_index.md"], options),
-    readAttachmentsAsync(taskDir),
-  ]);
-  return buildTaskFromFrontmatter(data, {
-    parents,
-    memos,
-    attachments,
-    ...nodeBodyFields(body, data, includeBody),
-  });
-}
-
-/**
- * Async mirror of readProject. Returns { tasks: Map, taskDirs: Map }.
- * Task directories are read concurrently so per-file disk latency overlaps
- * instead of summing.
- */
-async function readProjectAsyncUnmeasured(projectDir, options = {}) {
-  const tasks = new Map();
-  const taskDirs = new Map();
-
-  let entries;
-  try {
-    entries = await fs.promises.readdir(projectDir, { withFileTypes: true });
-  } catch (err) {
-    if (err.code === "ENOENT") return { tasks, taskDirs, legacyMemoFiles: new Map() };
-    throw err;
-  }
-
-  const hasRootFile = entries.some((entry) => entry.isFile() && entry.name === "_project.md");
-
-  const taskDirNames = entries
-    .filter((entry) => entry.isDirectory() && !entry.name.startsWith("_"))
-    .map((entry) => entry.name);
-
-  const [root, regularTasks] = await Promise.all([
-    hasRootFile ? readRootTaskAsync(projectDir, options).catch(() => null) : Promise.resolve(null),
-    Promise.all(
-      taskDirNames.map(async (name) => {
-        const taskDir = path.join(projectDir, name);
-        try {
-          await fs.promises.access(path.join(taskDir, "_index.md"));
-        } catch {
-          return null;
-        }
-        try {
-          const task = await readTaskDirAsync(taskDir, options);
-          return task.id ? { name, task } : null;
-        } catch {
-          // Skip malformed task directories (parity with sync readProject).
-          return null;
-        }
-      })
-    ),
-  ]);
-
-  const memosByTaskId = new Map();
-
-  if (root?.id) {
-    tasks.set(root.id, root);
-    taskDirs.set(root.id, "_project");
-    memosByTaskId.set(root.id, root.memos);
-    root.memos = [];
-  }
-
-  for (const entry of regularTasks) {
-    if (!entry) continue;
-    tasks.set(entry.task.id, entry.task);
-    taskDirs.set(entry.task.id, entry.name);
-    memosByTaskId.set(entry.task.id, entry.task.memos);
-    entry.task.memos = [];
-  }
-
-  const legacyMemoFiles = promoteLegacyMemos(tasks, taskDirs, memosByTaskId);
-
-  return { tasks, taskDirs, legacyMemoFiles };
-}
-
-async function readProjectAsync(projectDir, options = {}) {
-  return performanceMetrics.measureAsync("workspace.readProjectAsync", () =>
-    readProjectAsyncUnmeasured(projectDir, options)
-  );
-}
-
-async function readTaskMemosAsyncUnmeasured(projectDir, taskId, taskDirs) {
-  const dirName = taskDirs.get(taskId);
-  if (!dirName) {
-    throw new Error("Task directory was not found");
-  }
-  const taskDir = dirName === "_project" ? projectDir : path.join(projectDir, dirName);
-  return readMemosAsync(taskDir, dirName === "_project" ? ["_project.md"] : ["_index.md"], {
-    includeMemoContent: true,
-  });
-}
-
-async function readTaskMemosAsync(projectDir, taskId, taskDirs) {
-  return performanceMetrics.measureAsync("workspace.readTaskMemosAsync", () =>
-    readTaskMemosAsyncUnmeasured(projectDir, taskId, taskDirs)
-  );
-}
-
-function getTaskTargetDir(projectDir, taskDirs, taskId) {
-  const dirName = taskDirs.get(taskId);
-  if (!dirName) {
-    throw new Error("Task directory was not found");
-  }
-  return dirName === "_project" ? projectDir : path.join(projectDir, dirName);
-}
-
 module.exports = {
   parseFrontmatter,
   atomicWriteFile,
+  retryFileOperation,
+  assertSafePathSegment,
   legacyMemoId,
   LEGACY_MEMO_ORDER_BASE,
-  readProjectAsync,
-  readTaskMemosAsync,
-  loadNodeBodiesAsync,
+  buildMemoEntry,
+  sortMemoEntries,
+  parseNodeBody,
+  serializeNodeBody,
+  normalizeMemoFormat,
+  normalizeParentLinks,
+  normalizeTaskTags,
+  parseArchivedValue,
+  parseOrderValue,
 };

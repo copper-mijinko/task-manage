@@ -4,6 +4,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { expect, _electron as electron } from "@playwright/test";
+import { loadWorkspaceSync } from "../../electron/store/loader.js";
+import { writeWorkspaceFiles } from "../../tools/workspace-fixture.js";
 
 const REPO_ROOT = path.resolve(__dirname, "../..");
 
@@ -81,22 +83,13 @@ export function largeNodes(count = 2000) {
   return nodes;
 }
 
+export { writeWorkspaceFiles };
+
 /** ワークスペース（と任意で追加のファイル）を一時ディレクトリに作る。 */
-export function createWorkspace(nodes = projectNodes(), { meta = {}, files = {} } = {}) {
+export function createWorkspace(nodes = projectNodes(), { meta = {}, files = {}, inboxId } = {}) {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "tm-e2e-"));
   const workspacePath = path.join(tempDir, "workspace");
-  fs.mkdirSync(path.join(workspacePath, ".task-manage"), { recursive: true });
-  const graph = {
-    schemaVersion: 1,
-    workspaceId: "e2e",
-    rootId: "root",
-    revision: 0,
-    nodes: Object.fromEntries(nodes.map((n) => [n.id, n])),
-  };
-  fs.writeFileSync(
-    path.join(workspacePath, ".task-manage", "graph-v1.json"),
-    JSON.stringify({ schemaVersion: 1, graph, undo: [], redo: [] })
-  );
+  writeWorkspaceFiles(workspacePath, nodes, { inboxId });
   for (const [relative, content] of Object.entries(files)) {
     const target = path.join(workspacePath, relative);
     fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -172,9 +165,37 @@ export async function run(context, body) {
   if (succeeded) expect(app.pageErrors, "uncaught exceptions in the renderer").toEqual([]);
 }
 
-export const graphFile = (app) => path.join(app.workspacePath, ".task-manage", "graph-v1.json");
-export const readDocument = (app) => JSON.parse(fs.readFileSync(graphFile(app), "utf8"));
-export const graphOf = (app) => readDocument(app).graph;
+/**
+ * ディスク上のワークスペースをグラフとして読む（アプリの保存先そのもの）。
+ *
+ * 複数のファイルにまたがる操作の途中（ファイルの書き換えの最中）に読むと、
+ * 一時的に読めないことがある。その場合は少し待って読み直す。
+ */
+export function graphAt(workspacePath) {
+  let lastError;
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    try {
+      return loadWorkspaceSync(workspacePath).graph;
+    } catch (error) {
+      lastError = error;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 30);
+    }
+  }
+  throw lastError;
+}
+export const graphOf = (app) => graphAt(app.workspacePath);
+
+/** 履歴の段数（ディスクの `.task-manage/history`）。保存が終わったかの目印にもなる。 */
+export function historyDepth(app) {
+  const count = (stack) => {
+    try {
+      return fs.readdirSync(path.join(app.workspacePath, ".task-manage", "history", stack)).length;
+    } catch {
+      return 0;
+    }
+  };
+  return { undo: count("undo"), redo: count("redo") };
+}
 export const metaOf = (app) =>
   JSON.parse(fs.readFileSync(path.join(app.tempDir, "meta.json"), "utf8"));
 

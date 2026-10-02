@@ -276,6 +276,12 @@ delete (= archive) ではなく restore / permanently delete を出す。
       lastSubmittedText = null;
     }
   });
+  // 重複送信の防止は、ひとつの編集の中だけ。受け付けられなかった名前（別の変更が先に
+  // 保存された・ファイルが外で変更されていた）は名前が変わらないので、上の照合では外れない。
+  // 新しく編集を始めたら外し、同じ名前を入れ直しても送れるようにする。
+  $effect.pre(() => {
+    if (isEditing) lastSubmittedText = null;
+  });
 
   // ノードパス ("root / a / b / current") をツールチップで表示。
   // nodePath が空のときは従来挙動 (truncated 時のみ value/textContent を表示) に戻す。

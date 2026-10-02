@@ -146,7 +146,21 @@
    * 一括変換の対象は「本文を持つノード」。メモがノードになったので、
    * ノード 1 つにつき本文 1 つを見ればよい。
    */
-  function collectProjectMemosForFormat(node, targetFormat, fallbackFormat, seen = new Set()) {
+  /**
+   * ノードの本文。読み込みでは本文を読まない（`bodyLoaded: false`）ので、読んでいなければ
+   * まとめて読んだ本文（`bodies`）から引く。どちらも無ければ `undefined`。
+   */
+  function bodyOfNode(node, bodies) {
+    return node.data.bodyLoaded === false ? bodies?.[node.id]?.body : node.data.body;
+  }
+
+  function collectProjectMemosForFormat(
+    node,
+    targetFormat,
+    fallbackFormat,
+    bodies,
+    seen = new Set()
+  ) {
     if (!node || seen.has(node.id)) return [];
     seen.add(node.id);
 
@@ -154,7 +168,7 @@
     // 空の本文には変換するものが無い。ここを数えると、まだ何も書いていない
     // ノードまで「変換対象」に並び、件数が意味を失う。
     const ownItems =
-      currentFormat === targetFormat || isEmptyMemoContent(node.data.body)
+      currentFormat === targetFormat || isEmptyMemoContent(bodyOfNode(node, bodies))
         ? []
         : [
             {
@@ -170,7 +184,7 @@
 
     return ownItems.concat(
       (node.children ?? []).flatMap((child) =>
-        collectProjectMemosForFormat(child, targetFormat, fallbackFormat, seen)
+        collectProjectMemosForFormat(child, targetFormat, fallbackFormat, bodies, seen)
       )
     );
   }
@@ -178,9 +192,11 @@
   function countProjectMemosForFormat(node, targetFormat, fallbackFormat, seen = new Set()) {
     if (!node || seen.has(node.id)) return 0;
     seen.add(node.id);
+    // 本文を読んでいないノードは、空かどうかまだ分からない。変換の対象として数える
+    // （メニューの有効・無効の判定にだけ使う。正確な一覧は、本文を読んでから出す）。
     const ownCount =
       normalizeMemoFormat(node.data.format, fallbackFormat) === targetFormat ||
-      isEmptyMemoContent(node.data.body)
+      (node.data.bodyLoaded !== false && isEmptyMemoContent(node.data.body))
         ? 0
         : 1;
     return (
@@ -193,9 +209,20 @@
     );
   }
 
-  function requestBulkMemoFormat(targetFormat) {
+  // 変換の対象を決めるために読んだ、全ノードの本文。
+  let bulkBodies;
+
+  async function requestBulkMemoFormat(targetFormat) {
+    // 本文を読んでいないノードがあるので、全ノードの本文を読んでから対象を決める。
+    bulkBodies = await application.loadAllBodies();
+    if (!bulkBodies) return;
     bulkMemoTargetFormat = targetFormat;
-    bulkMemoItems = collectProjectMemosForFormat($tree_data?.data, targetFormat, defaultMemoFormat);
+    bulkMemoItems = collectProjectMemosForFormat(
+      $tree_data?.data,
+      targetFormat,
+      defaultMemoFormat,
+      bulkBodies
+    );
     bulkMemoPhase = "ready";
     show_memo_format_confirm = true;
   }
@@ -211,12 +238,15 @@
     try {
       const commands = bulkMemoItems.map((item) => {
         const node = getNode(item.id, $tree_data.data);
+        const body = bodyOfNode(node, bulkBodies);
+        // 本文を読めていないノードを変換すると、空の本文で上書きしてしまう。
+        if (body === undefined) throw new Error(`本文を読めませんでした: ${item.taskName}`);
         return {
           type: "update-node",
           nodeId: item.id,
           changes: {
             body: convertMemoContent(
-              node.data.body,
+              body,
               node.data.format || defaultMemoFormat,
               bulkMemoTargetFormat
             ),
@@ -591,7 +621,7 @@
   /**
    * 元に戻す / やり直しが実際に効くか。
    *
-   * graph 経路の履歴は main プロセスの `graph-v1.json` にあり、これまで
+   * graph 経路の履歴は main プロセスの `.task-manage/history/` にあり、これまで
    * レンダラーには渡っていなかったため、履歴が空でもボタンが有効なままで、
    * 押しても何も起きなかった。read / execute / history の戻り値に段数を
    * 添えるようにしたので、それを見る。

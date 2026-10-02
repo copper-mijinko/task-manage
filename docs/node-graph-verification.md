@@ -4,6 +4,11 @@ This record covers the workspace node graph implementation described in
 [node-graph-design.md](node-graph-design.md). All automated fixtures used isolated temporary
 workspaces; no user workspace was used as test data.
 
+> Note (2026-09-30): this record was written for the implementation that stored the whole
+> workspace in one `graph-v1.json` file. Storage has since returned to one Markdown file per
+> node (see [data.md](data.md)). The graph behavior recorded here (commands, history, views)
+> still applies; the persistence and import items below describe the earlier storage.
+
 ## Verified behavior
 
 ### Persistence and command model

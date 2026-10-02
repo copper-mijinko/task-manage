@@ -2,10 +2,8 @@
   import { userErrorMessage } from "@lib/utils/error_messages";
   import Modal from "@lib/primitives/Modal.svelte";
   import IconButton from "@lib/primitives/IconButton.svelte";
-  import * as platform from "@lib/ipc/platform";
   import { workspace_store } from "@features/workspace/stores/workspace";
-  import { workspace_graph } from "@features/workspace/stores/graph";
-  import type { MarkdownImportSource } from "@app-types/app";
+  import { workspace_graph_store } from "@features/workspace/stores/graph";
 
   interface Props {
     show?: boolean;
@@ -18,56 +16,21 @@
   let pendingLabel = $state("");
   let errorMessage = $state("");
 
-  // ワークスペース直下の旧 Markdown プロジェクトの取り込み。グラフを作った
-  // 後から置かれたプロジェクトを、既存のグラフへ足す。
-  let importSources: MarkdownImportSource[] | null = $state(null);
-  let importSelection = $state(new Set<string>());
-  let importBusy = $state(false);
-  let importMessage = $state("");
+  // ディスクから読み直す（ワークスペースのフォルダーを外で書き換えたとき）。
+  let reloadBusy = $state(false);
+  let reloadMessage = $state("");
 
-  // 引数は依存を $: に拾わせるためだけのもの。
-  function resetImport(..._deps: unknown[]) {
-    importSources = null;
-    importSelection = new Set();
-    importMessage = "";
-  }
-
-  async function loadImportSources() {
-    if (!activeWorkspacePath) return;
-    importMessage = "";
+  async function reloadFromDisk() {
+    if (!activeWorkspacePath || reloadBusy) return;
+    reloadBusy = true;
+    reloadMessage = "";
     try {
-      importSources = await platform.wsListMarkdownImports(activeWorkspacePath);
-      importSelection = new Set(
-        importSources.filter((source) => !source.imported).map((source) => source.dirName)
-      );
+      await workspace_graph_store.reload(activeWorkspacePath);
+      reloadMessage = "ディスクの内容を読み込み直しました。";
     } catch (error) {
-      importMessage = userErrorMessage(error);
-    }
-  }
-
-  function toggleImport(dirName: string, checked: boolean) {
-    const next = new Set(importSelection);
-    if (checked) next.add(dirName);
-    else next.delete(dirName);
-    importSelection = next;
-  }
-
-  async function runImport() {
-    if (!activeWorkspacePath || importSelection.size === 0 || importBusy) return;
-    importBusy = true;
-    importMessage = "";
-    try {
-      const result = await platform.wsImportMarkdownProjects(
-        activeWorkspacePath,
-        [...importSelection],
-        $workspace_graph?.revision
-      );
-      await loadImportSources();
-      importMessage = `${result.selectedNodeIds.length} 件のプロジェクトを取り込みました。「元に戻す」で取り消せます。`;
-    } catch (error) {
-      importMessage = userErrorMessage(error);
+      reloadMessage = userErrorMessage(error);
     } finally {
-      importBusy = false;
+      reloadBusy = false;
     }
   }
 
@@ -90,9 +53,9 @@
     if (!pendingPath) return;
     const label = pendingLabel.trim() || (pendingPath.split(/[/\\]/).pop() ?? pendingPath);
     workspace_store.addWorkspace(pendingPath, label);
-    if (!$workspace_store.activeWorkspacePath) {
-      await workspace_store.setActive(pendingPath);
-    }
+    // 追加したフォルダーをそのまま開く。以前は開いているワークスペースが
+    // あると登録だけで、「切り替え」を押すまで画面に何も出なかった。
+    await workspace_store.setActive(pendingPath);
     pendingPath = null;
     pendingLabel = "";
   }
@@ -105,9 +68,11 @@
     workspace_store.removeWorkspace(path);
   }
   let activeWorkspacePath = $derived($workspace_store.activeWorkspacePath);
-  // 開き直したとき・ワークスペースを切り替えたときは一覧を読み直させる。
+  // 開き直したとき・ワークスペースを切り替えたときは、前の結果の表示を消す。
   $effect.pre(() => {
-    resetImport(show, activeWorkspacePath);
+    void show;
+    void activeWorkspacePath;
+    reloadMessage = "";
   });
 </script>
 
@@ -179,43 +144,16 @@
       {/if}
 
       {#if activeWorkspacePath}
-        <p class="section-label">Markdown から取り込む</p>
+        <p class="section-label">ディスクから読み込み直す</p>
         <div class="migrate-area">
           <p class="migrate-note">
-            使用中のワークスペースに置かれた旧形式（Markdown）のプロジェクトを取り込みます。元のファイルは変更しません。
+            ワークスペースのフォルダーの Markdown ファイルを、アプリの外（エディターや AI
+            など）で書き換えたときや、旧形式のプロジェクトのフォルダーを置いたときに使います。画面はディスクの内容になります。
           </p>
-          {#if importSources === null}
-            <button class="migrate-link-btn" onclick={loadImportSources}>
-              取り込めるプロジェクトを探す...
-            </button>
-          {:else if importSources.length === 0}
-            <p class="empty-note">取り込める Markdown プロジェクトはありません。</p>
-          {:else}
-            <ul class="import-list">
-              {#each importSources as source (source.dirName)}
-                <li>
-                  <label class="import-option">
-                    <input
-                      type="checkbox"
-                      checked={importSelection.has(source.dirName)}
-                      onchange={(event) =>
-                        toggleImport(source.dirName, event.currentTarget.checked)}
-                    />
-                    <span>{source.name}</span>
-                    {#if source.imported}<span class="import-badge">取り込み済み</span>{/if}
-                  </label>
-                </li>
-              {/each}
-            </ul>
-            <button
-              class="action-btn confirm-btn"
-              disabled={importSelection.size === 0 || importBusy}
-              onclick={runImport}
-            >
-              {importBusy ? "取り込み中..." : `選んだ ${importSelection.size} 件を取り込む`}
-            </button>
-          {/if}
-          {#if importMessage}<p class="migrate-note" role="status">{importMessage}</p>{/if}
+          <button class="action-btn confirm-btn" disabled={reloadBusy} onclick={reloadFromDisk}>
+            {reloadBusy ? "読み込み中..." : "読み込み直す"}
+          </button>
+          {#if reloadMessage}<p class="migrate-note" role="status">{reloadMessage}</p>{/if}
         </div>
       {/if}
     </div>
@@ -402,43 +340,5 @@
     font-size: var(--font-body-sm);
     color: var(--theme-color-Sub-dark);
     margin: 0;
-  }
-  .migrate-link-btn {
-    align-self: flex-start;
-    cursor: pointer;
-    border: none;
-    background: none;
-    color: var(--theme-color-Primary-main);
-    font-size: var(--font-body-md);
-    padding: 0;
-    text-decoration: underline;
-  }
-  .migrate-link-btn:hover {
-    opacity: 0.75;
-  }
-  .import-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--sp1);
-  }
-  .import-option {
-    display: flex;
-    align-items: center;
-    gap: var(--sp2);
-    cursor: pointer;
-    padding: var(--sp1) var(--sp2);
-    border-radius: var(--shape-xs);
-    font-size: var(--font-body-md);
-    color: var(--theme-color-Sub-main);
-  }
-  .import-option:hover {
-    background-color: color-mix(in srgb, var(--theme-color-Sub-main) 6%, transparent);
-  }
-  .import-badge {
-    font-size: var(--font-body-sm);
-    color: var(--theme-color-Sub-dark);
   }
 </style>

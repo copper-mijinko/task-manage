@@ -73,3 +73,34 @@ describe("Graph adapter for the existing TreeGrid", () => {
     });
   });
 });
+
+describe("bodies that were not read at load time", () => {
+  const graph = () => ({
+    rootId: "root",
+    nodes: {
+      root: node("root"),
+      a: node("a", ["root"], { bodyLoaded: false, format: "markdown" }),
+      b: node("b", ["root"], { body: "already here", format: "markdown" }),
+    },
+  });
+
+  it("marks a node without its body, and gives no body for it", () => {
+    const [a, b] = projectTreeGrid(graph(), "root").data.children;
+    expect(a.data.bodyLoaded).toBe(false);
+    expect(a.data.body).toBeUndefined();
+    expect(b.data.bodyLoaded).toBe(true);
+    expect(b.data.body).toBe("already here");
+  });
+
+  it("uses the bodies that were read together, so the body search can see them", () => {
+    const bodies = { a: { body: "needle in the body", format: "markdown" } };
+    const project = projectTreeGrid(graph(), "root", bodies);
+    const [a] = project.data.children;
+    expect(a.data.bodyLoaded).toBe(true);
+    expect(a.data.body).toBe("needle in the body");
+    // 本文の検索がオンのときだけ、本文も探す。
+    const withBody = filterTree(project.data, { full_text: ["needle"], search_memo: ["1"] });
+    expect(withBody.children.map((child) => child.id)).toEqual(["a"]);
+    expect(filterTree(project.data, { full_text: ["needle"] })).toBeNull();
+  });
+});

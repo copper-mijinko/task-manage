@@ -49,10 +49,29 @@ export function graphFromTree(project, { rootId = "workspace-root", inboxId } = 
 }
 
 /**
+ * 読み込みでは本文を読まない状態（`bodyLoaded: false`）にする。本文はディスク側
+ * （`diskBodies`）に移り、`wsReadNodeBody` などで読む。
+ *
+ * @returns {Record<string, { body: any, format: string }>} `installGraphBackend` に渡す `diskBodies`
+ */
+export function makeBodiesLazy(graph, ids) {
+  const diskBodies = {};
+  for (const id of ids) {
+    const node = graph.nodes[id];
+    diskBodies[id] = { body: node.body ?? "", format: node.format ?? "markdown" };
+    delete node.body;
+    node.bodyLoaded = false;
+  }
+  return diskBodies;
+}
+
+/**
  * `window.electronAPI` を、メモリ上のグラフで動く偽物にする。コマンドは
  * main プロセスと同じエンジン（`workspace-graph-engine.js`）で実行する。
+ *
+ * `diskBodies` は、本文を読んでいないノードの本文（`makeBodiesLazy`）。
  */
-export function installGraphBackend(initialGraph, extraApi = {}) {
+export function installGraphBackend(initialGraph, extraApi = {}, { diskBodies = {} } = {}) {
   let graph = structuredClone(initialGraph);
   const undo = [];
   const redo = [];
@@ -98,8 +117,26 @@ export function installGraphBackend(initialGraph, extraApi = {}) {
       return { graph: publish(), changed: true };
     }),
     onWorkspaceGraphUpdated: vi.fn((callback) => listeners.add(callback)),
-    wsSaveGraphAsset: vi.fn(async (_path, nodeId, fileName) => ({
-      relativePath: `assets/${nodeId}/${fileName}`,
+    // 本物と同じく、ノードのフォルダーからの相対パスを返す（画像は assets、添付は attachments）。
+    wsReadNodeBody: vi.fn(async (_path, nodeId) => {
+      const node = graph.nodes[nodeId];
+      if (!node) throw new Error(`Unknown node: ${nodeId}`);
+      if (node.bodyLoaded !== false)
+        return { body: node.body ?? "", format: node.format ?? "markdown" };
+      return diskBodies[nodeId] ?? { body: "", format: "markdown" };
+    }),
+    wsReadAllNodeBodies: vi.fn(async () =>
+      Object.fromEntries(
+        Object.values(graph.nodes).map((node) => [
+          node.id,
+          node.bodyLoaded === false
+            ? (diskBodies[node.id] ?? { body: "", format: "markdown" })
+            : { body: node.body ?? "", format: node.format ?? "markdown" },
+        ])
+      )
+    ),
+    wsSaveGraphAsset: vi.fn(async (_path, _nodeId, fileName, _bytes, kind = "attachment") => ({
+      relativePath: `./${kind === "image" ? "assets" : "attachments"}/${fileName}`,
     })),
     wsResolveGraphAsset: vi.fn(async () => ({ url: "data:image/png;base64," })),
     wsOpenGraphAsset: vi.fn(async () => undefined),

@@ -7,10 +7,16 @@
  * 理由は利用者の言葉に置き換える。
  */
 
-const IPC_PREFIX = /^Error invoking remote method '[^']*':\s*(?:Error:\s*)?/;
+// 「Error:」だけでなく、独自のエラー名（`ExternalChangeError:` など）の前置きも落とす。
+const IPC_PREFIX = /^Error invoking remote method '[^']*':\s*(?:[A-Za-z]*Error:\s*)?/;
 
-/** 既知の理由と、その言い換え。上から順に照合する。 */
-const KNOWN: [RegExp, string][] = [
+/**
+ * 既知の理由と、その言い換え。上から順に照合する。言い換えが `null` のものは、
+ * すでに利用者向けの日本語なので、そのまま出す（ただし入力の拒否として扱う）。
+ */
+const KNOWN: [RegExp, string | null][] = [
+  // 保存先のファイルが、アプリの外で書き換えられていた（何も書いていない）。
+  [/アプリの外で変更されています/, null],
   [/Start date is after due date/i, "開始日が期限日より後になっています。日付を確認してください。"],
   [/Invalid node date/i, "日付の形式が正しくありません（YYYY-MM-DD）。"],
   [/cannot create a cycle|cyclic subgraph/i, "この操作では循環する親子関係を作れません。"],
@@ -61,7 +67,8 @@ export function userErrorMessage(error: unknown): string {
     IPC_PREFIX,
     ""
   );
-  for (const [pattern, message] of [...KNOWN, ...FAILURES]) if (pattern.test(raw)) return message;
+  for (const [pattern, message] of [...KNOWN, ...FAILURES])
+    if (pattern.test(raw)) return message ?? raw;
   return raw || "操作できませんでした。";
 }
 

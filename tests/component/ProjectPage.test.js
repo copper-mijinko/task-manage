@@ -27,6 +27,7 @@ import ProjectPage from "@pages/MainPage.svelte";
 import { active_row_path, ganttVisible, table_selected_id, ui_density } from "@stores";
 import { clearSelection, selectOnly, selected_ids } from "@stores/ui";
 import { renderWithGraph, settle } from "../helpers/render_with_graph.js";
+import { graphFromTree, makeBodiesLazy } from "../helpers/graph_backend.js";
 
 function createProjectData() {
   return {
@@ -234,7 +235,8 @@ describe("ProjectPage", () => {
 
     await fireEvent.click(screen.getByRole("button", { name: "表示と操作" }));
     await fireEvent.click(screen.getByRole("menuitem", { name: "全メモをMarkdownへ変換" }));
-    expect(screen.getByText("変換対象（1件）")).toBeInTheDocument();
+    // 本文を読んでいないノードがあるので、全ノードの本文を読んでから対象が決まる。
+    expect(await screen.findByText("変換対象（1件）")).toBeInTheDocument();
     expect(screen.getByText("First Task")).toBeInTheDocument();
     expect(screen.getByText(/情報が損なわれる可能性/)).toBeInTheDocument();
 
@@ -248,6 +250,34 @@ describe("ProjectPage", () => {
     expect(screen.getByText("変換が完了しました。")).toBeInTheDocument();
   });
 
+  // 読み込みでは本文を読まない。変換の前に全ノードの本文を読み、読んだ本文を変換する
+  // （読んでいないノードを、空の本文として変換して上書きしない）。
+  test("bulk conversion reads the bodies that were not read at load time and converts them", async () => {
+    project.data.children[0].data.body = { ops: [{ insert: "launch\n" }] };
+    project.data.children[0].data.format = "quill";
+    project.data.children.push({
+      id: "task-2",
+      data: { name: "Empty", status: "Open", format: "quill", body: { ops: [{ insert: "\n" }] } },
+      children: [],
+    });
+    const graph = graphFromTree(project);
+    const diskBodies = makeBodiesLazy(graph, ["task-1", "task-2"]);
+    const result = await renderWithGraph(ProjectPage, { graph, tree: project, diskBodies });
+    backend = result.backend;
+
+    await fireEvent.click(screen.getByRole("button", { name: "表示と操作" }));
+    await fireEvent.click(screen.getByRole("menuitem", { name: "全メモをMarkdownへ変換" }));
+    // 空の本文は対象にならない（本文を読んでから分かる）。
+    expect(await screen.findByText("変換対象（1件）")).toBeInTheDocument();
+    expect(backend.api.wsReadAllNodeBodies).toHaveBeenCalled();
+    await fireEvent.click(screen.getByRole("button", { name: "変換", exact: true }));
+    await settle();
+
+    expect(backend.node("task-1").format).toBe("markdown");
+    expect(backend.node("task-1").body).toBe("launch");
+    expect(backend.node("task-2").format).toBe("quill");
+  });
+
   test("reports a failed bulk conversion", async () => {
     project.data.children[0].data.body = { ops: [{ insert: "launch\n" }] };
     project.data.children[0].data.format = "quill";
@@ -256,7 +286,7 @@ describe("ProjectPage", () => {
 
     await fireEvent.click(screen.getByRole("button", { name: "表示と操作" }));
     await fireEvent.click(screen.getByRole("menuitem", { name: "全メモをMarkdownへ変換" }));
-    await fireEvent.click(screen.getByRole("button", { name: "変換", exact: true }));
+    await fireEvent.click(await screen.findByRole("button", { name: "変換", exact: true }));
     await settle();
 
     expect(screen.getByText(/Error: First Task/)).toBeInTheDocument();

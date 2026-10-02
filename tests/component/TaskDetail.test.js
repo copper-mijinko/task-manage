@@ -11,7 +11,7 @@ import TaskDetail from "@features/tasks/components/TaskDetail.svelte";
 import { selected_id, table_selected_id } from "@stores";
 import { clearSelection } from "@stores/ui";
 import { renderWithGraph, settle } from "../helpers/render_with_graph.js";
-import { TEST_WORKSPACE } from "../helpers/graph_backend.js";
+import { TEST_WORKSPACE, graphFromTree, makeBodiesLazy } from "../helpers/graph_backend.js";
 
 function createProjectData() {
   return {
@@ -45,7 +45,7 @@ async function renderDetail(props = {}, tree = project) {
 const specAttachment = {
   id: "spec",
   name: "spec.pdf",
-  relativePath: "assets/task-1/spec.pdf",
+  relativePath: "./attachments/spec.pdf",
   size: 4,
 };
 
@@ -137,10 +137,11 @@ describe("TaskDetail", () => {
         TEST_WORKSPACE,
         "task-1",
         "spec.pdf",
-        expect.any(Uint8Array)
+        expect.any(Uint8Array),
+        "attachment"
       );
       expect(backend.node("task-1").attachments).toEqual([
-        expect.objectContaining({ name: "spec.pdf", relativePath: "assets/task-1/spec.pdf" }),
+        expect.objectContaining({ name: "spec.pdf", relativePath: "./attachments/spec.pdf" }),
       ]);
     });
   });
@@ -169,7 +170,7 @@ describe("TaskDetail", () => {
 
     await waitFor(() => {
       expect(backend.node("task-1").attachments).toEqual([
-        expect.objectContaining({ name: "drop.txt", relativePath: "assets/task-1/drop.txt" }),
+        expect.objectContaining({ name: "drop.txt", relativePath: "./attachments/drop.txt" }),
       ]);
     });
   });
@@ -187,7 +188,7 @@ describe("TaskDetail", () => {
     expect(backend.api.wsOpenGraphAsset).toHaveBeenCalledWith(
       TEST_WORKSPACE,
       "task-1",
-      "assets/task-1/spec.pdf",
+      "./attachments/spec.pdf",
       false
     );
 
@@ -198,7 +199,7 @@ describe("TaskDetail", () => {
     expect(backend.api.wsOpenGraphAsset).toHaveBeenLastCalledWith(
       TEST_WORKSPACE,
       "task-1",
-      "assets/task-1/spec.pdf",
+      "./attachments/spec.pdf",
       true
     );
   });
@@ -321,6 +322,80 @@ describe("TaskDetail", () => {
     expect(backend.node("task-1").format).toBe("quill");
     expect(backend.node("task-1").body).toEqual({ ops: [{ insert: "stale markdown save\n" }] });
     expect(screen.getByTestId("memo-stub")).toHaveAttribute("data-format", "quill");
+  });
+
+  // ── 本文を読んでいないノード ─────────────────────────────────────
+  // 読み込みでは本文を読まない（`bodyLoaded: false`）。開いたノードの本文だけ読む。
+  // 読むまでは、エディターを出さない（空の本文を編集・保存させないため）。
+  describe("a node whose body has not been read", () => {
+    async function renderLazy(api) {
+      project.data.children[0].data.body = "stored on disk";
+      project.data.children[0].data.format = "markdown";
+      const graph = graphFromTree(project);
+      const diskBodies = makeBodiesLazy(graph, ["task-1"]);
+      table_selected_id.set("task-1");
+      const result = await renderWithGraph(TaskDetail, { graph, tree: project, api, diskBodies });
+      backend = result.backend;
+      return result;
+    }
+
+    test("reads the body when the node is opened, and shows the editor after that", async () => {
+      await renderLazy();
+      await fireEvent.click(screen.getByRole("tab", { name: "本文" }));
+      expect(await screen.findByTestId("memo-stub")).toHaveTextContent("stored on disk");
+      expect(backend.api.wsReadNodeBody).toHaveBeenCalledWith(TEST_WORKSPACE, "task-1");
+    });
+
+    test("does not show an editor (nothing that can be saved) until the body is read", async () => {
+      let release;
+      const gate = new Promise((resolve) => (release = resolve));
+      await renderLazy({
+        wsReadNodeBody: vi.fn(async () => {
+          await gate;
+          return { body: "stored on disk", format: "markdown" };
+        }),
+      });
+      await fireEvent.click(screen.getByRole("tab", { name: "本文" }));
+      await settle();
+      expect(screen.getByText("本文を読み込んでいます…")).toBeInTheDocument();
+      expect(screen.queryByTestId("memo-stub")).toBeNull();
+      release();
+      expect(await screen.findByTestId("memo-stub")).toHaveTextContent("stored on disk");
+      expect(screen.queryByText("本文を読み込んでいます…")).toBeNull();
+    });
+
+    test("keeps showing the body after the node is renamed (the editor is not replaced)", async () => {
+      await renderLazy();
+      await fireEvent.click(screen.getByRole("tab", { name: "本文" }));
+      await screen.findByTestId("memo-stub");
+      const reads = backend.api.wsReadNodeBody.mock.calls.length;
+      const stub = screen.getByTestId("memo-stub");
+      backend.api.wsExecuteGraphCommand.mockClear();
+      await fireEvent.click(screen.getByRole("tab", { name: "概要" }));
+      await fireEvent.click(screen.getByRole("button", { name: "編集", exact: true }));
+      const name = screen.getByRole("textbox", { name: "ノード名", exact: true });
+      await fireEvent.input(name, { target: { value: "Renamed" } });
+      await fireEvent.blur(name);
+      await waitFor(() => expect(backend.node("task-1").name).toBe("Renamed"));
+      await fireEvent.click(screen.getByRole("tab", { name: "本文" }));
+      expect(screen.getByTestId("memo-stub")).toHaveTextContent("stored on disk");
+      expect(backend.api.wsReadNodeBody.mock.calls.length).toBe(reads);
+      expect(stub).toBeTruthy();
+    });
+
+    test("converts the format from the body that was read, not from an empty one", async () => {
+      await renderLazy();
+      await fireEvent.click(screen.getByRole("tab", { name: "本文" }));
+      await screen.findByTestId("memo-stub");
+      await fireEvent.click(screen.getByRole("button", { name: "ノード詳細の操作" }));
+      await fireEvent.click(screen.getByRole("menuitem", { name: "形式を変換" }));
+      // 本文があるので、確認が出る（空の本文なら出ない）。
+      expect(await screen.findByText(/情報が損なわれる可能性/)).toBeInTheDocument();
+      await fireEvent.click(screen.getByRole("button", { name: "変換する" }));
+      await settle();
+      expect(backend.node("task-1").format).toBe("quill");
+      expect(backend.node("task-1").body).toEqual({ ops: [{ insert: "stored on disk\n" }] });
+    });
   });
 
   // 開いているプロジェクトを切り替えた直後に、前のプロジェクトで編集した名前の

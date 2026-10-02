@@ -1,6 +1,9 @@
 /** Canonical workspace application contract. Electron IPC is one transport.
  * All callers pass through authorization, initialization, revision checks and
  * the same domain command/persistence engine. No renderer tree is accepted.
+ *
+ * 操作の結果は、グラフ全体ではなく差分（変わったノードだけ）で返す。画面は
+ * 持っているグラフにそれを当てる（`docs/architecture.md` の「差分で伝える」）。
  */
 function createWorkspaceApplication({ authorize, initialize, repository, publish, openAsset }) {
   async function prepare(workspacePath) {
@@ -10,7 +13,7 @@ function createWorkspaceApplication({ authorize, initialize, repository, publish
   return {
     read: prepare,
     // `requester` は要求元（Electron では webContents）。結果は戻り値で受け取る
-    // ので、同じグラフを通知で二重に送らない。
+    // ので、同じ変更を通知で二重に送らない。
     async execute({ workspacePath, command, origin = "tree", expectedRevision, requester }) {
       await prepare(workspacePath);
       const result = await repository.executeWorkspaceGraphCommand(
@@ -19,8 +22,8 @@ function createWorkspaceApplication({ authorize, initialize, repository, publish
         origin,
         expectedRevision
       );
-      publish(workspacePath, result.graph, requester);
-      return result;
+      publish(workspacePath, { delta: result.delta }, requester);
+      return { selectedNodeIds: result.selectedNodeIds, delta: result.delta };
     },
     async history({ workspacePath, direction, expectedRevision, requester }) {
       if (direction !== "undo" && direction !== "redo")
@@ -29,26 +32,30 @@ function createWorkspaceApplication({ authorize, initialize, repository, publish
       const result = await repository[
         direction === "undo" ? "undoWorkspaceGraph" : "redoWorkspaceGraph"
       ](workspacePath, expectedRevision);
-      if (result.changed) publish(workspacePath, result.graph, requester);
-      return result;
+      if (!result.changed) return { changed: false, delta: null };
+      publish(workspacePath, { delta: result.delta }, requester);
+      return { changed: true, delta: result.delta };
     },
-    async listMarkdownImports(workspacePath) {
-      await prepare(workspacePath);
-      return repository.listMarkdownImportSources(workspacePath);
+    /** ディスクから読み直す（外で書き換えたファイルを取り込む）。全体を返す。 */
+    async reload({ workspacePath, requester }) {
+      await authorize(workspacePath);
+      const graph = await repository.reloadWorkspaceGraph(workspacePath);
+      publish(workspacePath, { graph }, requester);
+      return graph;
     },
-    async importMarkdown({ workspacePath, dirNames, expectedRevision, requester }) {
+    /** ノードの本文（読み込みでは本文を読まないので、詳細を開くときに読む）。 */
+    async readBody({ workspacePath, nodeId }) {
       await prepare(workspacePath);
-      const result = await repository.importMarkdownProjects(
-        workspacePath,
-        Array.isArray(dirNames) ? dirNames.map(String) : [],
-        expectedRevision
-      );
-      publish(workspacePath, result.graph, requester);
-      return result;
+      return repository.readNodeBody(workspacePath, nodeId);
     },
-    async saveAsset({ workspacePath, nodeId, fileName, bytes }) {
+    /** 全ノードの本文（本文の検索・全メモの形式変換のとき）。 */
+    async readAllBodies({ workspacePath }) {
       await prepare(workspacePath);
-      return repository.saveNodeAsset(workspacePath, nodeId, fileName, bytes);
+      return repository.readAllNodeBodies(workspacePath);
+    },
+    async saveAsset({ workspacePath, nodeId, fileName, bytes, kind }) {
+      await prepare(workspacePath);
+      return repository.saveNodeAsset(workspacePath, nodeId, fileName, bytes, kind);
     },
     async resolveAsset({ workspacePath, nodeId, relativePath }) {
       await prepare(workspacePath);
