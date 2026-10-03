@@ -54,6 +54,13 @@ Electron アプリ全体を起動して確認する。
 | `page_search_highlighter.test.js` | 画面内検索 |
 | `datetime_shortcuts.test.ts` / `date_urgency.test.ts` / `theme_contrast.test.ts` | 日時ショートカット・期限の緊急度・テーマのコントラスト |
 | `globalDismiss.test.js` / `tooltip.test.js` / `sidebarCollapsed.test.js` | action とサイドバー |
+| `app-paths.test.js` | 設定・データの置き場所の解決（`resolveAppDataPath`） |
+| `error_messages.test.ts` | エラーメッセージの日本語化 |
+| `graph_change.test.ts` | グラフの変更の取り込みと通知（`notice`） |
+| `node_search.test.js` | ノードの検索 |
+| `platform.test.ts` | レンダラーの IPC 境界（`platform.ts`） |
+| `status_labels.test.ts` | ステータスの選択肢と並べ替え |
+| `text_context_menu.test.js` | テキストの右クリックメニュー |
 
 ### 2.2 Component テスト（`tests/component/`）
 

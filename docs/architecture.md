@@ -273,7 +273,7 @@ CI（`.github/workflows/`）と同じ `npm run lint` / `npm run check` / `npm te
 | ページ内ハイライト検索                                             | `Header.svelte` の検索ボックス + `@features/search/utils/page_search_highlighter.ts`                                                             |
 | 列ヘッダのフィルタ / 列設定ポップオーバー                          | `TreeTableHeader.svelte` + `@features/search/components/*FilterPanel.svelte`                                                                     |
 | ツリーの三点リーダメニュー                                         | `TaskMenu.svelte` + `TaskName.svelte`                                                                                                            |
-| ワークスペース管理ダイアログ | `WorkspaceSetup.svelte`（登録・切替・削除、ディスクから読み込み直す） |
+| ワークスペース管理ダイアログ | `WorkspaceSetup.svelte`（登録・切替・削除、ディスクから読み込み直す、旧形式の変換 `ws:convert-legacy`） |
 | ウィンドウ状態の保存 / 復元（main プロセス） | `electron/window-state.js`（`loadWindowState` / `trackWindowState`）+ `electron/index.js` の BrowserWindow 生成 |
 | グラフの保存（main プロセス） | `electron/workspace-graph.js` + `electron/store/*.js` + `electron/workspace-graph-engine.js` + `electron/workspace-application.js` + `electron/ipc/workspace-ipc.js`（§ 8.9） |
 | 保存エラーのバナー | `src/App.svelte` の `save-error-banner`（`saveStatus` が `error` のとき） |
