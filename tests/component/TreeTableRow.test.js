@@ -74,6 +74,32 @@ describe("TreeTableRow", () => {
     expect(onaddbelow).toHaveBeenCalledWith({ id: "task-1", path: "project-1/task-1" });
   });
 
+  test("keeps arrow keys and Space inside the name input while renaming", async () => {
+    const onnavigate = vi.fn();
+    const props = createProps();
+    renderWithApplicationStub(TreeTableRow, {
+      ...props,
+      row: { ...props.row, path: "project-1/task-1" },
+      onnavigate,
+    });
+
+    const row = screen.getByRole("row");
+    await fireEvent.keyDown(row, { key: "F2" });
+    const input = screen.getByRole("textbox", { name: /のノード名$/ });
+    expect(input.disabled).toBe(false);
+
+    for (const key of ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End"]) {
+      // 入力欄の中のキーは既定動作（カーソル移動）のまま残す。
+      expect(await fireEvent.keyDown(input, { key })).toBe(true);
+    }
+    expect(await fireEvent.keyDown(input, { key: " " })).toBe(true);
+    expect(onnavigate).not.toHaveBeenCalled();
+
+    // 行そのものにフォーカスがあるときは従来どおり移動する。
+    await fireEvent.keyDown(row, { key: "ArrowDown" });
+    expect(onnavigate).toHaveBeenCalledWith(expect.objectContaining({ key: "ArrowDown" }));
+  });
+
   test("renders array-valued columns as a count badge", () => {
     renderWithApplicationStub(TreeTableRow, createProps());
 

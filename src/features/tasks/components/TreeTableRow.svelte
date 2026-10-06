@@ -224,7 +224,21 @@
     return false;
   }
 
+  /**
+   * 行の中の文字入力欄（名前の変更中の入力など）からバブルしてきたキーか。
+   * そこでの矢印キーや Space はカーソル移動・文字入力なので、行の移動や
+   * 選択に横取りしない。
+   */
+  function isTextEntryTarget(target) {
+    if (!(target instanceof HTMLElement)) return false;
+    if (target.isContentEditable) return true;
+    if (target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) return true;
+    if (!(target instanceof HTMLInputElement)) return false;
+    return !["checkbox", "radio", "button", "submit", "reset"].includes(target.type);
+  }
+
   function handleKeydown(e) {
+    if (e.target !== e.currentTarget && isTextEntryTarget(e.target)) return;
     if (handleEditKey(e)) {
       e.preventDefault();
       e.stopPropagation();
