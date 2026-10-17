@@ -13,6 +13,7 @@
     EditorView,
     keymap,
     layer,
+    lineNumbers,
     placeholder,
     type LayerMarker,
     type ViewUpdate,
@@ -1577,6 +1578,18 @@
     ".cm-visible-full-space-marker": {
       border: "1px solid color-mix(in srgb, var(--theme-color-Primary-main) 42%, transparent)",
     },
+    // 行番号。折り返した行は論理行の先頭にだけ番号が付く。
+    ".cm-gutters": {
+      backgroundColor: "transparent",
+      color: "color-mix(in srgb, var(--theme-color-Sub-main) 70%, transparent)",
+      border: "none",
+      fontFamily: markdownSourceFontFamily,
+    },
+    ".cm-lineNumbers .cm-gutterElement": { padding: "0 var(--sp2) 0 var(--sp3)" },
+    ".cm-activeLineGutter": {
+      backgroundColor: "transparent",
+      color: "var(--theme-color-Primary-text)",
+    },
     ".cm-activeLine": {
       backgroundColor: "color-mix(in srgb, var(--theme-color-Primary-main) 7%, transparent)",
     },
@@ -1668,6 +1681,7 @@
     return [
       editorTheme,
       searchPhrases,
+      lineNumbers(),
       search({ top: true }),
       placeholder("Markdown で入力…"),
       visibleSpaces,
