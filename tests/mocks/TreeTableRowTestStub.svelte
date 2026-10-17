@@ -82,7 +82,7 @@
       <input
         type="checkbox"
         data-testid={"bulk-select-" + row.id}
-        checked={bulkSelectionActive && selected}
+        checked={selected}
         onclick={() => ontogglecheckbox?.({ id: row.id })}
       />
     {/if}

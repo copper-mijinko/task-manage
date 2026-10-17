@@ -41,6 +41,19 @@
   let viewportWidth = $state(typeof window !== "undefined" ? window.innerWidth : 1280);
   let wideLayout = $derived(viewportWidth >= 1000);
 
+  /**
+   * サイドバーの外側を押したら閉じる。狭いときはスクリムが受けるので、
+   * 広いレールのときだけここで拾う。ヘッダー（開閉ボタン）、サイドバーから
+   * 開いたメニュー・ダイアログの中は外側として扱わない。
+   */
+  function closeSidebarOnOutsidePointer(event) {
+    if ($sidebarCollapsed || !wideLayout) return;
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (target.closest("aside.Sidebar, .Header, [role='menu'], [role='dialog'], dialog")) return;
+    $sidebarCollapsed = true;
+  }
+
   function loadWorkspaceTreeGridPage() {
     if (WorkspaceTreeGridPageComponent || workspaceTreeGridPageLoading)
       return workspaceTreeGridPageLoading;
@@ -215,7 +228,7 @@
   });
 </script>
 
-<svelte:window bind:innerWidth={viewportWidth} />
+<svelte:window bind:innerWidth={viewportWidth} onpointerdown={closeSidebarOnOutsidePointer} />
 
 <div class:Container={true}>
   <div class="notification-stack">

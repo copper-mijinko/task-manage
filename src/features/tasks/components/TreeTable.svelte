@@ -813,6 +813,11 @@
     const { id, path, shiftKey, ctrlKey } = event;
     if (path) $active_row_path = path;
     if (!$bulk_selection_active) {
+      // 単独選択中の行のチェックも ✓ で出すので、その ✓ を押したら外す。
+      if ($selected_ids.has(id)) {
+        clearSelection();
+        return;
+      }
       selectOnly(id, path);
       $bulk_selection_active = true;
       return;
