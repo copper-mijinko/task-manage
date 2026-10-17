@@ -488,6 +488,27 @@
     return insertNewline(editorView);
   }
 
+  /**
+   * 全角スペースで字下げした行の Enter。標準の Enter は字下げを桁数で数え直して
+   * 半角スペースにしてしまうので、行頭の空白をそのまま次の行へ写す。
+   * 全角スペースを含まない字下げ（半角・タブ・リスト）は標準のままにする。
+   */
+  function enterKeepFullWidthIndent(editorView: EditorView): boolean {
+    const { state } = editorView;
+    if (state.selection.ranges.length > 1) return false;
+    const { from, to } = state.selection.main;
+    const line = state.doc.lineAt(from);
+    const indent = /^[ \t\u3000]*/.exec(line.text)?.[0] ?? "";
+    if (!indent.includes("\u3000") || from - line.from < indent.length) return false;
+    editorView.dispatch({
+      changes: { from, to, insert: `\n${indent}` },
+      selection: { anchor: from + 1 + indent.length },
+      scrollIntoView: true,
+      userEvent: "input",
+    });
+    return true;
+  }
+
   function insertMarkdownHardBreak(editorView: EditorView): boolean {
     const transaction = editorView.state.changeByRange((range) => {
       const line = editorView.state.doc.lineAt(range.from);
@@ -1807,6 +1828,7 @@
           run: enterContinueMarkup,
         },
         { key: "Enter", run: enterBetweenBrackets },
+        { key: "Enter", run: enterKeepFullWidthIndent },
         {
           key: "Backspace",
           run: deleteMarkupBackward,
