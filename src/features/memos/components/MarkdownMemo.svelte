@@ -13,11 +13,12 @@
     EditorView,
     keymap,
     layer,
+    lineNumbers,
     placeholder,
     type LayerMarker,
     type ViewUpdate,
   } from "@codemirror/view";
-  import { EditorSelection, EditorState, type Text } from "@codemirror/state";
+  import { EditorSelection, EditorState, type Text, type Transaction } from "@codemirror/state";
   import {
     autocompletion,
     closeBrackets,
@@ -36,6 +37,7 @@
     bracketMatching,
     indentUnit,
     syntaxHighlighting,
+    syntaxTree,
     HighlightStyle,
   } from "@codemirror/language";
   import { tags as t } from "@lezer/highlight";
@@ -46,12 +48,17 @@
     historyKeymap,
     indentLess,
     indentMore,
+    insertNewline,
   } from "@codemirror/commands";
   import { undo, redo, selectAll } from "@codemirror/commands";
   import { formatDate, formatTime } from "@lib/utils/datetime_shortcuts";
   import { date_time_format } from "@stores/preferences";
-  import { openSearchPanel } from "@codemirror/search";
-  import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
+  import {
+    highlightSelectionMatches,
+    openSearchPanel,
+    search,
+    searchKeymap,
+  } from "@codemirror/search";
   import { markedHighlight } from "marked-highlight";
   import hljs from "highlight.js/lib/common";
   import mermaid from "mermaid";
@@ -203,7 +210,7 @@
     { kind: "group", label: "編集" },
     { kind: "item", command: "undo", label: "元に戻す" },
     { kind: "item", command: "redo", label: "やり直し" },
-    { kind: "item", command: "search", label: "本文内を検索・置換" },
+    { kind: "item", command: "search", label: "本文を検索・置換 (Ctrl+F)" },
     { kind: "item", command: "all", label: "すべて選択" },
     { kind: "group", label: "挿入" },
     { kind: "item", command: "date", label: "日付" },
@@ -408,6 +415,98 @@
       },
       scrollIntoView: true,
     });
+  }
+
+  /**
+   * 括弧の自動補完で `(|)` になっているところで Enter を押したか。
+   * 標準の Enter は「(」「空行」「)」の 3 行に割るが、これはコード向けの動作で、
+   * 文章では改行が複数入ったように見える。
+   */
+  function isBetweenBracketPair(state: EditorState): boolean {
+    const { from, empty } = state.selection.main;
+    if (!empty || from === 0) return false;
+    const pair = state.doc.sliceString(from - 1, from + 1);
+    return pair === "()" || pair === "[]" || pair === "{}";
+  }
+
+  function isInsideCode(state: EditorState, pos: number): boolean {
+    for (
+      let node = syntaxTree(state).resolveInner(pos, -1);
+      node;
+      node = node.parent as typeof node
+    ) {
+      if (node.name === "FencedCode" || node.name === "CodeBlock") return true;
+      if (!node.parent) return false;
+    }
+    return false;
+  }
+
+  const continueMarkup = insertNewlineContinueMarkupCommand({ nonTightLists: false });
+
+  /**
+   * リストで Enter を押したとき、項目の間に空行がある「緩いリスト」だと、
+   * lang-markdown は次の項目の前に空行まで足す（`nonTightLists: false` は空項目での
+   * Enter にしか効かない）。1 回の Enter で改行が 2 つ入るので、その空行を除く。
+   * 空行を足したければ、続けてもう一度 Enter を押せばよい。
+   */
+  function withoutLooseListBlankLine(state: EditorState, tr: Transaction): Transaction {
+    if (state.selection.ranges.length > 1) return tr;
+    const changes: { from: number; to: number; insert: string }[] = [];
+    let removed = 0;
+    tr.changes.iterChanges((from, to, _fromB, _toB, inserted) => {
+      let insert = inserted.toString();
+      const lines = insert.split("\n");
+      // 「改行 + 空行（字下げや > だけ）+ 改行 + 次の項目」の形だけを対象にする。
+      if (lines.length === 3 && lines[0] === "" && /^[\s>]*$/.test(lines[1])) {
+        removed += lines[1].length + 1;
+        insert = `\n${lines[2]}`;
+      }
+      changes.push({ from, to, insert });
+    });
+    if (removed === 0) return tr;
+    return state.update({
+      changes,
+      selection: { anchor: tr.newSelection.main.head - removed },
+      scrollIntoView: true,
+      userEvent: "input",
+    });
+  }
+
+  function enterContinueMarkup(editorView: EditorView): boolean {
+    const { state } = editorView;
+    return continueMarkup({
+      state,
+      dispatch: (tr) => editorView.dispatch(withoutLooseListBlankLine(state, tr)),
+    });
+  }
+
+  /** 文章中の `(|)` では普通に 1 回だけ改行する。コードブロック内は標準のまま。 */
+  function enterBetweenBrackets(editorView: EditorView): boolean {
+    const { state } = editorView;
+    if (!isBetweenBracketPair(state) || isInsideCode(state, state.selection.main.from))
+      return false;
+    return insertNewline(editorView);
+  }
+
+  /**
+   * 全角スペースで字下げした行の Enter。標準の Enter は字下げを桁数で数え直して
+   * 半角スペースにしてしまうので、行頭の空白をそのまま次の行へ写す。
+   * 全角スペースを含まない字下げ（半角・タブ・リスト）は標準のままにする。
+   */
+  function enterKeepFullWidthIndent(editorView: EditorView): boolean {
+    const { state } = editorView;
+    if (state.selection.ranges.length > 1) return false;
+    const { from, to } = state.selection.main;
+    const line = state.doc.lineAt(from);
+    const indent = /^[ \t\u3000]*/.exec(line.text)?.[0] ?? "";
+    if (!indent.includes("\u3000") || from - line.from < indent.length) return false;
+    editorView.dispatch({
+      changes: { from, to, insert: `\n${indent}` },
+      selection: { anchor: from + 1 + indent.length },
+      scrollIntoView: true,
+      userEvent: "input",
+    });
+    return true;
   }
 
   function insertMarkdownHardBreak(editorView: EditorView): boolean {
@@ -1499,6 +1598,28 @@
     },
   });
 
+  // 画面には検索が 2 つある。ヘッダーは「画面」、こちらは「本文」
+  // （長い本文の画面外の行まで探せて、置換もできる）。パネル自身にそう書く。
+  const searchPhrases = EditorState.phrases.of({
+    Find: "検索",
+    Replace: "置換後の文字",
+    next: "次へ",
+    previous: "前へ",
+    all: "一致をすべて選択",
+    "match case": "大文字小文字を区別",
+    regexp: "正規表現",
+    "by word": "単語単位",
+    replace: "置換",
+    "replace all": "すべて置換",
+    close: "閉じる",
+    "current match": "現在の一致",
+    "on line": "行",
+    "replaced $ matches": "$ 件を置換しました",
+    "replaced match on line $": "$ 行目の一致を置換しました",
+    "Go to line": "行へ移動",
+    go: "移動",
+  });
+
   const editorTheme = EditorView.theme({
     "&": {
       height: "100%",
@@ -1551,8 +1672,73 @@
     ".cm-visible-full-space-marker": {
       border: "1px solid color-mix(in srgb, var(--theme-color-Primary-main) 42%, transparent)",
     },
+    // 行番号。折り返した行は論理行の先頭にだけ番号が付く。
+    ".cm-gutters": {
+      backgroundColor: "transparent",
+      color: "color-mix(in srgb, var(--theme-color-Sub-main) 70%, transparent)",
+      border: "none",
+      fontFamily: markdownSourceFontFamily,
+    },
+    ".cm-lineNumbers .cm-gutterElement": { padding: "0 var(--sp2) 0 var(--sp3)" },
+    ".cm-activeLineGutter": {
+      backgroundColor: "transparent",
+      color: "var(--theme-color-Primary-text)",
+    },
     ".cm-activeLine": {
       backgroundColor: "color-mix(in srgb, var(--theme-color-Primary-main) 7%, transparent)",
+    },
+    // 本文検索パネル。既定は白地の英語 UI でダークテーマでは浮くので、
+    // エディタの配色に合わせ、「本文検索」と分かる見出しを付ける。
+    ".cm-panels": {
+      backgroundColor: "var(--theme-color-Main-main)",
+      color: "var(--theme-color-Sub-light)",
+      borderColor: "var(--theme-color-Primary-main)",
+    },
+    ".cm-panels.cm-panels-top": {
+      borderBottom: "2px solid var(--theme-color-Primary-main)",
+    },
+    ".cm-search": {
+      display: "flex",
+      flexWrap: "wrap",
+      alignItems: "center",
+      gap: "var(--sp1) var(--sp2)",
+      padding: "var(--sp2) 2rem var(--sp2) var(--sp3)",
+      fontSize: "var(--font-body-sm, 0.8125rem)",
+    },
+    ".cm-search::before": {
+      content: '"本文を検索"',
+      flexBasis: "100%",
+      fontWeight: "700",
+      color: "var(--theme-color-Primary-text)",
+    },
+    ".cm-search br": { display: "none" },
+    ".cm-search label": { display: "inline-flex", alignItems: "center", gap: "0.25rem" },
+    ".cm-search .cm-textfield": {
+      backgroundColor: "var(--theme-color-Main-light)",
+      color: "var(--theme-color-Sub-light)",
+      border: "1px solid var(--theme-color-Shadow-main)",
+      borderRadius: "4px",
+      padding: "0.125rem 0.375rem",
+    },
+    ".cm-search .cm-button": {
+      backgroundImage: "none",
+      backgroundColor: "var(--canvas-subtle)",
+      color: "var(--fg-default)",
+      border: "1px solid var(--border-muted)",
+      borderRadius: "4px",
+      padding: "0.125rem 0.5rem",
+      cursor: "pointer",
+    },
+    ".cm-search button[name=close]": {
+      color: "var(--theme-color-Sub-light)",
+      top: "0.5rem",
+      right: "0.5rem",
+    },
+    ".cm-searchMatch": {
+      backgroundColor: "color-mix(in srgb, #f5c518 45%, transparent)",
+    },
+    ".cm-searchMatch.cm-searchMatch-selected": {
+      backgroundColor: "color-mix(in srgb, #ff8a3d 75%, transparent)",
     },
   });
 
@@ -1588,6 +1774,9 @@
   function buildExtensions() {
     return [
       editorTheme,
+      searchPhrases,
+      lineNumbers(),
+      search({ top: true }),
       placeholder("Markdown で入力…"),
       visibleSpaces,
       markdown({ base: markdownLanguage, codeLanguages: languages, addKeymap: false }),
@@ -1636,8 +1825,10 @@
         },
         {
           key: "Enter",
-          run: insertNewlineContinueMarkupCommand({ nonTightLists: false }),
+          run: enterContinueMarkup,
         },
+        { key: "Enter", run: enterBetweenBrackets },
+        { key: "Enter", run: enterKeepFullWidthIndent },
         {
           key: "Backspace",
           run: deleteMarkupBackward,
@@ -1712,7 +1903,8 @@
           saveState = "dirty";
           const nextContent = update.view.state.doc.toString();
           currentContent = nextContent;
-          void updateRenderedHtml(nextContent);
+          // プレビューが見えているのは分割のときだけ。編集のみのときは作らない。
+          if (markdownMode === "split") void updateRenderedHtml(nextContent);
           clearTimeout(saveTimer);
           saveTimer = setTimeout(() => {
             flushSave(nextContent);
@@ -1743,6 +1935,8 @@
       syncHeadingLevel(view);
     }
     view.requestMeasure();
+    // 編集 → 分割では、編集中に溜まった変更を右ペインへ反映する。
+    if (nextMode === "split") void updateRenderedHtml(currentContent);
     if (focus) view.focus();
   }
 

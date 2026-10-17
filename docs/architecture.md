@@ -310,6 +310,10 @@ CI（`.github/workflows/`）と同じ `npm run lint` / `npm run check` / `npm te
 処理を担当する。
 
 - `setQuery(q)` でデバウンス（120ms）した `scanForMatches` を実行し、`Range` の配列を構築
+  - 同じブロック要素（inline でない最も近い祖先）に属するテキストノードは 1 本の文字列として照合する。
+    `**bold** text` の "bold text" のように、`<strong>` / `<code>` / `<a>` をまたぐ語も一致する
+  - `rescan()` は現在位置を「ノード + オフセット」で追い、見つからなければ「周辺文字列 + 同文脈の何番目か」
+    で探し直す（メモのプレビューは `{@html}` で DOM ごと作り直されるため、先頭へ戻さない）
 - `CSS.highlights.set("page-search", new Highlight(...ranges))` で全マッチを着色
 - `next()` / `prev()` で現在の一致を `page-search-current` という別 highlight 名に切替、scroll-into-view
 - 公開する readable store: `pageSearchMatchCount`、`pageSearchCurrentIndex`
@@ -318,8 +322,13 @@ CI（`.github/workflows/`）と同じ `npm run lint` / `npm run check` / `npm te
   - `script` / `style` / `noscript` / `template`
   - `input` / `textarea` / `select`（検索ボックス自体の文字列を拾わないため）
   - `.ql-toolbar` / `.ql-tooltip` / `.ql-clipboard`（Quill の不可視ノード）
+  - `.cm-editor`（Markdown のソースエディタ。CodeMirror は画面内の行しか DOM に持たず、分割モードでは
+    プレビューと二重に数えるため。エディタ内は CodeMirror 自身の「本文検索」で探す）
+  - `.copy-btn`（コードブロックの「コピー」ボタン）
   - `[data-page-search-skip]` 配下（ヘッダや検索 UI 自身に付与）
   - `getBoundingClientRect()` がゼロサイズの要素、`display: none` / `visibility: hidden`
+- `Header.svelte` はフォーカスが `.cm-editor` 内にあるときの `Ctrl+F` / `F3` / `Ctrl+G` を処理しない
+  （エディタの本文検索パネルだけを開く。プレビューなどエディタ外では画面の検索にフォーカスする）
 - CSS は `public/global.css` の `::highlight(page-search)` / `::highlight(page-search-current)` で定義
 
 ### 8.3 リサイザー snap-collapse（`SplitPanes.svelte`）

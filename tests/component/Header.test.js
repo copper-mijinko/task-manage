@@ -39,12 +39,12 @@ beforeEach(() => {
 describe("Header", () => {
   test("renders the page-search input with the highlight placeholder", () => {
     render(Header);
-    expect(screen.getByPlaceholderText("画面内の文字を探す…")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("画面を検索…")).toBeInTheDocument();
   });
 
   test("typing into the search input feeds pageSearchQuery", async () => {
     render(Header);
-    const input = screen.getByPlaceholderText("画面内の文字を探す…");
+    const input = screen.getByPlaceholderText("画面を検索…");
 
     await fireEvent.input(input, { target: { value: "task" } });
 
@@ -53,7 +53,7 @@ describe("Header", () => {
 
   test("Escape clears the search and blurs the input", async () => {
     render(Header);
-    const input = screen.getByPlaceholderText("画面内の文字を探す…");
+    const input = screen.getByPlaceholderText("画面を検索…");
 
     await fireEvent.input(input, { target: { value: "task" } });
     expect(get(pageSearchQuery)).toBe("task");
@@ -70,7 +70,7 @@ describe("Header", () => {
     expect(screen.queryByLabelText("次の一致へ")).toBeNull();
     expect(screen.queryByLabelText("検索をクリア")).toBeNull();
 
-    const input = screen.getByPlaceholderText("画面内の文字を探す…");
+    const input = screen.getByPlaceholderText("画面を検索…");
     await fireEvent.input(input, { target: { value: "anything" } });
     await tick();
 
@@ -81,7 +81,7 @@ describe("Header", () => {
 
   test("the clear button empties the input and resets pageSearchQuery", async () => {
     render(Header);
-    const input = screen.getByPlaceholderText("画面内の文字を探す…");
+    const input = screen.getByPlaceholderText("画面を検索…");
     await fireEvent.input(input, { target: { value: "stuff" } });
     await tick();
     expect(get(pageSearchQuery)).toBe("stuff");
@@ -124,7 +124,7 @@ describe("Header", () => {
         div.textContent = "hit";
         document.body.appendChild(div);
       }
-      const input = screen.getByPlaceholderText("画面内の文字を探す…");
+      const input = screen.getByPlaceholderText("画面を検索…");
       await fireEvent.input(input, { target: { value: query } });
       await new Promise((resolve) => setTimeout(resolve, 200));
       await tick();
@@ -141,6 +141,34 @@ describe("Header", () => {
       pageSearchCountIsPartial.set(true);
       const count = await searchFor("hit");
       expect(count.textContent.trim()).toBe(`${PAGE_SEARCH_PIN_LIMIT}+ 件`);
+    });
+  });
+
+  describe("Ctrl+F", () => {
+    test("focuses the page search outside the Markdown editor", async () => {
+      render(Header);
+      const input = screen.getByPlaceholderText("画面を検索…");
+      await fireEvent.keyDown(document.body, { key: "f", ctrlKey: true });
+      expect(document.activeElement).toBe(input);
+    });
+
+    test("leaves Ctrl+F to the editor's own search while typing in the Markdown editor", async () => {
+      render(Header);
+      const input = screen.getByPlaceholderText("画面を検索…");
+      const editor = document.createElement("div");
+      editor.className = "cm-editor";
+      const content = document.createElement("div");
+      content.tabIndex = 0;
+      editor.appendChild(content);
+      document.body.appendChild(editor);
+      content.focus();
+
+      const event = await fireEvent.keyDown(content, { key: "f", ctrlKey: true });
+
+      expect(event).toBe(true); // preventDefault されていない
+      expect(document.activeElement).toBe(content);
+      expect(document.activeElement).not.toBe(input);
+      editor.remove();
     });
   });
 

@@ -37,7 +37,10 @@
     {
       title: "全体",
       items: [
-        { keys: ["Ctrl", "F"], description: "画面内をハイライト検索" },
+        {
+          keys: ["Ctrl", "F"],
+          description: "画面を検索（本文の編集中は本文を検索）",
+        },
         { keys: ["F3"], description: "次の検索結果へ（Shift+F3 で前へ / Ctrl+G も同じ）" },
         { keys: ["Ctrl", "Shift", "I"], description: "Inbox にクイック追加" },
         { keys: ["Alt", "←"], description: "前のページへ戻る" },

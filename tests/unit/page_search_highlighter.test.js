@@ -188,4 +188,55 @@ describe("page_search_highlighter", () => {
 
     expect(get(pageSearchMatchCount)).toBe(1);
   });
+
+  test("matches a query that spans inline markup within one block", async () => {
+    document.body.innerHTML = `<p><strong>bold</strong> text and <code>co</code>de</p>`;
+
+    setQuery("bold text");
+    await flushDebounce();
+    expect(get(pageSearchMatchCount)).toBe(1);
+    const range = highlightsStore.get("page-search").ranges[0];
+    expect(range.toString()).toBe("bold text");
+
+    setQuery("code");
+    await flushDebounce();
+    expect(highlightsStore.get("page-search").ranges[0].toString()).toBe("code");
+  });
+
+  test("does not join text across block elements", async () => {
+    document.body.innerHTML = `<p>foo</p><p>bar</p>`;
+
+    setQuery("foobar");
+    await flushDebounce();
+
+    expect(get(pageSearchMatchCount)).toBe(0);
+  });
+
+  test("skips the Markdown source editor and code copy buttons", async () => {
+    document.body.innerHTML = `
+      <div class="preview"><pre>needle<button class="copy-btn">needle</button></pre></div>
+      <div class="cm-editor"><div class="cm-line">needle</div></div>
+    `;
+
+    setQuery("needle");
+    await flushDebounce();
+
+    expect(get(pageSearchMatchCount)).toBe(1);
+  });
+
+  test("rescan() keeps the current match when the DOM is rebuilt", async () => {
+    // メモのプレビューは {@html} で DOM ごと差し替わる。先頭へ戻ってはいけない。
+    const html = `<p>hit one</p><p>hit two</p><p>hit three</p>`;
+    document.body.innerHTML = html;
+    setQuery("hit");
+    await flushDebounce();
+    next();
+    expect(get(pageSearchCurrentIndex)).toBe(1);
+
+    document.body.innerHTML = html;
+    rescan();
+
+    expect(get(pageSearchMatchCount)).toBe(3);
+    expect(get(pageSearchCurrentIndex)).toBe(1);
+  });
 });
