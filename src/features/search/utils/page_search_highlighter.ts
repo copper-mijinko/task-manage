@@ -29,12 +29,17 @@ const CURRENT_HIGHLIGHT = "page-search-current";
  *   typed query to "match itself", so we exclude all editable text fields.
  * - `.ql-*`: Quill maintains hidden clipboards/tooltips containing copies
  *   of the document. Highlighting them ranges into invisible nodes.
+ * - `.cm-editor`: the Markdown source editor. CodeMirror only keeps the
+ *   visible lines in the DOM, so a page-wide count taken from it would be
+ *   partial, and in split mode it would count the same text twice (editor +
+ *   preview). The editor has its own search (Ctrl+F while typing in it).
+ * - `.copy-btn`: the code block "コピー" button is UI, not memo text.
  * - `[data-page-search-skip]`: explicit opt-out for shell chrome (the
  *   header search box, the toolbar SearchBox, tooltips, etc.).
  */
 const SKIP_SELECTOR =
   "script, style, noscript, template, input, textarea, select, " +
-  ".ql-toolbar, .ql-tooltip, .ql-clipboard, " +
+  ".ql-toolbar, .ql-tooltip, .ql-clipboard, .cm-editor, .copy-btn, " +
   "[data-page-search-skip], [data-page-search-skip] *";
 
 /** How long after the last query change before we re-scan. */
@@ -43,10 +48,17 @@ const SCAN_DEBOUNCE_MS = 120;
 interface ScanState {
   query: string;
   matches: Range[];
+  /** Parallel to `matches`: where the match sits, to find it again after a re-render. */
+  signatures: string[];
   index: number; // -1 when no matches
 }
 
-const state: ScanState = { query: "", matches: [], index: -1 };
+interface ScanResult {
+  matches: Range[];
+  signatures: string[];
+}
+
+const state: ScanState = { query: "", matches: [], signatures: [], index: -1 };
 
 const matchCountStore = writable<number>(0);
 const currentIndexStore = writable<number>(-1);
@@ -126,46 +138,111 @@ function shouldSkipNode(node: Node): boolean {
 }
 
 /**
- * Walk every text node under `root` and collect Ranges for matches of `query`
- * (case-insensitive). We do NOT modify the DOM — Ranges sit alongside it.
+ * The element whose text flows as one run: the nearest ancestor that is not
+ * an inline box. Text nodes under the same block are matched as one string, so
+ * a query can span `<strong>`, `<code>`, `<a>` and other inline markup
+ * ("bold text" in `**bold** text`).
  */
-function scanForMatches(query: string): Range[] {
-  if (!query) return [];
-  if (typeof document === "undefined") return [];
+function blockOf(el: Element, cache: Map<Element, Element>): Element {
+  const cached = cache.get(el);
+  if (cached) return cached;
+  let block: Element = el;
+  const display = window.getComputedStyle(el).display;
+  if ((display === "inline" || display === "contents") && el.parentElement) {
+    block = blockOf(el.parentElement, cache);
+  }
+  cache.set(el, block);
+  return block;
+}
 
-  const regex = new RegExp(escapeRegex(query), "gi");
-  const matches: Range[] = [];
-  const root = document.body;
-  if (!root) return matches;
+interface TextRun {
+  nodes: Text[];
+  text: string;
+}
 
+function collectRuns(root: Node): TextRun[] {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode: (node) =>
       shouldSkipNode(node) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
   } as NodeFilter);
 
+  const blocks = new Map<Element, Element>();
+  const runs: TextRun[] = [];
+  let current: { block: Element; run: TextRun } | null = null;
+
   let textNode = walker.nextNode() as Text | null;
   while (textNode) {
     const text = textNode.nodeValue ?? "";
-    if (text.length > 0) {
-      regex.lastIndex = 0;
-      let m: RegExpExecArray | null;
-      while ((m = regex.exec(text)) !== null) {
-        try {
-          const range = new Range();
-          range.setStart(textNode, m.index);
-          range.setEnd(textNode, m.index + m[0].length);
-          matches.push(range);
-        } catch {
-          // Range creation can throw if the text node was reparented mid-walk.
-          // We just skip those.
-        }
-        if (m[0].length === 0) regex.lastIndex += 1;
+    const parent = textNode.parentElement;
+    if (text.length > 0 && parent) {
+      const block = blockOf(parent, blocks);
+      if (!current || current.block !== block) {
+        current = { block, run: { nodes: [], text: "" } };
+        runs.push(current.run);
       }
+      current.run.nodes.push(textNode);
+      current.run.text += text;
     }
     textNode = walker.nextNode() as Text | null;
   }
+  return runs;
+}
 
-  return matches;
+/** Maps an offset in a run's joined text back to a (text node, offset) pair. */
+function locate(run: TextRun, offset: number, preferEnd: boolean): [Text, number] | null {
+  let start = 0;
+  for (const node of run.nodes) {
+    const end = start + (node.nodeValue ?? "").length;
+    if (offset < end || (preferEnd && offset === end)) return [node, offset - start];
+    start = end;
+  }
+  return null;
+}
+
+/**
+ * Walk every visible text run under the body and collect Ranges for matches of
+ * `query` (case-insensitive). We do NOT modify the DOM — Ranges sit alongside it.
+ */
+function scanForMatches(query: string): ScanResult {
+  const result: ScanResult = { matches: [], signatures: [] };
+  if (!query) return result;
+  if (typeof document === "undefined") return result;
+
+  const regex = new RegExp(escapeRegex(query), "gi");
+  const root = document.body;
+  if (!root) return result;
+
+  const seen = new Map<string, number>();
+  for (const run of collectRuns(root)) {
+    const text = run.text;
+    regex.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = regex.exec(text)) !== null) {
+      if (m[0].length === 0) {
+        regex.lastIndex += 1;
+        continue;
+      }
+      const from = locate(run, m.index, false);
+      const to = locate(run, m.index + m[0].length, true);
+      if (!from || !to) continue;
+      try {
+        const range = new Range();
+        range.setStart(from[0], from[1]);
+        range.setEnd(to[0], to[1]);
+        result.matches.push(range);
+        // 文脈 + 同じ文脈の何番目か。DOM が作り直されても同じ一致を見つけ直せる。
+        const context = `${m.index}:${text.slice(Math.max(0, m.index - 24), m.index + m[0].length + 24)}`;
+        const nth = seen.get(context) ?? 0;
+        seen.set(context, nth + 1);
+        result.signatures.push(`${context}#${nth}`);
+      } catch {
+        // Range creation can throw if the text node was reparented mid-walk.
+        // We just skip those.
+      }
+    }
+  }
+
+  return result;
 }
 
 function scrollCurrentIntoView() {
@@ -199,13 +276,15 @@ export function setQuery(query: string) {
     scanTimer = null;
     if (!state.query) {
       state.matches = [];
+      state.signatures = [];
       state.index = -1;
       clearHighlights();
       publish();
       return;
     }
-    const matches = scanForMatches(state.query);
+    const { matches, signatures } = scanForMatches(state.query);
     state.matches = matches;
+    state.signatures = signatures;
     state.index = matches.length > 0 ? 0 : -1;
     applyHighlights(matches, state.index);
     publish();
@@ -246,24 +325,30 @@ export function rescan() {
   }
   if (!state.query) {
     state.matches = [];
+    state.signatures = [];
     state.index = -1;
     clearHighlights();
     publish();
     return;
   }
   const previous = state.index >= 0 ? state.matches[state.index] : undefined;
-  const matches = scanForMatches(state.query);
+  const previousSignature = state.index >= 0 ? state.signatures[state.index] : undefined;
+  const { matches, signatures } = scanForMatches(state.query);
   state.matches = matches;
+  state.signatures = signatures;
   // 番号ではなく「同じ文字位置の一致」を追う。ツリーは見えている行の
   // 周りしか描かないので、スクロールで上の一致が消えると番号がずれ、
   // 次へ進んだときに別の一致へ飛んでしまう。
-  const sameMatch = previous
+  let sameMatch = previous
     ? matches.findIndex(
         (range) =>
           range.startContainer === previous.startContainer &&
           range.startOffset === previous.startOffset
       )
     : -1;
+  // メモのプレビューは再描画のたびに DOM ごと作り直される。ノードでは
+  // 見つからないので、周辺の文字列で同じ一致を探し直す（先頭へ戻さない）。
+  if (sameMatch < 0 && previousSignature) sameMatch = signatures.indexOf(previousSignature);
   if (matches.length === 0) {
     state.index = -1;
   } else if (sameMatch >= 0) {

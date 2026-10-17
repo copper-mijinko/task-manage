@@ -90,7 +90,14 @@
     }
   }
 
+  // Markdown エディタ（CodeMirror）の中では Ctrl+F / F3 / Ctrl+G をエディタ自身の
+  // 「本文検索」に任せる。ここでも取ると検索が 2 つ同時に開き、フォーカスも奪う。
+  function isInMarkdownEditor(e) {
+    return e.target instanceof Element && e.target.closest(".cm-editor") !== null;
+  }
+
   function handleGlobalKeydown(e) {
+    if (isInMarkdownEditor(e)) return;
     if ((e.ctrlKey || e.metaKey) && e.key === "f") {
       e.preventDefault();
       searchInputEl?.focus();
@@ -259,8 +266,8 @@
        文言とツールチップではっきりさせる。 -->
   <label
     class="SearchField"
-    aria-label="画面内検索（ハイライト）"
-    title="画面に出ている文字に色を付けて探します（一覧の行は減りません）"
+    aria-label="画面の検索（ハイライト）"
+    title="画面の文字に色を付けて探します（行は減りません）。編集中の本文は、本文の中で Ctrl+F"
     data-page-search-skip
   >
     <svg class="SearchIcon" viewBox="0 0 24 24" aria-hidden="true">
@@ -271,11 +278,11 @@
       bind:this={searchInputEl}
       type="search"
       class="SearchInput"
-      placeholder="画面内の文字を探す…"
+      placeholder="画面を検索…"
       value={queryText}
       oninput={handleSearchInput}
       onkeydown={handleSearchKeydown}
-      aria-label="画面内を検索してハイライト"
+      aria-label="画面を検索してハイライト"
     />
     {#if queryText}
       <span class="SearchCount" aria-live="polite">

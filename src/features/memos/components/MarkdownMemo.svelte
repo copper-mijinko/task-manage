@@ -50,8 +50,12 @@
   import { undo, redo, selectAll } from "@codemirror/commands";
   import { formatDate, formatTime } from "@lib/utils/datetime_shortcuts";
   import { date_time_format } from "@stores/preferences";
-  import { openSearchPanel } from "@codemirror/search";
-  import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
+  import {
+    highlightSelectionMatches,
+    openSearchPanel,
+    search,
+    searchKeymap,
+  } from "@codemirror/search";
   import { markedHighlight } from "marked-highlight";
   import hljs from "highlight.js/lib/common";
   import mermaid from "mermaid";
@@ -203,7 +207,7 @@
     { kind: "group", label: "編集" },
     { kind: "item", command: "undo", label: "元に戻す" },
     { kind: "item", command: "redo", label: "やり直し" },
-    { kind: "item", command: "search", label: "本文内を検索・置換" },
+    { kind: "item", command: "search", label: "本文を検索・置換 (Ctrl+F)" },
     { kind: "item", command: "all", label: "すべて選択" },
     { kind: "group", label: "挿入" },
     { kind: "item", command: "date", label: "日付" },
@@ -1499,6 +1503,28 @@
     },
   });
 
+  // 画面には検索が 2 つある。ヘッダーは「画面」、こちらは「本文」
+  // （長い本文の画面外の行まで探せて、置換もできる）。パネル自身にそう書く。
+  const searchPhrases = EditorState.phrases.of({
+    Find: "検索",
+    Replace: "置換後の文字",
+    next: "次へ",
+    previous: "前へ",
+    all: "一致をすべて選択",
+    "match case": "大文字小文字を区別",
+    regexp: "正規表現",
+    "by word": "単語単位",
+    replace: "置換",
+    "replace all": "すべて置換",
+    close: "閉じる",
+    "current match": "現在の一致",
+    "on line": "行",
+    "replaced $ matches": "$ 件を置換しました",
+    "replaced match on line $": "$ 行目の一致を置換しました",
+    "Go to line": "行へ移動",
+    go: "移動",
+  });
+
   const editorTheme = EditorView.theme({
     "&": {
       height: "100%",
@@ -1554,6 +1580,59 @@
     ".cm-activeLine": {
       backgroundColor: "color-mix(in srgb, var(--theme-color-Primary-main) 7%, transparent)",
     },
+    // 本文検索パネル。既定は白地の英語 UI でダークテーマでは浮くので、
+    // エディタの配色に合わせ、「本文検索」と分かる見出しを付ける。
+    ".cm-panels": {
+      backgroundColor: "var(--theme-color-Main-main)",
+      color: "var(--theme-color-Sub-light)",
+      borderColor: "var(--theme-color-Primary-main)",
+    },
+    ".cm-panels.cm-panels-top": {
+      borderBottom: "2px solid var(--theme-color-Primary-main)",
+    },
+    ".cm-search": {
+      display: "flex",
+      flexWrap: "wrap",
+      alignItems: "center",
+      gap: "var(--sp1) var(--sp2)",
+      padding: "var(--sp2) 2rem var(--sp2) var(--sp3)",
+      fontSize: "var(--font-body-sm, 0.8125rem)",
+    },
+    ".cm-search::before": {
+      content: '"本文を検索"',
+      flexBasis: "100%",
+      fontWeight: "700",
+      color: "var(--theme-color-Primary-text)",
+    },
+    ".cm-search br": { display: "none" },
+    ".cm-search label": { display: "inline-flex", alignItems: "center", gap: "0.25rem" },
+    ".cm-search .cm-textfield": {
+      backgroundColor: "var(--theme-color-Main-light)",
+      color: "var(--theme-color-Sub-light)",
+      border: "1px solid var(--theme-color-Shadow-main)",
+      borderRadius: "4px",
+      padding: "0.125rem 0.375rem",
+    },
+    ".cm-search .cm-button": {
+      backgroundImage: "none",
+      backgroundColor: "var(--canvas-subtle)",
+      color: "var(--fg-default)",
+      border: "1px solid var(--border-muted)",
+      borderRadius: "4px",
+      padding: "0.125rem 0.5rem",
+      cursor: "pointer",
+    },
+    ".cm-search button[name=close]": {
+      color: "var(--theme-color-Sub-light)",
+      top: "0.5rem",
+      right: "0.5rem",
+    },
+    ".cm-searchMatch": {
+      backgroundColor: "color-mix(in srgb, #f5c518 45%, transparent)",
+    },
+    ".cm-searchMatch.cm-searchMatch-selected": {
+      backgroundColor: "color-mix(in srgb, #ff8a3d 75%, transparent)",
+    },
   });
 
   // テーマ非依存の Markdown 用シンタックスハイライト。defaultHighlightStyle は
@@ -1588,6 +1667,8 @@
   function buildExtensions() {
     return [
       editorTheme,
+      searchPhrases,
+      search({ top: true }),
       placeholder("Markdown で入力…"),
       visibleSpaces,
       markdown({ base: markdownLanguage, codeLanguages: languages, addKeymap: false }),
@@ -1712,7 +1793,8 @@
           saveState = "dirty";
           const nextContent = update.view.state.doc.toString();
           currentContent = nextContent;
-          void updateRenderedHtml(nextContent);
+          // プレビューが見えているのは分割のときだけ。編集のみのときは作らない。
+          if (markdownMode === "split") void updateRenderedHtml(nextContent);
           clearTimeout(saveTimer);
           saveTimer = setTimeout(() => {
             flushSave(nextContent);
@@ -1743,6 +1825,8 @@
       syncHeadingLevel(view);
     }
     view.requestMeasure();
+    // 編集 → 分割では、編集中に溜まった変更を右ペインへ反映する。
+    if (nextMode === "split") void updateRenderedHtml(currentContent);
     if (focus) view.focus();
   }
 
