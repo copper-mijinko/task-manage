@@ -111,10 +111,10 @@ describe("TreeTableRow", () => {
     expect(container.querySelector('[role="row"]')).not.toHaveClass("RootRow");
   });
 
-  test("does not check the bulk-selection box for an ordinary focused row", () => {
+  test("checks the box for a selected row", () => {
     renderWithApplicationStub(TreeTableRow, { ...createProps(), selected: true });
 
-    expect(screen.getByRole("checkbox", { name: "一括操作の対象として選択" })).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "一括操作の対象として選択" })).toBeChecked();
   });
 
   test("checks the box after bulk selection is explicitly activated", () => {

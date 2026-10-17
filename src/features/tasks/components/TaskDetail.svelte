@@ -130,6 +130,11 @@
   async function changeTab(tab) {
     flushNameChange();
     if ((await memoEditor?.flush()) === false) return;
+    // タブ内の編集状態は、タブを移ったら閉じる。
+    if (tab !== activeTab) {
+      editingProperties = false;
+      editingBody = false;
+    }
     activeTab = tab;
     if (tab === "body") bodyVisited = true;
   }
@@ -431,31 +436,6 @@
           variant="text"
           normalColor="var(--fg-default)"
           activeColor="var(--accent-fg)"
-          ariaLabel={editingProperties ? "編集終了" : "編集"}
-          tooltipContent={editingProperties ? "編集終了" : "編集"}
-          style="margin:0; width:1.6875rem; height:1.6875rem;"
-          disabled={isArchived}
-          onclick={async () => {
-            if ((await memoEditor?.flush()) === false) return;
-            flushNameChange();
-            editingProperties = !editingProperties;
-            activeTab = "overview";
-          }}
-          ><svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.6"
-            aria-hidden="true"
-            >{#if editingProperties}<path d="m5 12 4 4L19 6" />{:else}<path
-                d="m15 4 5 5-11 11H4v-5L15 4Z M13 6l5 5"
-              />{/if}</svg
-          ></IconButton
-        >
-        <IconButton
-          variant="text"
-          normalColor="var(--fg-default)"
-          activeColor="var(--accent-fg)"
           ariaLabel="ノード詳細の操作"
           aria-haspopup="menu"
           aria-expanded={detailMenu}
@@ -532,6 +512,33 @@
             <span>このノードはアーカイブ済みです。編集するには復元してください。</span>
           </div>
         {/if}
+        <div class="overview-actions">
+          <IconButton
+            variant="text"
+            normalColor="var(--fg-default)"
+            activeColor="var(--accent-fg)"
+            ariaLabel={editingProperties ? "編集終了" : "編集"}
+            tooltipContent={editingProperties ? "編集終了" : "編集"}
+            style="margin:0; width:1.6875rem; height:1.6875rem;"
+            disabled={isArchived}
+            onclick={async () => {
+              if ((await memoEditor?.flush()) === false) return;
+              flushNameChange();
+              editingProperties = !editingProperties;
+              activeTab = "overview";
+            }}
+            ><svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              aria-hidden="true"
+              >{#if editingProperties}<path d="m5 12 4 4L19 6" />{:else}<path
+                  d="m15 4 5 5-11 11H4v-5L15 4Z M13 6l5 5"
+                />{/if}</svg
+            ></IconButton
+          >
+        </div>
         <div class="detail-container">
           <div class="detail-fields">
             <label class="detail-field">
@@ -1075,6 +1082,11 @@
     font-size: var(--font-label-md);
     font-weight: 600;
     border-bottom: 1px solid color-mix(in srgb, var(--theme-color-Primary-main) 30%, transparent);
+  }
+  .overview-actions {
+    display: flex;
+    justify-content: flex-end;
+    padding: var(--sp2) var(--sp4) 0;
   }
   .task-detail-actions {
     display: inline-flex;

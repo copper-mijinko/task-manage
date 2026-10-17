@@ -129,26 +129,25 @@ describe("TreeTable", () => {
 
     expect(get(table_selected_id)).toBe("task-1");
     expect(screen.getByTestId("row-task-1")).toHaveAttribute("data-selected", "true");
-    expect(screen.getByTestId("bulk-select-task-1")).not.toBeChecked();
+    expect(screen.getByTestId("bulk-select-task-1")).toBeChecked();
     expect(screen.getByTestId("tree-table-header-stub")).toHaveAttribute(
       "data-selected-count",
       "0"
     );
   });
 
-  test("checks the bulk-selection control only after it is explicitly clicked", async () => {
+  test("checks the box of a selected row and unchecks it when clicked", async () => {
     await renderTree();
 
     await fireEvent.click(screen.getByTestId("select-task-1"));
+    await tick();
+    expect(screen.getByTestId("bulk-select-task-1")).toBeChecked();
+
     await fireEvent.click(screen.getByTestId("bulk-select-task-1"));
     await tick();
 
-    expect(get(table_selected_id)).toBe("task-1");
-    expect(screen.getByTestId("bulk-select-task-1")).toBeChecked();
-    expect(screen.getByTestId("tree-table-header-stub")).toHaveAttribute(
-      "data-selected-count",
-      "1"
-    );
+    expect(get(table_selected_id)).toBeUndefined();
+    expect(screen.getByTestId("bulk-select-task-1")).not.toBeChecked();
   });
 
   test("keeps the current row selected when the tree background is clicked", async () => {

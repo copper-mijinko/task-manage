@@ -485,7 +485,7 @@
         <input
           type="checkbox"
           class="RowCheckbox"
-          checked={bulkSelectionActive && selected}
+          checked={selected}
           aria-label="一括操作の対象として選択"
           title="一括操作の対象として選択"
           tabindex={cellTabIndex}

@@ -114,6 +114,8 @@ async function walkMainScreens(page, check, suffix) {
   await check(`アーカイブの通知${suffix}`);
   await archived.getByRole("button", { name: "元に戻す" }).click();
   await expect(row(page, "root/work/release")).toBeVisible();
+  // 「元に戻しました」の通知は 6 秒出る。次の画面の検査に重ならないよう閉じる。
+  await page.getByRole("button", { name: "通知を閉じる", exact: true }).click();
 
   await overflow(page, "列の設定");
   const columns = page.getByRole("dialog", { name: "列の設定" });

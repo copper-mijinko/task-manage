@@ -31,6 +31,7 @@
   let listenersAttached = false;
   let focusOrigin;
 
+  let hasCheckItems = $derived(menuItems.some((item) => item.checked !== undefined));
   let menuSideClass = $derived(
     position.position === "left" ? "menu-position-left" : "menu-position-right"
   );
@@ -185,6 +186,11 @@
               onclick={(event) => triggerAction(item, event)}
             >
               <span class="menu-item-content">
+                {#if hasCheckItems && item.checked === undefined}
+                  <!-- チェック付きの項目と文字の開始位置を揃える（揃えないと、
+                       チェック付きの項目だけが字下げされて見える）。 -->
+                  <span class="menu-check" aria-hidden="true"></span>
+                {/if}
                 {#if item.checked !== undefined}
                   <!-- aria-checked と対になる視覚的な状態表示。これが無いと
                        目で見たときに現在どちらの状態か分からなかった。 -->
