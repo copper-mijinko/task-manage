@@ -18,7 +18,7 @@
     type LayerMarker,
     type ViewUpdate,
   } from "@codemirror/view";
-  import { EditorSelection, EditorState, type Text } from "@codemirror/state";
+  import { EditorSelection, EditorState, type Text, type Transaction } from "@codemirror/state";
   import {
     autocompletion,
     closeBrackets,
@@ -439,6 +439,45 @@
       if (!node.parent) return false;
     }
     return false;
+  }
+
+  const continueMarkup = insertNewlineContinueMarkupCommand({ nonTightLists: false });
+
+  /**
+   * リストで Enter を押したとき、項目の間に空行がある「緩いリスト」だと、
+   * lang-markdown は次の項目の前に空行まで足す（`nonTightLists: false` は空項目での
+   * Enter にしか効かない）。1 回の Enter で改行が 2 つ入るので、その空行を除く。
+   * 空行を足したければ、続けてもう一度 Enter を押せばよい。
+   */
+  function withoutLooseListBlankLine(state: EditorState, tr: Transaction): Transaction {
+    if (state.selection.ranges.length > 1) return tr;
+    const changes: { from: number; to: number; insert: string }[] = [];
+    let removed = 0;
+    tr.changes.iterChanges((from, to, _fromB, _toB, inserted) => {
+      let insert = inserted.toString();
+      const lines = insert.split("\n");
+      // 「改行 + 空行（字下げや > だけ）+ 改行 + 次の項目」の形だけを対象にする。
+      if (lines.length === 3 && lines[0] === "" && /^[\s>]*$/.test(lines[1])) {
+        removed += lines[1].length + 1;
+        insert = `\n${lines[2]}`;
+      }
+      changes.push({ from, to, insert });
+    });
+    if (removed === 0) return tr;
+    return state.update({
+      changes,
+      selection: { anchor: tr.newSelection.main.head - removed },
+      scrollIntoView: true,
+      userEvent: "input",
+    });
+  }
+
+  function enterContinueMarkup(editorView: EditorView): boolean {
+    const { state } = editorView;
+    return continueMarkup({
+      state,
+      dispatch: (tr) => editorView.dispatch(withoutLooseListBlankLine(state, tr)),
+    });
   }
 
   /** 文章中の `(|)` では普通に 1 回だけ改行する。コードブロック内は標準のまま。 */
@@ -1765,7 +1804,7 @@
         },
         {
           key: "Enter",
-          run: insertNewlineContinueMarkupCommand({ nonTightLists: false }),
+          run: enterContinueMarkup,
         },
         { key: "Enter", run: enterBetweenBrackets },
         {
