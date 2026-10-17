@@ -37,6 +37,7 @@
     bracketMatching,
     indentUnit,
     syntaxHighlighting,
+    syntaxTree,
     HighlightStyle,
   } from "@codemirror/language";
   import { tags as t } from "@lezer/highlight";
@@ -47,6 +48,7 @@
     historyKeymap,
     indentLess,
     indentMore,
+    insertNewline,
   } from "@codemirror/commands";
   import { undo, redo, selectAll } from "@codemirror/commands";
   import { formatDate, formatTime } from "@lib/utils/datetime_shortcuts";
@@ -413,6 +415,38 @@
       },
       scrollIntoView: true,
     });
+  }
+
+  /**
+   * 括弧の自動補完で `(|)` になっているところで Enter を押したか。
+   * 標準の Enter は「(」「空行」「)」の 3 行に割るが、これはコード向けの動作で、
+   * 文章では改行が複数入ったように見える。
+   */
+  function isBetweenBracketPair(state: EditorState): boolean {
+    const { from, empty } = state.selection.main;
+    if (!empty || from === 0) return false;
+    const pair = state.doc.sliceString(from - 1, from + 1);
+    return pair === "()" || pair === "[]" || pair === "{}";
+  }
+
+  function isInsideCode(state: EditorState, pos: number): boolean {
+    for (
+      let node = syntaxTree(state).resolveInner(pos, -1);
+      node;
+      node = node.parent as typeof node
+    ) {
+      if (node.name === "FencedCode" || node.name === "CodeBlock") return true;
+      if (!node.parent) return false;
+    }
+    return false;
+  }
+
+  /** 文章中の `(|)` では普通に 1 回だけ改行する。コードブロック内は標準のまま。 */
+  function enterBetweenBrackets(editorView: EditorView): boolean {
+    const { state } = editorView;
+    if (!isBetweenBracketPair(state) || isInsideCode(state, state.selection.main.from))
+      return false;
+    return insertNewline(editorView);
   }
 
   function insertMarkdownHardBreak(editorView: EditorView): boolean {
@@ -1733,6 +1767,7 @@
           key: "Enter",
           run: insertNewlineContinueMarkupCommand({ nonTightLists: false }),
         },
+        { key: "Enter", run: enterBetweenBrackets },
         {
           key: "Backspace",
           run: deleteMarkupBackward,
